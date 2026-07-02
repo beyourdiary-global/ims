@@ -17,6 +17,42 @@ $dataId = input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 
+if (!function_exists('resolveLookupValue')) {
+    function resolveLookupValue($tblName, $rawValue, $displayField, $connect, $altDisplayField = '')
+    {
+        $rawValue = trim((string) $rawValue);
+        $resolved = [
+            'id' => '',
+            'display' => '',
+        ];
+
+        if ($rawValue === '' || $rawValue === '0') {
+            return $resolved;
+        }
+
+        $escapedValue = mysqli_real_escape_string($connect, (string) $rawValue);
+        $result = getData("id,$displayField", "id = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
+
+        if ((!$result || $result->num_rows === 0) && $altDisplayField !== '') {
+            $result = getData("id,$displayField", "$altDisplayField = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
+        }
+
+        if ((!$result || $result->num_rows === 0) && $displayField !== $altDisplayField) {
+            $result = getData("id,$displayField", "$displayField = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
+        }
+
+        if ($result && $result->num_rows > 0) {
+            $lookupRow = $result->fetch_assoc();
+            $resolved['id'] = $lookupRow['id'];
+            $resolved['display'] = $lookupRow[$displayField];
+        } else {
+            $resolved['id'] = $rawValue;
+            $resolved['display'] = $rawValue;
+        }
+
+        return $resolved;
+    }
+}
 
 $redirectPage = $SITEURL . '/finance/lazada_cust_rcd_table.php';
 $redirectLink = ("<script>location.href = '$redirectPage';</script>");
@@ -98,11 +134,20 @@ if (isset($dataExisted) && !empty($dataId) && $act !== 'I' && isset($row['id']) 
     $lazadaCustomerLabelMeta = isset($lazadaCustomerLabelMap[(int) $row['id']]) ? $lazadaCustomerLabelMap[(int) $row['id']] : array();
     $lazadaCustomerLabelDisplayHtml = customerLabelRenderPageHeader($lazadaCustomerLabelMeta);
 }
-
-$series_list_result = getData('*', '', '', BRD_SERIES, $connect);
-
-if (post('actionBtn')) {
+if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $action = post('actionBtn');
+    if ($action === '' || $action === null) {
+        $action = post('actionBtnHidden');
+    }
+    if (($action === '' || $action === null) && ($act === 'I' || $act === 'E')) {
+        $action = ($act === 'I') ? 'addRecord' : 'updRecord';
+    }
+
+    if ($action === '' || $action === null) {
+        $action = '';
+    }
+
+    if ($action !== '') {
 
     $lcr_id = postSpaceFilter('lcr_id');
     $lcr_name = postSpaceFilter('lcr_name');
@@ -111,11 +156,32 @@ if (post('actionBtn')) {
     $lcr_pic = postSpaceFilter('lcr_pic_hidden');
     $lcr_country = postSpaceFilter('lcr_country_hidden');
     $lcr_brand = postSpaceFilter('lcr_brand_hidden');
-    $lcr_series = postSpaceFilter('lcr_series');
+    $lcr_series = postSpaceFilter('lcr_series_hidden');
+    $lcr_pic_text = postSpaceFilter('lcr_pic');
+    $lcr_country_text = postSpaceFilter('lcr_country');
+    $lcr_brand_text = postSpaceFilter('lcr_brand');
+    $lcr_series_text = postSpaceFilter('lcr_series');
     $lcr_rec_name = postSpaceFilter('lcr_rec_name');
     $lcr_rec_ctc = postSpaceFilter('lcr_rec_ctc');
     $lcr_rec_add = postSpaceFilter('lcr_rec_add');
     $lcr_remark = postSpaceFilter('lcr_remark');
+
+    if ($lcr_pic === '' || $lcr_pic === '0') {
+        $resolvedPic = resolveLookupValue(USR_USER, $lcr_pic_text, 'name', $connect);
+        $lcr_pic = (string) $resolvedPic['id'];
+    }
+    if ($lcr_country === '' || $lcr_country === '0') {
+        $resolvedCountry = resolveLookupValue(COUNTRIES, $lcr_country_text, 'nicename', $connect, 'name');
+        $lcr_country = (string) $resolvedCountry['id'];
+    }
+    if ($lcr_brand === '' || $lcr_brand === '0') {
+        $resolvedBrand = resolveLookupValue(BRAND, $lcr_brand_text, 'name', $connect);
+        $lcr_brand = (string) $resolvedBrand['id'];
+    }
+    if ($lcr_series === '' || $lcr_series === '0') {
+        $resolvedSeries = resolveLookupValue(BRD_SERIES, $lcr_series_text, 'name', $connect);
+        $lcr_series = (string) $resolvedSeries['id'];
+    }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -366,6 +432,7 @@ if (post('actionBtn')) {
             echo $clearLocalStorage . ' ' . $redirectLink;
             break;
     }
+    }
 }
 
 
@@ -540,38 +607,18 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     <div class="col-md-3 mb-3 autocomplete">
     <label class="form-label form_lbl" id="lcr_pic_lbl" for="lcr_pic">Sales Person In Charge<span class="requireRed">*</span></label>
     <?php
-     if(($act == 'E' || $act == '')){
-        unset($echoVal);
-
-        if (isset($row['sales_pic']))
-            $echoVal = $row['sales_pic'];
-
-        if (isset($echoVal)) {
-            $user_rst = getData('name', "id = '$echoVal'", '', USR_USER, $connect);
-            if (!$user_rst) {
-                // Graceful fallback: keep form usable even when lookup query is unavailable.
-            }
-            $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
-        }
-    ?>
-    <input class="form-control" type="text" name="lcr_pic" id="lcr_pic" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($user_row['name'] ?? '') : '' ?>">
-    <input type="hidden" name="lcr_pic_hidden" id="lcr_pic_hidden" value="<?php echo (isset($row['sales_pic'])) ? $row['sales_pic'] : ''; ?>">
-    <?php }?>
-    <?php
-     if(($act == 'I')){
-    $loggedInUserId = USER_ID; // Assuming USER_ID contains the ID of the logged-in user
-    $defaultUser = '';
-
-    // Retrieve details of the logged-in user
-    $user_rst = getData('name', "id = '$loggedInUserId'", '', USR_USER, $connect);
-    if ($user_rst && $user_rst->num_rows > 0) {
-        $user_row = ($user_rst && $user_rst->num_rows > 0) ? $user_rst->fetch_assoc() : array();
-        $defaultUser = $user_row['name'];
+    $picData = ['id' => '', 'display' => ''];
+    if (isset($lcr_pic_text) || isset($lcr_pic)) {
+        $picData['id'] = isset($lcr_pic) ? $lcr_pic : '';
+        $picData['display'] = isset($lcr_pic_text) ? $lcr_pic_text : '';
+    } else if ($act == 'I') {
+        $picData = resolveLookupValue(USR_USER, USER_ID, 'name', $connect);
+    } else if (isset($row['sales_pic']) && $row['sales_pic'] !== '') {
+        $picData = resolveLookupValue(USR_USER, $row['sales_pic'], 'name', $connect);
     }
     ?>
-    <input class="form-control" type="text" name="lcr_pic" id="lcr_pic" <?php if ($act == '') echo 'disabled' ?> value="<?php echo $defaultUser ?>">
-    <input type="hidden" name="lcr_pic_hidden" id="lcr_pic_hidden" value="<?php echo $loggedInUserId ?>">
-    <?php } ?>
+    <input class="form-control" type="text" name="lcr_pic" id="lcr_pic" <?php if ($act == '') echo 'disabled' ?> value="<?php echo htmlspecialchars((string) $picData['display'], ENT_QUOTES, 'UTF-8'); ?>">
+    <input type="hidden" name="lcr_pic_hidden" id="lcr_pic_hidden" value="<?php echo htmlspecialchars((string) $picData['id'], ENT_QUOTES, 'UTF-8'); ?>">
     <?php if (isset($pic_err)) { ?>
         <div id="err_msg">
             <span class="mt-n1">
@@ -584,21 +631,16 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <div class="col-md-3 mb-3 autocomplete country-autocomplete">
             <label class="form-label form_lbl" id="lcr_country_lbl" for="lcr_country">Country<span class="requireRed">*</span></label>
             <?php
-            unset($echoVal);
-
-            if (isset($row['country']))
-                $echoVal = $row['country'];
-
-            if (isset($echoVal)) {
-                $country_rst = getData('nicename', "id = '$echoVal'", '', COUNTRIES, $connect);
-                if (!$country_rst) {
-                    // Graceful fallback: keep form usable even when lookup query is unavailable.
-                }
-                $country_row = ($country_rst && $country_rst->num_rows > 0) ? $country_rst->fetch_assoc() : array();
+            $countryData = ['id' => '', 'display' => ''];
+            if (isset($lcr_country_text) || isset($lcr_country)) {
+                $countryData['id'] = isset($lcr_country) ? $lcr_country : '';
+                $countryData['display'] = isset($lcr_country_text) ? $lcr_country_text : '';
+            } else if (isset($row['country']) && $row['country'] !== '') {
+                $countryData = resolveLookupValue(COUNTRIES, $row['country'], 'nicename', $connect, 'name');
             }
             ?>
-            <input class="form-control" type="text" name="lcr_country" id="lcr_country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($country_row['nicename'] ?? '') : '' ?>">
-            <input type="hidden" name="lcr_country_hidden" id="lcr_country_hidden" value="<?php echo (isset($row['country'])) ? $row['country'] : ''; ?>">
+            <input class="form-control" type="text" name="lcr_country" id="lcr_country" <?php if ($act == '') echo 'disabled' ?> value="<?php echo htmlspecialchars((string) $countryData['display'], ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="lcr_country_hidden" id="lcr_country_hidden" value="<?php echo htmlspecialchars((string) $countryData['id'], ENT_QUOTES, 'UTF-8'); ?>">
             <?php if (isset($country_err)) { ?>
                 <div id="err_msg">
                     <span class="mt-n1">
@@ -611,21 +653,16 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         <div class="col-md-3 mb-3 autocomplete">
             <label class="form-label form_lbl" id="lcr_brand_lbl" for="lcr_brand">Brand<span class="requireRed">*</span></label>
             <?php
-            unset($echoVal);
-
-            if (isset($row['brand']))
-                $echoVal = $row['brand'];
-
-            if (isset($echoVal)) {
-                $brand_rst = getData('name', "id = '$echoVal'", '', BRAND, $connect);
-                if (!$brand_rst) {
-                    // Graceful fallback: keep form usable even when lookup query is unavailable.
-                }
-                $brand_row = ($brand_rst && $brand_rst->num_rows > 0) ? $brand_rst->fetch_assoc() : array();
+            $brandData = ['id' => '', 'display' => ''];
+            if (isset($lcr_brand_text) || isset($lcr_brand)) {
+                $brandData['id'] = isset($lcr_brand) ? $lcr_brand : '';
+                $brandData['display'] = isset($lcr_brand_text) ? $lcr_brand_text : '';
+            } else if (isset($row['brand']) && $row['brand'] !== '') {
+                $brandData = resolveLookupValue(BRAND, $row['brand'], 'name', $connect);
             }
             ?>
-            <input class="form-control" type="text" name="lcr_brand" id="lcr_brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($brand_row['name'] ?? '') : '' ?>">
-            <input type="hidden" name="lcr_brand_hidden" id="lcr_brand_hidden" value="<?php echo (isset($row['brand'])) ? $row['brand'] : ''; ?>">
+            <input class="form-control" type="text" name="lcr_brand" id="lcr_brand" <?php if ($act == '') echo 'disabled' ?> value="<?php echo htmlspecialchars((string) $brandData['display'], ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="lcr_brand_hidden" id="lcr_brand_hidden" value="<?php echo htmlspecialchars((string) $brandData['id'], ENT_QUOTES, 'UTF-8'); ?>">
             <?php if (isset($brand_err)) { ?>
                 <div id="err_msg">
                     <span class="mt-n1">
@@ -636,26 +673,17 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         </div>
         <div class="col-md-3 mb-3 autocomplete">
         <label class="form-label form_lbl" id="lcr_series_lbl" for="lcr_series">Series<span class="requireRed">*</span></label>
-            <select class="form-select" id="lcr_series" name="lcr_series" <?php if ($act == '') echo 'disabled' ?>>
-                <option value="0" disabled selected>Select Series</option>
-                <?php
-                if ($series_list_result->num_rows >= 1) {
-                    $series_list_result->data_seek(0);
-                    while ($series = $series_list_result->fetch_assoc()) {
-                        $selected = "";
-                        if (isset($dataExisted, $row['series']) && (!isset($lcr_series))) {
-                            $selected = $row['series'] == $series['id'] ? "selected" : "";
-                        } else if (isset($lcr_series)) {
-                            list($lcr_series_id, $lcr_series) = explode(':', $lcr_series);
-                            $selected = $lcr_series == $series['id'] ? "selected" : "";
-                        }
-                        echo "<option value=\"" . $series['id'] . "\" $selected>" . $series['name'] . "</option>";
-                    }
-                } else {
-                    echo "<option value=\"0\">None</option>";
-                }
-                ?>
-            </select>
+            <?php
+            $seriesData = ['id' => '', 'display' => ''];
+            if (isset($lcr_series_text) || isset($lcr_series)) {
+                $seriesData['id'] = isset($lcr_series) ? $lcr_series : '';
+                $seriesData['display'] = isset($lcr_series_text) ? $lcr_series_text : '';
+            } else if (isset($row['series']) && $row['series'] !== '') {
+                $seriesData = resolveLookupValue(BRD_SERIES, $row['series'], 'name', $connect);
+            }
+            ?>
+            <input class="form-control" type="text" name="lcr_series" id="lcr_series" <?php if ($act == '') echo 'disabled' ?> value="<?php echo htmlspecialchars((string) $seriesData['display'], ENT_QUOTES, 'UTF-8'); ?>">
+            <input type="hidden" name="lcr_series_hidden" id="lcr_series_hidden" value="<?php echo htmlspecialchars((string) $seriesData['id'], ENT_QUOTES, 'UTF-8'); ?>">
 
             <?php if (isset($lcr_series_err)) { ?>
                 <div id="err_msg">
@@ -917,6 +945,15 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
     <script>
         const page = "<?= $pageTitle ?>";
         const action = "<?php echo isset($act) ? $act : ' '; ?>";
+        window.lazadaCustomerRecordConfig = {
+            siteURL: "<?= $SITEURL ?>",
+            tables: {
+                user: "<?= USR_USER ?>",
+                countries: "<?= COUNTRIES ?>",
+                brand: "<?= BRAND ?>",
+                series: "<?= BRD_SERIES ?>"
+            }
+        };
 
         checkCurrentPage(page, action);
         setButtonColor();

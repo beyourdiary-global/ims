@@ -17,6 +17,43 @@ $act = isset($orderDeleteApprovalState['act']) ? $orderDeleteApprovalState['act'
 $orderDeleteApprovalPanelHtml = isset($orderDeleteApprovalState['panel_html']) ? (string) $orderDeleteApprovalState['panel_html'] : '';
 $pageAction = getPageAction($act);
 
+if (!function_exists('resolveLookupValue')) {
+    function resolveLookupValue($tblName, $rawValue, $displayField, $connect, $altDisplayField = '')
+    {
+        $rawValue = trim((string) $rawValue);
+        $resolved = [
+            'id' => '',
+            'display' => '',
+        ];
+
+        if ($rawValue === '' || $rawValue === '0') {
+            return $resolved;
+        }
+
+        $escapedValue = mysqli_real_escape_string($connect, (string) $rawValue);
+        $result = getData("id,$displayField", "id = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
+
+        if ((!$result || $result->num_rows === 0) && $altDisplayField !== '') {
+            $result = getData("id,$displayField", "$altDisplayField = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
+        }
+
+        if ((!$result || $result->num_rows === 0) && $displayField !== $altDisplayField) {
+            $result = getData("id,$displayField", "$displayField = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
+        }
+
+        if ($result && $result->num_rows > 0) {
+            $lookupRow = $result->fetch_assoc();
+            $resolved['id'] = $lookupRow['id'];
+            $resolved['display'] = $lookupRow[$displayField];
+        } else {
+            $resolved['id'] = $rawValue;
+            $resolved['display'] = $rawValue;
+        }
+
+        return $resolved;
+    }
+}
+
 
 $redirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
 $back_redirect_page = commonResolveBackUrl($redirectPage);
@@ -28,6 +65,8 @@ $clearLocalStorage = '<script>localStorage.clear();</script>';
 $pendingStatusUpdate = shopeeOmsNormalizeStatusCode(post('updateStatusBtn'));
 $lorShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E';
 $lorTriggerStatusTransitionAfterSave = false;
+$lazadaNewCustomerCreateSucceeded = false;
+$showLazadaNewCustomerSection = false;
 $lorHandleStatusTransition = function ($newStatus) use ($connect, $finance_connect, $dataId, $pageTitle, $cdate, $ctime, $tblName, $redirectPage) {
     $newStatus = shopeeOmsNormalizeStatusCode($newStatus);
     $transitionRemark = 'Order Status Update to ' . shopeeOmsGetStatusLabel($newStatus);
@@ -136,7 +175,8 @@ if ($pendingStatusUpdate !== '' && !$lorShouldSaveBeforeStatusUpdate) {
     }
 }
 
-if ($_SERVER["REQUEST_METHOD"] == "POST" && post('submit') !== '') {
+if ($_SERVER["REQUEST_METHOD"] == "POST" && post('newCustomerAction') === 'create') {
+    $showLazadaNewCustomerSection = true;
     $customer_id = postSpaceFilter('customer_id');
     $customer_name = postSpaceFilter('customer_name');
     $customer_email = postSpaceFilter('customer_email');
@@ -144,7 +184,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && post('submit') !== '') {
     $shipping_name = postSpaceFilter('shipping_name');
     $shipping_address = postSpaceFilter('shipping_address');
     $shipping_contact = postSpaceFilter('shipping_contact');
-    $sales_pic = postSpaceFilter('sales_pic');
+    $sales_pic = postSpaceFilter('sales_pic_hidden');
+    $sales_pic_text = postSpaceFilter('sales_pic');
+    $newCustomerTable = LAZADA_CUST_RCD;
+
+    if ($sales_pic === '' || $sales_pic === '0') {
+        $resolvedSalesPic = resolveLookupValue(USR_USER, $sales_pic_text, 'name', $connect);
+        $sales_pic = (string) $resolvedSalesPic['id'];
+    }
 
     $requiredNewCustomerFields = array(
         $customer_id,
@@ -154,7 +201,7 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && post('submit') !== '') {
         $shipping_name,
         $shipping_address,
         $shipping_contact,
-        $sales_pic,
+        $sales_pic_text,
     );
     $hasMissingNewCustomerField = false;
     foreach ($requiredNewCustomerFields as $requiredValue) {
@@ -167,16 +214,52 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && post('submit') !== '') {
     if ($hasMissingNewCustomerField) {
         echo "<script>alert('Please fill in all required fields for the new customer record.');</script>";
     } else {
-        $duplicate_check_query = "SELECT * FROM customer_lazada_deals_transaction WHERE lcr_id = '$customer_id'";
+        $escapedCustomerId = mysqli_real_escape_string($connect, (string) $customer_id);
+        $escapedCustomerName = mysqli_real_escape_string($connect, (string) $customer_name);
+        $escapedCustomerEmail = mysqli_real_escape_string($connect, (string) $customer_email);
+        $escapedCustomerPhone = mysqli_real_escape_string($connect, (string) $customer_phone);
+        $escapedShippingName = mysqli_real_escape_string($connect, (string) $shipping_name);
+        $escapedShippingAddress = mysqli_real_escape_string($connect, (string) $shipping_address);
+        $escapedShippingContact = mysqli_real_escape_string($connect, (string) $shipping_contact);
+        $escapedSalesPic = mysqli_real_escape_string($connect, (string) $sales_pic);
+
+        $duplicate_check_query = "SELECT id FROM " . $newCustomerTable . " WHERE lcr_id = '$escapedCustomerId' LIMIT 1";
         $duplicate_result = mysqli_query($connect, $duplicate_check_query);
 
-        if (mysqli_num_rows($duplicate_result) > 0) {
+        if ($duplicate_result && mysqli_num_rows($duplicate_result) > 0) {
             echo "<script>alert('Error: Duplicate record found!');</script>";
         } else {
-            $insert_query = "INSERT INTO customer_lazada_deals_transaction (lcr_id, name, email, phone, ship_rec_name, ship_rec_add, ship_rec_contact, sales_pic) 
-                             VALUES ('$customer_id', '$customer_name', '$customer_email', '$customer_phone', '$shipping_name', '$shipping_address', '$shipping_contact', '$sales_pic')";
+            $insert_query = "INSERT INTO " . $newCustomerTable . " (lcr_id, name, email, phone, ship_rec_name, ship_rec_add, ship_rec_contact, sales_pic, create_by, create_date, create_time) 
+                             VALUES ('$escapedCustomerId', '$escapedCustomerName', '$escapedCustomerEmail', '$escapedCustomerPhone', '$escapedShippingName', '$escapedShippingAddress', '$escapedShippingContact', '$escapedSalesPic', '" . USER_ID . "', curdate(), curtime())";
 
             if (mysqli_query($connect, $insert_query)) {
+                $newCustomerRowId = (int) $connect->insert_id;
+                $newCustomerFields = array('lcr_id', 'name', 'email', 'phone', 'ship_rec_name', 'ship_rec_add', 'ship_rec_contact', 'sales_pic');
+                $newCustomerValues = array($customer_id, $customer_name, $customer_email, $customer_phone, $shipping_name, $shipping_address, $shipping_contact, $sales_pic);
+                generateDBData($newCustomerTable, $connect);
+                $lazadaNewCustomerCreateSucceeded = true;
+                audit_log(array(
+                    'log_act' => 'Add',
+                    'cdate' => $cdate,
+                    'ctime' => $ctime,
+                    'uid' => USER_ID,
+                    'cby' => USER_ID,
+                    'query_rec' => $insert_query,
+                    'query_table' => $newCustomerTable,
+                    'page' => $pageTitle,
+                    'connect' => $connect,
+                    'newval' => implodeWithComma($newCustomerValues),
+                    'act_msg' => actMsgLog($newCustomerRowId, $newCustomerFields, $newCustomerValues, '', '', $newCustomerTable, 'Add', ''),
+                ));
+                $customer_id = '';
+                $customer_name = '';
+                $customer_email = '';
+                $customer_phone = '';
+                $shipping_name = '';
+                $shipping_address = '';
+                $shipping_contact = '';
+                $sales_pic = '';
+                $sales_pic_text = '';
                 echo "<script>alert('New record created successfully');</script>";
             } else {
                 echo "<script>alert('Error: " . $insert_query . "<br>" . mysqli_error($connect) . "');</script>";
@@ -201,7 +284,8 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
     $lor_cust_phone = postSpaceFilter('lor_cust_phone');
     $lor_country = postSpaceFilter('lor_country_hidden');
     $lor_oder_number = postSpaceFilter('lor_oder_number');
-    $lor_sales_pic = postSpaceFilter('lor_sales_pic');
+    $lor_sales_pic = postSpaceFilter('lor_sales_pic_hidden');
+    $lor_sales_pic_text = postSpaceFilter('lor_sales_pic');
     $lor_ship_rec_name = postSpaceFilter('lor_ship_rec_name');
     $lor_ship_rec_address = postSpaceFilter('lor_ship_rec_address');
     $lor_ship_rec_contact = postSpaceFilter('lor_ship_rec_contact');
@@ -218,6 +302,10 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
     $lor_order_status = shopeeOmsNormalizeStatusCode(postSpaceFilter('lor_order_status'));
     if ($lor_order_status === '') {
         $lor_order_status = isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : 'P';
+    }
+    if ($lor_sales_pic === '' || $lor_sales_pic === '0') {
+        $resolvedLorSalesPic = resolveLookupValue(USR_USER, $lor_sales_pic_text, 'name', $connect);
+        $lor_sales_pic = (string) $resolvedLorSalesPic['id'];
     }
     $lorCurrentEffectiveWarehouseId = isset($row) ? shopeeOmsResolveStockOutWarehouseId($connect, $row, $lorDefaultWarehouseId) : $lorDefaultWarehouseId;
     $lor_stock_out_warehouse_id = shopeeOmsNormalizeWarehouseId(postSpaceFilter('lor_stock_out_warehouse_id'));
@@ -268,12 +356,6 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                     $lor_airbill_no = '';
                     $lor_airbill_attachment = '';
                 }
-            }
-
-            if ($lor_cust_email && !isEmail($lor_cust_email)) {
-                $cust_email_err = "Wrong email format!";
-                $error = 1;
-                break;
             }
 
             if ($lorStockOutWarehouseEditable) {
@@ -471,6 +553,9 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                         }
                     }
                     $returnData2 = mysqli_query($connect, $query2);
+                    if ($returnData2) {
+                        generateDBData($tblName2, $connect);
+                    }
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -1203,35 +1288,35 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
                                             <form method="POST"
                                                 action="<?php echo htmlspecialchars($_SERVER["PHP_SELF"]); ?>">
-                                                <div id="new_customer_section" style="display: none;">
+                                                <div id="new_customer_section" style="display: <?= $showLazadaNewCustomerSection ? 'block' : 'none' ?>;">
 
                                                     <div class="row">
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl" for="customer_id">Customer
                                                                 ID</label>
                                                             <input class="form-control" type="text" id="customer_id"
-                                                                name="customer_id" data-new-customer-required="1">
+                                                                name="customer_id" data-new-customer-required="1" value="<?= htmlspecialchars(isset($customer_id) ? (string) $customer_id : '', ENT_QUOTES, 'UTF-8') ?>">
                                                         </div>
 
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl" for="customer_name">Customer
                                                                 Name</label>
                                                             <input class="form-control" type="text" id="customer_name"
-                                                                name="customer_name" data-new-customer-required="1">
+                                                                name="customer_name" data-new-customer-required="1" value="<?= htmlspecialchars(isset($customer_name) ? (string) $customer_name : '', ENT_QUOTES, 'UTF-8') ?>">
                                                         </div>
 
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl" for="customer_email">Customer
                                                                 Email</label>
-                                                            <input class="form-control" type="email" id="customer_email"
-                                                                name="customer_email" data-new-customer-required="1">
+                                                            <input class="form-control" type="text" id="customer_email"
+                                                                name="customer_email" data-new-customer-required="1" value="<?= htmlspecialchars(isset($customer_email) ? (string) $customer_email : '', ENT_QUOTES, 'UTF-8') ?>">
                                                         </div>
 
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl" for="customer_phone">Customer
                                                                 Phone</label>
                                                             <input class="form-control" type="number" id="customer_phone"
-                                                                name="customer_phone" data-new-customer-required="1">
+                                                                name="customer_phone" data-new-customer-required="1" value="<?= htmlspecialchars(isset($customer_phone) ? (string) $customer_phone : '', ENT_QUOTES, 'UTF-8') ?>">
                                                         </div>
                                                     </div>
 
@@ -1240,29 +1325,31 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                                             <label class="form-label form_lbl" for="shipping_name">Shipping
                                                                 Name</label>
                                                             <input class="form-control" type="text" id="shipping_name"
-                                                                name="shipping_name" data-new-customer-required="1">
+                                                                name="shipping_name" data-new-customer-required="1" value="<?= htmlspecialchars(isset($shipping_name) ? (string) $shipping_name : '', ENT_QUOTES, 'UTF-8') ?>">
                                                         </div>
 
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl"
                                                                 for="shipping_address">Shipping Address</label>
                                                             <input class="form-control" type="text" id="shipping_address"
-                                                                name="shipping_address" data-new-customer-required="1">
+                                                                name="shipping_address" data-new-customer-required="1" value="<?= htmlspecialchars(isset($shipping_address) ? (string) $shipping_address : '', ENT_QUOTES, 'UTF-8') ?>">
                                                         </div>
 
                                                         <div class="col-md-3 mb-3">
                                                             <label class="form-label form_lbl"
                                                                 for="shipping_contact">Shipping Contact</label>
                                                             <input class="form-control" type="number" id="shipping_contact"
-                                                                name="shipping_contact" data-new-customer-required="1">
+                                                                name="shipping_contact" data-new-customer-required="1" value="<?= htmlspecialchars(isset($shipping_contact) ? (string) $shipping_contact : '', ENT_QUOTES, 'UTF-8') ?>">
                                                         </div>
-                                                        <div class="col-md-3 mb-3">
+                                                        <div class="col-md-3 mb-3 autocomplete">
                                                             <label class="form-label form_lbl" for="sales_pic">Sales Person
                                                                 In Charge</label>
                                                             <input class="form-control" type="text" id="sales_pic"
-                                                                name="sales_pic" data-new-customer-required="1">
+                                                                name="sales_pic" data-new-customer-required="1" value="<?= htmlspecialchars(isset($sales_pic_text) ? (string) $sales_pic_text : '', ENT_QUOTES, 'UTF-8') ?>">
+                                                            <input type="hidden" id="sales_pic_hidden" name="sales_pic_hidden" value="<?= htmlspecialchars(isset($sales_pic) ? (string) $sales_pic : '', ENT_QUOTES, 'UTF-8') ?>">
                                                         </div>
                                                     </div>
+                                                    <input type="hidden" id="newCustomerAction" name="newCustomerAction" value="">
                                                     <button type="button" id="lazada_new_customer_submit_btn">Submit</button>
                                                 </div>
                                             <?php } ?>
@@ -1329,15 +1416,20 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                 <div class="col-md-6 mb-3 autocomplete">
                                     <label class="form-label form_lbl" id="lor_sales_pic_lbl" for="lor_sales_pic">Sales
                                         Person In Charge<span class="requireRed">*</span></label>
+                                    <?php
+                                    $lorSalesPicData = ['id' => '', 'display' => ''];
+                                    if (isset($lor_sales_pic_text) || isset($lor_sales_pic)) {
+                                        $lorSalesPicData['id'] = isset($lor_sales_pic) ? $lor_sales_pic : '';
+                                        $lorSalesPicData['display'] = isset($lor_sales_pic_text) ? $lor_sales_pic_text : '';
+                                    } else if (isset($row['sales_pic']) && $row['sales_pic'] !== '') {
+                                        $lorSalesPicData = resolveLookupValue(USR_USER, $row['sales_pic'], 'name', $connect);
+                                    }
+                                    ?>
                                     <input class="form-control" type="text" name="lor_sales_pic" id="lor_sales_pic"
-                                        value="<?php
-                                        if (isset($dataExisted) && isset($row['sales_pic']) && !isset($lor_sales_pic)) {
-                                            echo $row['sales_pic'];
-                                        } else if (isset($lor_sales_pic)) {
-                                            echo $lor_sales_pic;
-                                        }
-                                        ?>" <?php if ($act == '')
+                                        value="<?= htmlspecialchars((string) $lorSalesPicData['display'], ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '')
                                             echo 'disabled' ?>>
+                                    <input type="hidden" name="lor_sales_pic_hidden" id="lor_sales_pic_hidden"
+                                        value="<?= htmlspecialchars((string) $lorSalesPicData['id'], ENT_QUOTES, 'UTF-8') ?>">
                                     <?php if (isset($sales_pic_err)) { ?>
                                         <div id="err_msg">
                                             <span class="mt-n1">
@@ -1985,6 +2077,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
         const page = <?= json_encode((string) $pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         const action = <?= json_encode((string) (isset($act) ? $act : ' '), JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+        const lazadaNewCustomerCreateSucceeded = <?= $lazadaNewCustomerCreateSucceeded ? 'true' : 'false' ?>;
 
         checkCurrentPage(page, action);
         if (typeof setButtonColor === 'function') {
@@ -2033,6 +2126,8 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
             var lazadaNewCustomerFields = lazadaNewCustomerSection
                 ? lazadaNewCustomerSection.querySelectorAll('[data-new-customer-required="1"]')
                 : [];
+            var lazadaNewCustomerHiddenSalesPic = document.getElementById('sales_pic_hidden');
+            var lazadaNewCustomerActionInput = document.getElementById('newCustomerAction');
 
             function validateLazadaNewCustomerForm() {
                 var firstInvalidField = null;
@@ -2065,10 +2160,26 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                 });
             });
 
+            if (lazadaNewCustomerCreateSucceeded) {
+                Array.prototype.forEach.call(lazadaNewCustomerFields, function (field) {
+                    field.value = '';
+                    clearNewCustomerInlineError(field);
+                });
+                if (lazadaNewCustomerHiddenSalesPic) {
+                    lazadaNewCustomerHiddenSalesPic.value = '';
+                }
+                if (lazadaNewCustomerActionInput) {
+                    lazadaNewCustomerActionInput.value = '';
+                }
+            }
+
             if (lazadaNewCustomerSubmitBtn) {
                 lazadaNewCustomerSubmitBtn.addEventListener('click', function () {
                     if (!validateLazadaNewCustomerForm() || !lazadaNewCustomerForm) {
                         return;
+                    }
+                    if (lazadaNewCustomerActionInput) {
+                        lazadaNewCustomerActionInput.value = 'create';
                     }
                     HTMLFormElement.prototype.submit.call(lazadaNewCustomerForm);
                 });

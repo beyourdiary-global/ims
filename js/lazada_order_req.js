@@ -32,6 +32,19 @@ $(document).ready(function () {
     });
   }
 
+  if (!$("#sales_pic").attr("disabled")) {
+    $("#sales_pic").keyup(function () {
+      var param = {
+        search: $(this).val(),
+        searchType: "name",
+        elementID: $(this).attr("id"),
+        hiddenElementID: $(this).attr("id") + "_hidden",
+        dbTable: "<?= USR_USER ?>",
+      };
+      searchInput(param, "<?= $SITEURL ?>");
+    });
+  }
+
   if (!$("#lor_sales_pic").attr("disabled")) {
     $("#lor_sales_pic").keyup(function () {
       var param = {
