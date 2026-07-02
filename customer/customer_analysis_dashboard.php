@@ -253,10 +253,6 @@ $renderYearSection = function () use ($h, $pageUrl, $renderHiddenInputs, $platfo
                             <th>Month</th>
                             <th>Total New Customer per Month</th>
                             <th>Total Returning Customer per Month</th>
-                            <th>Total estimate repeat order monthly</th>
-                            <th>Total Success repeat order monthly</th>
-                            <th>Total LOST Customer</th>
-                            <th>Total Loyal Customer</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -266,10 +262,6 @@ $renderYearSection = function () use ($h, $pageUrl, $renderHiddenInputs, $platfo
                                 <th scope="row"><?= $h($row['month_label'] ?? '') ?></th>
                                 <td><?= $h($displayMetric($row['new_customer_total'] ?? 0)) ?></td>
                                 <td><?= $h($displayMetric($row['returning_customer_total'] ?? 0)) ?></td>
-                                <td><?= $h($displayMetric($row['estimated_repeat_order_total'] ?? null)) ?></td>
-                                <td><?= $h($displayMetric($row['success_repeat_order_total'] ?? null)) ?></td>
-                                <td><?= $h($displayMetric($row['lost_customer_total'] ?? null)) ?></td>
-                                <td><?= $h($displayMetric($row['loyal_customer_total'] ?? null)) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
@@ -412,8 +404,6 @@ $renderWeekSection = function () use ($h, $pageUrl, $renderHiddenInputs, $platfo
                             <th>Week</th>
                             <th>Total New Customer per Week</th>
                             <th>Total Returning Customer per Week</th>
-                            <th>Total estimate repeat order weekly</th>
-                            <th>Total Success repeat order weekly</th>
                         </tr>
                     </thead>
                     <tbody>
@@ -423,8 +413,6 @@ $renderWeekSection = function () use ($h, $pageUrl, $renderHiddenInputs, $platfo
                                 <th scope="row"><?= $h($weeklyRow['week_label'] ?? '') ?></th>
                                 <td><?= $h($displayMetric($weeklyRow['new_customer_total'] ?? 0)) ?></td>
                                 <td><?= $h($displayMetric($weeklyRow['returning_customer_total'] ?? 0)) ?></td>
-                                <td><?= $h($displayMetric($weeklyRow['estimated_repeat_order_total'] ?? null)) ?></td>
-                                <td><?= $h($displayMetric($weeklyRow['success_repeat_order_total'] ?? null)) ?></td>
                             </tr>
                         <?php endforeach; ?>
                     </tbody>
