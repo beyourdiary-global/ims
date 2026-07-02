@@ -403,7 +403,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                 <td scope="row"><?= htmlspecialchars((string) $row['other_discount'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) $row['pay_fee'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) $row['final_income'], ENT_QUOTES, 'UTF-8') ?></td>
-                                <td scope="row"><?= isset($pay_meth['name']) ? $pay_meth['name'] : htmlspecialchars((string) $row['pay_meth'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= isset($pay_meth['name']) ? htmlspecialchars((string) $pay_meth['name'], ENT_QUOTES, 'UTF-8') : '' ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>
                             </tr>
                         <?php } ?>

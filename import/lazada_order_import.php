@@ -138,7 +138,6 @@ if ($action === 'parseLazadaOrderReq') {
                     $price = lazadaImportExtractItemPrice($sourceText, $sku);
                     $voucher = lazadaImportExtractVoucher($sourceText);
                     $paidPrice = lazadaImportExtractPaidPrice($sourceText, $sku);
-                    $paymentMethod = lazadaImportExtractPaymentMethod($sourceText);
                     if ($orderNumber === '') {
                         $importErrors[] = 'Order Number could not be detected from the uploaded Lazada invoice PDF.';
                     } else if (lazadaImportIsDuplicateOrderNumber($orderNumber, $connect)) {
@@ -178,7 +177,7 @@ if ($action === 'parseLazadaOrderReq') {
                         'country_id' => (string) $defaultCountryId,
                         'country_name' => $defaultCountryId !== '' && isset($countryOptions[(int) $defaultCountryId]) ? (string) $countryOptions[(int) $defaultCountryId] : 'Malaysia',
                         'sales_pic' => (string) USER_NAME,
-                        'payment_method' => $paymentMethod,
+                        'payment_method' => '',
                         'order_status' => $defaultStatusLabel,
                         'order_status_val' => $defaultStatusCode,
                         'stock_out_warehouse_id' => (int) $defaultWarehouseId,
@@ -281,7 +280,7 @@ if ($action === 'parseLazadaOrderReq') {
         'country_id' => (string) $resolvedCountryId,
         'country_name' => $countryNameInput,
         'sales_pic' => (string) USER_NAME,
-        'payment_method' => trim((string) postSpaceFilter('payment_method')),
+        'payment_method' => '',
         'order_status' => $selectedOrderStatusLabel,
         'order_status_val' => $selectedOrderStatusCode,
         'stock_out_warehouse_id' => (int) $stockOutWarehouseId,
@@ -485,7 +484,7 @@ if ($action === 'parseLazadaOrderReq') {
                 '" . mysqli_real_escape_string($connect, $previewData['voucher']) . "',
                 '0.00',
                 '" . mysqli_real_escape_string($connect, $previewData['paid_price']) . "',
-                '" . mysqli_real_escape_string($connect, $previewData['payment_method']) . "',
+                NULL,
                 '" . mysqli_real_escape_string($connect, $previewData['remark']) . "',
                 '" . mysqli_real_escape_string($connect, $previewData['order_status_val']) . "',
                 " . ($stockWarehouseId > 0 ? $stockWarehouseId : 'NULL') . ",
