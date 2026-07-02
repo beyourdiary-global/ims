@@ -1032,10 +1032,10 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
 
                         <div class="mb-3">
                             <label class="form-label" for="arrival_follow_up_attachment">
-                                Screenshot / Attachment<span class="arrival-required-star">*</span>
+                                Customer Chat Screenshot<span class="arrival-required-star">*</span>
                             </label>
                             <input type="file" class="form-control" id="arrival_follow_up_attachment" name="follow_up_attachment" required>
-                            <div class="arrival-follow-up-field-error" id="arrival_follow_up_attachment_error">Screenshot / Attachment is required.</div>
+                            <div class="arrival-follow-up-field-error" id="arrival_follow_up_attachment_error">Customer Chat Screenshot is required.</div>
                             <div class="arrival-follow-up-preview" id="arrival_follow_up_attachment_preview_wrap">
                                 <img id="arrival_follow_up_attachment_preview_img" alt="Follow-Up Attachment Preview">
                                 <div class="arrival-follow-up-preview-note d-none" id="arrival_follow_up_attachment_preview_note"></div>

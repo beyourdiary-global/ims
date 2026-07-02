@@ -236,7 +236,7 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
-            array('Dashboard', 'mdi mdi-chart-bar', $SITEURL . '/customer/customer_analysis_dashboard.php', '160'),
+            array('Customer Dashboard', 'mdi mdi-chart-bar', $SITEURL . '/customer/customer_analysis_dashboard.php', '160'),
             array('Shopee Customer', 'mdi mdi-deal-outline', $SITEURL . '/shopee/shopee_cust_info_table.php', '85'),
             array('Lazada Customer', 'mdi mdi-deal-outline', $SITEURL . '/finance/lazada_cust_rcd_table.php', '91'),
             array('Facebook Customer', 'mdi mdi-deal-outline', $SITEURL . '/customer/fb_cust_deals_table.php', '75'),
