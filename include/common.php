@@ -2453,6 +2453,19 @@ if (!function_exists('customerAnalysisResolveDbConnect')) {
     }
 }
 
+if (!function_exists('customerAnalysisNormalizePlatformKey')) {
+    function customerAnalysisNormalizePlatformKey($platformKey, $allowAll = false)
+    {
+        $platformKey = strtolower(trim((string) $platformKey));
+        if ($allowAll && $platformKey === 'all') {
+            return 'all';
+        }
+
+        $platformConfigs = customerAnalysisGetPlatformConfigs();
+        return isset($platformConfigs[$platformKey]) ? $platformKey : '';
+    }
+}
+
 if (!function_exists('customerAnalysisNormalizeYear')) {
     function customerAnalysisNormalizeYear($year)
     {
@@ -2671,13 +2684,18 @@ if (!function_exists('customerAnalysisBuildPeriodMetrics')) {
 }
 
 if (!function_exists('customerAnalysisFetchCustomerOrderActivity')) {
-    function customerAnalysisFetchCustomerOrderActivity($connect, $financeConnect, $startDate, $endDate)
+    function customerAnalysisFetchCustomerOrderActivity($connect, $financeConnect, $startDate, $endDate, $platform = 'all')
     {
         $startDate = customerAnalysisNormalizeDateValue($startDate);
         $endDate = customerAnalysisNormalizeDateValue($endDate);
+        $platform = customerAnalysisNormalizePlatformKey($platform, true);
+        if ($platform === '') {
+            $platform = 'all';
+        }
         $activity = array(
             'start_date' => $startDate,
             'end_date' => $endDate,
+            'platform' => $platform,
             'customers' => array(),
             'orders' => array(),
         );
@@ -2687,6 +2705,10 @@ if (!function_exists('customerAnalysisFetchCustomerOrderActivity')) {
         }
 
         foreach (customerAnalysisGetPlatformConfigs() as $platformKey => $platformConfig) {
+            if ($platform !== 'all' && $platform !== $platformKey) {
+                continue;
+            }
+
             $customerConnect = customerAnalysisResolveDbConnect(
                 $connect,
                 $financeConnect,
@@ -2772,14 +2794,20 @@ if (!function_exists('customerAnalysisFetchCustomerOrderActivity')) {
 }
 
 if (!function_exists('customerAnalysisBuildDailyRows')) {
-    function customerAnalysisBuildDailyRows($connect, $financeConnect, $year, $month)
+    function customerAnalysisBuildDailyRows($connect, $financeConnect, $year, $month, $platform = 'all')
     {
+        $platform = customerAnalysisNormalizePlatformKey($platform, true);
+        if ($platform === '') {
+            $platform = 'all';
+        }
+
         $monthRange = customerAnalysisGetMonthDateRange($year, $month);
         $activity = customerAnalysisFetchCustomerOrderActivity(
             $connect,
             $financeConnect,
             $monthRange['start_date'],
-            $monthRange['end_date']
+            $monthRange['end_date'],
+            $platform
         );
         $rows = array();
         $labels = array();
@@ -2814,6 +2842,7 @@ if (!function_exists('customerAnalysisBuildDailyRows')) {
         return array(
             'year' => customerAnalysisNormalizeYear($year),
             'month' => customerAnalysisNormalizeMonth($month),
+            'platform' => $platform,
             'label' => isset($monthRange['label']) ? (string) $monthRange['label'] : '',
             'rows' => $rows,
             'chart' => array(
@@ -2826,14 +2855,20 @@ if (!function_exists('customerAnalysisBuildDailyRows')) {
 }
 
 if (!function_exists('customerAnalysisBuildMonthlyRows')) {
-    function customerAnalysisBuildMonthlyRows($connect, $financeConnect, $year)
+    function customerAnalysisBuildMonthlyRows($connect, $financeConnect, $year, $platform = 'all')
     {
         $year = customerAnalysisNormalizeYear($year);
+        $platform = customerAnalysisNormalizePlatformKey($platform, true);
+        if ($platform === '') {
+            $platform = 'all';
+        }
+
         $activity = customerAnalysisFetchCustomerOrderActivity(
             $connect,
             $financeConnect,
             sprintf('%04d-01-01', $year),
-            sprintf('%04d-12-31', $year)
+            sprintf('%04d-12-31', $year),
+            $platform
         );
         $rows = array();
         $labels = array();
@@ -2861,6 +2896,7 @@ if (!function_exists('customerAnalysisBuildMonthlyRows')) {
 
         return array(
             'year' => $year,
+            'platform' => $platform,
             'rows' => $rows,
             'chart' => array(
                 'labels' => $labels,
@@ -2872,14 +2908,20 @@ if (!function_exists('customerAnalysisBuildMonthlyRows')) {
 }
 
 if (!function_exists('customerAnalysisBuildWeeklyRows')) {
-    function customerAnalysisBuildWeeklyRows($connect, $financeConnect, $year, $month)
+    function customerAnalysisBuildWeeklyRows($connect, $financeConnect, $year, $month, $platform = 'all')
     {
+        $platform = customerAnalysisNormalizePlatformKey($platform, true);
+        if ($platform === '') {
+            $platform = 'all';
+        }
+
         $monthRange = customerAnalysisGetMonthDateRange($year, $month);
         $activity = customerAnalysisFetchCustomerOrderActivity(
             $connect,
             $financeConnect,
             $monthRange['start_date'],
-            $monthRange['end_date']
+            $monthRange['end_date'],
+            $platform
         );
         $weekRanges = customerAnalysisGetWeekRanges($year, $month);
         $rows = array();
@@ -2913,6 +2955,7 @@ if (!function_exists('customerAnalysisBuildWeeklyRows')) {
         return array(
             'year' => customerAnalysisNormalizeYear($year),
             'month' => customerAnalysisNormalizeMonth($month),
+            'platform' => $platform,
             'label' => isset($monthRange['label']) ? (string) $monthRange['label'] : '',
             'rows' => $rows,
             'chart' => array(
