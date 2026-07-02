@@ -47,6 +47,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
 $currentYear = (int) date('Y');
 $currentMonth = (int) date('n');
 $currentWeekNumber = customerAnalysisResolveWeekNumber((int) date('j'));
+$platformConfigs = customerAnalysisGetPlatformConfigs();
+$selectedPlatform = customerAnalysisNormalizePlatformKey(isset($_GET['platform']) ? $_GET['platform'] : 'all', true);
+if ($selectedPlatform === '') {
+    $selectedPlatform = 'all';
+}
+$platformOptions = array('all' => 'All');
+foreach ($platformConfigs as $platformKey => $platformConfig) {
+    $platformOptions[$platformKey] = isset($platformConfig['label']) ? (string) $platformConfig['label'] : ucfirst((string) $platformKey);
+}
+$selectedPlatformLabel = isset($platformOptions[$selectedPlatform]) ? (string) $platformOptions[$selectedPlatform] : 'All';
+$selectedPlatformSummary = $selectedPlatform === 'all' ? 'All Platforms' : $selectedPlatformLabel;
 $selectedYearlyYear = customerAnalysisNormalizeYear(isset($_GET['yearly_year']) ? $_GET['yearly_year'] : $currentYear);
 $selectedDailyYear = customerAnalysisNormalizeYear(isset($_GET['daily_year']) ? $_GET['daily_year'] : $currentYear);
 $selectedDailyMonth = customerAnalysisNormalizeMonth(isset($_GET['daily_month']) ? $_GET['daily_month'] : $currentMonth);
@@ -55,9 +66,9 @@ $selectedWeeklyMonth = customerAnalysisNormalizeMonth(isset($_GET['weekly_month'
 $defaultWeeklyWeek = ($selectedWeeklyYear === $currentYear && $selectedWeeklyMonth === $currentMonth) ? $currentWeekNumber : 1;
 $selectedWeeklyWeek = isset($_GET['weekly_week']) ? (int) $_GET['weekly_week'] : $defaultWeeklyWeek;
 
-$monthlyDataset = customerAnalysisBuildMonthlyRows($connect, $finance_connect, $selectedYearlyYear);
-$dailyDataset = customerAnalysisBuildDailyRows($connect, $finance_connect, $selectedDailyYear, $selectedDailyMonth);
-$weeklyDataset = customerAnalysisBuildWeeklyRows($connect, $finance_connect, $selectedWeeklyYear, $selectedWeeklyMonth);
+$monthlyDataset = customerAnalysisBuildMonthlyRows($connect, $finance_connect, $selectedYearlyYear, $selectedPlatform);
+$dailyDataset = customerAnalysisBuildDailyRows($connect, $finance_connect, $selectedDailyYear, $selectedDailyMonth, $selectedPlatform);
+$weeklyDataset = customerAnalysisBuildWeeklyRows($connect, $finance_connect, $selectedWeeklyYear, $selectedWeeklyMonth, $selectedPlatform);
 
 $weeklyRows = isset($weeklyDataset['rows']) && is_array($weeklyDataset['rows']) ? $weeklyDataset['rows'] : array();
 $validWeeklyNumbers = array();
@@ -103,6 +114,7 @@ for ($yearOption = $currentYear - 5; $yearOption <= $currentYear + 1; $yearOptio
 
 $pageUrl = $SITEURL . '/customer/customer_analysis_dashboard.php';
 $allFilters = array(
+    'platform' => $selectedPlatform,
     'yearly_year' => $selectedYearlyYear,
     'daily_year' => $selectedDailyYear,
     'daily_month' => $selectedDailyMonth,
@@ -156,13 +168,13 @@ $monthlyChartPayload = array(
     'labels' => $monthlyDataset['chart']['labels'] ?? array(),
     'newCustomerTotals' => $monthlyDataset['chart']['new_customer_totals'] ?? array(),
     'returningCustomerTotals' => $monthlyDataset['chart']['returning_customer_totals'] ?? array(),
-    'title' => 'Monthly New vs Returning Customers',
+    'title' => $selectedPlatformSummary . ' Monthly New vs Returning Customers',
 );
 $dailyChartPayload = array(
     'labels' => $dailyDataset['chart']['labels'] ?? array(),
     'newCustomerTotals' => $dailyDataset['chart']['new_customer_totals'] ?? array(),
     'returningCustomerTotals' => $dailyDataset['chart']['returning_customer_totals'] ?? array(),
-    'title' => 'Daily New vs Returning Customers',
+    'title' => $selectedPlatformSummary . ' Daily New vs Returning Customers',
 );
 $weeklyChartPayload = array(
     'labels' => $weeklyChartLabels,
@@ -170,17 +182,52 @@ $weeklyChartPayload = array(
     'returningCustomerTotals' => $weeklyDataset['chart']['returning_customer_totals'] ?? array(),
     'newBackgrounds' => $weeklyChartNewBackgrounds,
     'returningBackgrounds' => $weeklyChartReturningBackgrounds,
-    'title' => 'Weekly New vs Returning Customers',
+    'title' => $selectedPlatformSummary . ' Weekly New vs Returning Customers',
 );
 
-$renderYearSection = function () use ($h, $displayPageTitle, $pageUrl, $renderHiddenInputs, $yearOptions, $selectedYearlyYear, $monthlyDataset, $displayMetric) {
+$renderHeaderSection = function () use ($h, $SITEURL, $displayPageTitle, $pageUrl, $renderHiddenInputs, $platformOptions, $selectedPlatform, $selectedPlatformSummary) {
+    ob_start();
+    ?>
+        <section id="customerAnalysisHeaderSection" class="customer-analysis-card customer-analysis-section">
+            <div class="row">
+                <p><a href="<?= $h($SITEURL . '/dashboard.php') ?>">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> Customer <i class="fa-solid fa-chevron-right fa-xs"></i> <?= $h($displayPageTitle) ?></p>
+            </div>
+            <div class="row">
+                <div class="col-12">
+                    <h2 class="mb-2"><?= $h($displayPageTitle) ?></h2>
+                    <div class="customer-analysis-subtitle">Live customer and order activity across Shopee, Lazada, Facebook, and Website.</div>
+                </div>
+            </div>
+
+            <form method="get" action="<?= $h($pageUrl) ?>" class="customer-analysis-filter-form customer-analysis-auto-submit-form mt-3">
+                <?php $renderHiddenInputs(array('platform')); ?>
+                <div class="customer-analysis-filter-grid">
+                    <div>
+                        <label class="form-label" for="dashboard_platform">Platform</label>
+                        <select class="form-select" id="dashboard_platform" name="platform">
+                            <?php foreach ($platformOptions as $platformValue => $platformLabel): ?>
+                                <option value="<?= $h($platformValue) ?>" <?= (string) $platformValue === (string) $selectedPlatform ? 'selected' : '' ?>><?= $h($platformLabel) ?></option>
+                            <?php endforeach; ?>
+                        </select>
+                    </div>
+                </div>
+            </form>
+
+            <div class="customer-analysis-section-note">Current platform scope: <strong><?= $h($selectedPlatformSummary) ?></strong></div>
+        </section>
+    <?php
+
+    return ob_get_clean();
+};
+
+$renderYearSection = function () use ($h, $pageUrl, $renderHiddenInputs, $platformOptions, $selectedPlatform, $selectedPlatformSummary, $yearOptions, $selectedYearlyYear, $monthlyDataset, $displayMetric) {
     ob_start();
     ?>
         <section id="customerAnalysisYearSection" class="customer-analysis-card customer-analysis-section">
             <div class="customer-analysis-heading">
                 <div>
                     <h4 class="mb-1">Analysis by Year</h4>
-                    <div class="customer-analysis-subtitle">Monthly view for the selected year. New and returning counts are calculated live from customer creation dates and matching orders.</div>
+                    <div class="customer-analysis-subtitle">Monthly view for <?= $h($selectedPlatformSummary) ?> in the selected year. New and returning counts are calculated live from customer creation dates and matching orders.</div>
                 </div>
             </div>
 
@@ -238,14 +285,14 @@ $renderYearSection = function () use ($h, $displayPageTitle, $pageUrl, $renderHi
     return ob_get_clean();
 };
 
-$renderMonthSection = function () use ($h, $pageUrl, $renderHiddenInputs, $monthOptions, $selectedDailyMonth, $yearOptions, $selectedDailyYear, $dailyDataset, $displayMetric) {
+$renderMonthSection = function () use ($h, $pageUrl, $renderHiddenInputs, $platformOptions, $selectedPlatform, $selectedPlatformSummary, $monthOptions, $selectedDailyMonth, $yearOptions, $selectedDailyYear, $dailyDataset, $displayMetric) {
     ob_start();
     ?>
         <section id="customerAnalysisMonthSection" class="customer-analysis-card customer-analysis-section">
             <div class="customer-analysis-heading">
                 <div>
                     <h4 class="mb-1">Analysis by Monthly</h4>
-                    <div class="customer-analysis-subtitle">Daily breakdown for the selected month. Cumulative totals restart from day 1 of the selected month.</div>
+                    <div class="customer-analysis-subtitle">Daily breakdown for <?= $h($selectedPlatformSummary) ?> in the selected month. Cumulative totals restart from day 1 of the selected month.</div>
                 </div>
             </div>
 
@@ -307,14 +354,14 @@ $renderMonthSection = function () use ($h, $pageUrl, $renderHiddenInputs, $month
     return ob_get_clean();
 };
 
-$renderWeekSection = function () use ($h, $pageUrl, $renderHiddenInputs, $monthOptions, $selectedWeeklyMonth, $yearOptions, $selectedWeeklyYear, $weeklyRows, $selectedWeeklyWeek, $selectedWeeklySummary, $selectedWeeklyLabel, $selectedWeeklyDateRange, $displayMetric) {
+$renderWeekSection = function () use ($h, $pageUrl, $renderHiddenInputs, $platformOptions, $selectedPlatform, $selectedPlatformSummary, $monthOptions, $selectedWeeklyMonth, $yearOptions, $selectedWeeklyYear, $weeklyRows, $selectedWeeklyWeek, $selectedWeeklySummary, $selectedWeeklyLabel, $selectedWeeklyDateRange, $displayMetric) {
     ob_start();
     ?>
         <section id="customerAnalysisWeekSection" class="customer-analysis-card customer-analysis-section">
             <div class="customer-analysis-heading">
                 <div>
                     <h4 class="mb-1">Analysis by Weekly</h4>
-                    <div class="customer-analysis-subtitle">Week ranges follow the fixed monthly buckets: Day 1-7, 8-14, 15-21, and 22-end of month.</div>
+                    <div class="customer-analysis-subtitle">Week ranges for <?= $h($selectedPlatformSummary) ?> follow the fixed monthly buckets: Day 1-7, 8-14, 15-21, and 22-end of month.</div>
                 </div>
                 <?php if (!empty($selectedWeeklySummary)): ?>
                     <div class="customer-analysis-highlight">
@@ -401,6 +448,7 @@ if ($isAjaxAnalysisRequest) {
     echo $jsonEncode(array(
         'success' => true,
         'sections' => array(
+            'header' => $renderHeaderSection(),
             'year' => $renderYearSection(),
             'month' => $renderMonthSection(),
             'week' => $renderWeekSection(),
@@ -553,17 +601,7 @@ ob_end_flush();
 <body>
 <div class="container-fluid customer-analysis-dashboard py-4">
     <div class="col-12 col-xl-11 mx-auto customer-analysis-stack">
-        <div class="customer-analysis-card">
-            <div class="row">
-                <p><a href="<?= $h($SITEURL . '/dashboard.php') ?>">Dashboard</a> <i class="fa-solid fa-chevron-right fa-xs"></i> Customer <i class="fa-solid fa-chevron-right fa-xs"></i> <?= $h($displayPageTitle) ?></p>
-            </div>
-            <div class="row">
-                <div class="col-12">
-                    <h2 class="mb-2"><?= $h($displayPageTitle) ?></h2>
-                    <div class="customer-analysis-subtitle">Live customer and order activity across Shopee, Lazada, Facebook, and Website.</div>
-                </div>
-            </div>
-        </div>
+        <?= $renderHeaderSection() ?>
 
         <div id="customerAnalysisSections">
             <?= $renderYearSection() ?>
@@ -790,9 +828,10 @@ const bindFilterForms = () => {
                 destroyDataTables();
                 destroyCharts();
 
-                replaceSectionHtml('customerAnalysisYearSection', payload.sections ? payload.sections.year : '');
-                replaceSectionHtml('customerAnalysisMonthSection', payload.sections ? payload.sections.month : '');
-                replaceSectionHtml('customerAnalysisWeekSection', payload.sections ? payload.sections.week : '');
+                    replaceSectionHtml('customerAnalysisHeaderSection', payload.sections ? payload.sections.header : '');
+                    replaceSectionHtml('customerAnalysisYearSection', payload.sections ? payload.sections.year : '');
+                    replaceSectionHtml('customerAnalysisMonthSection', payload.sections ? payload.sections.month : '');
+                    replaceSectionHtml('customerAnalysisWeekSection', payload.sections ? payload.sections.week : '');
 
                 customerAnalysisConfig.chartPayloads = payload.charts || {};
                 bindFilterForms();
