@@ -317,10 +317,101 @@ function insertTableEnsureLazadaImportPin($cmsConn)
     }
 }
 
+function insertTableEnsurePackageParentSkuColumns($cmsConn, $dbCms)
+{
+    if (!($cmsConn instanceof mysqli)) {
+        return;
+    }
+
+    $safeDb = $cmsConn->real_escape_string($dbCms);
+    $qualifiedPackageTable = "`" . str_replace("`", "``", $dbCms) . "`.`package`";
+
+    $tableResult = $cmsConn->query("SELECT 1
+        FROM information_schema.tables
+        WHERE table_schema = '" . $safeDb . "'
+          AND table_name = 'package'
+        LIMIT 1");
+
+    if (!$tableResult || $tableResult->num_rows === 0) {
+        echo "<p style='color:red;'>Package parent SKU setup failed: `package` table does not exist in `" . htmlspecialchars($dbCms, ENT_QUOTES, 'UTF-8') . "`.</p>";
+        return;
+    }
+
+    $packageColumns = array(
+        'platform_item_id' => array(
+            'definition' => 'TEXT DEFAULT NULL',
+            'after' => 'item_code',
+        ),
+        'parent_package_id' => array(
+            'definition' => 'INT DEFAULT NULL',
+            'after' => 'product',
+        ),
+    );
+
+    foreach ($packageColumns as $columnName => $columnConfig) {
+        $safeColumnName = $cmsConn->real_escape_string($columnName);
+        $columnResult = $cmsConn->query("SELECT 1
+            FROM information_schema.columns
+            WHERE table_schema = '" . $safeDb . "'
+              AND table_name = 'package'
+              AND column_name = '" . $safeColumnName . "'
+            LIMIT 1");
+
+        if ($columnResult && $columnResult->num_rows > 0) {
+            echo "<p style='color:green;'>Verified `package`.`" . htmlspecialchars($columnName, ENT_QUOTES, 'UTF-8') . "` already exists.</p>";
+            continue;
+        }
+
+        $afterSql = '';
+        $afterColumnName = isset($columnConfig['after']) ? trim((string) $columnConfig['after']) : '';
+        if ($afterColumnName !== '') {
+            $safeAfterColumnName = $cmsConn->real_escape_string($afterColumnName);
+            $afterResult = $cmsConn->query("SELECT 1
+                FROM information_schema.columns
+                WHERE table_schema = '" . $safeDb . "'
+                  AND table_name = 'package'
+                  AND column_name = '" . $safeAfterColumnName . "'
+                LIMIT 1");
+
+            if ($afterResult && $afterResult->num_rows > 0) {
+                $afterSql = " AFTER `" . str_replace("`", "``", $afterColumnName) . "`";
+            }
+        }
+
+        $alterColumnSql = "ALTER TABLE " . $qualifiedPackageTable . "
+            ADD COLUMN `" . str_replace("`", "``", $columnName) . "` " . $columnConfig['definition'] . $afterSql;
+
+        if ($cmsConn->query($alterColumnSql)) {
+            echo "<p style='color:green;'>Added `package`.`" . htmlspecialchars($columnName, ENT_QUOTES, 'UTF-8') . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding `package`.`" . htmlspecialchars($columnName, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+        }
+    }
+
+    $indexResult = $cmsConn->query("SELECT 1
+        FROM information_schema.statistics
+        WHERE table_schema = '" . $safeDb . "'
+          AND table_name = 'package'
+          AND index_name = 'idx_package_parent_package_id'
+        LIMIT 1");
+
+    if ($indexResult && $indexResult->num_rows > 0) {
+        echo "<p style='color:green;'>Verified `package`.`idx_package_parent_package_id` already exists.</p>";
+        return;
+    }
+
+    if ($cmsConn->query("ALTER TABLE " . $qualifiedPackageTable . " ADD INDEX `idx_package_parent_package_id` (`parent_package_id`)")) {
+        echo "<p style='color:green;'>Added `package`.`idx_package_parent_package_id`.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed adding `package`.`idx_package_parent_package_id`: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+}
+
 $cmsConn = new mysqli($dbhost, $dbUser, $dbpwd, $db_cms, $dbport);
 if ($cmsConn->connect_error) {
     echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed connecting to CMS database `" . htmlspecialchars($db_cms, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($cmsConn->connect_error, ENT_QUOTES, 'UTF-8') . "</p>";
 } else {
+    insertTableEnsurePackageParentSkuColumns($cmsConn, $db_cms);
     insertTableEnsureOrderReportPins($cmsConn);
     insertTableEnsureLuckyDrawPins($cmsConn);
     insertTableEnsureLazadaImportPin($cmsConn);
