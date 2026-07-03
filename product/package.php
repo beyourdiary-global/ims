@@ -216,7 +216,7 @@ if (post('actionBtn')) {
 
             $parent_package_id = !empty($parentPackageRow) && isset($parentPackageRow['id']) ? (int) $parentPackageRow['id'] : 0;
             if (!empty($parentPackageRow)) {
-                $parent_package_name = isset($parentPackageRow['name']) ? (string) $parentPackageRow['name'] : $parent_package_name;
+                $parent_package_name = packageFormatRelationValue($parentPackageRow);
                 $parentPackageAuditValue = packageFormatRelationValue($parentPackageRow);
             }
 
@@ -232,7 +232,7 @@ if (post('actionBtn')) {
                     } else if (!empty($parentValidation['parent_row'])) {
                         $parentPackageRow = $parentValidation['parent_row'];
                         $parentPackageAuditValue = packageFormatRelationValue($parentPackageRow);
-                        $parent_package_name = isset($parentPackageRow['name']) ? (string) $parentPackageRow['name'] : $parent_package_name;
+                        $parent_package_name = packageFormatRelationValue($parentPackageRow);
                     }
                 }
             }
@@ -539,7 +539,7 @@ if (isset($parent_package_id)) {
 if ($parentPackageDisplayName === '' && isset($row['parent_package_id']) && (int) $row['parent_package_id'] > 0) {
     $parentPackageRows = commonPackageLoadRowsByIds($connect, array((int) $row['parent_package_id']), true);
     if (isset($parentPackageRows[(int) $row['parent_package_id']])) {
-        $parentPackageDisplayName = packageFormatRelationDisplayName($parentPackageRows[(int) $row['parent_package_id']]);
+        $parentPackageDisplayName = packageFormatRelationValue($parentPackageRows[(int) $row['parent_package_id']]);
         $parentPackageDisplayId = (string) ((int) $row['parent_package_id']);
     }
 }

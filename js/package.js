@@ -37,6 +37,89 @@ async function setBarcodeSlotTotal(rowCount) {
   hiddenField.val(totalSlot);
 }
 
+var packageLookupUrl = "<?= $SITEURL ?>/product/package_lookup.php";
+var currentPackageId = <?= json_encode((int) $dataId) ?>;
+
+function clearAutocompleteResult(elementID) {
+  $("#searchResult_" + elementID).empty();
+  $("#searchResult_" + elementID).remove();
+  $("#clear_" + elementID).remove();
+}
+
+function renderPackageAutocompleteResults(elementID, hiddenElementID, resultRows) {
+  ensureAutocompleteResultShell(elementID);
+  setWidth(elementID, "searchResult_" + elementID);
+  positionAutocompleteResult(elementID);
+
+  var rows = Array.isArray(resultRows) ? resultRows : [];
+  var resultList = $("#searchResult_" + elementID);
+  resultList.empty();
+
+  if (!rows.length) {
+    rows = [{ desc: "No Result", val: "emptyValue" }];
+  }
+
+  for (var i = 0; i < rows.length; i++) {
+    var row = rows[i] || {};
+    var desc = String(row.desc == null ? "" : row.desc);
+    var value = String(row.val == null ? "" : row.val);
+    resultList.append($("<li></li>").attr("value", value).text(desc));
+  }
+
+  resultList
+    .find("li")
+    .off("click.packageLookup")
+    .on("click.packageLookup", function () {
+      setText(this, "#" + elementID, "#" + hiddenElementID);
+      $("#" + elementID).change();
+      clearAutocompleteResult(elementID);
+    });
+}
+
+function searchPackageLookup(param) {
+  param = param || {};
+
+  var elementID = param.elementID;
+  var hiddenElementID = param.hiddenElementID;
+  var action = param.action;
+  var search = param.search == null ? "" : String(param.search);
+  var excludePackageId = Number(param.excludePackageId || 0);
+
+  if (!elementID || !hiddenElementID || !action) {
+    return;
+  }
+
+  if (search === "") {
+    clearAutocompleteResult(elementID);
+    return;
+  }
+
+  $.ajax({
+    url: packageLookupUrl,
+    type: "post",
+    data: {
+      action: action,
+      searchText: search,
+      excludePackageId: excludePackageId > 0 ? String(excludePackageId) : "",
+    },
+    dataType: "json",
+    success: function (result) {
+      renderPackageAutocompleteResults(elementID, hiddenElementID, result);
+    },
+    error: function () {
+      renderPackageAutocompleteResults(elementID, hiddenElementID, []);
+    },
+  });
+}
+
+function resetProductRowFields(id) {
+  $("#wgt_" + id).val("");
+  $("#wgt_unit_" + id).val("");
+  $("#wgt_unit_val_" + id).val("");
+  $("#barcode_status_" + id).val("0");
+  $("#barcode_slot_" + id).val("0");
+}
+
 function Add() {
   AddRow(
     $("#prod_name").val(),
@@ -154,23 +237,16 @@ function prodInfo(element) {
   id = id[id.length - 1];
 
   if (!$(element).attr("readonly")) {
-    var param = {
+    searchPackageLookup({
+      action: "search_products",
       search: $(element).val(),
-      searchType: "name",
-      page: "package",
       elementID: $(element).attr("id"),
       hiddenElementID: "prod_val_" + id,
-      dbTable: "<?= PROD ?>",
-    };
-    searchInput(param, "<?= $SITEURL ?>");
+    });
 
     if ($(element).val() == "") {
-      $("#prod_val_" + id).val("");
-      $("#wgt_" + id).val("");
-      $("#wgt_unit_" + id).val("");
-      $("#wgt_unit_val_" + id).val("");
-      $("#barcode_status_" + id).val("0");
-      $("#barcode_slot_" + id).val("0");
+      $("#prod_val_" + id).val("").trigger("input");
+      resetProductRowFields(id);
     }
   }
 }
@@ -182,79 +258,47 @@ function prodInfoAutoFill(element) {
 
   var id = $(element).attr("id").split("_");
   id = id[id.length - 1];
-  var prodArr = [];
-  var wgtArr = [];
   var rowCount = parseInt($("#productList TBODY TR:last TD").eq(0).html(), 10);
   if (isNaN(rowCount) || rowCount < 1) {
     rowCount = $("#productList TBODY TR").length;
   }
   var productId = String($(element).val() || "").trim();
+  if (productId === "") {
+    resetProductRowFields(id);
+    setBarcodeSlotTotal(rowCount);
+    return;
+  }
 
-  var retrieveProdInfo = async () => {
-    if (productId === "") {
-      prodArr = [];
-      return;
-    }
+  $.ajax({
+    url: packageLookupUrl,
+    type: "post",
+    data: {
+      action: "get_product_details",
+      productId: productId,
+    },
+    dataType: "json",
+    success: function (response) {
+      var product =
+        response && response.ok && response.product ? response.product : null;
 
-    prodArr = await retrieveJSONData(productId, "id", "<?= PROD ?>");
-  };
+      if (!product) {
+        resetProductRowFields(id);
+        setBarcodeSlotTotal(rowCount);
+        return;
+      }
 
-  var setProdInfo = async () => {
-    if (!Array.isArray(prodArr) || !prodArr.length || !prodArr[0]) {
-      $("#wgt_" + id).val("");
-      $("#wgt_unit_" + id).val("");
-      $("#wgt_unit_val_" + id).val("");
-      $("#barcode_status_" + id).val("0");
-      $("#barcode_slot_" + id).val("0");
-      return;
-    }
-
-    $("#wgt_" + id).val(prodArr[0]["weight"]);
-    $("#wgt_unit_val_" + id).val(prodArr[0]["weight_unit"]);
-    var barcodeStatus =
-      prodArr[0]["barcode_status"] === null ||
-      prodArr[0]["barcode_status"] === undefined ||
-      String(prodArr[0]["barcode_status"]).trim() === ""
-        ? "0"
-        : String(prodArr[0]["barcode_status"]);
-    var barcodeSlot =
-      prodArr[0]["barcode_slot"] === null ||
-      prodArr[0]["barcode_slot"] === undefined ||
-      String(prodArr[0]["barcode_slot"]).trim() === ""
-        ? "0"
-        : String(prodArr[0]["barcode_slot"]);
-    $("#barcode_status_" + id).val(barcodeStatus);
-    $("#barcode_slot_" + id).val(barcodeSlot);
-  };
-
-  var retrieveWgtUnit = async () => {
-    var weightUnitId = String($("#wgt_unit_val_" + id).val() || "").trim();
-    if (weightUnitId === "") {
-      wgtArr = [];
-      return;
-    }
-
-    wgtArr = await retrieveJSONData(weightUnitId, "id", "<?= WGT_UNIT ?>");
-  };
-
-  var setWgtUnit = async () => {
-    if (!Array.isArray(wgtArr) || !wgtArr.length || !wgtArr[0]) {
-      $("#wgt_unit_" + id).val("");
-      return;
-    }
-
-    $("#wgt_unit_" + id).val(wgtArr[0]["unit"]);
-  };
-
-  var allFunc = async () => {
-    await retrieveProdInfo();
-    await setProdInfo();
-    await retrieveWgtUnit();
-    await setWgtUnit();
-    await setBarcodeSlotTotal(rowCount);
-  };
-
-  allFunc();
+      $("#wgt_" + id).val(product.weight || "");
+      $("#wgt_unit_" + id).val(product.weight_unit_name || "");
+      $("#wgt_unit_val_" + id).val(product.weight_unit || "");
+      $("#barcode_status_" + id).val(product.barcode_status || "0");
+      $("#barcode_slot_" + id).val(product.barcode_slot || "0");
+      setBarcodeSlotTotal(rowCount);
+    },
+    error: function () {
+      resetProductRowFields(id);
+      setBarcodeSlotTotal(rowCount);
+    },
+  });
 }
 
 $("#package_cost").on("input", function () {
@@ -298,14 +342,13 @@ $(document).ready(function () {
   }
   if (!$("#parent_package_name").attr("readonly")) {
     $("#parent_package_name").keyup(function () {
-      var param = {
+      searchPackageLookup({
+        action: "search_parent_packages",
         search: $(this).val(),
-        searchType: "name",
         elementID: $(this).attr("id"),
         hiddenElementID: "parent_package_id",
-        dbTable: "<?= PKG ?>",
-      };
-      searchInput(param, "<?= $SITEURL ?>");
+        excludePackageId: currentPackageId,
+      });
     });
     $("#parent_package_name").change(function () {
       if ($(this).val() == "") {

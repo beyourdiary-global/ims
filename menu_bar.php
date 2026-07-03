@@ -911,6 +911,21 @@ if ($hasTaskManagementAccess) {
         }
     }
 
+    function syncMobileSidebarViewport() {
+        var mobileTop = $('.topNav').outerHeight() || 50;
+        var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+        if (window.visualViewport && window.visualViewport.height) {
+            viewportHeight = window.visualViewport.height;
+        }
+
+        var availableHeight = Math.max(0, Math.floor(viewportHeight - mobileTop));
+        document.documentElement.style.setProperty('--mobile-sidebar-top', mobileTop + 'px');
+
+        if (availableHeight > 0) {
+            document.documentElement.style.setProperty('--mobile-sidebar-height', availableHeight + 'px');
+        }
+    }
+
     function positionTaskProjectOptionsPanel(actionBtn) {
         if (!actionBtn) {
             return;
@@ -1085,6 +1100,12 @@ if ($hasTaskManagementAccess) {
     }
 
     syncTaskSidebarTopOffset();
+    syncMobileSidebarViewport();
+
+    if (window.visualViewport) {
+        window.visualViewport.addEventListener('resize', syncMobileSidebarViewport);
+        window.visualViewport.addEventListener('scroll', syncMobileSidebarViewport);
+    }
 
     if (hasTaskManagementAccess) {
         try {
@@ -1143,6 +1164,7 @@ if ($hasTaskManagementAccess) {
 
         $(window).on('resize', function () {
             syncTaskSidebarTopOffset();
+            syncMobileSidebarViewport();
             if (!hasTaskManagementAccess) {
                 $('body').removeClass('task-global-sidebar-open task-global-sidebar-enabled');
                 return;

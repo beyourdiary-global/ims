@@ -134,7 +134,7 @@ if ($action === 'parseLazadaOrderReq') {
                     $orderNumber = lazadaImportExtractOrderNumber($sourceText);
                     $customerName = lazadaImportExtractCustomerName($sourceText);
                     $shippingAddress = lazadaImportExtractShippingAddress($sourceText);
-                    $sku = lazadaImportExtractSellerSku($sourceText);
+                    $sku = lazadaImportExtractSellerSku($sourceText, $packageMeta);
                     $price = lazadaImportExtractItemPrice($sourceText, $sku);
                     $voucher = lazadaImportExtractVoucher($sourceText);
                     $paidPrice = lazadaImportExtractPaidPrice($sourceText, $sku);
@@ -760,15 +760,431 @@ function lazadaImportExtractFieldByLabels($text, $labels, $stopLabels = array())
     return '';
 }
 
-function lazadaImportExtractOrderNumber($text)
+function lazadaImportNormalizeOrderCandidate($value)
 {
-    $value = lazadaImportExtractFieldByLabels($text, array('Order Number'), array('Order Date', 'Invoice To', 'Invoice Date'));
-    if ($value !== '' && preg_match('/([0-9]{8,30})/', $value, $matches)) {
-        return trim((string) $matches[1]);
+    $raw = trim((string) $value);
+    if ($raw === '') {
+        return '';
     }
 
-    if (preg_match('/Order\s*Number\s*:?\s*([0-9]{8,30})/i', (string) $text, $matches)) {
-        return trim((string) $matches[1]);
+    $digitCount = strlen(preg_replace('/\D+/', '', $raw));
+    if ($digitCount < 10) {
+        return '';
+    }
+
+    $normalized = strtoupper($raw);
+    $normalized = strtr($normalized, array(
+        'O' => '0',
+        'Q' => '0',
+        'D' => '0',
+        'I' => '1',
+        'L' => '1',
+        '|' => '1',
+        'S' => '5',
+        'B' => '8',
+    ));
+    $normalized = preg_replace('/\D+/', '', $normalized);
+
+    return strlen($normalized) >= 12 && strlen($normalized) <= 30 ? $normalized : '';
+}
+
+function lazadaImportExtractOrderNumber($text)
+{
+    $text = lazadaImportNormalizeSourceText($text);
+    if ($text === '') {
+        return '';
+    }
+
+    $priorityPatterns = array(
+        '/Order\s+Detail\s*#?\s*([0-9\s]{12,50})/i',
+        '/Order\s+Number\s*:?\s*([0-9\s]{12,50})/i',
+        '/Your\s+ordered\s+items\s+for\s*([0-9\s]{12,50})/i',
+        '/Print\s+Time\s*:?[^0-9]{0,40}([0-9\s]{12,50})/i',
+    );
+
+    foreach ($priorityPatterns as $pattern) {
+        if (preg_match($pattern, $text, $matches)) {
+            $candidate = lazadaImportNormalizeOrderCandidate($matches[1]);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+    }
+
+    $value = lazadaImportExtractFieldByLabels($text, array('Order Number'), array('Order Date', 'Invoice To', 'Invoice Date'));
+    $candidate = lazadaImportNormalizeOrderCandidate($value);
+    if ($candidate !== '') {
+        return $candidate;
+    }
+
+    $candidates = array();
+    if (preg_match_all('/(?:^|[^0-9])((?:[0-9][\s\-]*){12,30})(?=[^0-9]|$)/', $text, $matches)) {
+        foreach ((array) $matches[1] as $match) {
+            $candidate = lazadaImportNormalizeOrderCandidate($match);
+            if ($candidate === '') {
+                continue;
+            }
+            if (!isset($candidates[$candidate])) {
+                $candidates[$candidate] = 0;
+            }
+            $candidates[$candidate]++;
+        }
+    }
+
+    if (!empty($candidates)) {
+        arsort($candidates);
+        return (string) array_key_first($candidates);
+    }
+
+    return '';
+}
+
+function lazadaImportExtractSpecialField($text, $fieldName)
+{
+    $fieldName = strtoupper(preg_replace('/[^A-Z0-9_]+/i', '', (string) $fieldName));
+    if ($fieldName === '') {
+        return '';
+    }
+
+    $pattern = '/__LZD_FIELD_' . preg_quote($fieldName, '/') . '__\|\|\|([^\n\r]+)/i';
+    if (preg_match_all($pattern, (string) $text, $matches)) {
+        for ($index = count($matches[1]) - 1; $index >= 0; $index--) {
+            $value = normalizeImportText($matches[1][$index]);
+            if ($value !== '') {
+                return $value;
+            }
+        }
+    }
+
+    return '';
+}
+
+function lazadaImportCleanCustomerName($name)
+{
+    $name = normalizeImportText((string) $name);
+    if ($name === '') {
+        return '';
+    }
+
+    $name = preg_replace('/\b(?:Invoice\s*Number|Order\s*Number|Order\s*Date|Invoice\s*To|Invoice\s*Date|Customer\s*Name|Receiver\s*Name)\s*:?\s*/i', ' ', $name);
+    $name = preg_replace('/\b\d{1,2}\s*[\/\-\s]\s*\d{1,2}\s*[\/\-\s]\s*\d{2,4}\b/', ' ', (string) $name);
+    $name = preg_replace('/\b\d{8,30}\b/', ' ', (string) $name);
+    $name = preg_replace('/\b(?:Billing\s*Address|Shipping\s*Address|Contact\s*Phone|Payment\s*Method|Product\s*Name|Seller\s*SKU|Shop\s*SKU|Price|Paid\s*Price|Subtotal|Total|Voucher|Net\s*Paid)\b.*$/i', '', (string) $name);
+    $name = preg_replace("/[^A-Za-z\.\-'\s]/", ' ', (string) $name);
+    $name = preg_replace('/\s{2,}/', ' ', (string) $name);
+
+    return trim((string) $name);
+}
+
+function lazadaImportLooksLikeCustomerNameCandidate($name)
+{
+    $name = lazadaImportCleanCustomerName($name);
+    if ($name === '') {
+        return false;
+    }
+
+    if (preg_match('/\d/', $name)) {
+        return false;
+    }
+
+    if (preg_match('/[,\/\\@#:_\|]/', $name)) {
+        return false;
+    }
+
+    $lettersOnly = preg_replace('/[^A-Za-z]/', '', $name);
+    if (strlen((string) $lettersOnly) < 5) {
+        return false;
+    }
+
+    if (strlen($name) > 100) {
+        return false;
+    }
+
+    $words = preg_split('/\s+/', trim((string) $name), -1, PREG_SPLIT_NO_EMPTY);
+    if (!is_array($words) || empty($words)) {
+        return false;
+    }
+
+    $genericDocumentWords = array(
+        'invoice', 'order', 'date', 'number', 'address', 'billing', 'shipping',
+        'contact', 'phone', 'payment', 'method', 'product', 'seller', 'shop',
+        'sku', 'price', 'paid', 'total', 'subtotal', 'voucher', 'barcode',
+        'customer', 'receiver', 'item', 'items', 'email', 'warehouse', 'package'
+    );
+
+    foreach ($words as $word) {
+        $wordKey = strtolower(preg_replace('/[^A-Za-z]/', '', (string) $word));
+        if ($wordKey !== '' && in_array($wordKey, $genericDocumentWords, true)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function lazadaImportGetTopInvoiceBlock($text)
+{
+    $text = lazadaImportNormalizeSourceText($text);
+    if ($text === '') {
+        return '';
+    }
+
+    $startPositions = array();
+    foreach (array('Invoice Number', 'Order Number', 'Order Date', 'Invoice To') as $startLabel) {
+        $startPos = stripos($text, $startLabel);
+        if ($startPos !== false) {
+            $startPositions[] = (int) $startPos;
+        }
+    }
+
+    $start = !empty($startPositions) ? min($startPositions) : 0;
+    $topBlock = substr($text, $start);
+
+    $stopPositions = array();
+    foreach (array('BILLING ADDRESS', 'SHIPPING ADDRESS', 'Your ordered items', 'Product name', 'Seller SKU', 'Ready To Ship') as $stopLabel) {
+        $stopPos = stripos($topBlock, $stopLabel);
+        if ($stopPos !== false) {
+            $stopPositions[] = (int) $stopPos;
+        }
+    }
+
+    if (!empty($stopPositions)) {
+        return substr($topBlock, 0, min($stopPositions));
+    }
+
+    return substr($topBlock, 0, 1800);
+}
+
+function lazadaImportExtractCustomerNameFromSpecialField($text)
+{
+    $candidate = lazadaImportCleanCustomerName(lazadaImportExtractSpecialField($text, 'CUSTOMER_NAME'));
+    return lazadaImportLooksLikeCustomerNameCandidate($candidate) ? $candidate : '';
+}
+
+function lazadaImportExtractCustomerNameFromInvoiceToRow($text)
+{
+    $topBlock = lazadaImportGetTopInvoiceBlock($text);
+    if ($topBlock === '') {
+        return '';
+    }
+
+    $patterns = array(
+        '/Invoice\s*To\s*:?\s*([^\n\r]{2,160}?)(?=\s+Invoice\s*Date\b|\s+BILLING\s+ADDRESS\b|\s+SHIPPING\s+ADDRESS\b|$)/is',
+        '/Invoice\s*To\s*:?\s*([A-Za-z][A-Za-z\s\.\-\']{4,100}?)(?:\||$)/is',
+        '/Order\s*Date\s*:?\s*\d{1,2}\s*[\/\-\s]\s*\d{1,2}\s*[\/\-\s]\s*\d{2,4}\s+([A-Za-z][A-Za-z\s\.\-\']{4,100}?)\s+(?:Invoice\s*Date\s*:?\s*)?\d{1,2}\s*[\/\-\s]\s*\d{1,2}\s*[\/\-\s]\s*\d{2,4}/is'
+    );
+
+    foreach ($patterns as $pattern) {
+        if (preg_match($pattern, $topBlock, $matches)) {
+            $candidate = lazadaImportCleanCustomerName($matches[1]);
+            if (lazadaImportLooksLikeCustomerNameCandidate($candidate)) {
+                return $candidate;
+            }
+        }
+    }
+
+    $lines = getPdfTextLines($topBlock);
+    foreach ($lines as $index => $line) {
+        $line = normalizeImportText($line);
+        if (stripos($line, 'Invoice To') === false) {
+            continue;
+        }
+
+        $value = preg_replace('/^.*?Invoice\s*To\s*:?\s*/i', '', $line);
+        $valueParts = preg_split('/\b(?:Invoice\s*Date|Billing\s*Address|Shipping\s*Address)\b/i', (string) $value);
+        $candidate = lazadaImportCleanCustomerName(isset($valueParts[0]) ? $valueParts[0] : '');
+        if (lazadaImportLooksLikeCustomerNameCandidate($candidate)) {
+            return $candidate;
+        }
+
+        for ($offset = 1; $offset <= 10; $offset++) {
+            if (!isset($lines[$index + $offset])) {
+                break;
+            }
+            $nextLine = normalizeImportText($lines[$index + $offset]);
+            if (preg_match('/\b(?:Billing\s*Address|Shipping\s*Address|Your\s+ordered\s+items)\b/i', $nextLine)) {
+                break;
+            }
+            if (preg_match('/\bInvoice\s*Date\b/i', $nextLine)) {
+                continue;
+            }
+            $candidate = lazadaImportCleanCustomerName($nextLine);
+            if (lazadaImportLooksLikeCustomerNameCandidate($candidate)) {
+                return $candidate;
+            }
+        }
+    }
+
+    if (preg_match_all('/__LZD_OCR_ROW__\|\|\|([^\n\r]+)/i', $topBlock, $rowMatches)) {
+        foreach ((array) $rowMatches[1] as $rowText) {
+            $rowText = normalizeImportText($rowText);
+            if (stripos($rowText, 'Invoice To') === false) {
+                continue;
+            }
+            $value = preg_replace('/^.*?Invoice\s*To\s*:?\s*/i', '', $rowText);
+            $valueParts = preg_split('/\b(?:Invoice\s*Date|Billing\s*Address|Shipping\s*Address)\b/i', (string) $value);
+            $candidate = lazadaImportCleanCustomerName(isset($valueParts[0]) ? $valueParts[0] : '');
+            if (lazadaImportLooksLikeCustomerNameCandidate($candidate)) {
+                return $candidate;
+            }
+        }
+    }
+
+    return '';
+}
+
+function lazadaImportExtractCustomerNameFromInvoiceValueStack($text)
+{
+    $topBlock = lazadaImportGetTopInvoiceBlock($text);
+    if ($topBlock === '') {
+        return '';
+    }
+
+    if (preg_match('/\b\d{8,30}\b\s+\d{1,2}\s*[\/\-\s]\s*\d{1,2}\s*[\/\-\s]\s*\d{2,4}\s+([A-Za-z][A-Za-z\s\.\-\']{4,100}?)\s+\d{1,2}\s*[\/\-\s]\s*\d{1,2}\s*[\/\-\s]\s*\d{2,4}/is', $topBlock, $matches)) {
+        $candidate = lazadaImportCleanCustomerName($matches[1]);
+        if (lazadaImportLooksLikeCustomerNameCandidate($candidate)) {
+            return $candidate;
+        }
+    }
+
+    $valueBlock = preg_replace('/\b(?:Invoice\s*Number|Order\s*Number|Order\s*Date|Invoice\s*To|Invoice\s*Date)\s*:?\s*/i', "\n", (string) $topBlock);
+    $valueBlock = preg_replace('/\bINVOICE\b/i', "\n", (string) $valueBlock);
+    $valueBlock = preg_replace('/\b\d{8,30}\b/', "\n", (string) $valueBlock);
+    $valueBlock = preg_replace('/\b\d{1,2}\s*[\/\-\s]\s*\d{1,2}\s*[\/\-\s]\s*\d{2,4}\b/', "\n", (string) $valueBlock);
+
+    $lines = getPdfTextLines($valueBlock);
+    foreach ($lines as $line) {
+        $pieces = preg_split('/\s{2,}|\t|\|/', $line);
+        foreach ((array) $pieces as $piece) {
+            $candidate = lazadaImportCleanCustomerName($piece);
+            if (lazadaImportLooksLikeCustomerNameCandidate($candidate)) {
+                return $candidate;
+            }
+        }
+    }
+
+    return '';
+}
+
+function lazadaImportExtractCustomerNameNearInvoiceLabel($text)
+{
+    $name = lazadaImportExtractCustomerNameFromSpecialField($text);
+    if ($name !== '') {
+        return $name;
+    }
+
+    $topBlock = lazadaImportGetTopInvoiceBlock($text);
+    if ($topBlock === '' || stripos($topBlock, 'Invoice To') === false) {
+        return '';
+    }
+
+    $name = lazadaImportExtractCustomerNameFromInvoiceToRow($text);
+    if ($name !== '') {
+        return $name;
+    }
+
+    return lazadaImportExtractCustomerNameFromInvoiceValueStack($text);
+}
+
+function lazadaImportExtractCustomerNameFromTopInvoiceBlock($text)
+{
+    return lazadaImportExtractCustomerNameNearInvoiceLabel($text);
+}
+
+function lazadaImportCleanCustomerTableName($name)
+{
+    $name = lazadaImportCleanCustomerName($name);
+    if ($name === '') {
+        return '';
+    }
+
+    $lettersOnly = preg_replace('/[^A-Za-z]/', '', $name);
+    if (strlen((string) $lettersOnly) < 2 || strlen((string) $lettersOnly) > 100) {
+        return '';
+    }
+
+    if (preg_match('/\d|[,\/\\@#:_\|]/', $name)) {
+        return '';
+    }
+
+    return $name;
+}
+
+function lazadaImportExtractCustomerNameFromCustomerTable($text)
+{
+    $text = lazadaImportNormalizeSourceText($text);
+    if ($text === '') {
+        return '';
+    }
+
+    if (preg_match('/Customer\s+Name\s+Customer\s+ID.*?\n\s*([^\n\r]{1,160})/is', $text, $matches)) {
+        $line = normalizeImportText($matches[1]);
+        if (preg_match('/^(.+?)\s+\d{5,}\b/', $line, $nameMatches)) {
+            $candidate = lazadaImportCleanCustomerTableName($nameMatches[1]);
+            if ($candidate !== '') {
+                return $candidate;
+            }
+        }
+    }
+
+    return '';
+}
+
+function lazadaImportLooksLikeDateLine($line)
+{
+    $line = strtoupper(normalizeImportText($line));
+    if ($line === '') {
+        return false;
+    }
+
+    $line = strtr($line, array(
+        'O' => '0',
+        'Q' => '0',
+        'D' => '0',
+        'I' => '1',
+        'L' => '1',
+        '|' => '1',
+        'S' => '5',
+        'B' => '8',
+    ));
+    $line = preg_replace('/\s+/', ' ', (string) $line);
+
+    return (bool) preg_match('/^(?:\d{1,2}[\/\-. ]\d{1,2}[\/\-. ]\d{2,4}|\d{6,8})$/', $line);
+}
+
+function lazadaImportExtractCustomerNameFromDateStack($text)
+{
+    $topBlock = lazadaImportGetTopInvoiceBlock($text);
+    $lines = getPdfTextLines($topBlock !== '' ? $topBlock : $text);
+    if (empty($lines)) {
+        return '';
+    }
+
+    for ($index = 0; $index < count($lines) - 2; $index++) {
+        $firstLine = normalizeImportText($lines[$index]);
+        $secondLine = normalizeImportText($lines[$index + 1]);
+        $thirdLine = normalizeImportText($lines[$index + 2]);
+
+        if (lazadaImportLooksLikeDateLine($firstLine) && lazadaImportLooksLikeDateLine($thirdLine)) {
+            $candidate = lazadaImportCleanCustomerName($secondLine);
+            if (lazadaImportLooksLikeCustomerNameCandidate($candidate)) {
+                return $candidate;
+            }
+        }
+    }
+
+    for ($index = 0; $index < count($lines) - 3; $index++) {
+        $firstLine = normalizeImportText($lines[$index]);
+        $secondLine = normalizeImportText($lines[$index + 1]);
+        $thirdLine = normalizeImportText($lines[$index + 2]);
+        $fourthLine = normalizeImportText($lines[$index + 3]);
+
+        if (lazadaImportNormalizeOrderCandidate($firstLine) !== '' && lazadaImportLooksLikeDateLine($secondLine) && lazadaImportLooksLikeDateLine($fourthLine)) {
+            $candidate = lazadaImportCleanCustomerName($thirdLine);
+            if (lazadaImportLooksLikeCustomerNameCandidate($candidate)) {
+                return $candidate;
+            }
+        }
     }
 
     return '';
@@ -776,16 +1192,54 @@ function lazadaImportExtractOrderNumber($text)
 
 function lazadaImportExtractCustomerName($text)
 {
-    $value = lazadaImportExtractFieldByLabels($text, array('Invoice To'), array('Invoice Date', 'SHIPPING ADDRESS', 'BILLING ADDRESS'));
-    if ($value !== '') {
-        return trim((string) $value);
+    $text = lazadaImportNormalizeSourceText($text);
+    if ($text === '') {
+        return '';
     }
 
-    if (preg_match('/Invoice\s*To\s*:?\s*([A-Za-z][^\n\r]{1,120}?)(?=\s+Invoice\s*Date|\s+SHIPPING\s+ADDRESS|\s+BILLING\s+ADDRESS|$)/i', (string) $text, $matches)) {
-        return normalizeImportText($matches[1]);
+    $labelAnchoredName = lazadaImportExtractCustomerNameNearInvoiceLabel($text);
+    if ($labelAnchoredName !== '') {
+        return $labelAnchoredName;
+    }
+
+    $value = lazadaImportExtractFieldByLabels($text, array('Invoice To'), array('Invoice Date', 'SHIPPING ADDRESS', 'BILLING ADDRESS'));
+    if (lazadaImportLooksLikeCustomerNameCandidate($value)) {
+        return lazadaImportCleanCustomerName($value);
+    }
+
+    $customerTableName = lazadaImportExtractCustomerNameFromCustomerTable($text);
+    if ($customerTableName !== '') {
+        return $customerTableName;
+    }
+
+    $stackName = lazadaImportExtractCustomerNameFromDateStack($text);
+    if ($stackName !== '') {
+        return $stackName;
     }
 
     return '';
+}
+
+function lazadaImportAddressLineLooksUsable($line)
+{
+    $line = normalizeImportText($line);
+    if ($line === '') {
+        return false;
+    }
+
+    if (preg_match('/^(?:BILLING\s+ADDRESS|SHIPPING\s+ADDRESS|Contact\s*Phone|Payment\s*Method|Your\s+ordered\s+items|Ready\s+To\s+Ship|#|Product\s+name|Seller\s+SKU|Shop\s+SKU)\b/i', $line)) {
+        return false;
+    }
+
+    if (preg_match('/\b(?:Detail\s+Address|Receiver\s+Name|Receiver\s+Phone\s+Number|Show\s+Personal\s+Info)\b/i', $line)) {
+        return false;
+    }
+
+    if (preg_match('/\b(?:Invoice\s*Number|Order\s*Number|Order\s*Date|Invoice\s*Date|Subtotal|Total|Voucher|Net\s*Paid)\b/i', $line)) {
+        return false;
+    }
+
+    return (bool) preg_match('/[0-9A-Za-z\*].*(?:,|\*)/', $line);
 }
 
 function lazadaImportExtractShippingAddress($text)
@@ -795,28 +1249,21 @@ function lazadaImportExtractShippingAddress($text)
         return '';
     }
 
-    $upperText = strtoupper($text);
-    $shippingLabelPos = strpos($upperText, 'SHIPPING ADDRESS');
-    if ($shippingLabelPos !== false) {
-        $segmentStart = $shippingLabelPos + strlen('SHIPPING ADDRESS');
-        $segment = substr($text, $segmentStart);
-        if ($segment !== false && $segment !== '') {
-            $stopOffsets = array();
-            foreach (array('Contact Phone', 'Payment Method', 'Your ordered items for', 'BILLING ADDRESS') as $stopLabel) {
-                $stopPos = stripos($segment, $stopLabel);
-                if ($stopPos !== false) {
-                    $stopOffsets[] = (int) $stopPos;
-                }
-            }
-            if (!empty($stopOffsets)) {
-                $segment = substr($segment, 0, min($stopOffsets));
-            }
+    $specialAddress = lazadaImportExtractSpecialField($text, 'SHIPPING_ADDRESS');
+    if ($specialAddress !== '') {
+        return lazadaImportCleanupAddress($specialAddress);
+    }
 
-            $value = lazadaImportCleanupAddress($segment);
-            if ($value !== '') {
-                return $value;
-            }
+    if (preg_match('/Shipping\s+Address(?:[^\n\r]{0,120})?\s+Detail\s+Address\s+Receiver\s+Name\s*([^\n\r]+?)(?=\s+Billing\s+Address|\s+Ready\s+To\s+Ship|\s+Receiver\s+Phone\s+Number|$)/is', $text, $matches)) {
+        $detailAddress = lazadaImportCleanupAddress($matches[1]);
+        if ($detailAddress !== '') {
+            return $detailAddress;
         }
+    }
+
+    $value = lazadaImportExtractAddressBySideBySideLabel($text, 'SHIPPING ADDRESS');
+    if ($value !== '') {
+        return lazadaImportCleanupAddress($value);
     }
 
     $value = lazadaImportExtractFieldByLabels(
@@ -828,11 +1275,88 @@ function lazadaImportExtractShippingAddress($text)
         return lazadaImportCleanupAddress($value);
     }
 
-    if (preg_match('/SHIPPING\s+ADDRESS\s*(.*?)\s*Contact\s*Phone/is', (string) $text, $matches)) {
+    if (preg_match('/SHIPPING\s+ADDRESS\s*(.*?)(?:Contact\s*Phone|Payment\s*Method|Your\s+ordered\s+items|#\s*Product\s+name|$)/is', $text, $matches)) {
         return lazadaImportCleanupAddress($matches[1]);
     }
 
     return '';
+}
+
+function lazadaImportExtractAddressBySideBySideLabel($text, $targetLabel)
+{
+    $lines = getPdfTextLines($text);
+    if (empty($lines)) {
+        return '';
+    }
+
+    $targetLabel = strtoupper(trim((string) $targetLabel));
+    $labelLineIndex = -1;
+    $labelColumn = 0;
+
+    foreach ($lines as $index => $line) {
+        $normalizedLine = strtoupper(normalizeImportText($line));
+        $labelPosition = strpos($normalizedLine, $targetLabel);
+        if ($labelPosition === false) {
+            continue;
+        }
+
+        $labelLineIndex = $index;
+        $labelColumn = $labelPosition;
+        break;
+    }
+
+    if ($labelLineIndex < 0) {
+        return '';
+    }
+
+    $parts = array();
+    for ($index = $labelLineIndex + 1; $index < count($lines); $index++) {
+        $line = normalizeImportText($lines[$index]);
+        if ($line === '') {
+            continue;
+        }
+
+        if (preg_match('/^(?:Contact\s*Phone|Payment\s*Method|Your\s+ordered\s+items|Ready\s+To\s+Ship|#|Product\s+name|Seller\s+SKU|Shop\s+SKU)\b/i', $line)) {
+            break;
+        }
+
+        $cleanLine = lazadaImportPickRightSideTableCell($line, $labelColumn);
+        if ($cleanLine === '') {
+            continue;
+        }
+
+        if (lazadaImportAddressLineLooksUsable($cleanLine)) {
+            $parts[] = $cleanLine;
+        }
+    }
+
+    if (count($parts) >= 2 && (int) $labelColumn <= 2) {
+        return trim((string) $parts[count($parts) - 1]);
+    }
+
+    return trim(implode(' ', $parts));
+}
+
+function lazadaImportPickRightSideTableCell($line, $labelColumn)
+{
+    $line = normalizeImportText($line);
+    if ($line === '') {
+        return '';
+    }
+
+    $chunks = preg_split('/\s{2,}|\t|\|/', $line, -1, PREG_SPLIT_NO_EMPTY);
+    if (is_array($chunks) && count($chunks) >= 2) {
+        return trim((string) $chunks[count($chunks) - 1]);
+    }
+
+    if ((int) $labelColumn > 0 && strlen($line) > (int) $labelColumn) {
+        $rightSide = trim(substr($line, (int) $labelColumn));
+        if ($rightSide !== '') {
+            return $rightSide;
+        }
+    }
+
+    return $line;
 }
 
 function lazadaImportCleanupAddress($address)
@@ -842,7 +1366,15 @@ function lazadaImportCleanupAddress($address)
         return '';
     }
 
-    $address = preg_replace('/\s*,\s*/', ', ', $address);
+    $address = preg_replace('/\b(?:SHIPPING\s+ADDRESS|BILLING\s+ADDRESS|Detail\s+Address)\b\s*:?\s*/i', ' ', $address);
+    $address = preg_replace('/\bContact\s*Phone\s*:?.*$/i', '', (string) $address);
+    $address = preg_replace('/\b(?:Payment\s*Method|Your\s+ordered\s+items|Product\s+name|Seller\s+SKU|Shop\s+SKU)\b.*$/i', '', (string) $address);
+    $address = preg_replace('/\s*\|\s*/', ' ', (string) $address);
+
+    $address = preg_replace('/^[^\p{L}\p{N}]+/u', '', (string) $address);
+    $address = preg_replace('/^[A-Za-z]\s+(?=\d+\s*,)/u', '', (string) $address);
+
+    $address = preg_replace('/\s*,\s*/', ', ', (string) $address);
     $address = preg_replace('/,\s*,+/u', ', ', (string) $address);
     $address = preg_replace('/,{2,}/', ',', (string) $address);
     $address = preg_replace('/\s{2,}/', ' ', (string) $address);
@@ -850,14 +1382,6 @@ function lazadaImportCleanupAddress($address)
 
     if (preg_match('/^(.{12,}?)\s+\1$/u', $address, $duplicateMatches)) {
         return trim((string) $duplicateMatches[1], " ,");
-    }
-
-    if (preg_match('/^(.+?\bMalaysia\b)\s+(.+)$/iu', $address, $countryMatches)) {
-        $firstAddress = trim((string) $countryMatches[1], " ,");
-        $remainingAddress = trim((string) $countryMatches[2], " ,");
-        if ($firstAddress !== '' && $remainingAddress !== '' && normalizeImportLookup($firstAddress) === normalizeImportLookup($remainingAddress)) {
-            return $firstAddress;
-        }
     }
 
     $parts = preg_split('/,\s*/', $address, -1, PREG_SPLIT_NO_EMPTY);
@@ -875,36 +1399,490 @@ function lazadaImportCleanupAddress($address)
     return trim(implode(', ', is_array($parts) ? $parts : array($address)), " ,");
 }
 
-function lazadaImportExtractSellerSku($text)
+function lazadaImportNormalizeSkuForCompare($value)
 {
-    $value = lazadaImportExtractFieldByLabels($text, array('Seller SKU'), array('Shop SKU', 'Price', 'Paid Price', 'Subtotal'));
+    $value = strtoupper((string) $value);
+    $value = preg_replace('/[^A-Z0-9]+/', '', $value);
+    return strtr($value, array(
+        'O' => '0',
+        'Q' => '0',
+        'I' => '1',
+        'L' => '1',
+        '|' => '1',
+        '8' => 'S',
+        '5' => 'S',
+    ));
+}
+
+function lazadaImportCleanupSkuCandidate($value)
+{
+    $value = strtoupper(normalizeImportText((string) $value));
+    if ($value === '') {
+        return '';
+    }
+
+    $value = preg_replace('/\b(?:SELLER\s*SKU|SHOP\s*SKU|PRODUCT\s*NAME|PRICE|PAID\s*PRICE|RM|MYR|STANDARD|WAREHOUSE|DROPSHIPPING|READY|SHIP|ORDER\s+LINE\s+ID|ITEM\s+ID|SUBTOTAL|LESS|TOTAL|NET\s+PAID)\b\s*:?/i', ' ', $value);
+    $value = preg_replace('/\s+(?:RM|MYR)?\s*[0-9][0-9,]*(?:\.\d{2})?.*$/i', '', (string) $value);
+    $value = preg_replace('/[^A-Z0-9\-\/_\s]/', ' ', (string) $value);
+    $value = preg_replace('/\s*[-\/_]\s*/', '-', (string) $value);
     $value = preg_replace('/\s+/', '', (string) $value);
-    $value = trim((string) $value);
-    if ($value !== '' && preg_match('/[A-Za-z]/', $value) && preg_match('/\d/', $value)) {
-        return $value;
+    $value = preg_replace('/-+/', '-', (string) $value);
+    $value = trim((string) $value, '-_/ ');
+
+    return $value;
+}
+
+function lazadaImportIsLikelyMarketplaceSkuCode($sku)
+{
+    $sku = lazadaImportCleanupSkuCandidate($sku);
+    if ($sku === '') {
+        return false;
     }
 
-    if (preg_match('/Seller\s*SKU\s*([A-Za-z0-9\-\/_]{4,60})\s+Shop\s*SKU/i', (string) $text, $matches)) {
-        return trim((string) $matches[1]);
+    if (!preg_match('/[A-Z]/i', $sku) || !preg_match('/\d/', $sku)) {
+        return false;
     }
 
-    if (preg_match('/Price\s+Paid\s*Price\s+(.*?)(?:Upon receipt|$)/is', (string) $text, $matches)) {
-        $section = trim((string) $matches[1]);
-        if ($section !== '') {
-            $sectionTail = substr($section, -260);
-            if (preg_match('/([A-Z0-9]{2,}(?:[\s\-\/_]+[A-Z0-9]{1,}){2,})\s+[0-9]{6,}[A-Za-z0-9\-_ ]{4,40}\s+[0-9][0-9,]*(?:\.\d{2})?\s+[0-9][0-9,]*(?:\.\d{2})?\s*$/', $sectionTail, $tailMatches)) {
-                $value = preg_replace('/\s+/', '', (string) $tailMatches[1]);
-                $value = trim((string) $value, '-_ ');
-                if ($value !== '' && preg_match('/[A-Za-z]/', $value) && preg_match('/\d/', $value)) {
-                    return $value;
+    $plainSku = preg_replace('/[^A-Z0-9]/i', '', $sku);
+    if (strlen((string) $plainSku) < 8) {
+        return false;
+    }
+
+    $separatorCount = preg_match_all('/[-\/_]/', $sku);
+    if ($separatorCount < 2) {
+        return false;
+    }
+
+    if (preg_match('/[-\/_]$/', $sku)) {
+        return false;
+    }
+
+    $segments = preg_split('/[-\/_]+/', $sku, -1, PREG_SPLIT_NO_EMPTY);
+    if (!is_array($segments) || count($segments) < 3) {
+        return false;
+    }
+
+    foreach ($segments as $segment) {
+        if (preg_match('/^[0-9]{6,}$/', $segment)) {
+            return false;
+        }
+    }
+
+    return true;
+}
+
+function lazadaImportSkuCandidateLooksUsable($sku)
+{
+    return lazadaImportIsLikelyMarketplaceSkuCode($sku);
+}
+
+function lazadaImportSkuCandidateScore($sku, $packageMeta)
+{
+    $sku = lazadaImportCleanupSkuCandidate($sku);
+    if (!lazadaImportSkuCandidateLooksUsable($sku)) {
+        return -1;
+    }
+
+    $plainSku = preg_replace('/[^A-Z0-9]/i', '', $sku);
+    $separatorCount = preg_match_all('/[-\/_]/', $sku);
+    $score = strlen((string) $plainSku) + ($separatorCount * 8);
+
+    if (is_array($packageMeta) && !empty($packageMeta)) {
+        $correctedSku = lazadaImportCorrectSkuFromPackageMeta($sku, $packageMeta);
+        if ($correctedSku !== $sku && lazadaImportSkuCandidateLooksUsable($correctedSku)) {
+            $score += 100;
+        }
+
+        foreach ($packageMeta as $packageRow) {
+            $itemCode = isset($packageRow['item_code']) ? trim((string) $packageRow['item_code']) : '';
+            if ($itemCode === '' || !lazadaImportIsLikelyMarketplaceSkuCode($itemCode)) {
+                continue;
+            }
+            if (strcasecmp($itemCode, $sku) === 0 || lazadaImportNormalizeSkuForCompare($itemCode) === lazadaImportNormalizeSkuForCompare($sku)) {
+                $score += 200;
+                break;
+            }
+        }
+    }
+
+    return $score;
+}
+
+function lazadaImportAddSkuCandidate(&$candidates, $candidate)
+{
+    $candidate = lazadaImportCleanupSkuCandidate($candidate);
+    if (!lazadaImportSkuCandidateLooksUsable($candidate)) {
+        return;
+    }
+
+    $key = lazadaImportNormalizeSkuForCompare($candidate);
+    if ($key === '') {
+        return;
+    }
+
+    if (!isset($candidates[$key]) || strlen($candidate) > strlen($candidates[$key])) {
+        $candidates[$key] = $candidate;
+    }
+}
+
+function lazadaImportGetOrderedItemsSection($text)
+{
+    $text = lazadaImportNormalizeSourceText($text);
+    if ($text === '') {
+        return '';
+    }
+
+    $startPositions = array();
+    foreach (array('Your ordered items for', 'Ready To Ship Package', 'Seller SKU') as $startLabel) {
+        $startPos = stripos($text, $startLabel);
+        if ($startPos !== false) {
+            $startPositions[] = (int) $startPos;
+        }
+    }
+
+    if (empty($startPositions)) {
+        return $text;
+    }
+
+    $section = substr($text, min($startPositions));
+    $stopPositions = array();
+    foreach (array('Subtotal:', 'Less:', 'Voucher applied', 'Total:', 'Shipping:', 'Net paid:', 'Upon receipt') as $stopLabel) {
+        $stopPos = stripos($section, $stopLabel);
+        if ($stopPos !== false) {
+            $stopPositions[] = (int) $stopPos;
+        }
+    }
+
+    if (!empty($stopPositions)) {
+        $section = substr($section, 0, min($stopPositions));
+    }
+
+    return trim((string) $section);
+}
+
+function lazadaImportExtractSkuCandidatesFromWindow($window)
+{
+    $window = strtoupper(normalizeImportText((string) $window));
+    if ($window === '') {
+        return array();
+    }
+
+    $window = preg_replace('/\b(?:SELLER\s*SKU|SHOP\s*SKU|PRODUCT\s*NAME|PRICE|PAID\s*PRICE)\b\s*:?/i', ' ', $window);
+    $candidates = array();
+
+    if (preg_match_all('/\b([A-Z0-9]{1,12}(?:\s*[-\/_]\s*[A-Z0-9]{1,12}){2,8})\b/i', $window, $matches)) {
+        foreach ((array) $matches[1] as $match) {
+            $candidate = lazadaImportCleanupSkuCandidate($match);
+            if (lazadaImportSkuCandidateLooksUsable($candidate)) {
+                $candidates[] = $candidate;
+            }
+        }
+    }
+
+    return array_values(array_unique($candidates));
+}
+
+function lazadaImportExtractSplitSkuCandidates($text)
+{
+    $section = lazadaImportGetOrderedItemsSection($text);
+    if ($section === '') {
+        return array();
+    }
+
+    $lines = getPdfTextLines($section);
+    $candidates = array();
+
+    foreach ($lines as $index => $line) {
+        $line = strtoupper(normalizeImportText($line));
+        if ($line === '') {
+            continue;
+        }
+
+        foreach (lazadaImportExtractSkuCandidatesFromWindow($line) as $candidate) {
+            $candidates[] = $candidate;
+        }
+
+        if (preg_match_all('/\b([A-Z0-9]{1,12}(?:[-\/_][A-Z0-9]{1,12}){1,7}[-\/_])(?=\s|$)/i', $line, $prefixMatches)) {
+            foreach ((array) $prefixMatches[1] as $prefix) {
+                $prefix = lazadaImportCleanupSkuCandidate($prefix . 'X');
+                $prefix = preg_replace('/X$/', '', $prefix);
+                if ($prefix === '') {
+                    continue;
+                }
+
+                for ($offset = 1; $offset <= 6; $offset++) {
+                    if (!isset($lines[$index + $offset])) {
+                        continue;
+                    }
+                    $nextLine = strtoupper(normalizeImportText($lines[$index + $offset]));
+                    if ($nextLine === '') {
+                        continue;
+                    }
+
+                    if (preg_match_all('/\b([A-Z0-9]{1,12}(?:[-\/_][A-Z0-9]{1,12}){1,5})\b/i', $nextLine, $suffixMatches)) {
+                        foreach ((array) $suffixMatches[1] as $suffix) {
+                            $combined = lazadaImportCleanupSkuCandidate($prefix . $suffix);
+                            if (lazadaImportSkuCandidateLooksUsable($combined)) {
+                                $candidates[] = $combined;
+                            }
+                        }
+                    }
                 }
             }
         }
     }
 
-    return '';
+    return array_values(array_unique($candidates));
 }
 
+function lazadaImportRepairCommonSkuOcrErrors($sku)
+{
+    $sku = lazadaImportCleanupSkuCandidate($sku);
+    if ($sku === '') {
+        return '';
+    }
+
+    $segments = preg_split('/[-\/]+/', strtoupper($sku), -1, PREG_SPLIT_NO_EMPTY);
+    if (!is_array($segments) || count($segments) < 4) {
+        return $sku;
+    }
+
+    foreach ($segments as $index => $segment) {
+        if ($index < 3) {
+            continue;
+        }
+
+        if (preg_match('/^([0-9])[85]([0-9][A-Z])$/', $segment, $matches)) {
+            $segments[$index] = $matches[1] . 'S' . $matches[2];
+            continue;
+        }
+
+        if (preg_match('/^([0-9])[85]([A-Z0-9]{1,4})$/', $segment, $matches) && preg_match('/[A-Z]/', $matches[2])) {
+            $segments[$index] = $matches[1] . 'S' . $matches[2];
+            continue;
+        }
+    }
+
+    return implode('-', $segments);
+}
+
+function lazadaImportExtractBestSkuLikePattern($value)
+{
+    $value = strtoupper(normalizeImportText((string) $value));
+    if ($value === '') {
+        return '';
+    }
+
+    $matches = array();
+    if (!preg_match_all('/\b([A-Z][A-Z0-9]{1,7}(?:\s*[-\/_]\s*[A-Z0-9]{1,8}){3,7})\b/i', $value, $matches)) {
+        return '';
+    }
+
+    $best = '';
+    $bestScore = -1;
+    foreach ((array) $matches[1] as $match) {
+        $candidate = lazadaImportCleanupSkuCandidate($match);
+        if (!lazadaImportSkuCandidateLooksUsable($candidate)) {
+            continue;
+        }
+
+        $plain = preg_replace('/[^A-Z0-9]/i', '', $candidate);
+        $segments = preg_split('/[-\/]+/', $candidate, -1, PREG_SPLIT_NO_EMPTY);
+        $score = strlen((string) $plain) + (is_array($segments) ? count($segments) * 10 : 0);
+        if ($score > $bestScore) {
+            $bestScore = $score;
+            $best = $candidate;
+        }
+    }
+
+    return $best;
+}
+
+function lazadaImportCorrectSkuFromPackageMeta($sku, $packageMeta)
+{
+    $sku = lazadaImportRepairCommonSkuOcrErrors($sku);
+    if ($sku === '' || !is_array($packageMeta) || empty($packageMeta)) {
+        return $sku;
+    }
+
+    $skuKey = lazadaImportNormalizeSkuForCompare($sku);
+    if ($skuKey === '') {
+        return $sku;
+    }
+
+    $bestItemCode = '';
+    $bestDistance = null;
+    foreach ($packageMeta as $packageRow) {
+        $itemCode = isset($packageRow['item_code']) ? trim((string) $packageRow['item_code']) : '';
+        if ($itemCode === '' || !lazadaImportIsLikelyMarketplaceSkuCode($itemCode)) {
+            continue;
+        }
+
+        $itemCodeKey = lazadaImportNormalizeSkuForCompare($itemCode);
+        if ($itemCodeKey === '') {
+            continue;
+        }
+
+        if ($itemCodeKey === $skuKey) {
+            return $itemCode;
+        }
+
+        if (strlen($skuKey) >= 8 && (strpos($itemCodeKey, $skuKey) !== false || strpos($skuKey, $itemCodeKey) !== false)) {
+            return $itemCode;
+        }
+
+        if (function_exists('levenshtein') && abs(strlen($itemCodeKey) - strlen($skuKey)) <= 3) {
+            $distance = levenshtein($itemCodeKey, $skuKey);
+            if ($bestDistance === null || $distance < $bestDistance) {
+                $bestDistance = $distance;
+                $bestItemCode = $itemCode;
+            }
+        }
+    }
+
+    if ($bestItemCode !== '' && $bestDistance !== null && $bestDistance <= max(1, (int) floor(strlen($skuKey) * 0.18))) {
+        return $bestItemCode;
+    }
+
+    return $sku;
+}
+
+function lazadaImportExtractSellerSkuFromSpecialField($text, $packageMeta = array())
+{
+    $candidate = lazadaImportRepairCommonSkuOcrErrors(lazadaImportExtractSpecialField($text, 'SELLER_SKU'));
+    if ($candidate === '') {
+        return '';
+    }
+
+    $candidate = lazadaImportCorrectSkuFromPackageMeta($candidate, $packageMeta);
+    return lazadaImportSkuCandidateLooksUsable($candidate) ? $candidate : '';
+}
+
+function lazadaImportExtractSellerSkuFromPackageTokens($text, $packageMeta)
+{
+    $section = lazadaImportGetOrderedItemsSection($text);
+    if ($section === '' || !is_array($packageMeta) || empty($packageMeta)) {
+        return '';
+    }
+
+    $sectionKey = lazadaImportNormalizeSkuForCompare($section);
+    if ($sectionKey === '') {
+        return '';
+    }
+
+    $bestSku = '';
+    $bestScore = -1;
+
+    foreach ($packageMeta as $packageRow) {
+        $itemCode = isset($packageRow['item_code']) ? trim((string) $packageRow['item_code']) : '';
+        if ($itemCode === '' || !lazadaImportIsLikelyMarketplaceSkuCode($itemCode)) {
+            continue;
+        }
+
+        $itemCodeKey = lazadaImportNormalizeSkuForCompare($itemCode);
+        if ($itemCodeKey === '') {
+            continue;
+        }
+
+        if (strpos($sectionKey, $itemCodeKey) !== false) {
+            return $itemCode;
+        }
+
+        $tokens = preg_split('/[^A-Z0-9]+/i', strtoupper($itemCode), -1, PREG_SPLIT_NO_EMPTY);
+        if (!is_array($tokens) || count($tokens) < 3) {
+            continue;
+        }
+
+        $position = 0;
+        $matchedCount = 0;
+        $score = 0;
+        foreach ($tokens as $token) {
+            $tokenKey = lazadaImportNormalizeSkuForCompare($token);
+            if ($tokenKey === '') {
+                continue;
+            }
+
+            $foundPosition = strpos($sectionKey, $tokenKey, $position);
+            if ($foundPosition === false) {
+                continue;
+            }
+
+            $position = $foundPosition + strlen($tokenKey);
+            $matchedCount++;
+            $score += strlen($tokenKey) * 5;
+        }
+
+        if ($matchedCount === count($tokens)) {
+            $score += count($tokens) * 30;
+            $score += strlen($itemCodeKey);
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestSku = $itemCode;
+            }
+        }
+    }
+
+    return $bestSku;
+}
+
+function lazadaImportExtractSellerSku($text, $packageMeta = array())
+{
+    $text = lazadaImportNormalizeSourceText($text);
+    if ($text === '') {
+        return '';
+    }
+
+    $specialSku = lazadaImportExtractSellerSkuFromSpecialField($text, $packageMeta);
+    if ($specialSku !== '') {
+        return $specialSku;
+    }
+
+    $packageMatchedSku = lazadaImportExtractSellerSkuFromPackageTokens($text, $packageMeta);
+    if ($packageMatchedSku !== '') {
+        return $packageMatchedSku;
+    }
+
+    $candidates = array();
+    foreach (lazadaImportExtractSplitSkuCandidates($text) as $candidate) {
+        lazadaImportAddSkuCandidate($candidates, $candidate);
+    }
+
+    $section = lazadaImportGetOrderedItemsSection($text);
+    foreach (lazadaImportExtractSkuCandidatesFromWindow($section) as $candidate) {
+        lazadaImportAddSkuCandidate($candidates, $candidate);
+    }
+
+    $lines = getPdfTextLines($section !== '' ? $section : $text);
+    foreach ($lines as $index => $line) {
+        $windowParts = array(normalizeImportText($line));
+        for ($offset = 1; $offset <= 6; $offset++) {
+            if (isset($lines[$index + $offset])) {
+                $windowParts[] = normalizeImportText($lines[$index + $offset]);
+            }
+        }
+        $window = implode(' ', $windowParts);
+
+        if (stripos($window, 'Seller SKU') !== false || preg_match('/[-\/_]/', $window)) {
+            foreach (lazadaImportExtractSkuCandidatesFromWindow($window) as $candidate) {
+                lazadaImportAddSkuCandidate($candidates, $candidate);
+            }
+        }
+    }
+
+    $bestSku = '';
+    $bestScore = -1;
+    foreach ($candidates as $candidate) {
+        $candidate = lazadaImportCorrectSkuFromPackageMeta($candidate, $packageMeta);
+        $score = lazadaImportSkuCandidateScore($candidate, $packageMeta);
+        if ($score > $bestScore) {
+            $bestScore = $score;
+            $bestSku = $candidate;
+        }
+    }
+
+    $bestSku = lazadaImportRepairCommonSkuOcrErrors($bestSku);
+    return lazadaImportSkuCandidateLooksUsable($bestSku) ? $bestSku : '';
+}
 function lazadaImportExtractOrderTableAmounts($text)
 {
     $text = lazadaImportNormalizeSourceText($text);
@@ -1068,31 +2046,71 @@ function lazadaImportExtractPaymentMethod($text)
 
 function lazadaImportResolvePackageIdFromSku($sku, $packageMeta)
 {
-    $sku = trim((string) $sku);
-    if ($sku === '' || !is_array($packageMeta) || empty($packageMeta)) {
+    $sku = lazadaImportRepairCommonSkuOcrErrors(trim((string) $sku));
+    if ($sku === '' || !lazadaImportIsLikelyMarketplaceSkuCode($sku) || !is_array($packageMeta) || empty($packageMeta)) {
         return '';
     }
 
     $skuLookup = normalizeImportLookup($sku);
+    $skuOcrLookup = lazadaImportNormalizeSkuForCompare($sku);
+
     foreach ($packageMeta as $packageId => $packageRow) {
         $itemCode = isset($packageRow['item_code']) ? (string) $packageRow['item_code'] : '';
-        if ($itemCode !== '' && strcasecmp($itemCode, $sku) === 0) {
+        if ($itemCode === '' || !lazadaImportIsLikelyMarketplaceSkuCode($itemCode)) {
+            continue;
+        }
+        if (strcasecmp($itemCode, $sku) === 0) {
             return (string) $packageId;
         }
         if ($skuLookup !== '' && normalizeImportLookup($itemCode) === $skuLookup) {
             return (string) $packageId;
         }
+        if ($skuOcrLookup !== '' && lazadaImportNormalizeSkuForCompare($itemCode) === $skuOcrLookup) {
+            return (string) $packageId;
+        }
     }
 
     foreach ($packageMeta as $packageId => $packageRow) {
-        $packageNameKey = normalizeImportLookup(isset($packageRow['name']) ? $packageRow['name'] : '');
-        $itemCodeKey = normalizeImportLookup(isset($packageRow['item_code']) ? $packageRow['item_code'] : '');
-        if ($skuLookup !== '' && (
-            ($itemCodeKey !== '' && (strpos($itemCodeKey, $skuLookup) !== false || strpos($skuLookup, $itemCodeKey) !== false))
-            || ($packageNameKey !== '' && strpos($packageNameKey, $skuLookup) !== false)
-        )) {
+        $itemCode = isset($packageRow['item_code']) ? (string) $packageRow['item_code'] : '';
+        if ($itemCode === '' || !lazadaImportIsLikelyMarketplaceSkuCode($itemCode)) {
+            continue;
+        }
+
+        $itemCodeKey = normalizeImportLookup($itemCode);
+        $itemCodeOcrKey = lazadaImportNormalizeSkuForCompare($itemCode);
+
+        if ($skuLookup !== '' && strlen($skuLookup) >= 10 && $itemCodeKey !== '' && (strpos($itemCodeKey, $skuLookup) !== false || strpos($skuLookup, $itemCodeKey) !== false)) {
             return (string) $packageId;
         }
+
+        if ($skuOcrLookup !== '' && strlen($skuOcrLookup) >= 10 && $itemCodeOcrKey !== '' && (strpos($itemCodeOcrKey, $skuOcrLookup) !== false || strpos($skuOcrLookup, $itemCodeOcrKey) !== false)) {
+            return (string) $packageId;
+        }
+    }
+
+    $bestPackageId = '';
+    $bestDistance = null;
+    if (function_exists('levenshtein') && $skuOcrLookup !== '') {
+        foreach ($packageMeta as $packageId => $packageRow) {
+            $itemCode = isset($packageRow['item_code']) ? (string) $packageRow['item_code'] : '';
+            if ($itemCode === '' || !lazadaImportIsLikelyMarketplaceSkuCode($itemCode)) {
+                continue;
+            }
+            $itemCodeOcrKey = lazadaImportNormalizeSkuForCompare($itemCode);
+            if ($itemCodeOcrKey === '' || abs(strlen($itemCodeOcrKey) - strlen($skuOcrLookup)) > 3) {
+                continue;
+            }
+
+            $distance = levenshtein($itemCodeOcrKey, $skuOcrLookup);
+            if ($bestDistance === null || $distance < $bestDistance) {
+                $bestDistance = $distance;
+                $bestPackageId = (string) $packageId;
+            }
+        }
+    }
+
+    if ($bestPackageId !== '' && $bestDistance !== null && $bestDistance <= max(1, (int) floor(strlen($skuOcrLookup) * 0.18))) {
+        return $bestPackageId;
     }
 
     return '';
@@ -1947,12 +2965,56 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = array())
                 for (var pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
                     pageTasks.push(
                         pdfDoc.getPage(pageNumber).then(function (page) {
-                            return page.getTextContent().then(function (textContent) {
-                                return (textContent.items || []).map(function (item) {
-                                    return typeof item.str === 'string' ? item.str.trim() : '';
-                                }).filter(function (text) {
-                                    return text !== '';
-                                }).join(' ');
+                            return page.getTextContent({ normalizeWhitespace: true }).then(function (textContent) {
+                                var items = [];
+
+                                (textContent.items || []).forEach(function (item) {
+                                    var text = typeof item.str === 'string' ? item.str.trim() : '';
+                                    if (text === '' || !item.transform || item.transform.length < 6) {
+                                        return;
+                                    }
+
+                                    items.push({
+                                        text: text,
+                                        x: Number(item.transform[4] || 0),
+                                        y: Number(item.transform[5] || 0)
+                                    });
+                                });
+
+                                if (items.length === 0) {
+                                    return '';
+                                }
+
+                                items.sort(function (a, b) {
+                                    if (Math.abs(b.y - a.y) > 3) {
+                                        return b.y - a.y;
+                                    }
+                                    return a.x - b.x;
+                                });
+
+                                var rows = [];
+                                items.forEach(function (item) {
+                                    var lastRow = rows.length > 0 ? rows[rows.length - 1] : null;
+
+                                    if (lastRow && Math.abs(lastRow.y - item.y) <= 3) {
+                                        lastRow.items.push(item);
+                                    } else {
+                                        rows.push({
+                                            y: item.y,
+                                            items: [item]
+                                        });
+                                    }
+                                });
+
+                                return rows.map(function (row) {
+                                    row.items.sort(function (a, b) {
+                                        return a.x - b.x;
+                                    });
+
+                                    return row.items.map(function (item) {
+                                        return item.text;
+                                    }).join(' ');
+                                }).join('\n');
                             }).catch(function () {
                                 return '';
                             });
@@ -1960,9 +3022,478 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = array())
                     );
                 }
 
-                return Promise.all(pageTasks).then(function (pageTexts) {
-                    return pageTexts.join('\n').trim();
+        return Promise.all(pageTasks).then(function (pageTexts) {
+            return pageTexts.join('\n').trim();
+        });
+    });
+}
+
+        function buildLazadaOcrRows(result) {
+            var words = result && result.data && Array.isArray(result.data.words) ? result.data.words : [];
+            if (!words.length) {
+                return '';
+            }
+
+            function normalizeLine(value) {
+                return String(value || '').replace(/\s+/g, ' ').trim();
+            }
+
+            function cleanFieldValue(value) {
+                return normalizeLine(value).replace(/^[:|\-\s]+/, '').replace(/[:|\-\s]+$/, '').trim();
+            }
+
+            function cleanSkuValue(value) {
+                value = String(value || '').toUpperCase();
+                value = value.replace(/SELLER\s*SKU|SHOP\s*SKU|PRODUCT\s*NAME|PRICE|PAID\s*PRICE/g, ' ');
+                value = value.replace(/[^A-Z0-9\-\/_\s]/g, ' ');
+                value = value.replace(/\s*[\-\/_]\s*/g, '-');
+                value = value.replace(/\s+/g, '');
+                value = value.replace(/\-+/g, '-');
+                value = value.replace(/^[-_\/]+|[-_\/]+$/g, '');
+                return value;
+            }
+
+            function repairSku(value) {
+                value = cleanSkuValue(value);
+                var parts = value.split('-').filter(Boolean);
+                if (parts.length >= 4) {
+                    for (var i = 3; i < parts.length; i++) {
+                        parts[i] = parts[i].replace(/^([0-9])[85]([0-9][A-Z])$/, '$1S$2');
+                        parts[i] = parts[i].replace(/^([0-9])[85]([A-Z0-9]{1,4})$/, '$1S$2');
+                    }
+                    value = parts.join('-');
+                }
+                return value;
+            }
+
+            function looksLikeSku(value) {
+                value = repairSku(value);
+                var plain = value.replace(/[^A-Z0-9]/g, '');
+                var separators = (value.match(/[-\/_]/g) || []).length;
+                return /[A-Z]/.test(value) && /\d/.test(value) && plain.length >= 8 && separators >= 2 && !/[-\/_]$/.test(value);
+            }
+
+            var normalizedWords = [];
+            words.forEach(function (word) {
+                var text = word && typeof word.text === 'string' ? word.text.trim() : '';
+                if (!text || !word.bbox) {
+                    return;
+                }
+
+                var x0 = Number(word.bbox.x0 || 0);
+                var y0 = Number(word.bbox.y0 || 0);
+                var x1 = Number(word.bbox.x1 || x0);
+                var y1 = Number(word.bbox.y1 || y0);
+                var height = Math.max(1, y1 - y0);
+                var centerX = x0 + ((x1 - x0) / 2);
+                var centerY = y0 + (height / 2);
+
+                normalizedWords.push({
+                    text: text,
+                    x0: x0,
+                    x1: x1,
+                    y0: y0,
+                    y1: y1,
+                    centerX: centerX,
+                    centerY: centerY,
+                    height: height
                 });
+            });
+
+            if (!normalizedWords.length) {
+                return '';
+            }
+
+            normalizedWords.sort(function (a, b) {
+                if (Math.abs(a.centerY - b.centerY) > Math.max(8, Math.min(a.height, b.height) * 0.65)) {
+                    return a.centerY - b.centerY;
+                }
+                return a.x0 - b.x0;
+            });
+
+            var rows = [];
+            normalizedWords.forEach(function (word) {
+                var row = rows.length ? rows[rows.length - 1] : null;
+                var tolerance = Math.max(10, word.height * 0.75);
+                if (row && Math.abs(row.centerY - word.centerY) <= tolerance) {
+                    row.words.push(word);
+                    row.centerY = ((row.centerY * (row.words.length - 1)) + word.centerY) / row.words.length;
+                } else {
+                    rows.push({
+                        centerY: word.centerY,
+                        words: [word]
+                    });
+                }
+            });
+
+            rows.forEach(function (row) {
+                row.words.sort(function (a, b) {
+                    return a.x0 - b.x0;
+                });
+                row.text = normalizeLine(row.words.map(function (word) { return word.text; }).join(' '));
+                row.upper = row.text.toUpperCase();
+            });
+
+            var fieldRows = [];
+            var rowTexts = [];
+
+            function pushField(name, value) {
+                value = cleanFieldValue(value);
+                if (value !== '') {
+                    fieldRows.push('__LZD_FIELD_' + name + '__|||' + value);
+                }
+            }
+
+            // Customer name from the row containing Invoice To.
+            rows.some(function (row, rowIndex) {
+                if (row.upper.indexOf('INVOICE TO') === -1) {
+                    return false;
+                }
+
+                var labelEndX = 0;
+                row.words.forEach(function (word, wordIndex) {
+                    var current = String(word.text || '').toUpperCase().replace(/[^A-Z]/g, '');
+                    var next = row.words[wordIndex + 1] ? String(row.words[wordIndex + 1].text || '').toUpperCase().replace(/[^A-Z]/g, '') : '';
+                    if (current === 'INVOICE' && next === 'TO') {
+                        labelEndX = Math.max(labelEndX, row.words[wordIndex + 1].x1);
+                    }
+                });
+
+                var valueWords = row.words.filter(function (word) {
+                    var clean = String(word.text || '').replace(/[^A-Za-z]/g, '');
+                    return word.x0 > labelEndX + 8 && clean !== '' && !/^(Invoice|Date)$/i.test(clean);
+                });
+                var value = normalizeLine(valueWords.map(function (word) { return word.text; }).join(' '));
+                value = value.replace(/\bInvoice\s*Date\b.*$/i, '').trim();
+
+                if (!value && rows[rowIndex + 1]) {
+                    value = rows[rowIndex + 1].text.replace(/\bInvoice\s*Date\b.*$/i, '').trim();
+                }
+
+                value = value.replace(/[^A-Za-z\.\-'\s]/g, ' ').replace(/\s{2,}/g, ' ').trim();
+                if (value.replace(/[^A-Za-z]/g, '').length >= 5) {
+                    pushField('CUSTOMER_NAME', value);
+                    return true;
+                }
+
+                return false;
+            });
+
+            // Shipping address: use the column below SHIPPING ADDRESS, not the billing column.
+            rows.some(function (row, rowIndex) {
+                if (row.upper.indexOf('SHIPPING ADDRESS') === -1) {
+                    return false;
+                }
+
+                var labelStartX = 0;
+                var labelEndX = 0;
+                row.words.forEach(function (word, wordIndex) {
+                    var current = String(word.text || '').toUpperCase().replace(/[^A-Z]/g, '');
+                    var next = row.words[wordIndex + 1] ? String(row.words[wordIndex + 1].text || '').toUpperCase().replace(/[^A-Z]/g, '') : '';
+                    if (current === 'SHIPPING' && next === 'ADDRESS') {
+                        labelStartX = word.x0;
+                        labelEndX = row.words[wordIndex + 1].x1;
+                    }
+                });
+
+                if (labelStartX <= 0) {
+                    return false;
+                }
+
+                var addressParts = [];
+                for (var i = rowIndex + 1; i < rows.length; i++) {
+                    var nextRow = rows[i];
+                    if (/^(CONTACT\s*PHONE|PAYMENT\s*METHOD|YOUR\s+ORDERED\s+ITEMS|#|PRODUCT\s+NAME|SELLER\s+SKU)/i.test(nextRow.text)) {
+                        break;
+                    }
+
+                    var wordsInColumn = nextRow.words.filter(function (word) {
+                        return word.centerX >= labelStartX - 20;
+                    });
+                    var line = normalizeLine(wordsInColumn.map(function (word) { return word.text; }).join(' '));
+                    line = line.replace(/\bContact\s*Phone\b.*$/i, '').trim();
+                    if (line && /[0-9A-Za-z\*]/.test(line) && /[,\*]/.test(line)) {
+                        addressParts.push(line);
+                    }
+                }
+
+                if (addressParts.length) {
+                    pushField('SHIPPING_ADDRESS', addressParts.join(' '));
+                    return true;
+                }
+                return false;
+            });
+
+            // Seller SKU: collect words inside the Seller SKU column under its header.
+            rows.some(function (row, rowIndex) {
+                if (row.upper.indexOf('SELLER') === -1 || row.upper.indexOf('SKU') === -1) {
+                    return false;
+                }
+
+                var sellerStartX = 0;
+                var sellerEndX = 0;
+                var shopStartX = 0;
+
+                row.words.forEach(function (word, wordIndex) {
+                    var current = String(word.text || '').toUpperCase().replace(/[^A-Z]/g, '');
+                    var next = row.words[wordIndex + 1] ? String(row.words[wordIndex + 1].text || '').toUpperCase().replace(/[^A-Z]/g, '') : '';
+                    if (current === 'SELLER' && next === 'SKU') {
+                        sellerStartX = word.x0;
+                        sellerEndX = row.words[wordIndex + 1].x1;
+                    }
+                    if (current === 'SHOP' && next === 'SKU') {
+                        shopStartX = word.x0;
+                    }
+                });
+
+                if (sellerStartX <= 0) {
+                    return false;
+                }
+                if (shopStartX <= sellerStartX) {
+                    shopStartX = sellerEndX + 220;
+                }
+
+                var skuParts = [];
+                for (var i = rowIndex + 1; i < rows.length; i++) {
+                    var itemRow = rows[i];
+                    if (/^(SUBTOTAL|LESS|TOTAL|SHIPPING|NET\s*PAID|UPON\s+RECEIPT)/i.test(itemRow.text)) {
+                        break;
+                    }
+
+                    var sellerWords = itemRow.words.filter(function (word) {
+                        return word.centerX >= sellerStartX - 35 && word.centerX < shopStartX - 10;
+                    });
+                    var part = normalizeLine(sellerWords.map(function (word) { return word.text; }).join(' '));
+                    part = cleanSkuValue(part);
+                    if (part) {
+                        skuParts.push(part);
+                    }
+                }
+
+                var joined = repairSku(skuParts.join('-'));
+                if (looksLikeSku(joined)) {
+                    pushField('SELLER_SKU', joined);
+                    return true;
+                }
+
+                return false;
+            });
+
+            rows.forEach(function (row) {
+                if (row.text) {
+                    rowTexts.push(row.text);
+                    rowTexts.push('__LZD_OCR_ROW__|||' + row.text);
+                }
+            });
+
+            return fieldRows.concat(rowTexts).join('\n').trim();
+        }
+
+        function prepareLazadaOcrCanvas(sourceCanvas) {
+            var canvas = document.createElement('canvas');
+            var context = canvas.getContext('2d', { willReadFrequently: true });
+            canvas.width = sourceCanvas.width;
+            canvas.height = sourceCanvas.height;
+
+            if (!context) {
+                return sourceCanvas;
+            }
+
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(sourceCanvas, 0, 0);
+
+            try {
+                var imageData = context.getImageData(0, 0, canvas.width, canvas.height);
+                var data = imageData.data;
+                for (var i = 0; i < data.length; i += 4) {
+                    var gray = (data[i] * 0.299) + (data[i + 1] * 0.587) + (data[i + 2] * 0.114);
+                    var enhanced = gray < 210 ? Math.max(0, gray - 35) : 255;
+                    data[i] = enhanced;
+                    data[i + 1] = enhanced;
+                    data[i + 2] = enhanced;
+                    data[i + 3] = 255;
+                }
+                context.putImageData(imageData, 0, 0);
+            } catch (error) {
+                return sourceCanvas;
+            }
+
+            return canvas;
+        }
+
+        function cropLazadaCanvas(sourceCanvas, topRatio, bottomRatio) {
+            var top = Math.max(0, Math.floor(sourceCanvas.height * topRatio));
+            var bottom = Math.min(sourceCanvas.height, Math.ceil(sourceCanvas.height * bottomRatio));
+            var height = Math.max(1, bottom - top);
+            var canvas = document.createElement('canvas');
+            var context = canvas.getContext('2d');
+            canvas.width = sourceCanvas.width;
+            canvas.height = height;
+            if (!context) {
+                return sourceCanvas;
+            }
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(sourceCanvas, 0, top, sourceCanvas.width, height, 0, 0, sourceCanvas.width, height);
+            return canvas;
+        }
+
+        function cropLazadaCanvasRect(sourceCanvas, leftRatio, topRatio, rightRatio, bottomRatio) {
+            var left = Math.max(0, Math.floor(sourceCanvas.width * leftRatio));
+            var top = Math.max(0, Math.floor(sourceCanvas.height * topRatio));
+            var right = Math.min(sourceCanvas.width, Math.ceil(sourceCanvas.width * rightRatio));
+            var bottom = Math.min(sourceCanvas.height, Math.ceil(sourceCanvas.height * bottomRatio));
+            var width = Math.max(1, right - left);
+            var height = Math.max(1, bottom - top);
+            var canvas = document.createElement('canvas');
+            var context = canvas.getContext('2d');
+            canvas.width = width;
+            canvas.height = height;
+            if (!context) {
+                return sourceCanvas;
+            }
+            context.fillStyle = '#ffffff';
+            context.fillRect(0, 0, canvas.width, canvas.height);
+            context.drawImage(sourceCanvas, left, top, width, height, 0, 0, width, height);
+            return canvas;
+        }
+
+        function splitLazadaOcrLines(text) {
+            return String(text || '')
+                .replace(/\r/g, '\n')
+                .split(/\n+/)
+                .map(function (line) {
+                    return String(line || '').replace(/\s+/g, ' ').trim();
+                })
+                .filter(function (line) {
+                    return line !== '';
+                });
+        }
+
+        function normalizeLazadaDateCandidate(value) {
+            value = String(value || '').toUpperCase().replace(/[^0-9OQILD SB\/\-. ]+/g, ' ');
+            value = value.replace(/[OQD]/g, '0').replace(/[IL|]/g, '1').replace(/S/g, '5').replace(/B/g, '8');
+            value = value.replace(/\s+/g, ' ').trim();
+            return value;
+        }
+
+        function looksLikeLazadaDateLine(value) {
+            var normalized = normalizeLazadaDateCandidate(value);
+            return /^(?:\d{1,2}[\/\-. ]\d{1,2}[\/\-. ]\d{2,4}|\d{6,8})$/.test(normalized);
+        }
+
+        function looksLikeLazadaOrderNumberLine(value) {
+            var normalized = String(value || '').toUpperCase()
+                .replace(/[OQD]/g, '0')
+                .replace(/[IL|]/g, '1')
+                .replace(/[^0-9]+/g, '');
+            return normalized.length >= 12 && normalized.length <= 20;
+        }
+
+        function normalizeLazadaCustomerNameCandidate(value) {
+            value = String(value || '')
+                .replace(/\b(?:INVOICE|ORDER|NUMBER|DATE|INVOICE TO|INVOICE DATE)\b/gi, ' ')
+                .replace(/[^A-Za-z.\-'\s]/g, ' ')
+                .replace(/\s{2,}/g, ' ')
+                .trim();
+            return value;
+        }
+
+        function looksLikeLazadaCustomerNameLine(value) {
+            var normalized = normalizeLazadaCustomerNameCandidate(value);
+            if (!normalized) {
+                return false;
+            }
+
+            if (/\d/.test(normalized) || /[,\/\\@#:_|]/.test(normalized)) {
+                return false;
+            }
+
+            var words = normalized.split(/\s+/).filter(Boolean);
+            if (!words.length) {
+                return false;
+            }
+
+            var lettersOnly = normalized.replace(/[^A-Za-z]/g, '');
+            if (lettersOnly.length < 5 || normalized.length > 80) {
+                return false;
+            }
+
+            return words.every(function (word) {
+                return /^[A-Za-z.\-']+$/.test(word);
+            });
+        }
+
+        function extractLazadaCustomerNameFromStackText(text) {
+            var lines = splitLazadaOcrLines(text);
+            if (!lines.length) {
+                return '';
+            }
+
+            for (var index = 0; index < lines.length; index++) {
+                var currentLine = lines[index];
+                if (looksLikeLazadaDateLine(currentLine) && lines[index + 1] && lines[index + 2]) {
+                    var middleLine = lines[index + 1];
+                    var nextLine = lines[index + 2];
+                    if (looksLikeLazadaCustomerNameLine(middleLine) && looksLikeLazadaDateLine(nextLine)) {
+                        return normalizeLazadaCustomerNameCandidate(middleLine);
+                    }
+                }
+            }
+
+            for (var i = 0; i < lines.length; i++) {
+                if (!looksLikeLazadaOrderNumberLine(lines[i])) {
+                    continue;
+                }
+
+                for (var offset = 1; offset <= 3; offset++) {
+                    var dateLine = lines[i + offset];
+                    var nameLine = lines[i + offset + 1];
+                    var trailingDateLine = lines[i + offset + 2];
+                    if (!dateLine || !nameLine) {
+                        break;
+                    }
+
+                    if (looksLikeLazadaDateLine(dateLine) && looksLikeLazadaCustomerNameLine(nameLine)) {
+                        if (!trailingDateLine || looksLikeLazadaDateLine(trailingDateLine)) {
+                            return normalizeLazadaCustomerNameCandidate(nameLine);
+                        }
+                    }
+                }
+            }
+
+            return '';
+        }
+
+        function recognizeLazadaCanvas(canvas, pageSegMode, options) {
+            options = options || {};
+            return Tesseract.recognize(canvas, 'eng', {
+                tessedit_pageseg_mode: String(pageSegMode || '6'),
+                preserve_interword_spaces: '1',
+                tessedit_char_whitelist: 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_/.,:*()# RMrm| '
+            }).then(function (result) {
+                var text = result && result.data && result.data.text ? String(result.data.text).trim() : '';
+                var rows = buildLazadaOcrRows(result);
+                var parts = [];
+
+                if (options.extractCustomerStack) {
+                    var stackedCustomerName = extractLazadaCustomerNameFromStackText(text);
+                    if (stackedCustomerName) {
+                        parts.push('__LZD_FIELD_CUSTOMER_NAME__|||' + stackedCustomerName);
+                    }
+                }
+
+                if (text) {
+                    parts.push(text);
+                }
+                if (rows) {
+                    parts.push(rows);
+                }
+
+                return parts.join('\n').trim();
+            }).catch(function () {
+                return '';
             });
         }
 
@@ -1981,9 +3512,9 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = array())
                     (function (currentPageNumber) {
                         sequence = sequence.then(function () {
                             return pdfDoc.getPage(currentPageNumber).then(function (page) {
-                                var viewport = page.getViewport({ scale: 2.0 });
+                                var viewport = page.getViewport({ scale: 3.5 });
                                 var canvas = document.createElement('canvas');
-                                var context = canvas.getContext('2d');
+                                var context = canvas.getContext('2d', { willReadFrequently: true });
                                 canvas.width = viewport.width;
                                 canvas.height = viewport.height;
 
@@ -1992,14 +3523,35 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = array())
                                     return;
                                 }
 
+                                context.fillStyle = '#ffffff';
+                                context.fillRect(0, 0, canvas.width, canvas.height);
+
                                 return page.render({
                                     canvasContext: context,
                                     viewport: viewport
                                 }).promise.then(function () {
-                                    return Tesseract.recognize(canvas, 'eng').then(function (result) {
-                                        pageTexts.push(result && result.data && result.data.text ? String(result.data.text).trim() : '');
-                                    }).catch(function () {
-                                        pageTexts.push('');
+                                    var preparedCanvas = prepareLazadaOcrCanvas(canvas);
+                                    var topCanvas = cropLazadaCanvas(preparedCanvas, 0.06, 0.33);
+                                    var middleCanvas = cropLazadaCanvas(preparedCanvas, 0.30, 0.66);
+                                    var invoiceDetailsCanvas = cropLazadaCanvasRect(preparedCanvas, 0.38, 0.09, 0.76, 0.30);
+                                    var invoiceValueStackCanvas = cropLazadaCanvasRect(preparedCanvas, 0.48, 0.12, 0.72, 0.27);
+
+                                    var tasks = [
+                                        recognizeLazadaCanvas(invoiceDetailsCanvas, '6', { extractCustomerStack: true }),
+                                        recognizeLazadaCanvas(invoiceDetailsCanvas, '11', { extractCustomerStack: true }),
+                                        recognizeLazadaCanvas(invoiceValueStackCanvas, '6', { extractCustomerStack: true }),
+                                        recognizeLazadaCanvas(invoiceValueStackCanvas, '11', { extractCustomerStack: true }),
+                                        recognizeLazadaCanvas(topCanvas, '6', { extractCustomerStack: true }),
+                                        recognizeLazadaCanvas(topCanvas, '4', { extractCustomerStack: true }),
+                                        recognizeLazadaCanvas(middleCanvas, '6'),
+                                        recognizeLazadaCanvas(middleCanvas, '4'),
+                                        recognizeLazadaCanvas(preparedCanvas, '6')
+                                    ];
+
+                                    return Promise.all(tasks).then(function (parts) {
+                                        pageTexts.push(parts.filter(function (part) {
+                                            return String(part || '').trim() !== '';
+                                        }).join('\n'));
                                     });
                                 }).catch(function () {
                                     pageTexts.push('');
@@ -2020,14 +3572,29 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = array())
         }
 
         function extractPdfTextViaBrowser(file) {
-            return extractPdfTextViaTextLayer(file).then(function (text) {
-                if (String(text || '').trim() !== '') {
-                    return text;
+            return extractPdfTextViaTextLayer(file).then(function (textLayerText) {
+                textLayerText = String(textLayerText || '').trim();
+
+                if (typeof Tesseract === 'undefined') {
+                    return textLayerText;
                 }
 
-                setStatus('No embedded PDF text detected. Running OCR fallback...', false);
+                setStatus('Reading visual PDF text with OCR...', false);
                 setSubmittingState(true, 'Running OCR...');
-                return extractPdfTextViaOcr(file);
+
+                return extractPdfTextViaOcr(file).then(function (ocrText) {
+                    ocrText = String(ocrText || '').trim();
+
+                    var textParts = [];
+                    if (textLayerText !== '') {
+                        textParts.push(textLayerText);
+                    }
+                    if (ocrText !== '') {
+                        textParts.push(ocrText);
+                    }
+
+                    return textParts.join('\n').trim();
+                });
             });
         }
 
