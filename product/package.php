@@ -88,6 +88,102 @@ if (!function_exists('packageFormatRelationDisplayName')) {
     }
 }
 
+if (!function_exists('packageResolveActiveProductId')) {
+    function packageResolveActiveProductId($connect, $productId, $productName = '')
+    {
+        if (!($connect instanceof mysqli)) {
+            return 0;
+        }
+
+        $productId = trim((string) $productId);
+        if ($productId !== '' && ctype_digit($productId) && (int) $productId > 0) {
+            $safeProductId = (int) $productId;
+            $productResult = mysqli_query(
+                $connect,
+                "SELECT id FROM `" . PROD . "` WHERE id = " . $safeProductId . " AND status = 'A' LIMIT 1"
+            );
+
+            if ($productResult && mysqli_num_rows($productResult) > 0) {
+                return $safeProductId;
+            }
+        }
+
+        $productName = trim((string) $productName);
+        if ($productName === '') {
+            return 0;
+        }
+
+        $safeProductName = mysqli_real_escape_string($connect, $productName);
+        $productResult = mysqli_query(
+            $connect,
+            "SELECT id FROM `" . PROD . "`
+             WHERE status = 'A'
+               AND name = '" . $safeProductName . "'
+             ORDER BY id DESC
+             LIMIT 1"
+        );
+
+        if ($productResult && mysqli_num_rows($productResult) > 0) {
+            $productRow = mysqli_fetch_assoc($productResult);
+            return isset($productRow['id']) ? (int) $productRow['id'] : 0;
+        }
+
+        return 0;
+    }
+}
+
+if (!function_exists('packageLoadProductDisplayRowsByIds')) {
+    function packageLoadProductDisplayRowsByIds($connect, $productIds)
+    {
+        $rows = array();
+
+        if (!($connect instanceof mysqli)) {
+            return $rows;
+        }
+
+        $safeIds = array();
+        foreach ((array) $productIds as $productId) {
+            $productId = trim((string) $productId);
+            if ($productId !== '' && ctype_digit($productId) && (int) $productId > 0) {
+                $safeIds[(int) $productId] = (int) $productId;
+            }
+        }
+
+        if (empty($safeIds)) {
+            return $rows;
+        }
+
+        $productResult = mysqli_query(
+            $connect,
+            "SELECT
+                p.id,
+                p.name,
+                p.weight,
+                p.weight_unit,
+                p.barcode_status,
+                p.barcode_slot,
+                p.status,
+                wu.unit AS weight_unit_name
+             FROM `" . PROD . "` p
+             LEFT JOIN `" . WGT_UNIT . "` wu
+                ON wu.id = p.weight_unit
+               AND wu.status = 'A'
+             WHERE p.id IN (" . implode(',', $safeIds) . ")"
+        );
+
+        if ($productResult) {
+            while ($productRow = mysqli_fetch_assoc($productResult)) {
+                $productId = isset($productRow['id']) ? (int) $productRow['id'] : 0;
+                if ($productId > 0) {
+                    $rows[$productId] = $productRow;
+                }
+            }
+        }
+
+        return $rows;
+    }
+}
+
 //Current Page Action And Data ID
 $dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
@@ -237,6 +333,37 @@ if (post('actionBtn')) {
                 }
             }
             
+            $prodListInput = post('prod_val');
+            $prodNameInput = postSpaceFilter('prod_name');
+
+            if (!is_array($prodListInput)) {
+                $prodListInput = array();
+            }
+
+            if (!is_array($prodNameInput)) {
+                $prodNameInput = array();
+            }
+
+            $prodListIds = array();
+            $productRowCount = max(count($prodListInput), count($prodNameInput));
+
+            for ($productIndex = 0; $productIndex < $productRowCount; $productIndex++) {
+                $postedProductId = isset($prodListInput[$productIndex]) ? trim((string) $prodListInput[$productIndex]) : '';
+                $postedProductName = isset($prodNameInput[$productIndex]) ? trim((string) $prodNameInput[$productIndex]) : '';
+
+                $resolvedProductId = packageResolveActiveProductId($connect, $postedProductId, $postedProductName);
+                if ($resolvedProductId > 0) {
+                    $prodListIds[] = (string) $resolvedProductId;
+                }
+            }
+
+            $prod_list = implode(',', $prodListIds);
+
+            if ($prod_list === '') {
+                $err4 = "Product is required. Please select a valid product from the list.";
+                $error = 1;
+            }
+
             if ($error == 1) {
                 break; // Stops the save but allows specific errors to display below fields
             }
@@ -245,10 +372,6 @@ if (post('actionBtn')) {
             $cost_curr = postSpaceFilter('cost_curr_hidden');
             $agent_cost = postSpaceFilter('agent_cost');
             $agent_cost_err = postSpaceFilter('agent_cost_err');
-
-            // middle
-            $prod_list = post('prod_val');
-            $prod_list = implode(',', array_filter($prod_list));
 
 
             $barcode_slot_total = postSpaceFilter('barcode_slot_total_hidden');
@@ -621,7 +744,7 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
 </style>
 
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
-    <link rel="stylesheet" href="./css/package.css">
+    <link rel="stylesheet" href="<?= $SITEURL ?>/css/package.css">
 </head>
 
 <body>
@@ -870,198 +993,96 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                                         <th scope="col" id="action_col"></th>
                                     </tr>
                                 </thead>
-                                <tbody>
+                                                                <tbody>
                                 <?php
                                 // check act
                                 $readonly = ($act != '') ? '' : ' readonly';
-                                
-                                // get value
-                                unset($echoVal);
-                                
-                                if (isset($row['product'])) {
-                                    $echoVal = $row['product'];
+
+                                $postedProdNames = postSpaceFilter('prod_name');
+                                $postedProdVals = postSpaceFilter('prod_val');
+
+                                if (!is_array($postedProdNames)) {
+                                    $postedProdNames = array();
                                 }
 
-                                if (is_array(post('prod_name'))) {
-                                    $postedProdNames = postSpaceFilter('prod_name') ?: array();
-                                    $postedProdVals = postSpaceFilter('prod_val') ?: array();
-                                    $rowCount = max(count($postedProdNames), count($postedProdVals));
-                                    if ($rowCount < 1) {
-                                        $rowCount = 1;
-                                    }
+                                if (!is_array($postedProdVals)) {
+                                    $postedProdVals = array();
+                                }
 
-                                    // Preload product and weight unit data to avoid N+1 queries
-                                    $productsById = array();
-                                    $weightUnitsById = array();
-                                    
-                                    if (!empty($postedProdVals) && is_array($postedProdVals)) {
-                                        $prodIdSet = array();
-                                        foreach ($postedProdVals as $val) {
-                                            if (trim($val) !== '') {
-                                                $intId = (int)$val;
-                                                if ($intId > 0) {
-                                                    $prodIdSet[$intId] = true;
-                                                }
-                                            }
-                                        }
-                                        
-                                        if (!empty($prodIdSet)) {
-                                            $idList = implode(',', array_keys($prodIdSet));
-                                            $product_info_result = getData('*', "id IN ($idList)", '', PROD, $connect);
-                                            
-                                            $weightUnitIds = array();
-                                            
-                                            if ($product_info_result && $product_info_result->num_rows > 0) {
-                                                while ($product_info_row = $product_info_result->fetch_assoc()) {
-                                                    $prodIdKey = (int)$product_info_row['id'];
-                                                    $productsById[$prodIdKey] = $product_info_row;
-                                                    
-                                                    if (!empty($product_info_row['weight_unit'])) {
-                                                        $wuId = (int)$product_info_row['weight_unit'];
-                                                        if ($wuId > 0) {
-                                                            $weightUnitIds[$wuId] = true;
-                                                        }
-                                                    }
-                                                }
-                                            }
-                                            
-                                            if (!empty($weightUnitIds)) {
-                                                $wuIdList = implode(',', array_keys($weightUnitIds));
-                                                $wgt_unit_result = getData('id, unit', "id IN ($wuIdList)", '', WGT_UNIT, $connect);
-                                                if ($wgt_unit_result && $wgt_unit_result->num_rows > 0) {
-                                                    while ($wgt_unit_row = $wgt_unit_result->fetch_assoc()) {
-                                                        $wuKey = (int)$wgt_unit_row['id'];
-                                                        $weightUnitsById[$wuKey] = $wgt_unit_row;
-                                                    }
-                                                }
-                                            }
+                                $hasPostedProductRows = is_array(post('prod_name')) || is_array(post('prod_val'));
+                                $displayProductIds = array();
+
+                                if ($hasPostedProductRows) {
+                                    $productRowCount = max(count($postedProdNames), count($postedProdVals));
+                                    for ($productIndex = 0; $productIndex < $productRowCount; $productIndex++) {
+                                        $productId = isset($postedProdVals[$productIndex]) ? trim((string) $postedProdVals[$productIndex]) : '';
+                                        $displayProductIds[] = ($productId !== '' && ctype_digit($productId)) ? (int) $productId : 0;
+                                    }
+                                } else if (isset($row['product']) && trim((string) $row['product']) !== '') {
+                                    $savedProductIds = explode(',', (string) $row['product']);
+                                    foreach ($savedProductIds as $savedProductId) {
+                                        $savedProductId = trim((string) $savedProductId);
+                                        if ($savedProductId !== '' && ctype_digit($savedProductId)) {
+                                            $displayProductIds[] = (int) $savedProductId;
                                         }
                                     }
+                                }
 
-                                    for ($i = 0; $i < $rowCount; $i++) {
-                                        $num = $i + 1;
-                                        $pn = isset($postedProdNames[$i]) ? $postedProdNames[$i] : '';
-                                        
-                                        // Cast to integer to prevent SQL injection & ensure safe lookups
-                                        $pid = isset($postedProdVals[$i]) && ctype_digit((string)$postedProdVals[$i]) ? (int)$postedProdVals[$i] : 0;
+                                $productRowsById = packageLoadProductDisplayRowsByIds($connect, $displayProductIds);
 
-                                        $pw = '';
-                                        $pwu = '';
-                                        $pwun = '';
-                                        $ps = '0';
-                                        $pslot = '0';
+                                if (empty($displayProductIds)) {
+                                    $displayProductIds[] = 0;
+                                }
 
-                                        if ($pid > 0 && isset($productsById[$pid])) {
-                                            $product_info_row = $productsById[$pid];
-                                            $pw = isset($product_info_row['weight']) ? $product_info_row['weight'] : '';
-                                            $pwu = isset($product_info_row['weight_unit']) ? $product_info_row['weight_unit'] : '';
-                                            $ps = isset($product_info_row['barcode_status']) && trim((string)$product_info_row['barcode_status']) !== '' ? $product_info_row['barcode_status'] : '0';
-                                            $pslot = isset($product_info_row['barcode_slot']) && trim((string)$product_info_row['barcode_slot']) !== '' ? $product_info_row['barcode_slot'] : '0';
-                                            
-                                            $pwuInt = (int)$pwu;
-                                            if ($pwuInt > 0 && isset($weightUnitsById[$pwuInt])) {
-                                                $pwun = $weightUnitsById[$pwuInt]['unit'];
-                                            }
+                                foreach ($displayProductIds as $productIndex => $pid) {
+                                    $num = $productIndex + 1;
+                                    $pid = (int) $pid;
+                                    $productDisplayRow = ($pid > 0 && isset($productRowsById[$pid])) ? $productRowsById[$pid] : array();
+
+                                    $pn = isset($postedProdNames[$productIndex]) ? trim((string) $postedProdNames[$productIndex]) : '';
+                                    $pw = '';
+                                    $pwu = '';
+                                    $pwun = '';
+                                    $ps = '0';
+                                    $pslot = '0';
+
+                                    if (!empty($productDisplayRow)) {
+                                        $dbProductName = isset($productDisplayRow['name']) ? trim((string) $productDisplayRow['name']) : '';
+                                        if ($dbProductName !== '') {
+                                            $pn = $dbProductName;
                                         }
-                                        ?>
-                                        <tr>
-                                            <td><?= $num ?></td>
-                                            <td class="autocomplete">
-                                                <input type="text" name="prod_name[]" id="prod_name_<?= $num ?>" value="<?= htmlspecialchars($pn) ?>" onkeyup="prodInfo(this)"<?= $readonly ?>>
-                                                <input type="hidden" name="prod_val[]" id="prod_val_<?= $num ?>" value="<?= htmlspecialchars($pid) ?>" oninput="prodInfoAutoFill(this)">
-                                                <div id="err_msg"><span class="mt-n1"><?php if (isset($err4)) echo $err4; ?></span></div>
-                                            </td>
-                                            <td><input class="readonlyInput" type="text" name="wgt[]" id="wgt_<?= $num ?>" value="<?= htmlspecialchars($pw) ?>" readonly></td>
-                                            <td>
-                                                <input class="readonlyInput" type="text" name="wgt_unit[]" id="wgt_unit_<?= $num ?>" value="<?= htmlspecialchars($pwun) ?>" readonly>
-                                                <input type="hidden" name="wgt_unit_val[]" id="wgt_unit_val_<?= $num ?>" value="<?= htmlspecialchars($pwu) ?>" readonly>
-                                            </td>
-                                            <td><input class="readonlyInput" type="text" name="barcode_status[]" id="barcode_status_<?= $num ?>" value="<?= htmlspecialchars($ps) ?>" readonly></td>
-                                            <td><input class="readonlyInput" type="text" name="barcode_slot[]" id="barcode_slot_<?= $num ?>" value="<?= htmlspecialchars($pslot) ?>" readonly></td>
-                                            <?php if ($act != ''): ?>
-                                                <td>
-                                                    <?php if ($num == 1): ?>
-                                                        <button class="mt-1" id="action_menu_btn" type="button" onclick="Add()"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
-                                                    <?php else: ?>
-                                                        <button class="mt-1" id="action_menu_btn" type="button" onclick="Remove(this)"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000" value="Remove"></i></button>
-                                                    <?php endif; ?>
-                                                </td>
-                                            <?php endif; ?>
-                                        </tr>
-                                        <?php
+
+                                        $pw = isset($productDisplayRow['weight']) ? $productDisplayRow['weight'] : '';
+                                        $pwu = isset($productDisplayRow['weight_unit']) ? $productDisplayRow['weight_unit'] : '';
+                                        $pwun = isset($productDisplayRow['weight_unit_name']) ? $productDisplayRow['weight_unit_name'] : '';
+                                        $ps = isset($productDisplayRow['barcode_status']) && trim((string) $productDisplayRow['barcode_status']) !== '' ? $productDisplayRow['barcode_status'] : '0';
+                                        $pslot = isset($productDisplayRow['barcode_slot']) && trim((string) $productDisplayRow['barcode_slot']) !== '' ? $productDisplayRow['barcode_slot'] : '0';
+                                    } else if ($pid > 0 && $pn === '') {
+                                        $pn = 'Product #' . $pid . ' not found';
                                     }
-                                } else if (!empty($echoVal)) {
-                                    $num = 1; // numbering
-                                    $echoVal = explode(',', $echoVal);
-                                
-                                    foreach ($echoVal as $prod_id) {
-                                        // product info
-                                        $product_info_result = getData('*', "id = '$prod_id'", '', PROD, $connect);
-                                        if ($product_info_result && $product_info_result->num_rows > 0) {
-                                            $product_info_row = $product_info_result->fetch_assoc();
-                                
-                                            $pid = $product_info_row['id'];
-                                            $pn = $product_info_row['name'];
-                                            $pw = $product_info_row['weight'];
-                                            $pwu = $product_info_row['weight_unit'];
-                                            $ps = (isset($product_info_row['barcode_status']) && trim((string)$product_info_row['barcode_status']) !== '') ? $product_info_row['barcode_status'] : '0';
-                                            $pslot = (isset($product_info_row['barcode_slot']) && trim((string)$product_info_row['barcode_slot']) !== '') ? $product_info_row['barcode_slot'] : '0';
-                                
-                                            // get weight unit info
-                                            $wgt_unit_result = getData('unit', "id = '$pwu'", '', WGT_UNIT, $connect);
-                                            $pwun = '';
-                                            if ($wgt_unit_result && $wgt_unit_result->num_rows > 0) {
-                                                $product_info_row = $wgt_unit_result->fetch_assoc();
-                                                $pwun = $product_info_row['unit'];
-                                            }
-                                
-                                            ?>
-                                            <tr>
-                                                <td><?= $num ?></td>
-                                                <td class="autocomplete">
-                                                    <input type="text" name="prod_name[]" id="prod_name_<?= $num ?>" value="<?= htmlspecialchars($pn) ?>" onkeyup="prodInfo(this)"<?= $readonly ?>>
-                                                    <input type="hidden" name="prod_val[]" id="prod_val_<?= $num ?>" value="<?= $pid ?>" oninput="prodInfoAutoFill(this)">
-                                                    <div id="err_msg"><span class="mt-n1"><?php if (isset($err4)) echo $err4; ?></span></div>
-                                                </td>
-                                                <td><input class="readonlyInput" type="text" name="wgt[]" id="wgt_<?= $num ?>" value="<?= $pw ?>" readonly></td>
-                                                <td>
-                                                    <input class="readonlyInput" type="text" name="wgt_unit[]" id="wgt_unit_<?= $num ?>" value="<?= htmlspecialchars($pwun) ?>" readonly>
-                                                    <input type="hidden" name="wgt_unit_val[]" id="wgt_unit_val_<?= $num ?>" value="<?= $pwu ?>" readonly>
-                                                </td>
-                                                <td><input class="readonlyInput" type="text" name="barcode_status[]" id="barcode_status_<?= $num ?>" value="<?= $ps ?>" readonly></td>
-                                                <td><input class="readonlyInput" type="text" name="barcode_slot[]" id="barcode_slot_<?= $num ?>" value="<?= $pslot ?>" readonly></td>
-                                                <?php if ($act != ''): ?>
-                                                    <td>
-                                                        <?php if ($num == 1): ?>
-                                                            <button class="mt-1" id="action_menu_btn" type="button" onclick="Add()"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
-                                                        <?php else: ?>
-                                                            <button class="mt-1" id="action_menu_btn" type="button" onclick="Remove(this)"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000" value="Remove"></i></button>
-                                                        <?php endif; ?>
-                                                    </td>
-                                                <?php endif; ?>
-                                            </tr>
-                                            <?php
-                                            $num++;
-                                        }
-                                    }
-                                } else {
-                                    ?>
+                                ?>
                                     <tr>
-                                        <td>1</td>
+                                        <td><?= $num ?></td>
                                         <td class="autocomplete">
-                                            <input type="text" name="prod_name[]" id="prod_name_1" value="" onkeyup="prodInfo(this)"<?= $readonly ?>>
-                                            <input type="hidden" name="prod_val[]" id="prod_val_1" value="" oninput="prodInfoAutoFill(this)">
+                                            <input type="text" name="prod_name[]" id="prod_name_<?= $num ?>" value="<?= htmlspecialchars($pn, ENT_QUOTES, 'UTF-8') ?>" onkeyup="prodInfo(this)"<?= $readonly ?>>
+                                            <input type="hidden" name="prod_val[]" id="prod_val_<?= $num ?>" value="<?= htmlspecialchars((string) ($pid > 0 ? $pid : ''), ENT_QUOTES, 'UTF-8') ?>" oninput="prodInfoAutoFill(this)">
                                             <div id="err_msg"><span class="mt-n1"><?php if (isset($err4)) echo $err4; ?></span></div>
                                         </td>
-                                        <td><input class="readonlyInput" type="text" name="wgt[]" id="wgt_1" value="" readonly></td>
+                                        <td><input class="readonlyInput" type="text" name="wgt[]" id="wgt_<?= $num ?>" value="<?= htmlspecialchars((string) $pw, ENT_QUOTES, 'UTF-8') ?>" readonly></td>
                                         <td>
-                                            <input class="readonlyInput" type="text" name="wgt_unit[]" id="wgt_unit_1" value="" readonly>
-                                            <input type="hidden" name="wgt_unit_val[]" id="wgt_unit_val_1" value="" readonly>
+                                            <input class="readonlyInput" type="text" name="wgt_unit[]" id="wgt_unit_<?= $num ?>" value="<?= htmlspecialchars((string) $pwun, ENT_QUOTES, 'UTF-8') ?>" readonly>
+                                            <input type="hidden" name="wgt_unit_val[]" id="wgt_unit_val_<?= $num ?>" value="<?= htmlspecialchars((string) $pwu, ENT_QUOTES, 'UTF-8') ?>" readonly>
                                         </td>
-                                        <td><input class="readonlyInput" type="text" name="barcode_status[]" id="barcode_status_1" value="0" readonly></td>
-                                        <td><input class="readonlyInput" type="text" name="barcode_slot[]" id="barcode_slot_1" value="0" readonly></td>
+                                        <td><input class="readonlyInput" type="text" name="barcode_status[]" id="barcode_status_<?= $num ?>" value="<?= htmlspecialchars((string) $ps, ENT_QUOTES, 'UTF-8') ?>" readonly></td>
+                                        <td><input class="readonlyInput" type="text" name="barcode_slot[]" id="barcode_slot_<?= $num ?>" value="<?= htmlspecialchars((string) $pslot, ENT_QUOTES, 'UTF-8') ?>" readonly></td>
                                         <?php if ($act != ''): ?>
-                                            <td><button class="mt-1" id="action_menu_btn" type="button" onclick="Add()"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button></td>
+                                            <td>
+                                                <?php if ($num == 1): ?>
+                                                    <button class="mt-1" id="action_menu_btn" type="button" onclick="Add()"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
+                                                <?php else: ?>
+                                                    <button class="mt-1" id="action_menu_btn" type="button" onclick="Remove(this)"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000" value="Remove"></i></button>
+                                                <?php endif; ?>
+                                            </td>
                                         <?php else: ?>
                                             <td></td>
                                         <?php endif; ?>

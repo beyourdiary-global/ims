@@ -71,7 +71,14 @@ function renderPackageAutocompleteResults(elementID, hiddenElementID, resultRows
     .off("click.packageLookup")
     .on("click.packageLookup", function () {
       setText(this, "#" + elementID, "#" + hiddenElementID);
-      $("#" + elementID).change();
+
+      var hiddenField = document.getElementById(hiddenElementID);
+      if (hiddenField && typeof hiddenField.oninput === "function") {
+        hiddenField.oninput.call(hiddenField);
+      }
+
+      $("#" + hiddenElementID).trigger("change");
+      $("#" + elementID).trigger("change");
       clearAutocompleteResult(elementID);
     });
 }
