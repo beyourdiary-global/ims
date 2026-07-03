@@ -2609,6 +2609,12 @@ body.task-board-page .task-board-scroll {
   overscroll-behavior: contain;
 }
 
+.task-composer-controls .dropdown-menu.task-composer-dropdown-fixed {
+  position: fixed !important;
+  inset: auto auto auto auto !important;
+  z-index: 1090 !important;
+}
+
 .task-due-date-input {
   position: absolute;
   width: 1px;

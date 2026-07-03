@@ -1286,6 +1286,26 @@ function migrationEnsureColumn($conn, $dbName, $tblName, $columnName, $alterSql,
     }
 }
 
+function migrationEnsureColumnWithPreferredAfter($conn, $dbName, $tblName, $columnName, $columnDefinitionSql, $afterColumnName, $successMessage)
+{
+    if (migrationColumnExists($conn, $dbName, $tblName, $columnName)) {
+        return;
+    }
+
+    $qualifiedTable = "`" . str_replace('`', '``', $dbName) . "`.`" . str_replace('`', '``', $tblName) . "`";
+    $alterSql = "ALTER TABLE " . $qualifiedTable . " ADD COLUMN `" . str_replace('`', '``', $columnName) . "` " . trim((string) $columnDefinitionSql);
+
+    if ($afterColumnName !== '' && migrationColumnExists($conn, $dbName, $tblName, $afterColumnName)) {
+        $alterSql .= " AFTER `" . str_replace('`', '``', $afterColumnName) . "`";
+    }
+
+    if ($conn->query($alterSql)) {
+        echo "<p style='color:green;'>" . $successMessage . "</p>";
+    } else {
+        echo "<p style='color:red;'>Failed altering `" . $tblName . "` for column `" . $columnName . "`: " . $conn->error . "</p>";
+    }
+}
+
 function migrationEnsureColumnAfter($conn, $dbName, $tblName, $columnName, $afterColumnName, $modifySql, $successMessage)
 {
     $safeDb = $conn->real_escape_string($dbName);
@@ -4286,9 +4306,9 @@ if ($conn->select_db($db_fin)) {
 }
 
 if ($conn->select_db($db_cms)) {
-    migrationEnsureColumn($conn, $db_cms, 'package', 'platform_item_id', "ALTER TABLE `package` ADD COLUMN `platform_item_id` TEXT DEFAULT NULL AFTER `item_code`", "Verified `package` includes `platform_item_id`.");
-    migrationEnsureColumn($conn, $db_cms, 'package', 'parent_package_id', "ALTER TABLE `package` ADD COLUMN `parent_package_id` INT DEFAULT NULL AFTER `product`", "Verified `package` includes `parent_package_id`.");
-    migrationEnsureIndex($conn, $db_cms, 'package', 'idx_package_parent_package_id', "ALTER TABLE `package` ADD INDEX `idx_package_parent_package_id` (`parent_package_id`)", "Verified `package` parent SKU lookup index.");
+    migrationEnsureColumnWithPreferredAfter($conn, $db_cms, 'package', 'platform_item_id', "TEXT DEFAULT NULL", 'item_code', "Verified `package` includes `platform_item_id`.");
+    migrationEnsureColumnWithPreferredAfter($conn, $db_cms, 'package', 'parent_package_id', "INT DEFAULT NULL", 'product', "Verified `package` includes `parent_package_id`.");
+    migrationEnsureIndex($conn, $db_cms, 'package', 'idx_package_parent_package_id', "ALTER TABLE `" . $db_cms . "`.`package` ADD INDEX `idx_package_parent_package_id` (`parent_package_id`)", "Verified `package` parent SKU lookup index.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `order_status`", "Verified `" . LAZADA_ORDER_REQ . "` includes `airbill_no`.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . LAZADA_ORDER_REQ . "` includes `airbill_attachment`.");
     migrationEnsureColumn($conn, $db_cms, LAZADA_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . LAZADA_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . LAZADA_ORDER_REQ . "` includes `stock_out_warehouse_id`.");

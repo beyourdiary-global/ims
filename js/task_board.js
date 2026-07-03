@@ -375,6 +375,75 @@ function repositionTaskItemMenu($dropdown) {
   });
 }
 
+function repositionTaskComposerDropdown($dropdown) {
+  var $wrap = $dropdown && $dropdown.length ? $dropdown : $();
+  if (!$wrap.length || !$wrap.hasClass("show")) {
+    return;
+  }
+
+  var $toggle = $wrap.children('[data-bs-toggle="dropdown"]').first();
+  var $menu = $wrap.children(".dropdown-menu").first();
+  if (!$toggle.length || !$menu.length) {
+    return;
+  }
+
+  var toggleRect = $toggle.get(0).getBoundingClientRect();
+  if (!toggleRect || (toggleRect.width === 0 && toggleRect.height === 0)) {
+    return;
+  }
+
+  $menu
+    .attr("data-bs-popper", "static")
+    .addClass("task-composer-dropdown-fixed")
+    .css({
+      visibility: "hidden",
+      left: "0px",
+      top: "0px",
+      right: "auto",
+      bottom: "auto",
+      transform: "none",
+    });
+
+  var menuWidth = $menu.outerWidth() || toggleRect.width || 180;
+  var menuHeight = $menu.outerHeight() || 0;
+  var viewportWidth =
+    window.innerWidth || document.documentElement.clientWidth || 0;
+  var viewportHeight =
+    window.innerHeight || document.documentElement.clientHeight || 0;
+  var edgePadding = 12;
+  var verticalGap = 6;
+  var preferredLeft = Math.floor(toggleRect.left);
+  var preferredTop = Math.floor(toggleRect.bottom + verticalGap);
+  var shouldOpenUp =
+    preferredTop + menuHeight > viewportHeight - edgePadding &&
+    toggleRect.top - menuHeight - verticalGap >= edgePadding;
+  var left = Math.max(
+    edgePadding,
+    Math.min(
+      preferredLeft,
+      Math.max(edgePadding, viewportWidth - menuWidth - edgePadding),
+    ),
+  );
+  var top = shouldOpenUp
+    ? Math.floor(toggleRect.top - menuHeight - verticalGap)
+    : preferredTop;
+
+  top = Math.max(
+    edgePadding,
+    Math.min(top, Math.max(edgePadding, viewportHeight - menuHeight - edgePadding)),
+  );
+
+  $wrap.toggleClass("task-composer-dropdown-open-up", shouldOpenUp);
+  $menu.css({
+    left: String(left) + "px",
+    top: String(top) + "px",
+    right: "auto",
+    bottom: "auto",
+    transform: "none",
+    visibility: "",
+  });
+}
+
 function repositionTaskItemSubmenu($submenuWrap) {
   var $wrap = $submenuWrap && $submenuWrap.length ? $submenuWrap : $();
   if (!$wrap.length || !$wrap.hasClass("show")) {
@@ -721,6 +790,26 @@ $app.on("show.bs.dropdown", ".dropdown", function () {
   setTimeout(function () {
     $menu.find(".task-assignee-search-input").trigger("focus");
   }, 50);
+});
+
+$app.on("shown.bs.dropdown", ".task-composer .dropdown", function () {
+  repositionTaskComposerDropdown($(this));
+});
+
+$app.on("hidden.bs.dropdown", ".task-composer .dropdown", function () {
+  $(this).removeClass("task-composer-dropdown-open-up");
+  $(this)
+    .children(".dropdown-menu")
+    .removeAttr("data-bs-popper")
+    .removeClass("task-composer-dropdown-fixed")
+    .css({
+      left: "",
+      top: "",
+      right: "",
+      bottom: "",
+      transform: "",
+      visibility: "",
+    });
 });
 
 $app.on("click keydown", ".task-assignee-search-input", function (e) {
@@ -1192,6 +1281,12 @@ $(document).on("hidden.bs.dropdown", ".task-item-menu-dropdown", function () {
       transform: "",
       visibility: "",
     });
+});
+
+$(window).on("resize scroll", function () {
+  $(".task-composer .dropdown.show").each(function () {
+    repositionTaskComposerDropdown($(this));
+  });
 });
 
 function repositionVisibleTaskItemMenus() {

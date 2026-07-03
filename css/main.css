@@ -495,13 +495,34 @@ input {
 }
 
 @media (max-width: 768px) {
+  #sidebar {
+    top: var(--mobile-sidebar-top, 50px);
+    bottom: auto;
+    height: 0;
+    max-height: 0;
+    overflow-x: hidden;
+    overflow-y: hidden;
+    overscroll-behavior: contain;
+    -webkit-overflow-scrolling: touch;
+  }
+
   #sidebar.active {
     z-index: 1057;
+    height: var(--mobile-sidebar-height, calc(100vh - var(--mobile-sidebar-top, 50px)));
+    max-height: var(--mobile-sidebar-height, calc(100vh - var(--mobile-sidebar-top, 50px)));
+    overflow-y: auto;
+    padding-bottom: calc(env(safe-area-inset-bottom, 0px) + 12px);
   }
 
   .filter_screen {
-    top: 50px;
+    top: var(--mobile-sidebar-top, 50px);
+    bottom: auto;
+    height: var(--mobile-sidebar-height, calc(100vh - var(--mobile-sidebar-top, 50px)));
     z-index: 1056;
+  }
+
+  body.mobile-sidebar-open {
+    overflow: hidden;
   }
 
   body.mobile-sidebar-open .mobile-floating-action-bar,

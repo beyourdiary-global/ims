@@ -199,6 +199,62 @@ if (!$result) {
             font-weight: normal;
             line-height: 1.5;
         }
+
+        #table th.package-name-col,
+        #table td.package-name-cell {
+            min-width: 420px;
+            width: 420px;
+            max-width: none;
+            vertical-align: top;
+        }
+
+        #table th.package-item-code-col,
+        #table td.package-item-code-cell {
+            min-width: 240px;
+            width: 240px;
+            max-width: none;
+            vertical-align: top;
+        }
+
+        #table td.package-name-cell {
+            white-space: nowrap;
+            line-height: 1.35;
+        }
+
+        #table td.package-item-code-cell {
+            white-space: nowrap;
+            word-break: keep-all;
+            overflow-wrap: normal;
+            line-height: 1.35;
+        }
+
+        @media (max-width: 768px) {
+            #table th.package-name-col,
+            #table td.package-name-cell {
+                min-width: 280px;
+                width: 280px;
+            }
+
+            #table th.package-item-code-col,
+            #table td.package-item-code-cell {
+                min-width: 220px;
+                width: 220px;
+            }
+
+            #table td.package-name-cell {
+                white-space: nowrap;
+                word-break: keep-all;
+                overflow-wrap: normal;
+                overflow: hidden;
+                text-overflow: ellipsis;
+            }
+
+            #table td.package-item-code-cell {
+                white-space: nowrap;
+                word-break: keep-all;
+                overflow-wrap: normal;
+            }
+        }
     </style>
 </head>
 
@@ -252,8 +308,8 @@ if (!$result) {
                                 <th class="text-center"><input type="checkbox" class="exportAll"></th>
                                 <th>S/N</th>
                                 <th id="action_col">Action</th>
-                                <th>Name</th>
-                                <th>Item Code</th>
+                                <th class="package-name-col">Name</th>
+                                <th class="package-item-code-col">Item Code</th>
                                 <th>Platform Item ID</th>
                                 <th>Item Description</th>
                                 <th>Price</th>
@@ -283,8 +339,8 @@ if (!$result) {
                                         <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                         <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
-                                    <td><?= htmlspecialchars($row['name']) ?></td>
-                                    <td><?= htmlspecialchars(isset($row['item_code']) ? $row['item_code'] : '') ?></td>
+                                    <td class="package-name-cell"><?= htmlspecialchars($row['name']) ?></td>
+                                    <td class="package-item-code-cell"><?= htmlspecialchars(isset($row['item_code']) ? $row['item_code'] : '') ?></td>
                                     <td>
                                         <?php
                                         $platformItemIds = array_filter(array_map('trim', explode(',', isset($row['platform_item_id']) ? (string) $row['platform_item_id'] : '')), 'strlen');
@@ -360,8 +416,8 @@ if (!$result) {
                                 <th class="text-center"><input type="checkbox" class="exportAll"></th>
                                 <th>S/N</th>
                                 <th>Action</th>
-                                <th>Name</th>
-                                <th>Item Code</th>
+                                <th class="package-name-col">Name</th>
+                                <th class="package-item-code-col">Item Code</th>
                                 <th>Platform Item ID</th>
                                 <th>Item Description</th>
                                 <th>Price</th>
