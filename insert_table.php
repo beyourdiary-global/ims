@@ -1822,6 +1822,12 @@ migrationEnsureIndex($conn, $db_cms, $customerFollowUpTable, 'idx_cfu_order_id',
 migrationEnsureIndex($conn, $db_cms, $customerFollowUpTable, 'idx_cfu_assigned_user', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD INDEX `idx_cfu_assigned_user` (`assigned_user_id`, `status`)", "Verified `{$customerFollowUpTable}` assigned user lookup index.");
 migrationEnsureIndex($conn, $db_cms, $customerFollowUpTable, 'idx_cfu_current_status', "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD INDEX `idx_cfu_current_status` (`current_status`, `status`)", "Verified `{$customerFollowUpTable}` status lookup index.");
 
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'summary', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `summary` TEXT DEFAULT NULL AFTER `attachment`", "Verified `" . USER_RECORD_LOG . "` includes `summary`.");
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'message_shortcut_id', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `message_shortcut_id` INT DEFAULT NULL AFTER `summary`", "Verified `" . USER_RECORD_LOG . "` includes `message_shortcut_id`.");
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'next_follow_up_date', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `next_follow_up_date` DATE DEFAULT NULL AFTER `content`", "Verified `" . USER_RECORD_LOG . "` includes `next_follow_up_date`.");
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_times', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_times` VARCHAR(255) DEFAULT NULL AFTER `next_follow_up_date`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_times`.");
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_day', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_day` VARCHAR(255) DEFAULT NULL AFTER `follow_up_times`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_day`.");
+
 $createCustomerFollowUpRoundSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpRoundTable}` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `follow_up_id` INT NOT NULL DEFAULT 0,
@@ -3792,16 +3798,17 @@ if ($conn->select_db($db_cms)) {
         (149, 'Flow Setting', '1,2,3,4', 'OMS flow setting management', '1', CURDATE(), CURTIME(), 'A'),
         (150, 'Customer Daily Report', '1', 'Customer daily edit activity reporting', '1', CURDATE(), CURTIME(), 'A'),
         (151, 'Customer Follow-Up', '1,11,12', 'Customer follow-up approval and log access', '1', CURDATE(), CURTIME(), 'A'),
-        (160, 'Customer Dashboard', '1', 'Customer Dashboard view access', '1', CURDATE(), CURTIME(), 'A')
+        (160, 'Customer Dashboard', '1', 'Customer Dashboard view access', '1', CURDATE(), CURTIME(), 'A'),
+        (161, 'Daily Follow Up Report', '1', 'Customer user record log daily activity reporting', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
             `remark` = VALUES(`remark`),
             `status` = 'A'";
     if ($conn->query($taskPinGroupSql)) {
-        echo "<p style='color:green;'>Verified pin groups 136-151 and 160 for task, customer, product label, OMS page management, and Customer Dashboard access.</p>";
+        echo "<p style='color:green;'>Verified pin groups 136-151 and 160-161 for task, customer, product label, OMS page management, Customer Dashboard access, and Daily Follow Up Report access.</p>";
     } else {
-        echo "<p style='color:red;'>Failed creating pin groups 136-151 and 160: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating pin groups 136-151 and 160-161: " . $conn->error . "</p>";
     }
 
     $omsPagePinGroupUpdateSql = "UPDATE `pin_group`
@@ -3813,6 +3820,7 @@ if ($conn->select_db($db_cms)) {
                 WHEN 150 THEN 'Customer Daily Report'
                 WHEN 151 THEN 'Customer Follow-Up'
                 WHEN 160 THEN 'Customer Dashboard'
+                WHEN 161 THEN 'Daily Follow Up Report'
                 ELSE `name`
             END,
             `remark` = CASE `id`
@@ -3823,12 +3831,13 @@ if ($conn->select_db($db_cms)) {
                 WHEN 150 THEN 'Customer daily edit activity reporting'
                 WHEN 151 THEN 'Customer follow-up approval and log access'
                 WHEN 160 THEN 'Customer Dashboard view access'
+                WHEN 161 THEN 'Customer user record log daily activity reporting'
                 ELSE `remark`
             END,
             `status` = 'A'
-        WHERE `id` IN (146,147,148,149,150,151,160)";
+        WHERE `id` IN (146,147,148,149,150,151,160,161)";
     if ($conn->query($omsPagePinGroupUpdateSql)) {
-        echo "<p style='color:green;'>Verified pin group names for Waiting To Pack, Arrival Management, Daily Flow Report, Flow Setting, Customer Daily Report, Customer Follow-Up, and Customer Dashboard.</p>";
+        echo "<p style='color:green;'>Verified pin group names for Waiting To Pack, Arrival Management, Daily Flow Report, Flow Setting, Customer Daily Report, Customer Follow-Up, Customer Dashboard, and Daily Follow Up Report.</p>";
     } else {
         echo "<p style='color:red;'>Failed updating OMS pin group names: " . $conn->error . "</p>";
     }
@@ -3931,24 +3940,26 @@ if ($conn->select_db($db_cms)) {
             if (in_array($groupId, array(1, 2), true)) {
                 // Admin groups keep full Customer Follow-Up access: View + Approve + Reject.
                 $updatedPins = addAccessToPinBlock($currentPins, 151, array(1, 11, 12));
+                $updatedPins = addAccessToPinBlock($updatedPins, 161, array(1));
             } else {
                 // Other user groups only get View access.
                 $updatedPins = addAccessToPinBlock($currentPins, 151, array(1));
+                $updatedPins = removePinBlockById($updatedPins, 161);
             }
 
             if ($updatedPins !== $currentPins) {
                 $safePins = $conn->real_escape_string($updatedPins);
                 if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . $groupId)) {
-                    echo "<p style='color:green;'>Verified Customer Follow-Up pin access for `user_group` id " . $groupId . ".</p>";
+                    echo "<p style='color:green;'>Verified Customer Follow-Up and Daily Follow Up Report pin access for `user_group` id " . $groupId . ".</p>";
                 } else {
-                    echo "<p style='color:red;'>Failed updating Customer Follow-Up pin access for `user_group` id " . $groupId . ": " . $conn->error . "</p>";
+                    echo "<p style='color:red;'>Failed updating Customer Follow-Up / Daily Follow Up Report pin access for `user_group` id " . $groupId . ": " . $conn->error . "</p>";
                 }
             } else {
-                echo "<p style='color:green;'>Verified Customer Follow-Up pin access already matches `user_group` id " . $groupId . ".</p>";
+                echo "<p style='color:green;'>Verified Customer Follow-Up and Daily Follow Up Report pin access already matches `user_group` id " . $groupId . ".</p>";
             }
         }
     } else {
-        echo "<p style='color:red;'>Failed reading `user_group` for Customer Follow-Up pin assignment: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed reading `user_group` for Customer Follow-Up / Daily Follow Up Report pin assignment: " . $conn->error . "</p>";
     }
 } else {
     echo "<p style='color:red;'>Failed selecting CMS database for task management migration.</p>";

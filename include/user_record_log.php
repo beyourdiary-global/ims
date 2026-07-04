@@ -269,6 +269,89 @@ if (!function_exists('urlUserRecordLogColumnExists')) {
     }
 }
 
+if (!function_exists('urlNormalizeUserRecordLogDateValue')) {
+    function urlNormalizeUserRecordLogDateValue($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $value)) {
+            return '';
+        }
+
+        $dateParts = explode('-', $value);
+        if (count($dateParts) !== 3) {
+            return '';
+        }
+
+        $year = (int) $dateParts[0];
+        $month = (int) $dateParts[1];
+        $day = (int) $dateParts[2];
+        if (!checkdate($month, $day, $year)) {
+            return '';
+        }
+
+        return $value;
+    }
+}
+
+if (!function_exists('urlNormalizeUserRecordLogShortText')) {
+    function urlNormalizeUserRecordLogShortText($value, $maxLength = 255)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        $maxLength = (int) $maxLength;
+        if ($maxLength < 1) {
+            $maxLength = 255;
+        }
+
+        if (function_exists('mb_substr')) {
+            return trim((string) mb_substr($value, 0, $maxLength, 'UTF-8'));
+        }
+
+        return trim((string) substr($value, 0, $maxLength));
+    }
+}
+
+if (!function_exists('urlNormalizeUserRecordLogPlainText')) {
+    function urlNormalizeUserRecordLogPlainText($value, $maxLength = 5000)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        $value = preg_replace("/\r\n|\r/", "\n", $value);
+        $maxLength = (int) $maxLength;
+        if ($maxLength < 1) {
+            $maxLength = 5000;
+        }
+
+        if (function_exists('mb_substr')) {
+            return trim((string) mb_substr($value, 0, $maxLength, 'UTF-8'));
+        }
+
+        return trim((string) substr($value, 0, $maxLength));
+    }
+}
+
+if (!function_exists('urlRenderUserRecordLogPlainTextHtml')) {
+    function urlRenderUserRecordLogPlainTextHtml($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        return nl2br(htmlspecialchars($value, ENT_QUOTES, 'UTF-8'));
+    }
+}
+
 if (!function_exists('urlGetUserRecordLogAttachmentsColumnName')) {
     function urlGetUserRecordLogAttachmentsColumnName()
     {
@@ -547,6 +630,130 @@ if (!function_exists('urlRenderUserRecordLogContentHtml')) {
     }
 }
 
+if (!function_exists('urlBuildUserRecordLogCopyHtml')) {
+    function urlBuildUserRecordLogCopyHtml($displayNo, $auditMetaText, $summary, $content, $attachments = array(), $uploadWebDir = '', $followUpFields = array())
+    {
+        $summary = trim((string) $summary);
+        $content = trim((string) $content);
+        $auditMetaText = trim((string) $auditMetaText);
+        $attachments = urlNormalizeUserRecordLogAttachmentList($attachments);
+
+        $parts = array();
+        $parts[] = '<div>';
+        $parts[] = '<div><strong>#' . (int) $displayNo . '</strong>';
+        if ($auditMetaText !== '') {
+            $parts[] = ' <span>' . htmlspecialchars($auditMetaText, ENT_QUOTES, 'UTF-8') . '</span>';
+        }
+        $parts[] = '</div>';
+
+        if ($summary !== '') {
+            $parts[] = '<div style="margin-top:12px;"><strong>Summary:</strong><div style="margin-top:6px;">' . urlRenderUserRecordLogPlainTextHtml($summary) . '</div></div>';
+        }
+
+        $parts[] = '<div style="margin-top:12px;"><strong>Content:</strong><div style="margin-top:6px;">' . urlRenderUserRecordLogContentHtml($content) . '</div></div>';
+
+        if (!empty($attachments)) {
+            $attachmentItems = array();
+            foreach ($attachments as $attachment) {
+                $href = urlBuildUserRecordLogAttachmentUrl($attachment, $uploadWebDir);
+                $label = basename(str_replace('\\', '/', (string) $attachment));
+                if ($href !== '') {
+                    $attachmentItems[] = '<li><a href="' . htmlspecialchars($href, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</a></li>';
+                } else {
+                    $attachmentItems[] = '<li>' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . '</li>';
+                }
+            }
+
+            if (!empty($attachmentItems)) {
+                $parts[] = '<div style="margin-top:12px;"><strong>Attachment:</strong><ul style="margin:6px 0 0 18px; padding:0;">' . implode('', $attachmentItems) . '</ul></div>';
+            }
+        }
+
+        if (!empty($followUpFields) && is_array($followUpFields)) {
+            $followUpItems = array();
+            foreach ($followUpFields as $label => $value) {
+                $label = trim((string) $label);
+                $value = trim((string) $value);
+                if ($label === '' || $value === '') {
+                    continue;
+                }
+
+                $followUpItems[] = '<div><strong>' . htmlspecialchars($label, ENT_QUOTES, 'UTF-8') . ':</strong> ' . htmlspecialchars($value, ENT_QUOTES, 'UTF-8') . '</div>';
+            }
+
+            if (!empty($followUpItems)) {
+                $parts[] = '<div style="margin-top:12px;">' . implode('', $followUpItems) . '</div>';
+            }
+        }
+
+        $parts[] = '</div>';
+
+        return implode('', $parts);
+    }
+}
+
+if (!function_exists('urlBuildUserRecordLogCopyText')) {
+    function urlBuildUserRecordLogCopyText($displayNo, $auditMetaText, $summary, $content, $attachments = array(), $uploadWebDir = '', $followUpFields = array())
+    {
+        $lines = array();
+        $summary = trim((string) $summary);
+        $content = trim((string) $content);
+        $auditMetaText = trim((string) $auditMetaText);
+        $attachments = urlNormalizeUserRecordLogAttachmentList($attachments);
+
+        $headerLine = '#' . (int) $displayNo;
+        if ($auditMetaText !== '') {
+            $headerLine .= ' ' . $auditMetaText;
+        }
+        $lines[] = $headerLine;
+
+        if ($summary !== '') {
+            $lines[] = '';
+            $lines[] = 'Summary:';
+            $lines[] = urlGetUserRecordLogContentPlainText($summary);
+        }
+
+        $lines[] = '';
+        $lines[] = 'Content:';
+        $lines[] = urlGetUserRecordLogContentPlainText($content);
+
+        if (!empty($attachments)) {
+            $lines[] = '';
+            $lines[] = 'Attachment:';
+            foreach ($attachments as $attachment) {
+                $href = urlBuildUserRecordLogAttachmentUrl($attachment, $uploadWebDir);
+                $label = basename(str_replace('\\', '/', (string) $attachment));
+                $lines[] = $href !== '' ? ($label . ': ' . $href) : $label;
+            }
+        }
+
+        if (!empty($followUpFields) && is_array($followUpFields)) {
+            $hasFollowUpValue = false;
+            foreach ($followUpFields as $value) {
+                if (trim((string) $value) !== '') {
+                    $hasFollowUpValue = true;
+                    break;
+                }
+            }
+
+            if ($hasFollowUpValue) {
+                $lines[] = '';
+                foreach ($followUpFields as $label => $value) {
+                    $label = trim((string) $label);
+                    $value = trim((string) $value);
+                    if ($label === '' || $value === '') {
+                        continue;
+                    }
+
+                    $lines[] = $label . ': ' . $value;
+                }
+            }
+        }
+
+        return trim(implode("\n", $lines));
+    }
+}
+
 if (!function_exists('urlEnsureUserRecordLogUploadDirectory')) {
     function urlEnsureUserRecordLogUploadDirectory()
     {
@@ -652,6 +859,123 @@ if (!function_exists('urlResolveUserRecordLogContext')) {
     }
 }
 
+if (!function_exists('urlGetLatestUserRecordLogSummary')) {
+    function urlGetLatestUserRecordLogSummary($dbConnect, $tblName, $context = array())
+    {
+        if (!($dbConnect instanceof mysqli)) {
+            return '';
+        }
+
+        if (!urlUserRecordLogColumnExists($dbConnect, $tblName, 'summary')) {
+            return '';
+        }
+
+        $customerId = isset($context['customer_id']) ? (int) $context['customer_id'] : 0;
+        $customerOnly = !empty($context['customer_only']);
+        $customerColumn = isset($context['customer_column']) ? trim((string) $context['customer_column']) : '';
+        if ($customerColumn === '') {
+            $customerColumn = 'cust_id';
+        }
+
+        $where = array("status='A'");
+        if ($customerId > 0) {
+            $where[] = "`" . preg_replace('/[^A-Za-z0-9_]/', '', $customerColumn) . "`='" . (int) $customerId . "'";
+        } else if ($customerOnly) {
+            return '';
+        } else {
+            return '';
+        }
+
+        $sql = "SELECT `summary`
+                FROM `" . preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName) . "`
+                WHERE " . implode(' AND ', $where) . "
+                ORDER BY `updated_at` DESC, `id` DESC
+                LIMIT 1";
+        $result = mysqli_query($dbConnect, $sql);
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            return isset($row['summary']) ? trim((string) $row['summary']) : '';
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('urlGetUserRecordLogMessageShortcutOptions')) {
+    function urlGetUserRecordLogMessageShortcutOptions($dbConnect)
+    {
+        $rows = array();
+        if (!($dbConnect instanceof mysqli) || !defined('MESSAGE_SHORTCUTS')) {
+            return $rows;
+        }
+
+        $tableName = preg_replace('/[^A-Za-z0-9_]/', '', (string) MESSAGE_SHORTCUTS);
+        if ($tableName === '') {
+            return $rows;
+        }
+
+        $where = '';
+        if (function_exists('urlUserRecordLogTableHasColumn') && urlUserRecordLogTableHasColumn($dbConnect, $tableName, 'status')) {
+            $where = " WHERE `status` = 'A'";
+        }
+
+        $sql = "SELECT `id`, `shortcuts_tag`, `shortcuts_message`
+                FROM `" . $tableName . "`" . $where . "
+                ORDER BY `shortcuts_tag` ASC, `id` ASC";
+        $result = mysqli_query($dbConnect, $sql);
+        if (!$result) {
+            return $rows;
+        }
+
+        while ($row = $result->fetch_assoc()) {
+            $shortcutId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($shortcutId <= 0) {
+                continue;
+            }
+
+            $label = trim((string) (isset($row['shortcuts_tag']) ? $row['shortcuts_tag'] : ''));
+            if ($label === '') {
+                $label = 'Shortcut #' . $shortcutId;
+            }
+
+            $rows[] = array(
+                'id' => $shortcutId,
+                'label' => $label,
+                'message_html' => urlRenderUserRecordLogContentHtml(isset($row['shortcuts_message']) ? (string) $row['shortcuts_message'] : ''),
+            );
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('urlGetUserRecordLogMessageShortcutById')) {
+    function urlGetUserRecordLogMessageShortcutById($dbConnect, $shortcutId)
+    {
+        $shortcutId = (int) $shortcutId;
+        if (!($dbConnect instanceof mysqli) || !defined('MESSAGE_SHORTCUTS') || $shortcutId <= 0) {
+            return array();
+        }
+
+        $result = getData('id,shortcuts_tag,shortcuts_message', "id='" . $shortcutId . "'", 'LIMIT 1', MESSAGE_SHORTCUTS, $dbConnect);
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            $label = trim((string) (isset($row['shortcuts_tag']) ? $row['shortcuts_tag'] : ''));
+            if ($label === '') {
+                $label = 'Shortcut #' . $shortcutId;
+            }
+
+            return array(
+                'id' => $shortcutId,
+                'label' => $label,
+                'message_html' => urlRenderUserRecordLogContentHtml(isset($row['shortcuts_message']) ? (string) $row['shortcuts_message'] : ''),
+            );
+        }
+
+        return array();
+    }
+}
+
 if (!function_exists('urlBuildListHtml')) {
     function urlBuildListHtml($connect, $financeConnect, $tblName, $context = array())
     {
@@ -692,6 +1016,7 @@ if (!function_exists('urlBuildListHtml')) {
                 'html' => '<div class="alert alert-secondary">No records / No results found</div>'
             );
         }
+        $where[] = "(IFNULL(content,'') <> '' OR IFNULL(attachment,'') <> '')";
 
         if ($keyword !== '') {
             $where[] = "content LIKE '%" . urlEsc($dbConnect, $keyword) . "%'";
@@ -768,6 +1093,11 @@ if (!function_exists('urlBuildListHtml')) {
             $content = isset($row['content']) ? $row['content'] : '';
             $attachment = isset($row['attachment']) ? $row['attachment'] : '';
             $attachmentList = urlDecodeUserRecordLogAttachmentList($attachment);
+            $summary = isset($row['summary']) ? trim((string) $row['summary']) : '';
+            $messageShortcutId = isset($row['message_shortcut_id']) ? (int) $row['message_shortcut_id'] : 0;
+            $nextFollowUpDate = isset($row['next_follow_up_date']) ? trim((string) $row['next_follow_up_date']) : '';
+            $followUpTimes = isset($row['follow_up_times']) ? trim((string) $row['follow_up_times']) : '';
+            $followUpDay = isset($row['follow_up_day']) ? trim((string) $row['follow_up_day']) : '';
             $createdAt = isset($row['created_at']) ? $row['created_at'] : '';
             $updatedAt = isset($row['updated_at']) ? $row['updated_at'] : '';
             $createdBy = urlGetUserName($connect, isset($row['created_by']) ? $row['created_by'] : '');
@@ -786,31 +1116,67 @@ if (!function_exists('urlBuildListHtml')) {
 
             $createdMeta = 'Created: ' . htmlspecialchars((string) $createdAt, ENT_QUOTES, 'UTF-8') . ' by ' . htmlspecialchars((string) $createdBy, ENT_QUOTES, 'UTF-8');
             $updatedMeta = 'Updated: ' . htmlspecialchars((string) $updatedAt, ENT_QUOTES, 'UTF-8') . ' by ' . htmlspecialchars((string) $updatedBy, ENT_QUOTES, 'UTF-8');
+            $createdMetaText = 'Created: ' . trim((string) $createdAt) . ' by ' . trim((string) $createdBy);
+            $updatedMetaText = 'Updated: ' . trim((string) $updatedAt) . ' by ' . trim((string) $updatedBy);
             $auditMeta = $createdMeta;
+            $auditMetaText = $createdMetaText;
             if (!$isSameAuditInfo && trim((string) $updatedAt) !== '') {
                 $auditMeta .= ' <span class="url-meta-sep">|</span> ' . $updatedMeta;
+                $auditMetaText .= ' | ' . $updatedMetaText;
             }
 
             $attachmentPreviewHtml = urlBuildUserRecordLogAttachmentPreviewGrid($attachmentList, $uploadWebDir);
+            $followUpMetaItems = array();
+            $followUpCopyFields = array();
+            if ($nextFollowUpDate !== '') {
+                $followUpMetaItems[] = '<span><strong>Next Follow-Up Date:</strong> ' . htmlspecialchars($nextFollowUpDate, ENT_QUOTES, 'UTF-8') . '</span>';
+                $followUpCopyFields['Next Follow-Up Date'] = $nextFollowUpDate;
+            }
+            if ($followUpTimes !== '') {
+                $followUpMetaItems[] = '<span><strong>Follow-Up Times:</strong> ' . htmlspecialchars($followUpTimes, ENT_QUOTES, 'UTF-8') . '</span>';
+                $followUpCopyFields['Follow-Up Times'] = $followUpTimes;
+            }
+            if ($followUpDay !== '') {
+                $followUpMetaItems[] = '<span><strong>Follow-Up Day:</strong> ' . htmlspecialchars($followUpDay, ENT_QUOTES, 'UTF-8') . '</span>';
+                $followUpCopyFields['Follow-Up Day'] = $followUpDay;
+            }
+
+            $copyHtml = urlBuildUserRecordLogCopyHtml($displayNo, $auditMetaText, $summary, $content, $attachmentList, $uploadWebDir, $followUpCopyFields);
+            $copyText = urlBuildUserRecordLogCopyText($displayNo, $auditMetaText, $summary, $content, $attachmentList, $uploadWebDir, $followUpCopyFields);
 
             $rowClass = ($count % 2 === 1) ? ' url-row-odd' : ' url-row-even';
             $html .= '<div class="card mb-3 url-log-row' . $rowClass . '">';
             $html .= '  <div class="card-header">';
             $html .= '    <div><strong>#' . $displayNo . '</strong> <span class="ms-2 text-muted small">' . $auditMeta . '</span></div>';
             $html .= '    <div class="d-flex align-items-center gap-2 mt-2">';
+            $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-secondary url-copy-btn" title="Copy User Log">Copy</button>';
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-info text-white url-toggle-btn" data-target="url-body-' . $recordId . '">Collapse/Expand</button>';
             $html .= $editBtn;
             $html .= '    </div>';
             $html .= '  </div>';
             $html .= '  <div id="url-body-' . $recordId . '" class="card-body">';
             $html .= '    <div class="url-content-row d-flex justify-content-between align-items-start gap-2 flex-wrap">';
-            $html .= '      <div class="mb-0 url-log-content-wrap"><strong>Content:</strong><div class="url-log-content mt-2">' . urlRenderUserRecordLogContentHtml($content) . '</div></div>';
+            $html .= '      <div class="mb-0 url-log-content-wrap">';
+            if ($summary !== '') {
+                $html .= '      <div class="mb-3"><strong>Summary:</strong><div class="url-log-summary mt-2">' . urlRenderUserRecordLogPlainTextHtml($summary) . '</div></div>';
+            }
+            $html .= '      <strong>Content:</strong><div class="url-log-content mt-2">' . urlRenderUserRecordLogContentHtml($content) . '</div></div>';
             if ($attachmentPreviewHtml !== '') {
                 $html .= '      <div class="url-attachment-action ms-auto"><div class="url-attachment-title">Attachment</div>' . $attachmentPreviewHtml . '</div>';
             }
             $html .= '    </div>';
+            if (!empty($followUpMetaItems)) {
+                $html .= '    <div class="url-log-extra-fields mt-3">' . implode('<span class="url-log-extra-sep">|</span>', $followUpMetaItems) . '</div>';
+            }
+            $html .= '    <textarea class="url-edit-summary d-none">' . htmlspecialchars($summary, ENT_QUOTES, 'UTF-8') . '</textarea>';
+            $html .= '    <input type="hidden" class="url-edit-message-shortcut-id" value="' . $messageShortcutId . '">';
+            $html .= '    <textarea class="url-copy-html d-none">' . htmlspecialchars($copyHtml, ENT_QUOTES, 'UTF-8') . '</textarea>';
+            $html .= '    <textarea class="url-copy-text d-none">' . htmlspecialchars($copyText, ENT_QUOTES, 'UTF-8') . '</textarea>';
             $html .= '    <textarea class="url-edit-content d-none">' . htmlspecialchars(urlRenderUserRecordLogContentHtml($content), ENT_QUOTES, 'UTF-8') . '</textarea>';
             $html .= '    <textarea class="url-edit-attachments d-none">' . htmlspecialchars(urlEncodeUserRecordLogAttachmentList($attachmentList), ENT_QUOTES, 'UTF-8') . '</textarea>';
+            $html .= '    <input type="hidden" class="url-edit-next-follow-up-date" value="' . htmlspecialchars($nextFollowUpDate, ENT_QUOTES, 'UTF-8') . '">';
+            $html .= '    <input type="hidden" class="url-edit-follow-up-times" value="' . htmlspecialchars($followUpTimes, ENT_QUOTES, 'UTF-8') . '">';
+            $html .= '    <input type="hidden" class="url-edit-follow-up-day" value="' . htmlspecialchars($followUpDay, ENT_QUOTES, 'UTF-8') . '">';
             $html .= '  </div>';
             $html .= '</div>';
 
@@ -878,6 +1244,164 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             ));
         }
 
+        if ($urlAction === 'save_summary') {
+            if ((int) $context['customer_id'] <= 0) {
+                if ($urlIsFallback) {
+                    urlFallbackResponse('Summary requires a customer record.', false, $context['return_url']);
+                }
+                urlJsonResponse(array('ok' => 0, 'message' => 'Summary requires a customer record.'));
+            }
+
+            $summary = urlNormalizeUserRecordLogPlainText(post('summary'));
+            $hasSummaryColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'summary');
+            if (!$hasSummaryColumn) {
+                if ($urlIsFallback) {
+                    urlFallbackResponse('User record log summary field is not ready yet. Please run insert_table.php first.', false, $context['return_url']);
+                }
+                urlJsonResponse(array('ok' => 0, 'message' => 'User record log summary field is not ready yet. Please run insert_table.php first.'));
+            }
+
+            $customerId = (int) $context['customer_id'];
+            $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+            $safeCustomerColumn = preg_replace('/[^A-Za-z0-9_]/', '', (string) $customerColumn);
+            if ($safeCustomerColumn === '') {
+                $safeCustomerColumn = 'cust_id';
+            }
+
+            $latestSql = "SELECT * FROM `" . $safeTable . "` WHERE `status`='A' AND `" . $safeCustomerColumn . "`='" . $customerId . "' ORDER BY `updated_at` DESC, `id` DESC LIMIT 1";
+            $latestRst = mysqli_query($dbConnect, $latestSql);
+            $latestRow = ($latestRst && $latestRst->num_rows > 0) ? $latestRst->fetch_assoc() : array();
+
+            if (!empty($latestRow)) {
+                $latestId = isset($latestRow['id']) ? (int) $latestRow['id'] : 0;
+                $oldSummary = isset($latestRow['summary']) ? trim((string) $latestRow['summary']) : '';
+                $sql = "UPDATE `" . $safeTable . "` SET `summary`=" . ($summary !== '' ? ("'" . urlEsc($dbConnect, $summary) . "'") : 'NULL') . ", `updated_by`='" . urlEsc($dbConnect, USER_ID) . "', `updated_at`=NOW() WHERE `id`='" . $latestId . "'";
+                $ok = mysqli_query($dbConnect, $sql);
+
+                $editFields = array('summary');
+                $editOld = array($oldSummary);
+                $editNew = array($summary);
+                $customerAuditValue = $customerId > 0 ? (string) $customerId : 'Empty Value';
+                $baseEditActMsg = function_exists('actMsgLog')
+                    ? actMsgLog($latestId, $editFields, '', $editOld, $editNew, $tblName, 'Edit', (!empty($ok) ? '' : mysqli_error($dbConnect)))
+                    : (USER_NAME . ' edited User Record Log Summary [ID=' . $latestId . ']');
+                $editActMsg = rtrim($baseEditActMsg) . ' [' . $customerColumn . ' : ' . $customerAuditValue . ']';
+
+                $log = array(
+                    'log_act' => 'Edit',
+                    'cdate' => $GLOBALS['cdate'],
+                    'ctime' => $GLOBALS['ctime'],
+                    'uid' => USER_ID,
+                    'cby' => USER_ID,
+                    'query_rec' => $sql,
+                    'query_table' => $tblName,
+                    'oldval' => implodeWithComma($editOld),
+                    'changes' => implodeWithComma($editNew),
+                    'newval' => '',
+                    'act_msg' => $editActMsg,
+                    'page' => $pageTitle,
+                    'connect' => $connect,
+                );
+                audit_log($log);
+
+                if (!$ok) {
+                    if ($urlIsFallback) {
+                        urlFallbackResponse('Failed to save summary.', false, $context['return_url']);
+                    }
+                    urlJsonResponse(array('ok' => 0, 'message' => 'Failed to save summary.'));
+                }
+
+                if ($urlIsFallback) {
+                    urlFallbackResponse('Summary saved successfully.', true, $context['return_url']);
+                }
+                urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.'));
+            }
+
+            if ($summary === '') {
+                if ($urlIsFallback) {
+                    urlFallbackResponse('Summary saved successfully.', true, $context['return_url']);
+                }
+                urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.'));
+            }
+
+            $insertColumns = array(
+                $customerColumn,
+                'content',
+                'attachment',
+                'summary',
+                'created_by',
+                'created_at',
+                'updated_by',
+                'updated_at',
+                'status',
+            );
+            $insertValues = array(
+                "'" . $customerId . "'",
+                "''",
+                "''",
+                "'" . urlEsc($dbConnect, $summary) . "'",
+                "'" . urlEsc($dbConnect, USER_ID) . "'",
+                'NOW()',
+                "'" . urlEsc($dbConnect, USER_ID) . "'",
+                'NOW()',
+                "'A'",
+            );
+
+            if (urlUserRecordLogColumnExists($dbConnect, $tblName, 'next_follow_up_date')) {
+                $insertColumns[] = 'next_follow_up_date';
+                $insertValues[] = 'NULL';
+            }
+            if (urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_times')) {
+                $insertColumns[] = 'follow_up_times';
+                $insertValues[] = 'NULL';
+            }
+            if (urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_day')) {
+                $insertColumns[] = 'follow_up_day';
+                $insertValues[] = 'NULL';
+            }
+
+            $sql = "INSERT INTO `" . $safeTable . "` (" . implode(', ', $insertColumns) . ") VALUES (" . implode(', ', $insertValues) . ")";
+            $ok = mysqli_query($dbConnect, $sql);
+            $newId = (int) $dbConnect->insert_id;
+
+            $addFields = array('summary');
+            $addNew = array($summary);
+            $customerAuditValue = $customerId > 0 ? (string) $customerId : 'Empty Value';
+            $baseAddActMsg = function_exists('actMsgLog')
+                ? actMsgLog($newId, $addFields, $addNew, '', '', $tblName, 'Add', (!empty($ok) ? '' : mysqli_error($dbConnect)))
+                : (USER_NAME . ' added User Record Log Summary [ID=' . $newId . ']');
+            $addActMsg = rtrim($baseAddActMsg) . ' [' . $customerColumn . ' : ' . $customerAuditValue . ']';
+
+            $log = array(
+                'log_act' => 'Add',
+                'cdate' => $GLOBALS['cdate'],
+                'ctime' => $GLOBALS['ctime'],
+                'uid' => USER_ID,
+                'cby' => USER_ID,
+                'query_rec' => $sql,
+                'query_table' => $tblName,
+                'oldval' => '',
+                'changes' => '',
+                'newval' => implodeWithComma($addNew),
+                'act_msg' => $addActMsg,
+                'page' => $pageTitle,
+                'connect' => $connect,
+            );
+            audit_log($log);
+
+            if (!$ok) {
+                if ($urlIsFallback) {
+                    urlFallbackResponse('Failed to save summary.', false, $context['return_url']);
+                }
+                urlJsonResponse(array('ok' => 0, 'message' => 'Failed to save summary.'));
+            }
+
+            if ($urlIsFallback) {
+                urlFallbackResponse('Summary saved successfully.', true, $context['return_url']);
+            }
+            urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.'));
+        }
+
         if ($urlAction !== 'save') {
             if ($urlIsFallback) {
                 urlFallbackResponse('Invalid action.', false, $context['return_url']);
@@ -892,6 +1416,53 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 urlFallbackResponse('Content is required.', false, $context['return_url']);
             }
             urlJsonResponse(array('ok' => 0, 'message' => 'Content is required.'));
+        }
+
+        $submittedNextFollowUpDate = trim((string) post('next_follow_up_date'));
+        $nextFollowUpDate = '';
+        if ($submittedNextFollowUpDate !== '') {
+            $nextFollowUpDate = urlNormalizeUserRecordLogDateValue($submittedNextFollowUpDate);
+            if ($nextFollowUpDate === '') {
+                if ($urlIsFallback) {
+                    urlFallbackResponse('Next Follow-Up Date is invalid.', false, $context['return_url']);
+                }
+                urlJsonResponse(array('ok' => 0, 'message' => 'Next Follow-Up Date is invalid.'));
+            }
+        }
+        $summary = urlNormalizeUserRecordLogPlainText(post('summary'));
+        $messageShortcutId = (int) post('message_shortcut_id');
+        $followUpTimes = urlNormalizeUserRecordLogShortText(post('follow_up_times'));
+        $followUpDay = urlNormalizeUserRecordLogShortText(post('follow_up_day'));
+        $hasSummaryColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'summary');
+        $hasMessageShortcutIdColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'message_shortcut_id');
+        $hasNextFollowUpDateColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'next_follow_up_date');
+        $hasFollowUpTimesColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_times');
+        $hasFollowUpDayColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_day');
+        $followUpColumnsReady = $hasNextFollowUpDateColumn && $hasFollowUpTimesColumn && $hasFollowUpDayColumn;
+        $hasFollowUpFieldInput = ($nextFollowUpDate !== '' || $followUpTimes !== '' || $followUpDay !== '');
+        if ($hasFollowUpFieldInput && !$followUpColumnsReady) {
+            if ($urlIsFallback) {
+                urlFallbackResponse('User record log follow-up fields are not ready yet. Please run insert_table.php first.', false, $context['return_url']);
+            }
+            urlJsonResponse(array('ok' => 0, 'message' => 'User record log follow-up fields are not ready yet. Please run insert_table.php first.'));
+        }
+        if ($summary !== '' && !$hasSummaryColumn) {
+            if ($urlIsFallback) {
+                urlFallbackResponse('User record log summary field is not ready yet. Please run insert_table.php first.', false, $context['return_url']);
+            }
+            urlJsonResponse(array('ok' => 0, 'message' => 'User record log summary field is not ready yet. Please run insert_table.php first.'));
+        }
+        if ($messageShortcutId > 0 && !$hasMessageShortcutIdColumn) {
+            if ($urlIsFallback) {
+                urlFallbackResponse('User record log message shortcut field is not ready yet. Please run insert_table.php first.', false, $context['return_url']);
+            }
+            urlJsonResponse(array('ok' => 0, 'message' => 'User record log message shortcut field is not ready yet. Please run insert_table.php first.'));
+        }
+        if ($messageShortcutId > 0 && empty(urlGetUserRecordLogMessageShortcutById($dbConnect, $messageShortcutId))) {
+            if ($urlIsFallback) {
+                urlFallbackResponse('Selected message shortcut is invalid.', false, $context['return_url']);
+            }
+            urlJsonResponse(array('ok' => 0, 'message' => 'Selected message shortcut is invalid.'));
         }
 
         $submittedAttachments = array();
@@ -1037,6 +1608,21 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 "content='" . urlEsc($dbConnect, $content) . "'",
                 "attachment='" . urlEsc($dbConnect, $attachmentValue) . "'",
             );
+            if ($hasSummaryColumn) {
+                $updateParts[] = "summary=" . ($summary !== '' ? ("'" . urlEsc($dbConnect, $summary) . "'") : 'NULL');
+            }
+            if ($hasMessageShortcutIdColumn) {
+                $updateParts[] = "message_shortcut_id=" . ($messageShortcutId > 0 ? $messageShortcutId : 'NULL');
+            }
+            if ($hasNextFollowUpDateColumn) {
+                $updateParts[] = "next_follow_up_date=" . ($nextFollowUpDate !== '' ? ("'" . urlEsc($dbConnect, $nextFollowUpDate) . "'") : 'NULL');
+            }
+            if ($hasFollowUpTimesColumn) {
+                $updateParts[] = "follow_up_times=" . ($followUpTimes !== '' ? ("'" . urlEsc($dbConnect, $followUpTimes) . "'") : 'NULL');
+            }
+            if ($hasFollowUpDayColumn) {
+                $updateParts[] = "follow_up_day=" . ($followUpDay !== '' ? ("'" . urlEsc($dbConnect, $followUpDay) . "'") : 'NULL');
+            }
             $updateParts[] = "updated_by='" . urlEsc($dbConnect, USER_ID) . "'";
             $updateParts[] = "updated_at=NOW()";
 
@@ -1060,6 +1646,46 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 $editFields[] = 'attachment';
                 $editOld[] = $oldAttachment;
                 $editNew[] = $attachmentValue;
+            }
+            if ($hasSummaryColumn) {
+                $oldSummary = isset($currentRow['summary']) ? trim((string) $currentRow['summary']) : '';
+                if ($oldSummary !== $summary) {
+                    $editFields[] = 'summary';
+                    $editOld[] = $oldSummary;
+                    $editNew[] = $summary;
+                }
+            }
+            if ($hasMessageShortcutIdColumn) {
+                $oldMessageShortcutId = isset($currentRow['message_shortcut_id']) ? (int) $currentRow['message_shortcut_id'] : 0;
+                if ($oldMessageShortcutId !== $messageShortcutId) {
+                    $editFields[] = 'message_shortcut_id';
+                    $editOld[] = $oldMessageShortcutId > 0 ? (string) $oldMessageShortcutId : '';
+                    $editNew[] = $messageShortcutId > 0 ? (string) $messageShortcutId : '';
+                }
+            }
+            if ($hasNextFollowUpDateColumn) {
+                $oldNextFollowUpDate = isset($currentRow['next_follow_up_date']) ? trim((string) $currentRow['next_follow_up_date']) : '';
+                if ($oldNextFollowUpDate !== $nextFollowUpDate) {
+                    $editFields[] = 'next_follow_up_date';
+                    $editOld[] = $oldNextFollowUpDate;
+                    $editNew[] = $nextFollowUpDate;
+                }
+            }
+            if ($hasFollowUpTimesColumn) {
+                $oldFollowUpTimes = isset($currentRow['follow_up_times']) ? trim((string) $currentRow['follow_up_times']) : '';
+                if ($oldFollowUpTimes !== $followUpTimes) {
+                    $editFields[] = 'follow_up_times';
+                    $editOld[] = $oldFollowUpTimes;
+                    $editNew[] = $followUpTimes;
+                }
+            }
+            if ($hasFollowUpDayColumn) {
+                $oldFollowUpDay = isset($currentRow['follow_up_day']) ? trim((string) $currentRow['follow_up_day']) : '';
+                if ($oldFollowUpDay !== $followUpDay) {
+                    $editFields[] = 'follow_up_day';
+                    $editOld[] = $oldFollowUpDay;
+                    $editNew[] = $followUpDay;
+                }
             }
 
             $customerAuditValue = $currentCustomerId > 0 ? (string) $currentCustomerId : 'Empty Value';
@@ -1115,6 +1741,26 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             "'" . urlEsc($dbConnect, $content) . "'",
             "'" . urlEsc($dbConnect, $attachmentValue) . "'",
         );
+        if ($hasSummaryColumn) {
+            $insertColumns[] = 'summary';
+            $insertValues[] = $summary !== '' ? ("'" . urlEsc($dbConnect, $summary) . "'") : 'NULL';
+        }
+        if ($hasMessageShortcutIdColumn) {
+            $insertColumns[] = 'message_shortcut_id';
+            $insertValues[] = $messageShortcutId > 0 ? (string) $messageShortcutId : 'NULL';
+        }
+        if ($hasNextFollowUpDateColumn) {
+            $insertColumns[] = 'next_follow_up_date';
+            $insertValues[] = $nextFollowUpDate !== '' ? ("'" . urlEsc($dbConnect, $nextFollowUpDate) . "'") : 'NULL';
+        }
+        if ($hasFollowUpTimesColumn) {
+            $insertColumns[] = 'follow_up_times';
+            $insertValues[] = $followUpTimes !== '' ? ("'" . urlEsc($dbConnect, $followUpTimes) . "'") : 'NULL';
+        }
+        if ($hasFollowUpDayColumn) {
+            $insertColumns[] = 'follow_up_day';
+            $insertValues[] = $followUpDay !== '' ? ("'" . urlEsc($dbConnect, $followUpDay) . "'") : 'NULL';
+        }
         $insertColumns = array_merge($insertColumns, array('created_by', 'created_at', 'updated_by', 'updated_at', 'status'));
         $insertValues = array_merge($insertValues, array(
             "'" . urlEsc($dbConnect, USER_ID) . "'",
@@ -1135,6 +1781,26 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         $newId = (int) $dbConnect->insert_id;
         $addFields = array('content', 'attachment');
         $addNew = array($content, $attachmentValue);
+        if ($hasSummaryColumn) {
+            $addFields[] = 'summary';
+            $addNew[] = $summary;
+        }
+        if ($hasMessageShortcutIdColumn) {
+            $addFields[] = 'message_shortcut_id';
+            $addNew[] = $messageShortcutId > 0 ? (string) $messageShortcutId : '';
+        }
+        if ($hasNextFollowUpDateColumn) {
+            $addFields[] = 'next_follow_up_date';
+            $addNew[] = $nextFollowUpDate;
+        }
+        if ($hasFollowUpTimesColumn) {
+            $addFields[] = 'follow_up_times';
+            $addNew[] = $followUpTimes;
+        }
+        if ($hasFollowUpDayColumn) {
+            $addFields[] = 'follow_up_day';
+            $addNew[] = $followUpDay;
+        }
         $customerAuditValue = (int) $context['customer_id'] > 0 ? (string) ((int) $context['customer_id']) : 'Empty Value';
         $baseAddActMsg = function_exists('actMsgLog')
             ? actMsgLog($newId, $addFields, $addNew, '', '', $tblName, 'Add', (!empty($ok) ? '' : mysqli_error($dbConnect)))
@@ -1192,6 +1858,11 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
         $showScopeNote = !isset($options['show_scope_note']) || (bool) $options['show_scope_note'];
         $pathReturn = isset($context['return_url']) ? (string) $context['return_url'] : '';
         $initialList = urlBuildListHtml($connect, $dbConnect, $tblName, $context);
+        $currentSummary = urlGetLatestUserRecordLogSummary($dbConnect, $tblName, $context);
+        if ($dbConnect instanceof mysqli && defined('MESSAGE_SHORTCUTS') && function_exists('generateDBData')) {
+            generateDBData((string) MESSAGE_SHORTCUTS, $dbConnect);
+        }
+        $messageShortcutOptions = urlGetUserRecordLogMessageShortcutOptions($dbConnect);
         $config = array(
             'ajaxUrl' => isset($context['ajax_url']) ? (string) $context['ajax_url'] : (rtrim((string) $GLOBALS['SITEURL'], '/') . '/users/user_record_log.php'),
             'customerId' => isset($context['customer_id']) ? (int) $context['customer_id'] : 0,
@@ -1199,6 +1870,9 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
             'pathReturn' => $pathReturn,
             'siteUrl' => rtrim((string) $GLOBALS['SITEURL'], '/'),
             'uploadWebDir' => trim((string) urlGetUserRecordLogUploadWebDir(), '/'),
+            'currentSummary' => $currentSummary,
+            'messageShortcuts' => $messageShortcutOptions,
+            'messageShortcutTable' => defined('MESSAGE_SHORTCUTS') ? (string) MESSAGE_SHORTCUTS : '',
             'confirmationPageName' => 'User Record Log',
         );
         $configJson = json_encode($config);
@@ -1343,10 +2017,51 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     font-size: 0.82rem;
                 }
 
+                .user-record-log-module .url-summary-wrap {
+                    border: 1px solid #d9e1f2;
+                    border-radius: 12px;
+                    background: #f8fbff;
+                    padding: 16px;
+                }
+
+                .user-record-log-module .url-summary-note {
+                    color: #5e6c84;
+                    font-size: 0.82rem;
+                }
+
+                .user-record-log-module .url-log-summary {
+                    white-space: normal;
+                    word-break: break-word;
+                    line-height: 1.6;
+                }
+
                 .user-record-log-module .si-attach-wrap {
                     border: 1px solid #e2e2e2;
                     border-radius: 8px;
                     padding: 12px;
+                }
+
+                .user-record-log-module .url-attachment-form-footer {
+                    display: flex;
+                    justify-content: center;
+                    align-items: center;
+                    gap: 10px;
+                    flex-wrap: wrap;
+                    margin-top: 14px;
+                    padding-top: 14px;
+                    border-top: 1px solid #eceff4;
+                }
+
+                .user-record-log-module .url-save-log-btn {
+                    min-width: 168px;
+                    padding: 0.72rem 1.35rem;
+                    font-size: 0.98rem;
+                    font-weight: 600;
+                }
+
+                .user-record-log-module .url-cancel-log-btn {
+                    padding: 0.72rem 1.15rem;
+                    font-size: 0.95rem;
                 }
 
                 .user-record-log-module .si-attach-preview {
@@ -1436,6 +2151,18 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     white-space: nowrap;
                 }
 
+                .user-record-log-module .url-log-extra-fields {
+                    display: flex;
+                    flex-wrap: wrap;
+                    gap: 0.5rem;
+                    font-size: 0.9rem;
+                    color: #4f5a6b;
+                }
+
+                .user-record-log-module .url-log-extra-sep {
+                    color: #93a0b4;
+                }
+
                 .user-record-log-module .url-attachment-modal {
                     position: fixed;
                     inset: 0;
@@ -1502,8 +2229,29 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     .user-record-log-module .url-attachment-preview-grid {
                         grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
                     }
+
+                    .user-record-log-module .url-attachment-form-footer {
+                        justify-content: center;
+                    }
+
+                    .user-record-log-module .url-save-log-btn,
+                    .user-record-log-module .url-cancel-log-btn {
+                        width: 100%;
+                    }
                 }
             </style>
+            <div class="card mb-3">
+                <div class="card-body">
+                    <div class="url-summary-wrap">
+                        <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
+                            <label class="form-label mb-0" for="url_summary">Summary</label>
+                            <button type="button" class="btn btn-sm btn-rounded btn-outline-primary" id="url_summary_submit_btn">Save Summary</button>
+                        </div>
+                        <textarea class="form-control" id="url_summary" rows="4" placeholder="Enter summary"><?php echo htmlspecialchars($currentSummary, ENT_QUOTES, 'UTF-8'); ?></textarea>
+                    </div>
+                </div>
+            </div>
+
             <?php if ($sectionHeading !== '') { ?>
                 <div class="d-flex justify-content-between align-items-center flex-wrap mb-3">
                     <h5 class="mb-0"><?php echo htmlspecialchars($sectionHeading, ENT_QUOTES, 'UTF-8'); ?></h5>
@@ -1523,14 +2271,37 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                         <input type="hidden" name="record_id" id="url_record_id" value="0">
                         <input type="hidden" name="existing_attachment" id="url_existing_attachment" value="">
                         <input type="hidden" name="existing_attachments" id="url_existing_attachments" value="[]">
+                        <input type="hidden" name="message_shortcut_id" id="url_message_shortcut_id" value="">
                         <input type="hidden" name="customer_id" value="<?php echo isset($context['customer_id']) ? (int) $context['customer_id'] : 0; ?>">
                         <input type="hidden" name="customer_column" value="<?php echo htmlspecialchars(isset($context['customer_column']) ? (string) $context['customer_column'] : '', ENT_QUOTES, 'UTF-8'); ?>">
                         <input type="hidden" name="return_url" value="<?php echo htmlspecialchars($pathReturn, ENT_QUOTES, 'UTF-8'); ?>">
 
                         <div class="mb-3">
+                            <label class="form-label" for="url_message_shortcut_label">Message Shortcut</label>
+                            <div class="autocomplete">
+                                <input type="text" class="form-control" id="url_message_shortcut_label" placeholder="Type to search message shortcut" autocomplete="off">
+                            </div>
+                            <div class="url-editor-note">Selecting a shortcut will replace the current content with the shortcut message.</div>
+                        </div>
+
+                        <div class="mb-3">
                             <label class="form-label" for="url_content">Content</label>
                             <textarea class="form-control" id="url_content" name="content" rows="4" required></textarea>
                             <div class="url-editor-note">Supports paragraphs, bold text, emoji, and bullet or numbered lists.</div>
+                        </div>
+                        <div class="row g-3 mb-3">
+                            <div class="col-12 col-md-4">
+                                <label class="form-label" for="url_next_follow_up_date">Next Follow-Up Date</label>
+                                <input type="date" class="form-control" id="url_next_follow_up_date" name="next_follow_up_date">
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label" for="url_follow_up_times">Follow-Up Times</label>
+                                <input type="text" class="form-control" id="url_follow_up_times" name="follow_up_times">
+                            </div>
+                            <div class="col-12 col-md-4">
+                                <label class="form-label" for="url_follow_up_day">Follow-Up Day</label>
+                                <input type="text" class="form-control" id="url_follow_up_day" name="follow_up_day">
+                            </div>
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="url_attachment">Attachment</label>
@@ -1553,11 +2324,11 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                                         </div>
                                     </div>
                                 </div>
+                                <div class="url-attachment-form-footer">
+                                    <button type="button" class="btn btn-sm btn-rounded btn-secondary url-cancel-log-btn" id="url_cancel_edit_btn" style="display:none;">Cancel Edit</button>
+                                    <button type="submit" class="btn btn-rounded btn-primary url-save-log-btn" id="url_submit_btn">Save User Log</button>
+                                </div>
                             </div>
-                        </div>
-                        <div class="d-flex gap-2 flex-wrap">
-                            <button type="submit" class="btn btn-sm btn-rounded btn-primary" id="url_submit_btn">Save User Log</button>
-                            <button type="button" class="btn btn-sm btn-rounded btn-secondary" id="url_cancel_edit_btn" style="display:none;">Cancel Edit</button>
                         </div>
                     </form>
                 </div>
