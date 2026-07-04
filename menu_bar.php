@@ -243,6 +243,7 @@ $menuList = array(
             array('Website Customer', 'mdi mdi-deal-outline', $SITEURL . '/customer/website_customer_record_table.php', '84'),
             array('Whatsapp Customer', 'mdi mdi-deal-outline', $SITEURL . '/customer/customerInfoTable.php', '38'),
             array('Customer Follow-Up', 'mdi mdi-account-clock-outline', $SITEURL . '/customer/customer_follow_up_list.php', '151'),
+            array('Daily Follow Up Report', 'mdi mdi-history', $SITEURL . '/customer/customer_daily_follow_up_report.php', '161'),
             array('Customer Daily Report', 'mdi mdi-file-chart-outline', $SITEURL . '/customer/customer_daily_report.php', '150'),
             array('Campaign', 'mdi mdi-bullhorn-outline', $SITEURL . '/campaign/campaign_table.php', '153'),
             array(

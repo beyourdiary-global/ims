@@ -11,6 +11,7 @@
     var customerId = parseInt(cfg.customerId || "0", 10) || 0;
     var customerColumn = String(cfg.customerColumn || "");
     var pathReturn = cfg.pathReturn || window.location.href;
+    var messageShortcutTable = String(cfg.messageShortcutTable || "");
 
     var $form = $("#url_form");
     var $alert = $("#url_alert");
@@ -21,7 +22,14 @@
     var $pagination = $("#url_pagination");
     var $pagingSummary = $("#url_paging_summary");
     var $recordId = $("#url_record_id");
+    var $summary = $("#url_summary");
+    var $summarySubmitBtn = $("#url_summary_submit_btn");
+    var $messageShortcutId = $("#url_message_shortcut_id");
+    var $messageShortcutLabel = $("#url_message_shortcut_label");
     var $content = $("#url_content");
+    var $nextFollowUpDate = $("#url_next_follow_up_date");
+    var $followUpTimes = $("#url_follow_up_times");
+    var $followUpDay = $("#url_follow_up_day");
     var $existingAttachment = $("#url_existing_attachment");
     var $existingAttachments = $("#url_existing_attachments");
     var $submitBtn = $("#url_submit_btn");
@@ -29,6 +37,10 @@
     var $attachmentModal = $("#url_attachment_preview_modal");
     var $attachmentModalClose = $("#url_attachment_modal_close");
     var $attachmentPreviewContent = $("#url_attachment_preview_content");
+    var currentSummaryValue = String(cfg.currentSummary || "");
+    var messageShortcutOptions = Array.isArray(cfg.messageShortcuts)
+      ? cfg.messageShortcuts
+      : [];
     var currentAttachmentObjectUrls = [];
     var currentPage = 1;
     var currentPageSize = parseInt($pageSize.val() || "10", 10) || 10;
@@ -36,7 +48,13 @@
       "url_record_id",
       "url_existing_attachment",
       "url_existing_attachments",
+      "url_message_shortcut_id",
+      "url_message_shortcut_label",
+      "url_summary",
       "url_content",
+      "url_next_follow_up_date",
+      "url_follow_up_times",
+      "url_follow_up_day",
       "url_attachment",
     ];
     var filterFieldIds = [
@@ -81,6 +99,194 @@
       $alert.addClass("d-none").text("");
     }
 
+    function fallbackCopyText(text) {
+      var $temp = $('<textarea readonly></textarea>');
+      var copied = false;
+
+      $temp.css({
+        position: "fixed",
+        top: "-9999px",
+        left: "-9999px",
+        opacity: "0",
+      });
+      $temp.val(String(text || ""));
+      $("body").append($temp);
+      $temp.trigger("focus").trigger("select");
+
+      try {
+        copied = document.execCommand("copy");
+      } catch (err) {
+        copied = false;
+      }
+
+      $temp.remove();
+      return copied;
+    }
+
+    function fallbackCopyHtml(html, text) {
+      var $temp = $('<div contenteditable="true" aria-hidden="true"></div>');
+      var copied = false;
+      var selection = window.getSelection ? window.getSelection() : null;
+      var range = document.createRange ? document.createRange() : null;
+      var fallbackHtml = String(html || "");
+
+      if (!fallbackHtml && text) {
+        fallbackHtml = $("<div>")
+          .text(String(text || ""))
+          .html()
+          .replace(/\r\n|\r|\n/g, "<br>");
+      }
+
+      if (!fallbackHtml) {
+        return fallbackCopyText(text);
+      }
+
+      $temp.css({
+        position: "fixed",
+        top: "-9999px",
+        left: "-9999px",
+        opacity: "0",
+        whiteSpace: "normal",
+      });
+      $temp.html(fallbackHtml);
+      $("body").append($temp);
+
+      try {
+        if (selection && range) {
+          range.selectNodeContents($temp[0]);
+          selection.removeAllRanges();
+          selection.addRange(range);
+        }
+        copied = document.execCommand("copy");
+      } catch (err) {
+        copied = false;
+      }
+
+      if (selection) {
+        selection.removeAllRanges();
+      }
+
+      $temp.remove();
+
+      if (!copied) {
+        return fallbackCopyText(text);
+      }
+
+      return true;
+    }
+
+    function copyUserRecordLogToClipboard(html, text) {
+      var copyHtml = String(html || "");
+      var copyText = String(text || "");
+
+      return new Promise(function (resolve, reject) {
+        if (
+          navigator.clipboard &&
+          typeof navigator.clipboard.write === "function" &&
+          typeof window.ClipboardItem === "function" &&
+          (copyHtml || copyText)
+        ) {
+          var clipboardItems = {};
+
+          if (copyHtml) {
+            clipboardItems["text/html"] = new Blob([copyHtml], {
+              type: "text/html",
+            });
+          }
+
+          if (copyText) {
+            clipboardItems["text/plain"] = new Blob([copyText], {
+              type: "text/plain",
+            });
+          }
+
+          navigator.clipboard
+            .write([new window.ClipboardItem(clipboardItems)])
+            .then(resolve)
+            .catch(function () {
+              if (fallbackCopyHtml(copyHtml, copyText)) {
+                resolve();
+                return;
+              }
+              reject(new Error("Clipboard write failed."));
+            });
+          return;
+        }
+
+        if (
+          navigator.clipboard &&
+          typeof navigator.clipboard.writeText === "function" &&
+          !copyHtml &&
+          copyText
+        ) {
+          navigator.clipboard
+            .writeText(copyText)
+            .then(resolve)
+            .catch(function () {
+              if (fallbackCopyText(copyText)) {
+                resolve();
+                return;
+              }
+              reject(new Error("Clipboard write failed."));
+            });
+          return;
+        }
+
+        if (fallbackCopyHtml(copyHtml, copyText)) {
+          resolve();
+          return;
+        }
+
+        reject(new Error("Clipboard write failed."));
+      });
+    }
+
+    function setCopyButtonState($button, state) {
+      var originalHtml = String($button.data("original-html") || "");
+      var originalTitle = String($button.data("original-title") || "");
+      var resetTimer = parseInt($button.data("reset-timer") || "0", 10) || 0;
+
+      if (!originalHtml) {
+        originalHtml = String($button.html() || "Copy");
+        $button.data("original-html", originalHtml);
+      }
+      if (!originalTitle) {
+        originalTitle = String($button.attr("title") || "Copy User Log");
+        $button.data("original-title", originalTitle);
+      }
+      if (resetTimer) {
+        window.clearTimeout(resetTimer);
+      }
+
+      $button.removeClass("btn-secondary btn-success btn-danger");
+
+      if (state === "success") {
+        $button
+          .addClass("btn-success")
+          .html("Copied")
+          .attr("title", "Copied");
+      } else if (state === "error") {
+        $button
+          .addClass("btn-danger")
+          .html("Copy Failed")
+          .attr("title", "Copy Failed");
+      } else {
+        $button
+          .addClass("btn-secondary")
+          .html(originalHtml)
+          .attr("title", originalTitle);
+      }
+
+      if (state === "success" || state === "error") {
+        $button.data(
+          "reset-timer",
+          window.setTimeout(function () {
+            setCopyButtonState($button, "default");
+          }, 1400),
+        );
+      }
+    }
+
     function showSuccessPopup(text) {
       var message = String(text || "Record added successfully.");
 
@@ -118,9 +324,11 @@
       if (on) {
         $loading.removeClass("d-none");
         $submitBtn.prop("disabled", true);
+        $summarySubmitBtn.prop("disabled", true);
       } else {
         $loading.addClass("d-none");
         $submitBtn.prop("disabled", false);
+        $summarySubmitBtn.prop("disabled", false);
       }
     }
 
@@ -136,6 +344,29 @@
     function escHtml(text) {
       return $("<div>").text(String(text || "")).html();
     }
+
+    function buildMessageShortcutMaps() {
+      var byId = {};
+      var byLabel = {};
+
+      messageShortcutOptions.forEach(function (option) {
+        var id = parseInt(option && option.id ? option.id : "0", 10) || 0;
+        var label = $.trim(String(option && option.label ? option.label : ""));
+        if (!id || !label) {
+          return;
+        }
+
+        byId[id] = option;
+        byLabel[label.toLowerCase()] = option;
+      });
+
+      return {
+        byId: byId,
+        byLabel: byLabel,
+      };
+    }
+
+    var messageShortcutMaps = buildMessageShortcutMaps();
 
     function getFileExtension(filePath) {
       var cleanPath = String(filePath || "").split("?")[0].split("#")[0];
@@ -526,7 +757,13 @@
 
     function resetForm() {
       $recordId.val("0");
+      $messageShortcutId.val("");
+      $messageShortcutLabel.val("");
+      $summary.val(currentSummaryValue);
       setEditorContent("");
+      $nextFollowUpDate.val("");
+      $followUpTimes.val("");
+      $followUpDay.val("");
       resetAttachmentInputs();
       setExistingAttachments([]);
       $submitBtn.text("Save User Log");
@@ -743,11 +980,13 @@
         });
     }
 
-    function saveRecord() {
+    function saveRecord(options) {
+      var saveMode =
+        options && options.saveMode ? String(options.saveMode) : "log";
       hideAlert();
       syncEditorToTextarea();
 
-      if (!getEditorPlainText()) {
+      if (saveMode === "log" && !getEditorPlainText()) {
         showAlert("danger", "Content is required.");
         focusEditor();
         return;
@@ -760,10 +999,12 @@
       }
 
       var formData = new FormData(formEl);
-      formData.set("url_action", "save");
+      formData.set("url_action", saveMode === "summary" ? "save_summary" : "save");
       formData.set("customer_id", String(customerId || 0));
       formData.set("customer_column", customerColumn);
       formData.set("return_url", pathReturn);
+      formData.set("summary", String($summary.val() || ""));
+      formData.set("message_shortcut_id", String($messageShortcutId.val() || ""));
       formData.set(
         "existing_attachments",
         String($existingAttachments.val() || "[]"),
@@ -794,7 +1035,12 @@
 
           var successMessage =
             res && res.message ? res.message : "Record saved successfully.";
-          resetForm();
+          currentSummaryValue = $.trim(String($summary.val() || ""));
+          if (saveMode === "log") {
+            resetForm();
+          } else {
+            $summary.val(currentSummaryValue);
+          }
           loadList();
 
           hideAlert();
@@ -815,13 +1061,19 @@
     $form.off("submit.url").on("submit.url", function (e) {
       e.preventDefault();
       e.stopPropagation();
-      saveRecord();
+      saveRecord({ saveMode: "log" });
       return false;
     });
 
     $submitBtn.off("click.url").on("click.url", function (e) {
       e.preventDefault();
-      saveRecord();
+      saveRecord({ saveMode: "log" });
+      return false;
+    });
+
+    $summarySubmitBtn.off("click.url").on("click.url", function (e) {
+      e.preventDefault();
+      saveRecord({ saveMode: "summary" });
       return false;
     });
 
@@ -948,14 +1200,40 @@
     $list.on("click", ".url-edit-btn", function () {
       var id = String($(this).data("id") || "0");
       var $card = $(this).closest(".card");
+      var messageShortcutIdValue = parseInt(
+        $card.find(".url-edit-message-shortcut-id").val() || "0",
+        10,
+      ) || 0;
       var contentValue = String($card.find(".url-edit-content").val() || "");
       var attachmentsValue = String(
         $card.find(".url-edit-attachments").val() || "[]",
       );
+      var nextFollowUpDateValue = String(
+        $card.find(".url-edit-next-follow-up-date").val() || "",
+      );
+      var followUpTimesValue = String(
+        $card.find(".url-edit-follow-up-times").val() || "",
+      );
+      var followUpDayValue = String(
+        $card.find(".url-edit-follow-up-day").val() || "",
+      );
       var attachments = parseAttachmentList(attachmentsValue);
 
       $recordId.val(id);
+      $summary.val(currentSummaryValue);
+      if (messageShortcutIdValue && messageShortcutMaps.byId[messageShortcutIdValue]) {
+        $messageShortcutId.val(String(messageShortcutIdValue));
+        $messageShortcutLabel.val(
+          String(messageShortcutMaps.byId[messageShortcutIdValue].label || ""),
+        );
+      } else {
+        $messageShortcutId.val("");
+        $messageShortcutLabel.val("");
+      }
       setEditorContent(contentValue);
+      $nextFollowUpDate.val(nextFollowUpDateValue);
+      $followUpTimes.val(followUpTimesValue);
+      $followUpDay.val(followUpDayValue);
       resetAttachmentInputs();
       setExistingAttachments(attachments);
       $submitBtn.text("Save User Log");
@@ -973,6 +1251,32 @@
       if (target) {
         $("#" + target).toggle();
       }
+    });
+
+    $list.on("click", ".url-copy-btn", function () {
+      var $button = $(this);
+      var $card = $button.closest(".card");
+      var copyHtml = String($card.find(".url-copy-html").val() || "");
+      var copyText = String($card.find(".url-copy-text").val() || "");
+
+      if (!copyHtml && !copyText) {
+        setCopyButtonState($button, "error");
+        showAlert("danger", "Unable to copy this user log.");
+        return;
+      }
+
+      copyUserRecordLogToClipboard(copyHtml, copyText)
+        .then(function () {
+          hideAlert();
+          setCopyButtonState($button, "success");
+        })
+        .catch(function () {
+          setCopyButtonState($button, "error");
+          showAlert(
+            "danger",
+            "Clipboard access failed. Please allow clipboard permission and try again.",
+          );
+        });
     });
 
     $("#url_keyword").on("keyup", function (e) {
@@ -998,6 +1302,70 @@
       if (e.target === this) {
         closeAttachmentModal();
       }
+    });
+
+    function applyMessageShortcutSelection(option, shouldFillContent) {
+      var shortcutId =
+        parseInt(option && option.id ? option.id : "0", 10) || 0;
+      if (!shortcutId) {
+        $messageShortcutId.val("");
+        return;
+      }
+
+      $messageShortcutId.val(String(shortcutId));
+      $messageShortcutLabel.val(String(option.label || ""));
+
+      if (shouldFillContent) {
+        setEditorContent(String(option.message_html || ""));
+      }
+    }
+
+    function triggerMessageShortcutAutocomplete() {
+      var typedValue = $.trim(String($messageShortcutLabel.val() || ""));
+      if (typeof searchInput !== "function" || !messageShortcutTable) {
+        return;
+      }
+
+      searchInput(
+        {
+          search: typedValue,
+          searchType: "shortcuts_tag",
+          elementID: "url_message_shortcut_label",
+          hiddenElementID: "url_message_shortcut_id",
+          dbTable: messageShortcutTable,
+        },
+        String(cfg.siteUrl || ""),
+      );
+    }
+
+    $messageShortcutLabel.on("keyup", function () {
+      $messageShortcutId.val("");
+      triggerMessageShortcutAutocomplete();
+    });
+
+    $messageShortcutId.on("input change", function () {
+      var shortcutId = parseInt(String($(this).val() || "0"), 10) || 0;
+      if (!shortcutId || !messageShortcutMaps.byId[shortcutId]) {
+        return;
+      }
+
+      applyMessageShortcutSelection(messageShortcutMaps.byId[shortcutId], true);
+    });
+
+    $messageShortcutLabel.on("change blur", function () {
+      var typedValue = $.trim(String($(this).val() || ""));
+      if (!typedValue) {
+        $messageShortcutId.val("");
+        return;
+      }
+
+      var option = messageShortcutMaps.byLabel[typedValue.toLowerCase()];
+      if (!option) {
+        $messageShortcutId.val("");
+        return;
+      }
+
+      applyMessageShortcutSelection(option, true);
     });
 
     $(document).on("keydown", function (e) {

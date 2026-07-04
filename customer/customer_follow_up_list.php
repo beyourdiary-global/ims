@@ -308,8 +308,11 @@ if ($customerFollowUpUserRecordLogEmbedMode) {
             urlJsonResponse(array('ok' => 0, 'message' => 'Customer context is invalid.'));
         }
 
-        if (ob_get_length() > 0) {
-            ob_clean();
+        customerFollowUpPageClearOutputBuffers();
+
+        if (!headers_sent()) {
+            header('Content-Type: text/html; charset=UTF-8');
+            header('X-Content-Type-Options: nosniff');
         }
 
         echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>User Record Log</title></head><body><div style="padding:16px;color:#842029;background:#f8d7da;border:1px solid #f5c2c7;border-radius:8px;">Customer context is invalid.</div></body></html>';
@@ -336,21 +339,33 @@ if ($customerFollowUpUserRecordLogEmbedMode) {
         ))
         : array();
 
-    if (ob_get_length() > 0) {
-        ob_clean();
+    customerFollowUpPageClearOutputBuffers();
+
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=UTF-8');
+        header('X-Content-Type-Options: nosniff');
     }
     ?>
     <!DOCTYPE html>
     <html>
     <head>
         <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
         <title>User Record Log</title>
-        <?php include_once ROOT . '/header.php'; ?>
+
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+        <link rel="stylesheet" href="<?= htmlspecialchars(rtrim((string) $SITEURL, '/') . '/css/main.css?v=' . @filemtime(ROOT . '/css/main.css'), ENT_QUOTES, 'UTF-8') ?>">
+
         <style>
+            html,
             body {
                 background: #f8f9fa;
                 padding: 0;
                 margin: 0;
+                width: 100%;
+                min-height: 100%;
+                font-family: "Open Sans", Arial, sans-serif;
             }
 
             .customer-follow-up-user-record-log-embed {
@@ -360,7 +375,36 @@ if ($customerFollowUpUserRecordLogEmbedMode) {
             .customer-follow-up-user-record-log-embed .user-record-log-module {
                 margin-top: 0 !important;
             }
+
+            .customer-follow-up-user-record-log-embed .user-record-log-module > .card:first-child {
+                margin-top: 0 !important;
+            }
         </style>
+
+        <script src="<?= htmlspecialchars(defined('JQUERY_3_6_4_JS') ? JQUERY_3_6_4_JS : 'https://code.jquery.com/jquery-3.6.4.min.js', ENT_QUOTES, 'UTF-8') ?>"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+        <script>
+            if (typeof window.showNotification !== 'function') {
+                window.showNotification = function (message, type) {
+                    var alertType = type === 'success' ? 'success' : (type === 'error' ? 'danger' : 'info');
+                    var alertBox = document.createElement('div');
+                    alertBox.className = 'alert alert-' + alertType;
+                    alertBox.style.position = 'fixed';
+                    alertBox.style.top = '16px';
+                    alertBox.style.right = '16px';
+                    alertBox.style.zIndex = '9999';
+                    alertBox.style.maxWidth = '360px';
+                    alertBox.textContent = message || '';
+                    document.body.appendChild(alertBox);
+
+                    window.setTimeout(function () {
+                        if (alertBox && alertBox.parentNode) {
+                            alertBox.parentNode.removeChild(alertBox);
+                        }
+                    }, 2200);
+                };
+            }
+        </script>
     </head>
     <body>
         <div class="customer-follow-up-user-record-log-embed">
@@ -2647,8 +2691,6 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             setCustomerFollowUpFieldError('submit_message_shortcut_id', 'submit_message_shortcut_error', false);
             setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', false);
         }
-
-        var appealUserRecordLogEditorPromise = null;
 
         function customerFollowUpValidateYmdDate(value) {
             return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
