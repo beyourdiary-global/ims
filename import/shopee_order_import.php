@@ -507,6 +507,14 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
 
             $pkgMatchInfo = resolvePackageMatchesFromDetectedData($detectedSkuList, $productNameCandidates, $connect, $pkgMetaOptions);
             $pkgIds = isset($pkgMatchInfo['package_ids']) ? (array) $pkgMatchInfo['package_ids'] : array();
+            if (!empty($pkgMatchInfo['normalized_detected_skus'])) {
+                $detectedSkuList = normalizeDetectedImportSkuList($pkgMatchInfo['normalized_detected_skus']);
+                $sku = formatDetectedImportSkuList($detectedSkuList);
+            }
+            if (!empty($pkgMatchInfo['matched_skus'])) {
+                $detectedSkuList = canonicalizeDetectedSkuListByMatchedPackages($detectedSkuList, $pkgIds, $pkgMetaOptions);
+                $sku = formatDetectedImportSkuList($detectedSkuList);
+            }
             $pkg_id = implode(',', $pkgIds);
             $missing_sku = !empty($pkgMatchInfo['unmatched_skus']) || (empty($detectedSkuList) && empty($pkgIds));
             $brandIds = resolveBrandIdsByPackageIds($pkgIds, $connect);
@@ -1185,6 +1193,109 @@ function formatDetectedImportSkuList($skuValues)
     return implode(', ', normalizeDetectedImportSkuList($skuValues));
 }
 
+function isLikelyShopeeSkuNearMatch($leftValue, $rightValue)
+{
+    $leftValue = normalizeShopeeSkuCandidate($leftValue);
+    $rightValue = normalizeShopeeSkuCandidate($rightValue);
+    if ($leftValue === '' || $rightValue === '') {
+        return false;
+    }
+
+    $leftSegments = preg_split('/[-_\/]+/', $leftValue);
+    $rightSegments = preg_split('/[-_\/]+/', $rightValue);
+    if (!is_array($leftSegments) || !is_array($rightSegments) || count($leftSegments) !== count($rightSegments)) {
+        return false;
+    }
+
+    foreach ($leftSegments as $index => $leftSegment) {
+        $rightSegment = isset($rightSegments[$index]) ? (string) $rightSegments[$index] : '';
+        if (strlen($leftSegment) !== strlen($rightSegment)) {
+            return false;
+        }
+    }
+
+    $leftLookup = normalizeImportLookup($leftValue);
+    $rightLookup = normalizeImportLookup($rightValue);
+    if ($leftLookup === '' || $rightLookup === '' || strlen($leftLookup) !== strlen($rightLookup)) {
+        return false;
+    }
+
+    if (strlen($leftLookup) < 8 || !preg_match('/\d/', $leftLookup) || !preg_match('/\d/', $rightLookup)) {
+        return false;
+    }
+
+    return levenshtein($leftLookup, $rightLookup) === 1;
+}
+
+function isReliableShopeeReverseSkuCandidate($value)
+{
+    $candidate = normalizeShopeeSkuCandidate($value);
+    if ($candidate === '') {
+        return false;
+    }
+
+    if (preg_match('/[-_\/]/', $candidate)) {
+        return true;
+    }
+
+    if (
+        strlen($candidate) >= 8
+        && preg_match('/[A-Z]/', $candidate)
+        && preg_match('/\d.*\d/', $candidate)
+        && preg_match('/(?:[A-Z].*\d|\d.*[A-Z])/', $candidate)
+    ) {
+        return true;
+    }
+
+    return false;
+}
+
+function canonicalizeDetectedSkuListByMatchedPackages($detectedSkus, $packageIds, $packageMetaOptions = array())
+{
+    $detectedSkuList = normalizeDetectedImportSkuList($detectedSkus);
+    if (empty($detectedSkuList) || !is_array($packageMetaOptions)) {
+        return $detectedSkuList;
+    }
+
+    $normalizedPackageIds = array_values(array_unique(array_filter(array_map('intval', (array) $packageIds))));
+    if (count($normalizedPackageIds) !== 1) {
+        return $detectedSkuList;
+    }
+
+    $packageId = (int) $normalizedPackageIds[0];
+    if ($packageId <= 0 || !isset($packageMetaOptions[$packageId]) || !is_array($packageMetaOptions[$packageId])) {
+        return $detectedSkuList;
+    }
+
+    $canonicalItemCode = normalizeShopeeSkuCandidate(isset($packageMetaOptions[$packageId]['item_code']) ? $packageMetaOptions[$packageId]['item_code'] : '');
+    if ($canonicalItemCode === '') {
+        return $detectedSkuList;
+    }
+
+    return array($canonicalItemCode);
+}
+
+function resolveCanonicalShopeeSkuByPackageIds($skuValue, $packageIds, $packageMetaOptions = array())
+{
+    $normalizedSku = normalizeShopeeSkuCandidate($skuValue);
+    if ($normalizedSku === '' || !is_array($packageMetaOptions)) {
+        return $normalizedSku;
+    }
+
+    $normalizedPackageIds = array_values(array_unique(array_filter(array_map('intval', (array) $packageIds))));
+    if (count($normalizedPackageIds) !== 1) {
+        return $normalizedSku;
+    }
+
+    $packageId = (int) $normalizedPackageIds[0];
+    if ($packageId <= 0 || !isset($packageMetaOptions[$packageId]) || !is_array($packageMetaOptions[$packageId])) {
+        return $normalizedSku;
+    }
+
+    $canonicalItemCode = normalizeShopeeSkuCandidate(isset($packageMetaOptions[$packageId]['item_code']) ? $packageMetaOptions[$packageId]['item_code'] : '');
+    return $canonicalItemCode !== '' ? $canonicalItemCode : $normalizedSku;
+}
+
 function collectShopeeDetectedSkuCandidate($rawCandidate, &$detectedSkuMap)
 {
     $rawCandidate = preg_replace('/\b(?:SKU|ITEM\s*CODE|VARIATION|VIEW|TRANSACTION|HISTORY|UNIT|PRICE|MERCHANDISE|SUBTOTAL|PAYMENT|INFO|INFORMATION|DELIVERY|ADDRESS|LOGISTIC|QUANTITY|QTY|ORDER)\b.*$/i', '', (string) $rawCandidate);
@@ -1249,6 +1360,7 @@ function resolvePackageMatchesFromDetectedData($detectedSkus, $productNameCandid
     $resolvedIds = array();
     $matchedSkus = array();
     $unmatchedSkus = array();
+    $normalizedDetectedSkus = array();
 
     $pushId = function ($id) use (&$resolvedIds) {
         $id = (int) $id;
@@ -1301,6 +1413,13 @@ function resolvePackageMatchesFromDetectedData($detectedSkus, $productNameCandid
         foreach ($packageMetaOptions as $pkgId => $pkgMeta) {
             $itemCodeLookup = normalizeImportLookup(isset($pkgMeta['item_code']) ? $pkgMeta['item_code'] : '');
             if ($itemCodeLookup !== '' && $itemCodeLookup === $normalizedValue) {
+                $pushMatchedId($pkgId);
+            }
+        }
+
+        foreach ($packageMetaOptions as $pkgId => $pkgMeta) {
+            $itemCodeCandidate = isset($pkgMeta['item_code']) ? $pkgMeta['item_code'] : '';
+            if (isLikelyShopeeSkuNearMatch($value, $itemCodeCandidate)) {
                 $pushMatchedId($pkgId);
             }
         }
@@ -1384,8 +1503,10 @@ function resolvePackageMatchesFromDetectedData($detectedSkus, $productNameCandid
                 $pushId($matchedId);
             }
             $matchedSkus[] = $sku;
+            $normalizedDetectedSkus[] = resolveCanonicalShopeeSkuByPackageIds($sku, $matchedIds, $packageMetaOptions);
         } else {
             $unmatchedSkus[] = $sku;
+            $normalizedDetectedSkus[] = $sku;
         }
     }
 
@@ -1453,6 +1574,7 @@ function resolvePackageMatchesFromDetectedData($detectedSkus, $productNameCandid
         'package_ids' => array_values(array_unique(array_map('intval', $resolvedIds))),
         'matched_skus' => array_values(array_unique(array_map('strval', $matchedSkus))),
         'unmatched_skus' => array_values(array_unique(array_map('strval', $unmatchedSkus))),
+        'normalized_detected_skus' => array_values(array_unique(array_map('strval', $normalizedDetectedSkus))),
     );
 }
 
@@ -2100,9 +2222,12 @@ function extractShopeeSkuCandidatesFromText($text)
         }
 
         foreach ($candidateLineTexts as $lineText) {
-            foreach ($patterns as $pattern) {
+            foreach ($patterns as $patternIndex => $pattern) {
                 if (preg_match_all($pattern, $lineText, $matches)) {
                     foreach ($matches[1] as $rawCandidate) {
+                        if ($patternIndex === 1 && !isReliableShopeeReverseSkuCandidate($rawCandidate)) {
+                            continue;
+                        }
                         collectShopeeDetectedSkuCandidate($rawCandidate, $detectedSkuMap);
                     }
                 }
@@ -5259,7 +5384,8 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                     (function (currentPageNumber) {
                         sequence = sequence.then(function () {
                             return pdfDoc.getPage(currentPageNumber).then(function (page) {
-                                var viewport = page.getViewport({ scale: 2.0 });
+                                // Slightly sharper raster improves OCR accuracy on small SKU text without changing the normal text-layer path.
+                                var viewport = page.getViewport({ scale: 3.0 });
                                 var canvas = document.createElement('canvas');
                                 var context = canvas.getContext('2d');
                                 canvas.width = viewport.width;
