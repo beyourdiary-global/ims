@@ -126,6 +126,14 @@ if ($lazadaCustomerFreshAddPage) {
 $lazadaCustomerTagState = customerTagHandlePost($connect, $lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, $pageTitle, $lazadaCustomerTagDisplayName, $lazadaCustomerTagDraftToken);
 $lazadaCustomerActiveTags = $lazadaCustomerFreshAddPage ? array() : customerTagGetDisplayTags($connect, $lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, $lazadaCustomerTagDraftToken);
 $lazadaCustomerDraftTagIds = customerTagExtractTagIds($lazadaCustomerActiveTags);
+$lazadaMemberPointStickyUrl = '';
+$lazadaMemberPointStickyCount = 0;
+$lazadaMemberPointAccess = checkPinByGroupId($connect, 162);
+if (isActionAllowed('View', $lazadaMemberPointAccess) && isset($dataExisted) && !empty($dataId) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
+    $lazadaMemberPointSnapshot = memberPointBuildCustomerSnapshot($connect, $finance_connect, 'lazada', (int) $row['id'], $row);
+    $lazadaMemberPointStickyCount = isset($lazadaMemberPointSnapshot['summary']['active_points']) ? (int) $lazadaMemberPointSnapshot['summary']['active_points'] : 0;
+    $lazadaMemberPointStickyUrl = $SITEURL . '/customer/member_point.php?platform=lazada&customer_id=' . (int) $row['id'];
+}
 
 $lazadaCustomerLabelMeta = array();
 $lazadaCustomerLabelDisplayHtml = '';
@@ -515,7 +523,7 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 echo customerTagRenderTitle($lazadaCustomerPageActionTitle, $lazadaCustomerActiveTags);
                                 ?>
                             </h2>
-                            <?php echo customerTagRenderManageButton($lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
+                            <?php echo customerTagRenderStickyActions($lazadaCustomerTagPlatform, $lazadaCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I', array('member_point_url' => $lazadaMemberPointStickyUrl, 'member_point_count' => $lazadaMemberPointStickyCount)); ?>
                         </div>
                         <?php echo $lazadaCustomerLabelDisplayHtml; ?>
                     </div>

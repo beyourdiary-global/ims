@@ -626,6 +626,39 @@ if (!function_exists('customerTagRenderManageButton')) {
     }
 }
 
+if (!function_exists('customerTagRenderStickyActions')) {
+    function customerTagRenderStickyActions($platform, $customerId, $allowManage = true, $options = array())
+    {
+        $platform = customerTagNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if ($platform === '' || $customerId < 0) {
+            return '';
+        }
+
+        $buttons = array();
+        $memberPointUrl = isset($options['member_point_url']) ? trim((string) $options['member_point_url']) : '';
+        if ($memberPointUrl !== '' && $customerId > 0) {
+            $memberPointCount = isset($options['member_point_count']) ? (int) $options['member_point_count'] : 0;
+            $buttons[] = '<div class="customer-tag-member-point-sticky-wrap"><a class="btn btn-rounded btn-warning customer-tag-member-point-btn" href="' . htmlspecialchars($memberPointUrl, ENT_QUOTES, 'UTF-8') . '"><span class="customer-tag-member-point-count">' . number_format($memberPointCount) . ' Point</span><span class="customer-tag-member-point-label">Member Point</span></a></div>';
+        }
+
+        $manageButtonHtml = customerTagRenderManageButton($platform, $customerId, $allowManage);
+        if ($manageButtonHtml !== '') {
+            $buttons[] = $manageButtonHtml;
+        }
+
+        if (empty($buttons)) {
+            return '';
+        }
+
+        if (count($buttons) === 1) {
+            return $buttons[0];
+        }
+
+        return '<div class="customer-tag-sticky-actions-wrap">' . implode('', $buttons) . '</div>';
+    }
+}
+
 if (!function_exists('customerTagBuildCustomerLabel')) {
     function customerTagBuildCustomerLabel($pageTitle, $customerDisplayName, $customerId)
     {
