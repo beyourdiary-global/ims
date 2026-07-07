@@ -148,6 +148,14 @@ if ($shopeeCustomerFreshAddPage) {
 $shopeeCustomerTagState = customerTagHandlePost($connect, $shopeeCustomerTagPlatform, $shopeeCustomerTagCustomerId, $pageTitle, $shopeeCustomerTagDisplayName, $shopeeCustomerTagDraftToken);
 $shopeeCustomerActiveTags = $shopeeCustomerFreshAddPage ? array() : customerTagGetDisplayTags($connect, $shopeeCustomerTagPlatform, $shopeeCustomerTagCustomerId, $shopeeCustomerTagDraftToken);
 $shopeeCustomerDraftTagIds = customerTagExtractTagIds($shopeeCustomerActiveTags);
+$shopeeMemberPointStickyUrl = '';
+$shopeeMemberPointStickyCount = 0;
+$shopeeMemberPointAccess = checkPinByGroupId($connect, 162);
+if (isActionAllowed('View', $shopeeMemberPointAccess) && isset($dataExisted) && !empty($dataId) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
+    $shopeeMemberPointSnapshot = memberPointBuildCustomerSnapshot($connect, $finance_connect, 'shopee', (int) $row['id'], $row);
+    $shopeeMemberPointStickyCount = isset($shopeeMemberPointSnapshot['summary']['active_points']) ? (int) $shopeeMemberPointSnapshot['summary']['active_points'] : 0;
+    $shopeeMemberPointStickyUrl = $SITEURL . '/customer/member_point.php?platform=shopee&customer_id=' . (int) $row['id'];
+}
 
 //Delete Data
 if ($act == 'D') {
@@ -477,7 +485,7 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 echo customerTagRenderTitle($shopeeCustomerPageActionTitle, $shopeeCustomerActiveTags);
                                 ?>
                             </h2>
-                            <?php echo customerTagRenderManageButton($shopeeCustomerTagPlatform, $shopeeCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
+                            <?php echo customerTagRenderStickyActions($shopeeCustomerTagPlatform, $shopeeCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I', array('member_point_url' => $shopeeMemberPointStickyUrl, 'member_point_count' => $shopeeMemberPointStickyCount)); ?>
                         </div>
                         <?php echo $shopeeCustomerLabelDisplayHtml; ?>
                     </div>

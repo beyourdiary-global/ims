@@ -99,6 +99,14 @@ if ($facebookCustomerFreshAddPage) {
 $facebookCustomerTagState = customerTagHandlePost($connect, $facebookCustomerTagPlatform, $facebookCustomerTagCustomerId, $pageTitle, $facebookCustomerTagDisplayName, $facebookCustomerTagDraftToken);
 $facebookCustomerActiveTags = $facebookCustomerFreshAddPage ? array() : customerTagGetDisplayTags($connect, $facebookCustomerTagPlatform, $facebookCustomerTagCustomerId, $facebookCustomerTagDraftToken);
 $facebookCustomerDraftTagIds = customerTagExtractTagIds($facebookCustomerActiveTags);
+$facebookMemberPointStickyUrl = '';
+$facebookMemberPointStickyCount = 0;
+$facebookMemberPointAccess = checkPinByGroupId($connect, 162);
+if (isActionAllowed('View', $facebookMemberPointAccess) && isset($dataExisted) && !empty($dataId) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
+    $facebookMemberPointSnapshot = memberPointBuildCustomerSnapshot($connect, $finance_connect, 'facebook', (int) $row['id'], $row);
+    $facebookMemberPointStickyCount = isset($facebookMemberPointSnapshot['summary']['active_points']) ? (int) $facebookMemberPointSnapshot['summary']['active_points'] : 0;
+    $facebookMemberPointStickyUrl = $SITEURL . '/customer/member_point.php?platform=facebook&customer_id=' . (int) $row['id'];
+}
 
 $facebookCustomerLabelMeta = array();
 $facebookCustomerLabelDisplayHtml = '';
@@ -474,7 +482,7 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 echo customerTagRenderTitle($facebookCustomerPageActionTitle, $facebookCustomerActiveTags);
                                 ?>
                             </h2>
-                            <?php echo customerTagRenderManageButton($facebookCustomerTagPlatform, $facebookCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I'); ?>
+                            <?php echo customerTagRenderStickyActions($facebookCustomerTagPlatform, $facebookCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I', array('member_point_url' => $facebookMemberPointStickyUrl, 'member_point_count' => $facebookMemberPointStickyCount)); ?>
                         </div>
                         <?php echo $facebookCustomerLabelDisplayHtml; ?>
                     </div>

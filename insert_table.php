@@ -3799,16 +3799,19 @@ if ($conn->select_db($db_cms)) {
         (150, 'Customer Daily Report', '1', 'Customer daily edit activity reporting', '1', CURDATE(), CURTIME(), 'A'),
         (151, 'Customer Follow-Up', '1,11,12', 'Customer follow-up approval and log access', '1', CURDATE(), CURTIME(), 'A'),
         (160, 'Customer Dashboard', '1', 'Customer Dashboard view access', '1', CURDATE(), CURTIME(), 'A'),
-        (161, 'Daily Follow Up Report', '1', 'Customer user record log daily activity reporting', '1', CURDATE(), CURTIME(), 'A')
+        (161, 'Daily Follow Up Report', '1', 'Customer user record log daily activity reporting', '1', CURDATE(), CURTIME(), 'A'),
+        (162, 'Member Point', '1', 'Member point customer summary view access', '1', CURDATE(), CURTIME(), 'A'),
+        (163, 'Member Redeem Setting', '1,2,3,4', 'Member redeem gift setting management', '1', CURDATE(), CURTIME(), 'A'),
+        (164, 'Member Bonus Management', '1,2,3,4', 'Member bonus tier and special bonus management', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
             `remark` = VALUES(`remark`),
             `status` = 'A'";
     if ($conn->query($taskPinGroupSql)) {
-        echo "<p style='color:green;'>Verified pin groups 136-151 and 160-161 for task, customer, product label, OMS page management, Customer Dashboard access, and Daily Follow Up Report access.</p>";
+        echo "<p style='color:green;'>Verified pin groups 136-151 and 160-164 for task, customer, product label, OMS page management, Customer Dashboard access, Daily Follow Up Report access, Member Point access, Member Redeem Setting access, and Member Bonus Management access.</p>";
     } else {
-        echo "<p style='color:red;'>Failed creating pin groups 136-151 and 160-161: " . $conn->error . "</p>";
+        echo "<p style='color:red;'>Failed creating pin groups 136-151 and 160-164: " . $conn->error . "</p>";
     }
 
     $omsPagePinGroupUpdateSql = "UPDATE `pin_group`
@@ -3821,6 +3824,9 @@ if ($conn->select_db($db_cms)) {
                 WHEN 151 THEN 'Customer Follow-Up'
                 WHEN 160 THEN 'Customer Dashboard'
                 WHEN 161 THEN 'Daily Follow Up Report'
+                WHEN 162 THEN 'Member Point'
+                WHEN 163 THEN 'Member Redeem Setting'
+                WHEN 164 THEN 'Member Bonus Management'
                 ELSE `name`
             END,
             `remark` = CASE `id`
@@ -3832,12 +3838,15 @@ if ($conn->select_db($db_cms)) {
                 WHEN 151 THEN 'Customer follow-up approval and log access'
                 WHEN 160 THEN 'Customer Dashboard view access'
                 WHEN 161 THEN 'Customer user record log daily activity reporting'
+                WHEN 162 THEN 'Member point customer summary view access'
+                WHEN 163 THEN 'Member redeem gift setting management'
+                WHEN 164 THEN 'Member bonus tier and special bonus management'
                 ELSE `remark`
             END,
             `status` = 'A'
-        WHERE `id` IN (146,147,148,149,150,151,160,161)";
+        WHERE `id` IN (146,147,148,149,150,151,160,161,162,163,164)";
     if ($conn->query($omsPagePinGroupUpdateSql)) {
-        echo "<p style='color:green;'>Verified pin group names for Waiting To Pack, Arrival Management, Daily Flow Report, Flow Setting, Customer Daily Report, Customer Follow-Up, Customer Dashboard, and Daily Follow Up Report.</p>";
+        echo "<p style='color:green;'>Verified pin group names for Waiting To Pack, Arrival Management, Daily Flow Report, Flow Setting, Customer Daily Report, Customer Follow-Up, Customer Dashboard, Daily Follow Up Report, Member Point, Member Redeem Setting, and Member Bonus Management.</p>";
     } else {
         echo "<p style='color:red;'>Failed updating OMS pin group names: " . $conn->error . "</p>";
     }
@@ -3869,6 +3878,9 @@ if ($conn->select_db($db_cms)) {
             $updatedPins = addAccessToPinBlock($updatedPins, 148, array(1));
             $updatedPins = addAccessToPinBlock($updatedPins, 150, array(1));
             $updatedPins = addAccessToPinBlock($updatedPins, 160, array(1));
+            $updatedPins = addAccessToPinBlock($updatedPins, 162, array(1));
+            $updatedPins = addAccessToPinBlock($updatedPins, 163, array(1, 2, 3, 4));
+            $updatedPins = addAccessToPinBlock($updatedPins, 164, array(1, 2, 3, 4));
         }
 
         if ($groupId === 1) {
@@ -3960,6 +3972,66 @@ if ($conn->select_db($db_cms)) {
         }
     } else {
         echo "<p style='color:red;'>Failed reading `user_group` for Customer Follow-Up / Daily Follow Up Report pin assignment: " . $conn->error . "</p>";
+    }
+
+    $memberPointGroupResult = $conn->query("SELECT `id`, `pins` FROM `user_group`");
+    if ($memberPointGroupResult) {
+        while ($memberPointGroupRow = $memberPointGroupResult->fetch_assoc()) {
+            $groupId = isset($memberPointGroupRow['id']) ? (int) $memberPointGroupRow['id'] : 0;
+            if ($groupId <= 0) {
+                continue;
+            }
+
+            $currentPins = isset($memberPointGroupRow['pins']) ? (string) $memberPointGroupRow['pins'] : '';
+            if (in_array($groupId, array(1, 2), true)) {
+                $updatedPins = addAccessToPinBlock($currentPins, 162, array(1));
+            } else {
+                $updatedPins = removePinBlockById($currentPins, 162);
+            }
+
+            if ($updatedPins !== $currentPins) {
+                $safePins = $conn->real_escape_string($updatedPins);
+                if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . $groupId)) {
+                    echo "<p style='color:green;'>Verified Member Point pin access for `user_group` id " . $groupId . ".</p>";
+                } else {
+                    echo "<p style='color:red;'>Failed updating Member Point pin access for `user_group` id " . $groupId . ": " . $conn->error . "</p>";
+                }
+            } else {
+                echo "<p style='color:green;'>Verified Member Point pin access already matches `user_group` id " . $groupId . ".</p>";
+            }
+        }
+    } else {
+        echo "<p style='color:red;'>Failed reading `user_group` for Member Point pin assignment: " . $conn->error . "</p>";
+    }
+
+    $memberRedeemGroupResult = $conn->query("SELECT `id`, `pins` FROM `user_group`");
+    if ($memberRedeemGroupResult) {
+        while ($memberRedeemGroupRow = $memberRedeemGroupResult->fetch_assoc()) {
+            $groupId = isset($memberRedeemGroupRow['id']) ? (int) $memberRedeemGroupRow['id'] : 0;
+            if ($groupId <= 0) {
+                continue;
+            }
+
+            $currentPins = isset($memberRedeemGroupRow['pins']) ? (string) $memberRedeemGroupRow['pins'] : '';
+            if (in_array($groupId, array(1, 2), true)) {
+                $updatedPins = addAccessToPinBlock($currentPins, 163, array(1, 2, 3, 4));
+            } else {
+                $updatedPins = removePinBlockById($currentPins, 163);
+            }
+
+            if ($updatedPins !== $currentPins) {
+                $safePins = $conn->real_escape_string($updatedPins);
+                if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . $groupId)) {
+                    echo "<p style='color:green;'>Verified Member Redeem Setting pin access for `user_group` id " . $groupId . ".</p>";
+                } else {
+                    echo "<p style='color:red;'>Failed updating Member Redeem Setting pin access for `user_group` id " . $groupId . ": " . $conn->error . "</p>";
+                }
+            } else {
+                echo "<p style='color:green;'>Verified Member Redeem Setting pin access already matches `user_group` id " . $groupId . ".</p>";
+            }
+        }
+    } else {
+        echo "<p style='color:red;'>Failed reading `user_group` for Member Redeem Setting pin assignment: " . $conn->error . "</p>";
     }
 } else {
     echo "<p style='color:red;'>Failed selecting CMS database for task management migration.</p>";
@@ -4256,12 +4328,248 @@ if ($conn->select_db($db_fin)) {
     migrationEnsureIndex($conn, $db_fin, ORDER_RETURN_LOG, 'idx_oms_return_platform', "ALTER TABLE `" . ORDER_RETURN_LOG . "` ADD INDEX `idx_oms_return_platform` (`platform`, `status`)", "Verified `" . ORDER_RETURN_LOG . "` platform index.");
     migrationEnsureIndex($conn, $db_fin, ORDER_WAREHOUSE_SCAN_TOKEN, 'idx_oms_warehouse_platform', "ALTER TABLE `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` ADD INDEX `idx_oms_warehouse_platform` (`platform`, `status`)", "Verified `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` platform index.");
 
+    $createMemberPointLedgerSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . MEMBER_POINT_LEDGER . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `platform` VARCHAR(30) NOT NULL,
+        `customer_id` INT NOT NULL,
+        `customer_label` VARCHAR(200) DEFAULT NULL,
+        `record_type` VARCHAR(30) NOT NULL DEFAULT 'order',
+        `source_key` VARCHAR(120) NOT NULL,
+        `source_order_id` INT DEFAULT NULL,
+        `source_order_code` VARCHAR(120) DEFAULT NULL,
+        `order_date` DATE DEFAULT NULL,
+        `bonus_month` CHAR(7) DEFAULT NULL,
+        `order_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        `point_rate` DECIMAL(8,4) NOT NULL DEFAULT 0.0000,
+        `base_points` INT NOT NULL DEFAULT 0,
+        `bonus_points` INT NOT NULL DEFAULT 0,
+        `total_points` INT NOT NULL DEFAULT 0,
+        `point_status` VARCHAR(30) DEFAULT NULL,
+        `usage_scope` VARCHAR(120) DEFAULT NULL,
+        `expiry_date` DATE DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `metadata_json` LONGTEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uq_member_point_customer_source` (`platform`, `customer_id`, `source_key`),
+        KEY `idx_member_point_customer_status` (`platform`, `customer_id`, `status`),
+        KEY `idx_member_point_expiry` (`expiry_date`, `status`),
+        KEY `idx_member_point_order_date` (`order_date`, `status`),
+        KEY `idx_member_point_order` (`source_order_id`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createMemberPointLedgerSql)) {
+        echo "<p style='color:green;'>Verified table `" . MEMBER_POINT_LEDGER . "` for member point ledger rows.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . MEMBER_POINT_LEDGER . "`: " . $conn->error . "</p>";
+    }
+
+    $createMemberRedeemSettingSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . MEMBER_REDEEM_SETTING . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `point_tier` INT NOT NULL DEFAULT 0,
+        `redeemable_gift` VARCHAR(255) NOT NULL,
+        `price` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        `selling_price` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        `cost_ratio` DECIMAL(8,2) NOT NULL DEFAULT 0.00,
+        `remark` TEXT DEFAULT NULL,
+        `shopee_lazada_redeem_order` INT NOT NULL DEFAULT 0,
+        `private_redeem_order` INT NOT NULL DEFAULT 0,
+        `display_order` INT NOT NULL DEFAULT 0,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_member_redeem_point_status` (`point_tier`, `status`),
+        KEY `idx_member_redeem_display_status` (`display_order`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createMemberRedeemSettingSql)) {
+        echo "<p style='color:green;'>Verified table `" . MEMBER_REDEEM_SETTING . "` for member redeem setting rows.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . MEMBER_REDEEM_SETTING . "`: " . $conn->error . "</p>";
+    }
+
+    $createMemberPointTransactionSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . MEMBER_POINT_TRANSACTION . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `platform` VARCHAR(20) NOT NULL,
+        `customer_id` INT NOT NULL,
+        `customer_label` VARCHAR(255) DEFAULT NULL,
+        `transaction_type` VARCHAR(30) NOT NULL DEFAULT 'earn',
+        `wallet_type` VARCHAR(30) NOT NULL DEFAULT 'frozen',
+        `points_change` INT NOT NULL DEFAULT 0,
+        `source_platform` VARCHAR(20) DEFAULT NULL,
+        `source_table` VARCHAR(80) DEFAULT NULL,
+        `source_record_id` INT DEFAULT NULL,
+        `source_key` VARCHAR(150) NOT NULL,
+        `reference_label` VARCHAR(255) DEFAULT NULL,
+        `redeem_setting_id` INT DEFAULT NULL,
+        `expiry_date` DATE DEFAULT NULL,
+        `metadata_json` LONGTEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uq_member_point_tx_source_key` (`source_key`),
+        KEY `idx_member_point_tx_platform_customer_expiry` (`platform`, `customer_id`, `status`, `expiry_date`),
+        KEY `idx_member_point_tx_wallet` (`platform`, `customer_id`, `wallet_type`, `status`, `expiry_date`),
+        KEY `idx_member_point_tx_source_record` (`source_table`, `source_record_id`, `status`),
+        KEY `idx_member_point_tx_redeem_setting` (`redeem_setting_id`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createMemberPointTransactionSql)) {
+        echo "<p style='color:green;'>Verified table `" . MEMBER_POINT_TRANSACTION . "` for shared member point transactions.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . MEMBER_POINT_TRANSACTION . "`: " . $conn->error . "</p>";
+    }
+
+    $createMemberPointMemberStateSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . MEMBER_POINT_MEMBER_STATE . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `platform` VARCHAR(20) NOT NULL,
+        `customer_id` INT NOT NULL,
+        `customer_label` VARCHAR(255) DEFAULT NULL,
+        `current_tier_key` VARCHAR(30) NOT NULL DEFAULT 'normal',
+        `current_tier_label` VARCHAR(80) NOT NULL DEFAULT 'Normal Member',
+        `qualifying_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        `private_point_rate` DECIMAL(8,4) NOT NULL DEFAULT 0.0300,
+        `monthly_bonus_points` INT NOT NULL DEFAULT 0,
+        `last_bonus_month` CHAR(7) DEFAULT NULL,
+        `last_evaluated_month` CHAR(7) DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uq_member_point_state_customer` (`platform`, `customer_id`),
+        KEY `idx_member_point_state_tier` (`current_tier_key`, `status`),
+        KEY `idx_member_point_state_bonus_month` (`last_bonus_month`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createMemberPointMemberStateSql)) {
+        echo "<p style='color:green;'>Verified table `" . MEMBER_POINT_MEMBER_STATE . "` for member point tier state rows.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . MEMBER_POINT_MEMBER_STATE . "`: " . $conn->error . "</p>";
+    }
+
+    $createMemberBonusTierSettingSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . MEMBER_BONUS_TIER_SETTING . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `tier_key` VARCHAR(40) NOT NULL,
+        `tier_name` VARCHAR(120) NOT NULL,
+        `requirement_type` VARCHAR(40) NOT NULL DEFAULT 'register',
+        `minimum_purchase_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        `private_point_rate` DECIMAL(8,4) NOT NULL DEFAULT 0.0300,
+        `marketplace_point_rate` DECIMAL(8,4) NOT NULL DEFAULT 0.0300,
+        `bonus_points` INT NOT NULL DEFAULT 0,
+        `bonus_frequency` VARCHAR(20) NOT NULL DEFAULT 'monthly',
+        `remark` TEXT DEFAULT NULL,
+        `display_order` INT NOT NULL DEFAULT 0,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uq_member_bonus_tier_key` (`tier_key`),
+        KEY `idx_member_bonus_tier_display` (`display_order`, `status`),
+        KEY `idx_member_bonus_tier_requirement` (`requirement_type`, `minimum_purchase_amount`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createMemberBonusTierSettingSql)) {
+        echo "<p style='color:green;'>Verified table `" . MEMBER_BONUS_TIER_SETTING . "` for member bonus tier settings.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . MEMBER_BONUS_TIER_SETTING . "`: " . $conn->error . "</p>";
+    }
+
+    $createMemberBonusSpecialSettingSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . MEMBER_BONUS_SPECIAL_SETTING . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `bonus_key` VARCHAR(40) NOT NULL,
+        `bonus_name` VARCHAR(120) NOT NULL,
+        `minimum_purchase_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
+        `minimum_purchase_times` INT NOT NULL DEFAULT 0,
+        `bonus_points` INT NOT NULL DEFAULT 0,
+        `remark` TEXT DEFAULT NULL,
+        `display_order` INT NOT NULL DEFAULT 0,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uq_member_bonus_special_key` (`bonus_key`),
+        KEY `idx_member_bonus_special_display` (`display_order`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createMemberBonusSpecialSettingSql)) {
+        echo "<p style='color:green;'>Verified table `" . MEMBER_BONUS_SPECIAL_SETTING . "` for member bonus special settings.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . MEMBER_BONUS_SPECIAL_SETTING . "`: " . $conn->error . "</p>";
+    }
+
+    $memberBonusTierCountResult = $conn->query("SELECT COUNT(*) AS `total` FROM `" . MEMBER_BONUS_TIER_SETTING . "` WHERE `status` = 'A'");
+    $memberBonusTierCount = ($memberBonusTierCountResult && ($memberBonusTierCountRow = $memberBonusTierCountResult->fetch_assoc())) ? (int) ($memberBonusTierCountRow['total'] ?? 0) : 0;
+    if ($memberBonusTierCount === 0) {
+        $seedMemberBonusTierSql = "INSERT INTO `" . MEMBER_BONUS_TIER_SETTING . "` (
+                `tier_key`, `tier_name`, `requirement_type`, `minimum_purchase_amount`,
+                `private_point_rate`, `marketplace_point_rate`, `bonus_points`, `bonus_frequency`,
+                `remark`, `display_order`, `create_by`, `create_date`, `create_time`, `update_by`, `update_date`, `update_time`, `status`
+            ) VALUES
+                ('normal', 'Normal Member', 'register', 0.00, 0.0300, 0.0300, 0, 'monthly', 'System records the base point ratio after member registration/purchase.', 1, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A'),
+                ('silver', 'Silver Member', 'minimum_purchase_amount', 500.00, 0.0500, 0.0300, 10, 'monthly', 'Auto upgrade after cumulative purchase reaches RM500.', 2, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A'),
+                ('gold', 'Gold Member', 'minimum_purchase_amount', 1500.00, 0.0800, 0.0300, 15, 'monthly', 'Auto upgrade after cumulative purchase reaches RM1500.', 3, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A'),
+                ('vip', 'VIP', 'minimum_purchase_amount', 3000.00, 0.1000, 0.0300, 20, 'monthly', 'Auto upgrade after cumulative purchase reaches RM3000.', 4, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A')";
+        if ($conn->query($seedMemberBonusTierSql)) {
+            echo "<p style='color:green;'>Seeded default rows for `" . MEMBER_BONUS_TIER_SETTING . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed seeding `" . MEMBER_BONUS_TIER_SETTING . "`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified `" . MEMBER_BONUS_TIER_SETTING . "` already has active rows.</p>";
+    }
+
+    $memberBonusSpecialCountResult = $conn->query("SELECT COUNT(*) AS `total` FROM `" . MEMBER_BONUS_SPECIAL_SETTING . "` WHERE `status` = 'A'");
+    $memberBonusSpecialCount = ($memberBonusSpecialCountResult && ($memberBonusSpecialCountRow = $memberBonusSpecialCountResult->fetch_assoc())) ? (int) ($memberBonusSpecialCountRow['total'] ?? 0) : 0;
+    if ($memberBonusSpecialCount === 0) {
+        $seedMemberBonusSpecialSql = "INSERT INTO `" . MEMBER_BONUS_SPECIAL_SETTING . "` (
+                `bonus_key`, `bonus_name`, `minimum_purchase_amount`, `minimum_purchase_times`,
+                `bonus_points`, `remark`, `display_order`,
+                `create_by`, `create_date`, `create_time`, `update_by`, `update_date`, `update_time`, `status`
+            ) VALUES
+                ('birthday', 'Birthday Bonus', 0.00, 0, 10, 'Give private bonus points during the registered Urbanism member birthday month.', 1, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A'),
+                ('monthly_purchase', 'Monthly Purchase Bonus', 300.00, 2, 10, 'Give private bonus points when current month purchase amount or order count reaches the configured target.', 2, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A')";
+        if ($conn->query($seedMemberBonusSpecialSql)) {
+            echo "<p style='color:green;'>Seeded default rows for `" . MEMBER_BONUS_SPECIAL_SETTING . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed seeding `" . MEMBER_BONUS_SPECIAL_SETTING . "`: " . $conn->error . "</p>";
+        }
+    } else {
+        echo "<p style='color:green;'>Verified `" . MEMBER_BONUS_SPECIAL_SETTING . "` already has active rows.</p>";
+    }
+
+    migrationEnsureColumn($conn, $db_cms, MEMBER_POINT_TRANSACTION, 'wallet_type', "ALTER TABLE `" . MEMBER_POINT_TRANSACTION . "` ADD COLUMN `wallet_type` VARCHAR(30) NOT NULL DEFAULT 'frozen' AFTER `transaction_type`", "Verified `" . MEMBER_POINT_TRANSACTION . "` includes `wallet_type`.");
+    migrationEnsureIndex($conn, $db_cms, MEMBER_POINT_TRANSACTION, 'idx_member_point_tx_wallet', "ALTER TABLE `" . MEMBER_POINT_TRANSACTION . "` ADD INDEX `idx_member_point_tx_wallet` (`platform`, `customer_id`, `wallet_type`, `status`, `expiry_date`)", "Verified `" . MEMBER_POINT_TRANSACTION . "` wallet type index.");
+
     migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `order_status`", "Verified `" . FB_ORDER_REQ . "` includes `airbill_no`.");
     migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . FB_ORDER_REQ . "` includes `airbill_attachment`.");
     migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'stock_out_warehouse_id', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `stock_out_warehouse_id` INT DEFAULT NULL AFTER `airbill_attachment`", "Verified `" . FB_ORDER_REQ . "` includes `stock_out_warehouse_id`.");
     migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'delay_remark', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `delay_remark` TEXT DEFAULT NULL AFTER `stock_out_warehouse_id`", "Verified `" . FB_ORDER_REQ . "` includes `delay_remark`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'member_point_platform', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `member_point_platform` VARCHAR(20) DEFAULT NULL AFTER `delay_remark`", "Verified `" . FB_ORDER_REQ . "` includes `member_point_platform`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'member_point_customer_id', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `member_point_customer_id` INT DEFAULT NULL AFTER `member_point_platform`", "Verified `" . FB_ORDER_REQ . "` includes `member_point_customer_id`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'member_point_customer_label', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `member_point_customer_label` VARCHAR(255) DEFAULT NULL AFTER `member_point_customer_id`", "Verified `" . FB_ORDER_REQ . "` includes `member_point_customer_label`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'member_point_redeem_id', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `member_point_redeem_id` INT DEFAULT NULL AFTER `member_point_customer_label`", "Verified `" . FB_ORDER_REQ . "` includes `member_point_redeem_id`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'member_point_redeem_points', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `member_point_redeem_points` INT NOT NULL DEFAULT 0 AFTER `member_point_redeem_id`", "Verified `" . FB_ORDER_REQ . "` includes `member_point_redeem_points`.");
+    migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'member_point_transaction_id', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `member_point_transaction_id` INT DEFAULT NULL AFTER `member_point_redeem_points`", "Verified `" . FB_ORDER_REQ . "` includes `member_point_transaction_id`.");
     migrationEnsureIndex($conn, $db_fin, FB_ORDER_REQ, 'idx_fb_order_status', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD INDEX `idx_fb_order_status` (`order_status`)", "Verified `" . FB_ORDER_REQ . "` status index.");
     migrationEnsureIndex($conn, $db_fin, FB_ORDER_REQ, 'idx_fb_order_airbill', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD INDEX `idx_fb_order_airbill` (`airbill_no`)", "Verified `" . FB_ORDER_REQ . "` airbill index.");
+    migrationEnsureIndex($conn, $db_fin, FB_ORDER_REQ, 'idx_fb_order_member_point_customer', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD INDEX `idx_fb_order_member_point_customer` (`member_point_platform`, `member_point_customer_id`)", "Verified `" . FB_ORDER_REQ . "` member point customer index.");
+    migrationEnsureIndex($conn, $db_fin, FB_ORDER_REQ, 'idx_fb_order_member_point_transaction', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD INDEX `idx_fb_order_member_point_transaction` (`member_point_transaction_id`)", "Verified `" . FB_ORDER_REQ . "` member point transaction index.");
 
     migrationEnsureColumn($conn, $db_fin, WEB_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `order_status`", "Verified `" . WEB_ORDER_REQ . "` includes `airbill_no`.");
     migrationEnsureColumn($conn, $db_fin, WEB_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . WEB_ORDER_REQ . "` includes `airbill_attachment`.");

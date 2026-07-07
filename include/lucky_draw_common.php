@@ -1094,6 +1094,75 @@ if (!function_exists('luckyDrawValidateEligibility')) {
     }
 }
 
+if (!function_exists('luckyDrawFindUrbanMemberByDisplayName')) {
+    function luckyDrawFindUrbanMemberByDisplayName($connect, $displayName)
+    {
+        $displayName = strtolower(trim((string) $displayName));
+        if (!($connect instanceof mysqli) || $displayName === '') {
+            return array();
+        }
+
+        $safeDisplayName = mysqli_real_escape_string($connect, $displayName);
+        $sql = "SELECT * FROM `" . URBAN_CUST_REG . "`
+            WHERE LOWER(TRIM(name)) = '" . $safeDisplayName . "'
+            LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        return ($result && ($row = mysqli_fetch_assoc($result))) ? (array) $row : array();
+    }
+}
+
+if (!function_exists('luckyDrawFetchHistoryByMemberName')) {
+    function luckyDrawFetchHistoryByMemberName($connect, $displayName)
+    {
+        $memberRow = luckyDrawFindUrbanMemberByDisplayName($connect, $displayName);
+        if (empty($memberRow)) {
+            return array();
+        }
+
+        $normalizedId = luckyDrawNormalizeFullId(isset($memberRow['ic']) ? $memberRow['ic'] : '');
+        $memberIdHmac = luckyDrawMemberIdHmac($normalizedId);
+        if ($memberIdHmac === '') {
+            return array();
+        }
+
+        $safeMemberIdHmac = mysqli_real_escape_string($connect, $memberIdHmac);
+        $sql = "SELECT *
+            FROM `" . LUCKY_DRAW_DRAW_LOG . "`
+            WHERE `member_id_hmac` = '" . $safeMemberIdHmac . "'
+              AND `status` = 'A'
+            ORDER BY `id` DESC";
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return array();
+        }
+
+        $rows = array();
+        while ($row = mysqli_fetch_assoc($result)) {
+            $facebookOrderRequestId = isset($row['facebook_order_request_id']) ? (int) $row['facebook_order_request_id'] : 0;
+            $rows[] = array(
+                'id' => isset($row['id']) ? (int) $row['id'] : 0,
+                'redeem_reference' => isset($row['redeem_reference']) ? (string) $row['redeem_reference'] : '',
+                'prize_name_snapshot' => isset($row['prize_name_snapshot']) ? (string) $row['prize_name_snapshot'] : '',
+                'prize_type_snapshot' => isset($row['prize_type_snapshot']) ? (string) $row['prize_type_snapshot'] : '',
+                'draw_state' => isset($row['draw_state']) ? (string) $row['draw_state'] : '',
+                'claim_state' => isset($row['claim_state']) ? (string) $row['claim_state'] : '',
+                'email_state' => isset($row['email_state']) ? (string) $row['email_state'] : '',
+                'claim_email' => isset($row['claim_email']) ? (string) $row['claim_email'] : '',
+                'failure_message' => isset($row['failure_message']) ? (string) $row['failure_message'] : '',
+                'facebook_order_request_id' => $facebookOrderRequestId,
+                'view_url' => $facebookOrderRequestId > 0 && function_exists('memberPointBuildOrderViewUrl')
+                    ? memberPointBuildOrderViewUrl('facebook', $facebookOrderRequestId)
+                    : '',
+                'created_at' => trim((string) (isset($row['create_date']) ? $row['create_date'] : '') . ' ' . (isset($row['create_time']) ? $row['create_time'] : '')),
+                'create_date' => isset($row['create_date']) ? (string) $row['create_date'] : '',
+                'create_time' => isset($row['create_time']) ? (string) $row['create_time'] : '',
+            );
+        }
+
+        return $rows;
+    }
+}
+
 if (!function_exists('luckyDrawInsertAdminLog')) {
     function luckyDrawInsertAdminLog($connect, $actionType, $targetTable, $targetId, $detail, $actorUserId, $options = array())
     {

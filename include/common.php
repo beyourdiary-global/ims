@@ -2453,6 +2453,3363 @@ if (!function_exists('customerAnalysisResolveDbConnect')) {
     }
 }
 
+if (!function_exists('memberPointGetStartDate')) {
+    function memberPointGetStartDate()
+    {
+        return '2025-12-01';
+    }
+}
+
+if (!function_exists('memberPointGetTierRequirementOptions')) {
+    function memberPointGetTierRequirementOptions()
+    {
+        return array(
+            'register' => 'Register',
+            'minimum_purchase_amount' => 'Minimum Purchase Amount',
+        );
+    }
+}
+
+if (!function_exists('memberPointGetBonusFrequencyOptions')) {
+    function memberPointGetBonusFrequencyOptions()
+    {
+        return array(
+            'daily' => 'Daily',
+            'weekly' => 'Weekly',
+            'monthly' => 'Monthly',
+            'yearly' => 'Yearly',
+        );
+    }
+}
+
+if (!function_exists('memberPointGetDefaultTierConfigs')) {
+    function memberPointGetDefaultTierConfigs()
+    {
+        return array(
+            'normal' => array(
+                'id' => 0,
+                'key' => 'normal',
+                'label' => 'Normal Member',
+                'requirement_type' => 'register',
+                'min_amount' => 0,
+                'private_rate' => 0.03,
+                'marketplace_rate' => 0.03,
+                'bonus_points' => 0,
+                'bonus_frequency' => 'monthly',
+                'monthly_bonus_points' => 0,
+                'remark' => 'System records the base point ratio after member registration/purchase.',
+                'display_order' => 1,
+            ),
+            'silver' => array(
+                'id' => 0,
+                'key' => 'silver',
+                'label' => 'Silver Member',
+                'requirement_type' => 'minimum_purchase_amount',
+                'min_amount' => 500,
+                'private_rate' => 0.05,
+                'marketplace_rate' => 0.03,
+                'bonus_points' => 10,
+                'bonus_frequency' => 'monthly',
+                'monthly_bonus_points' => 10,
+                'remark' => 'Auto upgrade after cumulative purchase reaches RM500.',
+                'display_order' => 2,
+            ),
+            'gold' => array(
+                'id' => 0,
+                'key' => 'gold',
+                'label' => 'Gold Member',
+                'requirement_type' => 'minimum_purchase_amount',
+                'min_amount' => 1500,
+                'private_rate' => 0.08,
+                'marketplace_rate' => 0.03,
+                'bonus_points' => 15,
+                'bonus_frequency' => 'monthly',
+                'monthly_bonus_points' => 15,
+                'remark' => 'Auto upgrade after cumulative purchase reaches RM1500.',
+                'display_order' => 3,
+            ),
+            'vip' => array(
+                'id' => 0,
+                'key' => 'vip',
+                'label' => 'VIP',
+                'requirement_type' => 'minimum_purchase_amount',
+                'min_amount' => 3000,
+                'private_rate' => 0.10,
+                'marketplace_rate' => 0.03,
+                'bonus_points' => 20,
+                'bonus_frequency' => 'monthly',
+                'monthly_bonus_points' => 20,
+                'remark' => 'Auto upgrade after cumulative purchase reaches RM3000.',
+                'display_order' => 4,
+            ),
+        );
+    }
+}
+
+if (!function_exists('memberPointGetDefaultSpecialBonusConfigs')) {
+    function memberPointGetDefaultSpecialBonusConfigs()
+    {
+        return array(
+            'birthday' => array(
+                'id' => 0,
+                'key' => 'birthday',
+                'label' => 'Birthday Bonus',
+                'minimum_purchase_amount' => 0,
+                'minimum_purchase_times' => 0,
+                'bonus_points' => 10,
+                'remark' => 'Give private bonus points during the registered Urbanism member birthday month.',
+                'display_order' => 1,
+            ),
+            'monthly_purchase' => array(
+                'id' => 0,
+                'key' => 'monthly_purchase',
+                'label' => 'Monthly Purchase Bonus',
+                'minimum_purchase_amount' => 300,
+                'minimum_purchase_times' => 2,
+                'bonus_points' => 10,
+                'remark' => 'Give private bonus points when current month purchase amount or order count reaches the configured target.',
+                'display_order' => 2,
+            ),
+        );
+    }
+}
+
+if (!function_exists('memberPointBonusTierSettingTableExists')) {
+    function memberPointBonusTierSettingTableExists($connect)
+    {
+        static $tableExists = null;
+        if ($tableExists !== null) {
+            return $tableExists;
+        }
+
+        if (!($connect instanceof mysqli)) {
+            $tableExists = false;
+            return $tableExists;
+        }
+
+        $safeTable = mysqli_real_escape_string($connect, MEMBER_BONUS_TIER_SETTING);
+        $result = mysqli_query($connect, "SHOW TABLES LIKE '" . $safeTable . "'");
+        $tableExists = $result && $result->num_rows > 0;
+        return $tableExists;
+    }
+}
+
+if (!function_exists('memberPointBonusSpecialSettingTableExists')) {
+    function memberPointBonusSpecialSettingTableExists($connect)
+    {
+        static $tableExists = null;
+        if ($tableExists !== null) {
+            return $tableExists;
+        }
+
+        if (!($connect instanceof mysqli)) {
+            $tableExists = false;
+            return $tableExists;
+        }
+
+        $safeTable = mysqli_real_escape_string($connect, MEMBER_BONUS_SPECIAL_SETTING);
+        $result = mysqli_query($connect, "SHOW TABLES LIKE '" . $safeTable . "'");
+        $tableExists = $result && $result->num_rows > 0;
+        return $tableExists;
+    }
+}
+
+if (!function_exists('memberPointFetchTierSettingRows')) {
+    function memberPointFetchTierSettingRows($connect, $activeOnly = true)
+    {
+        if (!memberPointBonusTierSettingTableExists($connect)) {
+            return array_values(memberPointGetDefaultTierConfigs());
+        }
+
+        $where = $activeOnly ? "WHERE `status` = 'A'" : '';
+        $sql = "SELECT * FROM `" . MEMBER_BONUS_TIER_SETTING . "` " . $where . " ORDER BY `display_order` ASC, `id` ASC";
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return array_values(memberPointGetDefaultTierConfigs());
+        }
+
+        $rows = array();
+        while ($row = $result->fetch_assoc()) {
+            $row['id'] = isset($row['id']) ? (int) $row['id'] : 0;
+            $row['tier_key'] = strtolower(trim((string) ($row['tier_key'] ?? '')));
+            $row['tier_name'] = trim((string) ($row['tier_name'] ?? ''));
+            $row['requirement_type'] = strtolower(trim((string) ($row['requirement_type'] ?? 'register')));
+            if (!isset(memberPointGetTierRequirementOptions()[$row['requirement_type']])) {
+                $row['requirement_type'] = 'register';
+            }
+            $row['minimum_purchase_amount'] = isset($row['minimum_purchase_amount']) ? (float) $row['minimum_purchase_amount'] : 0.0;
+            $row['private_point_rate'] = isset($row['private_point_rate']) ? (float) $row['private_point_rate'] : 0.03;
+            $row['marketplace_point_rate'] = isset($row['marketplace_point_rate']) ? (float) $row['marketplace_point_rate'] : 0.03;
+            $row['bonus_points'] = isset($row['bonus_points']) ? (int) $row['bonus_points'] : 0;
+            $row['bonus_frequency'] = strtolower(trim((string) ($row['bonus_frequency'] ?? 'monthly')));
+            if (!isset(memberPointGetBonusFrequencyOptions()[$row['bonus_frequency']])) {
+                $row['bonus_frequency'] = 'monthly';
+            }
+            $row['remark'] = trim((string) ($row['remark'] ?? ''));
+            $row['display_order'] = isset($row['display_order']) ? (int) $row['display_order'] : 0;
+            $rows[] = $row;
+        }
+
+        return !empty($rows) ? $rows : array_values(memberPointGetDefaultTierConfigs());
+    }
+}
+
+if (!function_exists('memberPointFetchSpecialBonusRows')) {
+    function memberPointFetchSpecialBonusRows($connect, $activeOnly = true)
+    {
+        if (!memberPointBonusSpecialSettingTableExists($connect)) {
+            return array_values(memberPointGetDefaultSpecialBonusConfigs());
+        }
+
+        $where = $activeOnly ? "WHERE `status` = 'A'" : '';
+        $sql = "SELECT * FROM `" . MEMBER_BONUS_SPECIAL_SETTING . "` " . $where . " ORDER BY `display_order` ASC, `id` ASC";
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return array_values(memberPointGetDefaultSpecialBonusConfigs());
+        }
+
+        $rows = array();
+        while ($row = $result->fetch_assoc()) {
+            $row['id'] = isset($row['id']) ? (int) $row['id'] : 0;
+            $row['bonus_key'] = strtolower(trim((string) ($row['bonus_key'] ?? '')));
+            $row['bonus_name'] = trim((string) ($row['bonus_name'] ?? ''));
+            $row['minimum_purchase_amount'] = isset($row['minimum_purchase_amount']) ? (float) $row['minimum_purchase_amount'] : 0.0;
+            $row['minimum_purchase_times'] = isset($row['minimum_purchase_times']) ? (int) $row['minimum_purchase_times'] : 0;
+            $row['bonus_points'] = isset($row['bonus_points']) ? (int) $row['bonus_points'] : 0;
+            $row['remark'] = trim((string) ($row['remark'] ?? ''));
+            $row['display_order'] = isset($row['display_order']) ? (int) $row['display_order'] : 0;
+            $rows[] = $row;
+        }
+
+        return !empty($rows) ? $rows : array_values(memberPointGetDefaultSpecialBonusConfigs());
+    }
+}
+
+if (!function_exists('memberPointGetTierConfigs')) {
+    function memberPointGetTierConfigs()
+    {
+        global $connect;
+
+        $rows = ($connect instanceof mysqli)
+            ? memberPointFetchTierSettingRows($connect, true)
+            : array_values(memberPointGetDefaultTierConfigs());
+
+        $configs = array();
+        foreach ($rows as $index => $row) {
+            $tierKey = strtolower(trim((string) ($row['tier_key'] ?? ($row['key'] ?? ''))));
+            if ($tierKey === '') {
+                $tierKey = 'tier_' . ($index + 1);
+            }
+
+            $configs[$tierKey] = array(
+                'id' => isset($row['id']) ? (int) $row['id'] : 0,
+                'key' => $tierKey,
+                'label' => trim((string) ($row['tier_name'] ?? ($row['label'] ?? 'Tier'))),
+                'requirement_type' => strtolower(trim((string) ($row['requirement_type'] ?? 'register'))),
+                'min_amount' => round(max(0, (float) ($row['minimum_purchase_amount'] ?? ($row['min_amount'] ?? 0))), 2),
+                'private_rate' => max(0, (float) ($row['private_point_rate'] ?? ($row['private_rate'] ?? 0.03))),
+                'marketplace_rate' => max(0, (float) ($row['marketplace_point_rate'] ?? ($row['marketplace_rate'] ?? 0.03))),
+                'bonus_points' => max(0, (int) ($row['bonus_points'] ?? 0)),
+                'bonus_frequency' => strtolower(trim((string) ($row['bonus_frequency'] ?? 'monthly'))),
+                'monthly_bonus_points' => max(0, (int) ($row['bonus_points'] ?? ($row['monthly_bonus_points'] ?? 0))),
+                'remark' => trim((string) ($row['remark'] ?? '')),
+                'display_order' => isset($row['display_order']) ? (int) $row['display_order'] : ($index + 1),
+            );
+        }
+
+        return !empty($configs) ? $configs : memberPointGetDefaultTierConfigs();
+    }
+}
+
+if (!function_exists('memberPointGetSpecialBonusConfigs')) {
+    function memberPointGetSpecialBonusConfigs()
+    {
+        global $connect;
+
+        $rows = ($connect instanceof mysqli)
+            ? memberPointFetchSpecialBonusRows($connect, true)
+            : array_values(memberPointGetDefaultSpecialBonusConfigs());
+
+        $configs = array();
+        foreach ($rows as $index => $row) {
+            $bonusKey = strtolower(trim((string) ($row['bonus_key'] ?? ($row['key'] ?? ''))));
+            if ($bonusKey === '') {
+                $bonusKey = 'bonus_' . ($index + 1);
+            }
+
+            $configs[$bonusKey] = array(
+                'id' => isset($row['id']) ? (int) $row['id'] : 0,
+                'key' => $bonusKey,
+                'label' => trim((string) ($row['bonus_name'] ?? ($row['label'] ?? 'Bonus'))),
+                'minimum_purchase_amount' => round(max(0, (float) ($row['minimum_purchase_amount'] ?? 0)), 2),
+                'minimum_purchase_times' => max(0, (int) ($row['minimum_purchase_times'] ?? 0)),
+                'bonus_points' => max(0, (int) ($row['bonus_points'] ?? 0)),
+                'remark' => trim((string) ($row['remark'] ?? '')),
+                'display_order' => isset($row['display_order']) ? (int) $row['display_order'] : ($index + 1),
+            );
+        }
+
+        return !empty($configs) ? $configs : memberPointGetDefaultSpecialBonusConfigs();
+    }
+}
+
+if (!function_exists('memberPointResolveTierMetaByKey')) {
+    function memberPointResolveTierMetaByKey($tierKey, $qualifyingAmount = null)
+    {
+        $tierKey = strtolower(trim((string) $tierKey));
+        $tierConfigs = memberPointGetTierConfigs();
+        if (!isset($tierConfigs[$tierKey])) {
+            $configKeys = array_keys($tierConfigs);
+            $tierKey = in_array('normal', $configKeys, true) ? 'normal' : (isset($configKeys[0]) ? (string) $configKeys[0] : 'normal');
+        }
+
+        $tierMeta = $tierConfigs[$tierKey];
+        $tierMeta['qualifying_amount'] = $qualifyingAmount === null ? null : round(max(0, (float) $qualifyingAmount), 2);
+
+        return $tierMeta;
+    }
+}
+
+if (!function_exists('memberPointNormalizeWalletType')) {
+    function memberPointNormalizeWalletType($walletType)
+    {
+        $walletType = strtolower(trim((string) $walletType));
+        $allowedWalletTypes = array('frozen', 'private', 'redeem');
+        return in_array($walletType, $allowedWalletTypes, true) ? $walletType : 'frozen';
+    }
+}
+
+if (!function_exists('memberPointGetPlatformConfigs')) {
+    function memberPointGetPlatformConfigs()
+    {
+        $dailyConfigs = function_exists('customerDailyReportGetPlatformConfigs') ? customerDailyReportGetPlatformConfigs() : array();
+        $labelConfigs = function_exists('customerLabelGetPlatformConfigs') ? customerLabelGetPlatformConfigs() : array();
+        $orderConfigs = function_exists('shopeeOmsGetOrderSourceConfigs') ? shopeeOmsGetOrderSourceConfigs() : array();
+
+        return array(
+            'shopee' => array(
+                'platform' => 'shopee',
+                'label' => 'Shopee',
+                'page_title' => isset($dailyConfigs['shopee']['page_title']) ? (string) $dailyConfigs['shopee']['page_title'] : 'Shopee Customer Record',
+                'customer_table' => isset($dailyConfigs['shopee']['table']) ? (string) $dailyConfigs['shopee']['table'] : SHOPEE_CUST_INFO,
+                'customer_db' => isset($dailyConfigs['shopee']['db']) ? (string) $dailyConfigs['shopee']['db'] : 'finance',
+                'customer_display_fields' => isset($dailyConfigs['shopee']['display_fields']) ? (array) $dailyConfigs['shopee']['display_fields'] : array('buyer_username'),
+                'record_url' => isset($dailyConfigs['shopee']['record_url']) ? (string) $dailyConfigs['shopee']['record_url'] : '/shopee/shopee_cust_info.php',
+                'order_table' => isset($labelConfigs['shopee']['order_table']) ? (string) $labelConfigs['shopee']['order_table'] : SHOPEE_SG_ORDER_REQ,
+                'order_db' => isset($labelConfigs['shopee']['order_db']) ? (string) $labelConfigs['shopee']['order_db'] : 'finance',
+                'order_amount_field' => isset($labelConfigs['shopee']['order_amount_field']) ? (string) $labelConfigs['shopee']['order_amount_field'] : 'final_amt',
+                'order_date_field' => isset($orderConfigs['shopee']['date_field']) ? (string) $orderConfigs['shopee']['date_field'] : 'date',
+                'order_code_field' => isset($orderConfigs['shopee']['order_code_field']) ? (string) $orderConfigs['shopee']['order_code_field'] : 'orderID',
+                'order_view_url' => isset($orderConfigs['shopee']['view_url']) ? (string) $orderConfigs['shopee']['view_url'] : '/shopee/shopee_order_req.php',
+                'point_rate' => 0.03,
+                'point_status' => 'frozen',
+                'point_status_label' => 'Frozen',
+                'usage_scope' => 'Private order only',
+            ),
+            'lazada' => array(
+                'platform' => 'lazada',
+                'label' => 'Lazada',
+                'page_title' => isset($dailyConfigs['lazada']['page_title']) ? (string) $dailyConfigs['lazada']['page_title'] : 'Lazada Customer Record (Deals)',
+                'customer_table' => isset($dailyConfigs['lazada']['table']) ? (string) $dailyConfigs['lazada']['table'] : LAZADA_CUST_RCD,
+                'customer_db' => isset($dailyConfigs['lazada']['db']) ? (string) $dailyConfigs['lazada']['db'] : 'cms',
+                'customer_display_fields' => isset($dailyConfigs['lazada']['display_fields']) ? (array) $dailyConfigs['lazada']['display_fields'] : array('name'),
+                'record_url' => isset($dailyConfigs['lazada']['record_url']) ? (string) $dailyConfigs['lazada']['record_url'] : '/finance/lazada_cust_rcd.php',
+                'order_table' => isset($labelConfigs['lazada']['order_table']) ? (string) $labelConfigs['lazada']['order_table'] : LAZADA_ORDER_REQ,
+                'order_db' => isset($labelConfigs['lazada']['order_db']) ? (string) $labelConfigs['lazada']['order_db'] : 'cms',
+                'order_amount_field' => isset($labelConfigs['lazada']['order_amount_field']) ? (string) $labelConfigs['lazada']['order_amount_field'] : 'final_income',
+                'order_date_field' => isset($orderConfigs['lazada']['date_field']) ? (string) $orderConfigs['lazada']['date_field'] : 'create_date',
+                'order_code_field' => isset($orderConfigs['lazada']['order_code_field']) ? (string) $orderConfigs['lazada']['order_code_field'] : 'oder_number',
+                'order_view_url' => isset($orderConfigs['lazada']['view_url']) ? (string) $orderConfigs['lazada']['view_url'] : '/finance/lazada_order_req.php',
+                'point_rate' => 0.03,
+                'point_status' => 'frozen',
+                'point_status_label' => 'Frozen',
+                'usage_scope' => 'Private order only',
+            ),
+            'facebook' => array(
+                'platform' => 'facebook',
+                'label' => 'Facebook',
+                'page_title' => isset($dailyConfigs['facebook']['page_title']) ? (string) $dailyConfigs['facebook']['page_title'] : 'Facebook Customer Record (Deals)',
+                'customer_table' => isset($dailyConfigs['facebook']['table']) ? (string) $dailyConfigs['facebook']['table'] : FB_CUST_DEALS,
+                'customer_db' => isset($dailyConfigs['facebook']['db']) ? (string) $dailyConfigs['facebook']['db'] : 'cms',
+                'customer_display_fields' => isset($dailyConfigs['facebook']['display_fields']) ? (array) $dailyConfigs['facebook']['display_fields'] : array('name'),
+                'record_url' => isset($dailyConfigs['facebook']['record_url']) ? (string) $dailyConfigs['facebook']['record_url'] : '/customer/fb_cust_deals.php',
+                'order_table' => isset($labelConfigs['facebook']['order_table']) ? (string) $labelConfigs['facebook']['order_table'] : FB_ORDER_REQ,
+                'order_db' => isset($labelConfigs['facebook']['order_db']) ? (string) $labelConfigs['facebook']['order_db'] : 'finance',
+                'order_amount_field' => isset($labelConfigs['facebook']['order_amount_field']) ? (string) $labelConfigs['facebook']['order_amount_field'] : 'price',
+                'order_date_field' => isset($orderConfigs['facebook']['date_field']) ? (string) $orderConfigs['facebook']['date_field'] : 'create_date',
+                'order_code_field' => isset($orderConfigs['facebook']['order_code_field']) ? (string) $orderConfigs['facebook']['order_code_field'] : '',
+                'order_view_url' => isset($orderConfigs['facebook']['view_url']) ? (string) $orderConfigs['facebook']['view_url'] : '/finance/fb_order_req.php',
+                'point_rate' => 0.05,
+                'point_status' => 'available',
+                'point_status_label' => 'Available',
+                'usage_scope' => 'Redeem or private order',
+            ),
+        );
+    }
+}
+
+if (!function_exists('memberPointNormalizePlatform')) {
+    function memberPointNormalizePlatform($platform)
+    {
+        $platform = strtolower(trim((string) $platform));
+        $configs = memberPointGetPlatformConfigs();
+        return isset($configs[$platform]) ? $platform : '';
+    }
+}
+
+if (!function_exists('memberPointResolveDbConnect')) {
+    function memberPointResolveDbConnect($connect, $financeConnect, $dbKey)
+    {
+        return $dbKey === 'finance' ? $financeConnect : $connect;
+    }
+}
+
+if (!function_exists('memberPointTableExists')) {
+    function memberPointTableExists($connect)
+    {
+        static $tableExists = null;
+        if ($tableExists !== null) {
+            return $tableExists;
+        }
+
+        $safeTable = mysqli_real_escape_string($connect, MEMBER_POINT_LEDGER);
+        $result = mysqli_query($connect, "SHOW TABLES LIKE '" . $safeTable . "'");
+        $tableExists = $result && $result->num_rows > 0;
+        return $tableExists;
+    }
+}
+
+if (!function_exists('memberPointFetchCustomerRow')) {
+    function memberPointFetchCustomerRow($connect, $financeConnect, $platform, $customerId)
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if ($platform === '' || $customerId <= 0) {
+            return array();
+        }
+
+        $configs = memberPointGetPlatformConfigs();
+        $platformConfig = $configs[$platform];
+        $dbConnect = memberPointResolveDbConnect($connect, $financeConnect, isset($platformConfig['customer_db']) ? $platformConfig['customer_db'] : 'cms');
+        $tableName = isset($platformConfig['customer_table']) ? (string) $platformConfig['customer_table'] : '';
+        if ($tableName === '') {
+            return array();
+        }
+
+        $result = getData('*', "id = '" . $customerId . "'", 'LIMIT 1', $tableName, $dbConnect);
+        if (!$result || $result->num_rows === 0) {
+            return array();
+        }
+
+        return $result->fetch_assoc();
+    }
+}
+
+if (!function_exists('memberPointResolveCustomerDisplayName')) {
+    function memberPointResolveCustomerDisplayName($row, $platform)
+    {
+        if (!is_array($row) || empty($row)) {
+            return '';
+        }
+
+        $platform = memberPointNormalizePlatform($platform);
+        if ($platform === '') {
+            return '';
+        }
+
+        $configs = memberPointGetPlatformConfigs();
+        $displayFields = isset($configs[$platform]['customer_display_fields']) ? (array) $configs[$platform]['customer_display_fields'] : array();
+        return function_exists('customerDailyReportGetDisplayNameFromRow')
+            ? customerDailyReportGetDisplayNameFromRow($row, $displayFields)
+            : '';
+    }
+}
+
+if (!function_exists('memberPointResolveOrderCode')) {
+    function memberPointResolveOrderCode($platform, $platformConfig, $orderRow)
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
+        $orderCodeField = isset($platformConfig['order_code_field']) ? (string) $platformConfig['order_code_field'] : '';
+        $orderCode = $orderCodeField !== '' && isset($orderRow[$orderCodeField]) ? trim((string) $orderRow[$orderCodeField]) : '';
+
+        if ($orderCode !== '') {
+            return $orderCode;
+        }
+
+        switch ($platform) {
+            case 'shopee':
+                return $orderId > 0 ? 'SHP-' . $orderId : '';
+            case 'lazada':
+                return $orderId > 0 ? 'LAZ-' . $orderId : '';
+            case 'facebook':
+                return $orderId > 0 ? 'FB-' . $orderId : '';
+        }
+
+        return $orderId > 0 ? '#' . $orderId : '';
+    }
+}
+
+if (!function_exists('memberPointBuildOrderViewUrl')) {
+    function memberPointBuildOrderViewUrl($platform, $orderId)
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $orderId = (int) $orderId;
+        if ($platform === '' || $orderId <= 0) {
+            return '';
+        }
+
+        $configs = memberPointGetPlatformConfigs();
+        $platformConfig = $configs[$platform];
+        $baseUrl = rtrim((string) SITEURL, '/') . (isset($platformConfig['order_view_url']) ? (string) $platformConfig['order_view_url'] : '');
+
+        return $baseUrl . '?id=' . $orderId;
+    }
+}
+
+if (!function_exists('memberPointCalculateOrderPoints')) {
+    function memberPointCalculateOrderPoints($amount, $rate)
+    {
+        $amount = max(0, (float) $amount);
+        $rate = max(0, (float) $rate);
+        return (int) floor($amount * $rate);
+    }
+}
+
+if (!function_exists('memberPointFetchEligibleOrderRows')) {
+    function memberPointFetchEligibleOrderRows($connect, $financeConnect, $platform, $customerId, $customerRow)
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if ($platform === '' || $customerId <= 0 || !is_array($customerRow) || empty($customerRow)) {
+            return array();
+        }
+
+        $configs = memberPointGetPlatformConfigs();
+        $platformConfig = $configs[$platform];
+        $dbConnect = memberPointResolveDbConnect($connect, $financeConnect, isset($platformConfig['order_db']) ? $platformConfig['order_db'] : 'cms');
+        $tableName = isset($platformConfig['order_table']) ? (string) $platformConfig['order_table'] : '';
+        if ($tableName === '') {
+            return array();
+        }
+
+        $orderRows = array();
+        switch ($platform) {
+            case 'shopee':
+                $orderWhere = "status='A' AND buyer='" . $customerId . "'";
+                $orderSql = "SELECT * FROM `" . $tableName . "` WHERE " . $orderWhere . " ORDER BY date DESC, time DESC, id DESC";
+                break;
+            case 'lazada':
+                $customerCode = isset($customerRow['lcr_id']) ? trim((string) $customerRow['lcr_id']) : '';
+                $orderWhere = "status='A' AND (cust_id='" . $customerId . "'";
+                if ($customerCode !== '') {
+                    $orderWhere .= " OR cust_id='" . mysqli_real_escape_string($dbConnect, $customerCode) . "'";
+                }
+                $orderWhere .= ")";
+                $orderSql = "SELECT * FROM `" . $tableName . "` WHERE " . $orderWhere . " ORDER BY id DESC";
+                break;
+            case 'facebook':
+                $customerName = isset($customerRow['name']) ? trim((string) $customerRow['name']) : '';
+                $customerFbLink = isset($customerRow['fb_link']) ? trim((string) $customerRow['fb_link']) : '';
+                if ($customerName === '') {
+                    return array();
+                }
+
+                $orderWhere = "status='A' AND name='" . mysqli_real_escape_string($dbConnect, $customerName) . "'";
+                if ($customerFbLink !== '') {
+                    $orderWhere .= " AND fb_link='" . mysqli_real_escape_string($dbConnect, $customerFbLink) . "'";
+                }
+                $orderSql = "SELECT * FROM `" . $tableName . "` WHERE " . $orderWhere . " ORDER BY id DESC";
+                break;
+            default:
+                return array();
+        }
+
+        $orderResult = mysqli_query($dbConnect, $orderSql);
+        if (!$orderResult) {
+            return array();
+        }
+
+        while ($orderRow = $orderResult->fetch_assoc()) {
+            $orderRows[] = $orderRow;
+        }
+
+        return $orderRows;
+    }
+}
+
+if (!function_exists('memberPointFetchLinkedFacebookOrderRows')) {
+    function memberPointFetchLinkedFacebookOrderRows($connect, $financeConnect, $platform, $customerId, $options = array())
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $options = is_array($options) ? $options : array();
+        if (!in_array($platform, array('shopee', 'lazada'), true) || $customerId <= 0) {
+            return array();
+        }
+
+        $facebookConfig = memberPointGetPlatformConfigs();
+        $facebookConfig = isset($facebookConfig['facebook']) ? $facebookConfig['facebook'] : array();
+        $dbConnect = memberPointResolveDbConnect($connect, $financeConnect, isset($facebookConfig['order_db']) ? $facebookConfig['order_db'] : 'finance');
+        $tableName = isset($facebookConfig['order_table']) ? (string) $facebookConfig['order_table'] : FB_ORDER_REQ;
+        if (!($dbConnect instanceof mysqli) || $tableName === '') {
+            return array();
+        }
+
+        $safePlatform = mysqli_real_escape_string($dbConnect, $platform);
+        $sql = "SELECT * FROM `" . $tableName . "`
+            WHERE `status` = 'A'
+              AND `member_point_platform` = '" . $safePlatform . "'
+              AND `member_point_customer_id` = " . $customerId . "
+            ORDER BY `id` DESC";
+        $result = mysqli_query($dbConnect, $sql);
+        if (!$result) {
+            return array();
+        }
+
+        $rows = array();
+        while ($row = $result->fetch_assoc()) {
+            if (!is_array($row)) {
+                continue;
+            }
+
+            $orderDate = trim((string) ($row['create_date'] ?? ''));
+            if ($orderDate === '' || $orderDate < memberPointGetStartDate()) {
+                continue;
+            }
+
+            if (!empty($options['as_of_date']) && $orderDate > (string) $options['as_of_date']) {
+                continue;
+            }
+
+            $rows[] = $row;
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('memberPointBuildCustomerSnapshot')) {
+    function memberPointBuildCustomerSnapshot($connect, $financeConnect, $platform, $customerId, $customerRow = array(), $options = array())
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $syncLedger = !empty($options['sync_ledger']);
+        $snapshot = array(
+            'platform' => $platform,
+            'customer_id' => $customerId,
+            'customer_row' => array(),
+            'customer_display_name' => '',
+            'customer_label' => '',
+            'rows' => array(),
+            'summary' => array(
+                'active_points' => 0,
+                'lifetime_points' => 0,
+                'order_count' => 0,
+                'marketplace_order_count' => 0,
+                'private_order_count' => 0,
+                'bonus_count' => 0,
+                'next_expiry' => '',
+                'latest_expiry' => '',
+                'qualifying_amount' => 0,
+                'member_tier' => 'Normal Member',
+                'member_tier_key' => 'normal',
+            ),
+        );
+
+        if ($platform === '' || $customerId <= 0) {
+            return $snapshot;
+        }
+
+        $configs = memberPointGetPlatformConfigs();
+        $platformConfig = $configs[$platform];
+        if (!is_array($customerRow) || empty($customerRow)) {
+            $customerRow = memberPointFetchCustomerRow($connect, $financeConnect, $platform, $customerId);
+        }
+
+        if (empty($customerRow)) {
+            return $snapshot;
+        }
+
+        $snapshot['customer_row'] = $customerRow;
+        $snapshot['customer_display_name'] = memberPointResolveCustomerDisplayName($customerRow, $platform);
+        $snapshot['customer_label'] = trim($snapshot['customer_display_name'] !== '' ? $snapshot['customer_display_name'] : ((isset($platformConfig['label']) ? $platformConfig['label'] : 'Customer') . ' #' . $customerId));
+
+        $startDate = memberPointGetStartDate();
+        $rawOrderRows = memberPointFetchEligibleOrderRows($connect, $financeConnect, $platform, $customerId, $customerRow);
+        $marketplaceOrderRows = array();
+        $orderRows = array();
+        $privateOrderCount = 0;
+        $qualifyingAmount = memberPointCalculateCustomerQualifyingAmount($connect, $financeConnect, $platform, $customerId, $customerRow);
+
+        $tierMeta = memberPointResolveCurrentTierMeta($connect, $platform, $customerId, $qualifyingAmount, true);
+        $marketplaceRate = max(0, (float) ($tierMeta['marketplace_rate'] ?? ($platformConfig['point_rate'] ?? 0.03)));
+        $privateRate = max(0, (float) ($tierMeta['private_rate'] ?? ($platformConfig['point_rate'] ?? 0.03)));
+        $orderPointRate = $platform === 'facebook' ? $privateRate : $marketplaceRate;
+        $orderWalletType = $platform === 'facebook' ? 'private' : 'frozen';
+        $orderRuleLabel = (int) round($orderPointRate * 100) . ($platform === 'facebook' ? '% private order point' : '% order point');
+
+        foreach ($rawOrderRows as $orderRow) {
+            $dateField = isset($platformConfig['order_date_field']) ? (string) $platformConfig['order_date_field'] : '';
+            $orderDateRaw = $dateField !== '' && isset($orderRow[$dateField]) ? trim((string) $orderRow[$dateField]) : '';
+            $orderDate = function_exists('shopeeOmsParseEstimatedDateBaseDate') ? shopeeOmsParseEstimatedDateBaseDate($orderDateRaw) : null;
+            if (!($orderDate instanceof DateTimeImmutable) || $orderDate->format('Y-m-d') < $startDate) {
+                continue;
+            }
+
+            $orderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
+            if ($orderId <= 0) {
+                continue;
+            }
+
+            $orderAmountField = isset($platformConfig['order_amount_field']) ? (string) $platformConfig['order_amount_field'] : '';
+            $orderAmount = $orderAmountField !== '' && isset($orderRow[$orderAmountField]) ? (float) $orderRow[$orderAmountField] : 0.0;
+            $orderAmount = max(0, $orderAmount);
+            $basePoints = memberPointCalculateOrderPoints($orderAmount, $orderPointRate);
+            $expiryDate = $orderDate->modify('+1 year')->format('Y-m-d');
+            $orderCode = memberPointResolveOrderCode($platform, $platformConfig, $orderRow);
+            $viewUrl = memberPointBuildOrderViewUrl($platform, $orderId);
+
+            $rowData = array(
+                'record_type' => 'order',
+                'source_key' => 'order:' . $orderId,
+                'platform' => $platform,
+                'source_platform' => $platform,
+                'source_table' => MEMBER_POINT_LEDGER,
+                'wallet_type' => $orderWalletType,
+                'customer_id' => $customerId,
+                'source_order_id' => $orderId,
+                'source_order_code' => $orderCode,
+                'reference_label' => $orderCode,
+                'order_date' => $orderDate->format('Y-m-d'),
+                'bonus_month' => $orderDate->format('Y-m'),
+                'order_amount' => $orderAmount,
+                'point_rate' => $orderPointRate,
+                'base_points' => $basePoints,
+                'bonus_points' => 0,
+                'total_points' => $basePoints,
+                'point_status' => isset($platformConfig['point_status']) ? (string) $platformConfig['point_status'] : 'available',
+                'point_status_label' => isset($platformConfig['point_status_label']) ? (string) $platformConfig['point_status_label'] : 'Available',
+                'usage_scope' => isset($platformConfig['usage_scope']) ? (string) $platformConfig['usage_scope'] : '',
+                'expiry_date' => $expiryDate,
+                'rule_label' => $orderRuleLabel,
+                'remark' => '',
+                'view_url' => $viewUrl,
+                'metadata' => array(
+                    'platform_label' => isset($platformConfig['label']) ? (string) $platformConfig['label'] : ucfirst($platform),
+                ),
+            );
+
+            $marketplaceOrderRows[] = $rowData;
+            $orderRows[] = $rowData;
+        }
+
+        if (in_array($platform, array('shopee', 'lazada'), true)) {
+            memberPointSyncFacebookPrivateEarnTransactionsForCustomer($connect, $financeConnect, $platform, $customerId, $customerRow);
+            $privateOrderCount = count(memberPointFetchLinkedFacebookOrderRows($connect, $financeConnect, $platform, $customerId));
+            $privateOrderRows = memberPointFetchPrivateOrderTransactionRows($connect, $platform, $customerId);
+            foreach ($privateOrderRows as $privateOrderRow) {
+                $orderRows[] = $privateOrderRow;
+            }
+        } else if ($platform === 'facebook') {
+            $privateOrderCount = count($marketplaceOrderRows);
+        }
+
+        usort($orderRows, function ($left, $right) {
+            $dateCompare = strcmp((string) ($right['order_date'] ?? ''), (string) ($left['order_date'] ?? ''));
+            if ($dateCompare !== 0) {
+                return $dateCompare;
+            }
+
+            $leftPriority = ($left['record_type'] ?? '') === 'monthly_bonus' ? 1 : 0;
+            $rightPriority = ($right['record_type'] ?? '') === 'monthly_bonus' ? 1 : 0;
+            if ($leftPriority !== $rightPriority) {
+                return $leftPriority <=> $rightPriority;
+            }
+
+            return strcmp((string) ($right['source_key'] ?? ''), (string) ($left['source_key'] ?? ''));
+        });
+
+        $today = new DateTimeImmutable('today');
+        $activePoints = 0;
+        $lifetimePoints = 0;
+        $nextExpiry = '';
+        $latestExpiry = '';
+        $bonusCount = 0;
+        $orderCount = count($orderRows);
+        $marketplaceOrderCount = count($marketplaceOrderRows);
+        $redeemedPoints = 0;
+
+        foreach ($orderRows as $rowData) {
+            $points = (int) ($rowData['total_points'] ?? 0);
+            $expiryDate = isset($rowData['expiry_date']) ? (string) $rowData['expiry_date'] : '';
+            $lifetimePoints += $points;
+
+            if ($expiryDate !== '') {
+                if ($latestExpiry === '' || $expiryDate > $latestExpiry) {
+                    $latestExpiry = $expiryDate;
+                }
+            }
+
+            if ($expiryDate === '' || $expiryDate >= $today->format('Y-m-d')) {
+                $activePoints += $points;
+                if ($expiryDate !== '' && ($nextExpiry === '' || $expiryDate < $nextExpiry)) {
+                    $nextExpiry = $expiryDate;
+                }
+            }
+        }
+
+        if (memberPointTransactionTableExists($connect)) {
+            memberPointSyncEarnTransactions($connect, $platform, $customerId, $snapshot['customer_label'], $marketplaceOrderRows);
+            $transactionSummary = memberPointGetTransactionSummary($connect, $platform, $customerId);
+            $activePoints = isset($transactionSummary['active_points']) ? (int) $transactionSummary['active_points'] : $activePoints;
+            $lifetimePoints = isset($transactionSummary['lifetime_points']) ? (int) $transactionSummary['lifetime_points'] : $lifetimePoints;
+            $redeemedPoints = isset($transactionSummary['redeemed_points']) ? (int) $transactionSummary['redeemed_points'] : $redeemedPoints;
+            $nextExpiry = isset($transactionSummary['next_expiry']) ? (string) $transactionSummary['next_expiry'] : $nextExpiry;
+            $latestExpiry = isset($transactionSummary['latest_expiry']) ? (string) $transactionSummary['latest_expiry'] : $latestExpiry;
+        }
+
+        $snapshot['rows'] = $orderRows;
+        $snapshot['summary'] = array(
+            'active_points' => $activePoints,
+            'lifetime_points' => $lifetimePoints,
+            'order_count' => $orderCount,
+            'marketplace_order_count' => $marketplaceOrderCount,
+            'private_order_count' => $privateOrderCount,
+            'bonus_count' => $bonusCount,
+            'next_expiry' => $nextExpiry,
+            'latest_expiry' => $latestExpiry,
+            'redeemed_points' => $redeemedPoints,
+            'qualifying_amount' => round($qualifyingAmount, 2),
+            'member_tier' => isset($tierMeta['label']) ? (string) $tierMeta['label'] : 'Normal Member',
+            'member_tier_key' => isset($tierMeta['key']) ? (string) $tierMeta['key'] : 'normal',
+        );
+
+        if ($syncLedger && memberPointTableExists($connect)) {
+            memberPointSyncCustomerLedger($connect, $snapshot);
+        }
+
+        return $snapshot;
+    }
+}
+
+if (!function_exists('memberPointCalculateCustomerQualifyingAmount')) {
+    function memberPointCalculateCustomerQualifyingAmount($connect, $financeConnect, $platform, $customerId, $customerRow = array(), $options = array())
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $options = is_array($options) ? $options : array();
+        if ($platform === '' || $customerId <= 0) {
+            return 0.0;
+        }
+
+        $configs = memberPointGetPlatformConfigs();
+        if (!isset($configs[$platform])) {
+            return 0.0;
+        }
+
+        $platformConfig = $configs[$platform];
+        if (!is_array($customerRow) || empty($customerRow)) {
+            $customerRow = memberPointFetchCustomerRow($connect, $financeConnect, $platform, $customerId);
+        }
+        if (empty($customerRow)) {
+            return 0.0;
+        }
+
+        $qualifyingAmount = 0.0;
+        $rawOrderRows = memberPointFetchEligibleOrderRows($connect, $financeConnect, $platform, $customerId, $customerRow);
+        $linkedFacebookOrderRows = memberPointFetchLinkedFacebookOrderRows($connect, $financeConnect, $platform, $customerId, $options);
+        $orderAmountField = isset($platformConfig['order_amount_field']) ? (string) $platformConfig['order_amount_field'] : '';
+
+        foreach ($rawOrderRows as $orderRow) {
+            $qualifyingAmount += max(0, (float) ($orderAmountField !== '' && isset($orderRow[$orderAmountField]) ? $orderRow[$orderAmountField] : 0));
+        }
+
+        if (in_array($platform, array('shopee', 'lazada'), true)) {
+            foreach ($linkedFacebookOrderRows as $facebookOrderRow) {
+                $qualifyingAmount += max(0, (float) ($facebookOrderRow['price'] ?? 0));
+            }
+        }
+
+        return round($qualifyingAmount, 2);
+    }
+}
+
+if (!function_exists('memberPointResolveTierMeta')) {
+    function memberPointResolveTierMeta($qualifyingAmount, $hasPurchase = true)
+    {
+        $qualifyingAmount = max(0, (float) $qualifyingAmount);
+        $hasPurchase = (bool) $hasPurchase;
+        $tierConfigs = array_values(memberPointGetTierConfigs());
+        if (empty($tierConfigs)) {
+            return memberPointResolveTierMetaByKey('normal', $qualifyingAmount);
+        }
+
+        usort($tierConfigs, function ($left, $right) {
+            $leftOrder = isset($left['display_order']) ? (int) $left['display_order'] : 0;
+            $rightOrder = isset($right['display_order']) ? (int) $right['display_order'] : 0;
+            if ($leftOrder !== $rightOrder) {
+                return $leftOrder <=> $rightOrder;
+            }
+
+            return strcmp((string) ($left['key'] ?? ''), (string) ($right['key'] ?? ''));
+        });
+
+        $resolvedTier = $tierConfigs[0];
+        foreach ($tierConfigs as $tierMeta) {
+            $requirementType = strtolower(trim((string) ($tierMeta['requirement_type'] ?? 'register')));
+            $minimumAmount = max(0, (float) ($tierMeta['min_amount'] ?? 0));
+            $isQualified = false;
+
+            if ($requirementType === 'minimum_purchase_amount') {
+                $isQualified = $qualifyingAmount >= $minimumAmount;
+            } else {
+                $isQualified = $hasPurchase || $minimumAmount <= 0;
+            }
+
+            if ($isQualified) {
+                $resolvedTier = $tierMeta;
+            }
+        }
+
+        return memberPointResolveTierMetaByKey((string) ($resolvedTier['key'] ?? 'normal'), $qualifyingAmount);
+    }
+}
+
+if (!function_exists('memberPointMemberStateTableExists')) {
+    function memberPointMemberStateTableExists($connect)
+    {
+        static $tableExists = null;
+        if ($tableExists !== null) {
+            return $tableExists;
+        }
+
+        $safeTable = mysqli_real_escape_string($connect, MEMBER_POINT_MEMBER_STATE);
+        $result = mysqli_query($connect, "SHOW TABLES LIKE '" . $safeTable . "'");
+        $tableExists = $result && $result->num_rows > 0;
+        return $tableExists;
+    }
+}
+
+if (!function_exists('memberPointFetchMemberState')) {
+    function memberPointFetchMemberState($connect, $platform, $customerId)
+    {
+        if (!memberPointMemberStateTableExists($connect)) {
+            return array();
+        }
+
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if ($platform === '' || $customerId <= 0) {
+            return array();
+        }
+
+        $sql = "SELECT * FROM `" . MEMBER_POINT_MEMBER_STATE . "`
+            WHERE `platform` = '" . mysqli_real_escape_string($connect, $platform) . "'
+              AND `customer_id` = " . $customerId . "
+              AND `status` = 'A'
+            LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if (!$result || $result->num_rows === 0) {
+            return array();
+        }
+
+        $row = $result->fetch_assoc();
+        if (!is_array($row)) {
+            return array();
+        }
+
+        $row['qualifying_amount'] = isset($row['qualifying_amount']) ? (float) $row['qualifying_amount'] : 0.0;
+        $row['private_point_rate'] = isset($row['private_point_rate']) ? (float) $row['private_point_rate'] : 0.03;
+        $row['monthly_bonus_points'] = isset($row['monthly_bonus_points']) ? (int) $row['monthly_bonus_points'] : 0;
+        $row['current_tier_key'] = strtolower(trim((string) ($row['current_tier_key'] ?? '')));
+        if ($row['current_tier_key'] !== '') {
+            $resolvedTierMeta = memberPointResolveTierMetaByKey($row['current_tier_key'], $row['qualifying_amount']);
+            $row['current_tier_label'] = (string) ($resolvedTierMeta['label'] ?? ($row['current_tier_label'] ?? ''));
+            $row['private_point_rate'] = max(0, (float) ($resolvedTierMeta['private_rate'] ?? $row['private_point_rate']));
+            $row['monthly_bonus_points'] = max(0, (int) ($resolvedTierMeta['bonus_points'] ?? ($resolvedTierMeta['monthly_bonus_points'] ?? $row['monthly_bonus_points'])));
+        }
+
+        return $row;
+    }
+}
+
+if (!function_exists('memberPointResolveCurrentTierMeta')) {
+    function memberPointResolveCurrentTierMeta($connect, $platform, $customerId, $qualifyingAmount = 0, $preferSavedState = true)
+    {
+        $qualifyingAmount = max(0, (float) $qualifyingAmount);
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $hasPurchase = $customerId > 0 || $qualifyingAmount > 0;
+        $calculatedTierMeta = memberPointResolveTierMeta($qualifyingAmount, $hasPurchase);
+
+        if (!in_array($platform, array('shopee', 'lazada'), true)) {
+            return $calculatedTierMeta;
+        }
+
+        return $calculatedTierMeta;
+    }
+}
+
+if (!function_exists('memberPointResolveCurrentPrivateRate')) {
+    function memberPointResolveCurrentPrivateRate($connect, $platform, $customerId)
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if (!in_array($platform, array('shopee', 'lazada'), true) || $customerId <= 0) {
+            return 0.03;
+        }
+
+        $stateRow = memberPointFetchMemberState($connect, $platform, $customerId);
+        if (!empty($stateRow)) {
+            $tierKey = strtolower(trim((string) ($stateRow['current_tier_key'] ?? '')));
+            $qualifyingAmount = isset($stateRow['qualifying_amount']) ? (float) $stateRow['qualifying_amount'] : 0;
+            if ($tierKey !== '') {
+                $tierMeta = memberPointResolveTierMetaByKey($tierKey, $qualifyingAmount);
+                return max(0, (float) ($tierMeta['private_rate'] ?? 0.03));
+            }
+        }
+
+        return 0.03;
+    }
+}
+
+if (!function_exists('memberPointUpsertMemberState')) {
+    function memberPointUpsertMemberState($connect, $platform, $customerId, $customerLabel, $tierMeta, $qualifyingAmount, $bonusMonth = '')
+    {
+        if (!memberPointMemberStateTableExists($connect)) {
+            return array('success' => false, 'message' => 'Member point member state table is not ready.');
+        }
+
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $customerLabel = trim((string) $customerLabel);
+        $tierMeta = is_array($tierMeta) ? $tierMeta : array();
+        $tierKey = strtolower(trim((string) ($tierMeta['key'] ?? 'normal')));
+        $tierLabel = trim((string) ($tierMeta['label'] ?? 'Normal Member'));
+        $privateRate = max(0, (float) ($tierMeta['private_rate'] ?? 0.03));
+        $monthlyBonusPoints = max(0, (int) ($tierMeta['monthly_bonus_points'] ?? 0));
+        $qualifyingAmount = round(max(0, (float) $qualifyingAmount), 2);
+        $bonusMonth = preg_match('/^\d{4}-\d{2}$/', (string) $bonusMonth) ? (string) $bonusMonth : '';
+
+        if ($platform === '' || $customerId <= 0) {
+            return array('success' => false, 'message' => 'Invalid member point state target.');
+        }
+
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $safeCustomerLabel = mysqli_real_escape_string($connect, $customerLabel);
+        $safeTierKey = mysqli_real_escape_string($connect, $tierKey);
+        $safeTierLabel = mysqli_real_escape_string($connect, $tierLabel);
+        $safeUserId = mysqli_real_escape_string($connect, defined('USER_ID') ? (string) USER_ID : 'cron');
+        $privateRateSql = number_format($privateRate, 4, '.', '');
+        $qualifyingAmountSql = number_format($qualifyingAmount, 2, '.', '');
+        $safeBonusMonth = $bonusMonth !== '' ? mysqli_real_escape_string($connect, $bonusMonth) : '';
+
+        $existingSql = "SELECT `id`, `current_tier_key` FROM `" . MEMBER_POINT_MEMBER_STATE . "`
+            WHERE `platform` = '" . $safePlatform . "' AND `customer_id` = " . $customerId . " LIMIT 1";
+        $existingResult = mysqli_query($connect, $existingSql);
+        $existingRow = $existingResult && $existingResult->num_rows > 0 ? $existingResult->fetch_assoc() : array();
+
+        if (!empty($existingRow['id'])) {
+            $sql = "UPDATE `" . MEMBER_POINT_MEMBER_STATE . "`
+                SET `customer_label` = " . ($safeCustomerLabel !== '' ? "'" . $safeCustomerLabel . "'" : "NULL") . ",
+                    `current_tier_key` = '" . $safeTierKey . "',
+                    `current_tier_label` = '" . $safeTierLabel . "',
+                    `qualifying_amount` = '" . $qualifyingAmountSql . "',
+                    `private_point_rate` = '" . $privateRateSql . "',
+                    `monthly_bonus_points` = " . $monthlyBonusPoints . ",
+                    `last_evaluated_month` = " . ($safeBonusMonth !== '' ? "'" . $safeBonusMonth . "'" : "NULL") . ",
+                    `update_by` = '" . $safeUserId . "',
+                    `update_date` = CURDATE(),
+                    `update_time` = CURTIME(),
+                    `status` = 'A'
+                WHERE `id` = " . (int) $existingRow['id'] . " LIMIT 1";
+            $success = (bool) mysqli_query($connect, $sql);
+            return array(
+                'success' => $success,
+                'member_state_id' => (int) $existingRow['id'],
+                'previous_tier_key' => isset($existingRow['current_tier_key']) ? (string) $existingRow['current_tier_key'] : '',
+                'message' => $success ? '' : mysqli_error($connect),
+            );
+        }
+
+        $sql = "INSERT INTO `" . MEMBER_POINT_MEMBER_STATE . "` (
+                `platform`, `customer_id`, `customer_label`, `current_tier_key`, `current_tier_label`,
+                `qualifying_amount`, `private_point_rate`, `monthly_bonus_points`, `last_evaluated_month`,
+                `create_by`, `create_date`, `create_time`, `update_by`, `update_date`, `update_time`, `status`
+            ) VALUES (
+                '" . $safePlatform . "',
+                " . $customerId . ",
+                " . ($safeCustomerLabel !== '' ? "'" . $safeCustomerLabel . "'" : "NULL") . ",
+                '" . $safeTierKey . "',
+                '" . $safeTierLabel . "',
+                '" . $qualifyingAmountSql . "',
+                '" . $privateRateSql . "',
+                " . $monthlyBonusPoints . ",
+                " . ($safeBonusMonth !== '' ? "'" . $safeBonusMonth . "'" : "NULL") . ",
+                '" . $safeUserId . "',
+                CURDATE(),
+                CURTIME(),
+                '" . $safeUserId . "',
+                CURDATE(),
+                CURTIME(),
+                'A'
+            )";
+        $success = (bool) mysqli_query($connect, $sql);
+
+        return array(
+            'success' => $success,
+            'member_state_id' => $success ? (int) mysqli_insert_id($connect) : 0,
+            'previous_tier_key' => '',
+            'message' => $success ? '' : mysqli_error($connect),
+        );
+    }
+}
+
+if (!function_exists('memberPointSyncCustomerLedger')) {
+    function memberPointSyncCustomerLedger($connect, $snapshot)
+    {
+        if (!memberPointTableExists($connect)) {
+            return false;
+        }
+
+        $platform = memberPointNormalizePlatform(isset($snapshot['platform']) ? $snapshot['platform'] : '');
+        $customerId = isset($snapshot['customer_id']) ? (int) $snapshot['customer_id'] : 0;
+        $customerLabel = isset($snapshot['customer_label']) ? (string) $snapshot['customer_label'] : '';
+        $rows = isset($snapshot['rows']) && is_array($snapshot['rows']) ? $snapshot['rows'] : array();
+        if ($platform === '' || $customerId <= 0) {
+            return false;
+        }
+
+        $existingMap = array();
+        $existingResult = mysqli_query(
+            $connect,
+            "SELECT `id`, `source_key` FROM `" . MEMBER_POINT_LEDGER . "` WHERE `platform` = '" . mysqli_real_escape_string($connect, $platform) . "' AND `customer_id` = " . $customerId
+        );
+        if ($existingResult) {
+            while ($existingRow = $existingResult->fetch_assoc()) {
+                $existingKey = isset($existingRow['source_key']) ? (string) $existingRow['source_key'] : '';
+                if ($existingKey !== '') {
+                    $existingMap[$existingKey] = isset($existingRow['id']) ? (int) $existingRow['id'] : 0;
+                }
+            }
+        }
+
+        $seenKeys = array();
+        foreach ($rows as $rowData) {
+            $sourceKey = isset($rowData['source_key']) ? trim((string) $rowData['source_key']) : '';
+            if ($sourceKey === '') {
+                continue;
+            }
+
+            $seenKeys[] = $sourceKey;
+            $safeCustomerLabel = mysqli_real_escape_string($connect, $customerLabel);
+            $safeRecordType = mysqli_real_escape_string($connect, isset($rowData['record_type']) ? (string) $rowData['record_type'] : 'order');
+            $safeSourceKey = mysqli_real_escape_string($connect, $sourceKey);
+            $safeOrderCode = mysqli_real_escape_string($connect, isset($rowData['source_order_code']) ? (string) $rowData['source_order_code'] : '');
+            $safeOrderDate = mysqli_real_escape_string($connect, isset($rowData['order_date']) ? (string) $rowData['order_date'] : '');
+            $safeBonusMonth = mysqli_real_escape_string($connect, isset($rowData['bonus_month']) ? (string) $rowData['bonus_month'] : '');
+            $safePointStatus = mysqli_real_escape_string($connect, isset($rowData['point_status']) ? (string) $rowData['point_status'] : '');
+            $safeUsageScope = mysqli_real_escape_string($connect, isset($rowData['usage_scope']) ? (string) $rowData['usage_scope'] : '');
+            $safeExpiryDate = mysqli_real_escape_string($connect, isset($rowData['expiry_date']) ? (string) $rowData['expiry_date'] : '');
+            $safeRemark = mysqli_real_escape_string($connect, isset($rowData['remark']) ? (string) $rowData['remark'] : '');
+            $metadataJson = json_encode(isset($rowData['metadata']) ? $rowData['metadata'] : array(), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $safeMetadataJson = mysqli_real_escape_string($connect, $metadataJson !== false ? $metadataJson : '{}');
+            $sourceOrderId = isset($rowData['source_order_id']) ? (int) $rowData['source_order_id'] : 0;
+            $orderAmount = number_format((float) ($rowData['order_amount'] ?? 0), 2, '.', '');
+            $pointRate = number_format((float) ($rowData['point_rate'] ?? 0), 4, '.', '');
+            $basePoints = (int) ($rowData['base_points'] ?? 0);
+            $bonusPoints = (int) ($rowData['bonus_points'] ?? 0);
+            $totalPoints = (int) ($rowData['total_points'] ?? 0);
+
+            if (isset($existingMap[$sourceKey]) && $existingMap[$sourceKey] > 0) {
+                $ledgerId = (int) $existingMap[$sourceKey];
+                $updateSql = "UPDATE `" . MEMBER_POINT_LEDGER . "`
+                    SET `customer_label` = '" . $safeCustomerLabel . "',
+                        `record_type` = '" . $safeRecordType . "',
+                        `source_order_id` = " . $sourceOrderId . ",
+                        `source_order_code` = '" . $safeOrderCode . "',
+                        `order_date` = " . ($safeOrderDate !== '' ? "'" . $safeOrderDate . "'" : "NULL") . ",
+                        `bonus_month` = " . ($safeBonusMonth !== '' ? "'" . $safeBonusMonth . "'" : "NULL") . ",
+                        `order_amount` = '" . $orderAmount . "',
+                        `point_rate` = '" . $pointRate . "',
+                        `base_points` = " . $basePoints . ",
+                        `bonus_points` = " . $bonusPoints . ",
+                        `total_points` = " . $totalPoints . ",
+                        `point_status` = " . ($safePointStatus !== '' ? "'" . $safePointStatus . "'" : "NULL") . ",
+                        `usage_scope` = " . ($safeUsageScope !== '' ? "'" . $safeUsageScope . "'" : "NULL") . ",
+                        `expiry_date` = " . ($safeExpiryDate !== '' ? "'" . $safeExpiryDate . "'" : "NULL") . ",
+                        `remark` = " . ($safeRemark !== '' ? "'" . $safeRemark . "'" : "NULL") . ",
+                        `metadata_json` = '" . $safeMetadataJson . "',
+                        `update_by` = '" . mysqli_real_escape_string($connect, (string) USER_ID) . "',
+                        `update_date` = CURDATE(),
+                        `update_time` = CURTIME(),
+                        `status` = 'A'
+                    WHERE `id` = " . $ledgerId . " LIMIT 1";
+                mysqli_query($connect, $updateSql);
+            } else {
+                $insertSql = "INSERT INTO `" . MEMBER_POINT_LEDGER . "` (
+                        `platform`, `customer_id`, `customer_label`, `record_type`, `source_key`, `source_order_id`, `source_order_code`,
+                        `order_date`, `bonus_month`, `order_amount`, `point_rate`, `base_points`, `bonus_points`, `total_points`,
+                        `point_status`, `usage_scope`, `expiry_date`, `remark`, `metadata_json`,
+                        `create_by`, `create_date`, `create_time`, `status`
+                    ) VALUES (
+                        '" . mysqli_real_escape_string($connect, $platform) . "',
+                        " . $customerId . ",
+                        '" . $safeCustomerLabel . "',
+                        '" . $safeRecordType . "',
+                        '" . $safeSourceKey . "',
+                        " . $sourceOrderId . ",
+                        '" . $safeOrderCode . "',
+                        " . ($safeOrderDate !== '' ? "'" . $safeOrderDate . "'" : "NULL") . ",
+                        " . ($safeBonusMonth !== '' ? "'" . $safeBonusMonth . "'" : "NULL") . ",
+                        '" . $orderAmount . "',
+                        '" . $pointRate . "',
+                        " . $basePoints . ",
+                        " . $bonusPoints . ",
+                        " . $totalPoints . ",
+                        " . ($safePointStatus !== '' ? "'" . $safePointStatus . "'" : "NULL") . ",
+                        " . ($safeUsageScope !== '' ? "'" . $safeUsageScope . "'" : "NULL") . ",
+                        " . ($safeExpiryDate !== '' ? "'" . $safeExpiryDate . "'" : "NULL") . ",
+                        " . ($safeRemark !== '' ? "'" . $safeRemark . "'" : "NULL") . ",
+                        '" . $safeMetadataJson . "',
+                        '" . mysqli_real_escape_string($connect, (string) USER_ID) . "',
+                        CURDATE(),
+                        CURTIME(),
+                        'A'
+                    )";
+                mysqli_query($connect, $insertSql);
+            }
+        }
+
+        $seenKeys = array_values(array_unique(array_filter(array_map('strval', $seenKeys), 'strlen')));
+        foreach ($existingMap as $existingKey => $ledgerId) {
+            if (in_array($existingKey, $seenKeys, true)) {
+                continue;
+            }
+
+            mysqli_query(
+                $connect,
+                "UPDATE `" . MEMBER_POINT_LEDGER . "`
+                    SET `status` = 'D',
+                        `update_by` = '" . mysqli_real_escape_string($connect, (string) USER_ID) . "',
+                        `update_date` = CURDATE(),
+                        `update_time` = CURTIME()
+                    WHERE `id` = " . (int) $ledgerId . " LIMIT 1"
+            );
+        }
+
+        return true;
+    }
+}
+
+if (!function_exists('memberRedeemTableExists')) {
+    function memberRedeemTableExists($connect)
+    {
+        static $tableExists = null;
+        if ($tableExists !== null) {
+            return $tableExists;
+        }
+
+        $safeTable = mysqli_real_escape_string($connect, MEMBER_REDEEM_SETTING);
+        $result = mysqli_query($connect, "SHOW TABLES LIKE '" . $safeTable . "'");
+        $tableExists = $result && $result->num_rows > 0;
+        return $tableExists;
+    }
+}
+
+if (!function_exists('memberRedeemCalculateCostRatio')) {
+    function memberRedeemCalculateCostRatio($price, $sellingPrice)
+    {
+        $price = max(0, (float) $price);
+        $sellingPrice = max(0, (float) $sellingPrice);
+        if ($sellingPrice <= 0) {
+            return 0.00;
+        }
+
+        return round(($price / $sellingPrice) * 100, 2);
+    }
+}
+
+if (!function_exists('memberRedeemFetchRows')) {
+    function memberRedeemFetchRows($connect, $activeOnly = true)
+    {
+        if (!memberRedeemTableExists($connect)) {
+            return array();
+        }
+
+        $where = $activeOnly ? "WHERE `status` = 'A'" : '';
+        $sql = "SELECT * FROM `" . MEMBER_REDEEM_SETTING . "` " . $where . " ORDER BY `point_tier` ASC, `display_order` ASC, `id` ASC";
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return array();
+        }
+
+        $rows = array();
+        while ($row = $result->fetch_assoc()) {
+            $row['point_tier'] = isset($row['point_tier']) ? (int) $row['point_tier'] : 0;
+            $row['price'] = isset($row['price']) ? (float) $row['price'] : 0.0;
+            $row['selling_price'] = isset($row['selling_price']) ? (float) $row['selling_price'] : 0.0;
+            $row['cost_ratio'] = isset($row['cost_ratio']) ? (float) $row['cost_ratio'] : memberRedeemCalculateCostRatio($row['price'], $row['selling_price']);
+            $row['shopee_lazada_redeem_order'] = isset($row['shopee_lazada_redeem_order']) ? (int) $row['shopee_lazada_redeem_order'] : 0;
+            $row['private_redeem_order'] = isset($row['private_redeem_order']) ? (int) $row['private_redeem_order'] : 0;
+            $rows[] = $row;
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('memberRedeemBuildStrategyText')) {
+    function memberRedeemBuildStrategyText($row)
+    {
+        $shopeeLazadaOrder = isset($row['shopee_lazada_redeem_order']) ? (int) $row['shopee_lazada_redeem_order'] : 0;
+        $privateOrder = isset($row['private_redeem_order']) ? (int) $row['private_redeem_order'] : 0;
+
+        $parts = array();
+        if ($shopeeLazadaOrder > 0) {
+            $parts[] = 'Shopee/Lazada RM300 package #' . $shopeeLazadaOrder;
+        }
+        if ($privateOrder > 0) {
+            $parts[] = 'Private RM300 package #' . $privateOrder;
+        }
+
+        return !empty($parts) ? implode(' | ', $parts) : '-';
+    }
+}
+
+if (!function_exists('memberRedeemRowMeetsOrderThresholds')) {
+    function memberRedeemRowMeetsOrderThresholds($row, $options = array())
+    {
+        $options = is_array($options) ? $options : array();
+        $marketplaceOrderCount = array_key_exists('marketplace_order_count', $options) ? (int) $options['marketplace_order_count'] : null;
+        $privateOrderCount = array_key_exists('private_order_count', $options) ? (int) $options['private_order_count'] : null;
+
+        $requiredMarketplaceOrders = isset($row['shopee_lazada_redeem_order']) ? max(0, (int) $row['shopee_lazada_redeem_order']) : 0;
+        $requiredPrivateOrders = isset($row['private_redeem_order']) ? max(0, (int) $row['private_redeem_order']) : 0;
+
+        if ($requiredMarketplaceOrders > 0 && $marketplaceOrderCount !== null && $marketplaceOrderCount < $requiredMarketplaceOrders) {
+            return false;
+        }
+
+        if ($requiredPrivateOrders > 0 && $privateOrderCount !== null && $privateOrderCount < $requiredPrivateOrders) {
+            return false;
+        }
+
+        return true;
+    }
+}
+
+if (!function_exists('memberRedeemBuildThresholdFailureMessage')) {
+    function memberRedeemBuildThresholdFailureMessage($row)
+    {
+        $parts = array();
+        $requiredMarketplaceOrders = isset($row['shopee_lazada_redeem_order']) ? max(0, (int) $row['shopee_lazada_redeem_order']) : 0;
+        $requiredPrivateOrders = isset($row['private_redeem_order']) ? max(0, (int) $row['private_redeem_order']) : 0;
+
+        if ($requiredMarketplaceOrders > 0) {
+            $parts[] = $requiredMarketplaceOrders . ' Shopee/Lazada orders';
+        }
+
+        if ($requiredPrivateOrders > 0) {
+            $parts[] = $requiredPrivateOrders . ' private orders';
+        }
+
+        if (empty($parts)) {
+            return 'Selected redeem item does not meet the required redeem conditions.';
+        }
+
+        return 'Selected redeem item requires at least ' . implode(' and ', $parts) . ' before it can be redeemed.';
+    }
+}
+
+if (!function_exists('memberRedeemGetEligibleRows')) {
+    function memberRedeemGetEligibleRows($connect, $pointBalance, $options = array())
+    {
+        $pointBalance = (int) $pointBalance;
+        $options = is_array($options) ? $options : array();
+        $eligibleRows = array();
+        foreach (memberRedeemFetchRows($connect, true) as $row) {
+            if ((int) ($row['point_tier'] ?? 0) <= $pointBalance && memberRedeemRowMeetsOrderThresholds($row, $options)) {
+                $eligibleRows[] = $row;
+            }
+        }
+
+        return $eligibleRows;
+    }
+}
+
+if (!function_exists('memberPointTransactionTableExists')) {
+    function memberPointTransactionTableExists($connect)
+    {
+        static $tableExists = null;
+        if ($tableExists !== null) {
+            return $tableExists;
+        }
+
+        $safeTable = mysqli_real_escape_string($connect, MEMBER_POINT_TRANSACTION);
+        $result = mysqli_query($connect, "SHOW TABLES LIKE '" . $safeTable . "'");
+        $tableExists = $result && $result->num_rows > 0;
+        return $tableExists;
+    }
+}
+
+if (!function_exists('memberPointBuildEarnTransactionSourceKey')) {
+    function memberPointBuildEarnTransactionSourceKey($platform, $customerId, $ledgerSourceKey)
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $ledgerSourceKey = trim((string) $ledgerSourceKey);
+        if ($platform === '' || $customerId <= 0 || $ledgerSourceKey === '') {
+            return '';
+        }
+
+        return 'earn:' . $platform . ':' . $customerId . ':' . $ledgerSourceKey;
+    }
+}
+
+if (!function_exists('memberPointBuildRedeemTransactionSourceKey')) {
+    function memberPointBuildRedeemTransactionSourceKey($sourceTable, $sourceRecordId)
+    {
+        $sourceTable = trim((string) $sourceTable);
+        $sourceRecordId = (int) $sourceRecordId;
+        if ($sourceTable === '' || $sourceRecordId <= 0) {
+            return '';
+        }
+
+        return 'redeem:' . $sourceTable . ':' . $sourceRecordId;
+    }
+}
+
+if (!function_exists('memberPointFetchRedeemRowById')) {
+    function memberPointFetchRedeemRowById($connect, $redeemId)
+    {
+        $redeemId = (int) $redeemId;
+        if ($redeemId <= 0 || !memberRedeemTableExists($connect)) {
+            return array();
+        }
+
+        $sql = "SELECT * FROM `" . MEMBER_REDEEM_SETTING . "` WHERE `id` = " . $redeemId . " AND `status` = 'A' LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if (!$result || $result->num_rows === 0) {
+            return array();
+        }
+
+        $row = $result->fetch_assoc();
+        if (!is_array($row)) {
+            return array();
+        }
+
+        $row['point_tier'] = isset($row['point_tier']) ? (int) $row['point_tier'] : 0;
+        $row['price'] = isset($row['price']) ? (float) $row['price'] : 0.0;
+        $row['selling_price'] = isset($row['selling_price']) ? (float) $row['selling_price'] : 0.0;
+        $row['cost_ratio'] = isset($row['cost_ratio']) ? (float) $row['cost_ratio'] : memberRedeemCalculateCostRatio($row['price'], $row['selling_price']);
+        $row['shopee_lazada_redeem_order'] = isset($row['shopee_lazada_redeem_order']) ? (int) $row['shopee_lazada_redeem_order'] : 0;
+        $row['private_redeem_order'] = isset($row['private_redeem_order']) ? (int) $row['private_redeem_order'] : 0;
+        return $row;
+    }
+}
+
+if (!function_exists('memberPointBuildRewardDisplayText')) {
+    function memberPointBuildRewardDisplayText($row)
+    {
+        $requiredPoints = isset($row['point_tier']) ? (int) $row['point_tier'] : 0;
+        $giftLabel = trim((string) ($row['redeemable_gift'] ?? ''));
+        $strategyText = memberRedeemBuildStrategyText($row);
+
+        $parts = array();
+        if ($giftLabel !== '') {
+            $parts[] = $giftLabel;
+        }
+        if ($requiredPoints > 0) {
+            $parts[] = $requiredPoints . ' points';
+        }
+        if ($strategyText !== '' && $strategyText !== '-') {
+            $parts[] = $strategyText;
+        }
+
+        return !empty($parts) ? implode(' | ', $parts) : 'Reward';
+    }
+}
+
+if (!function_exists('memberPointBuildCashbackLabel')) {
+    function memberPointBuildCashbackLabel($points, $amount = null)
+    {
+        $points = max(0, (int) $points);
+        if ($amount === null) {
+            $amount = (float) $points;
+        }
+        $amount = max(0, (float) $amount);
+
+        return 'Cashback ' . number_format($amount, 2, '.', '') . ' RM (' . $points . ' points)';
+    }
+}
+
+if (!function_exists('memberPointFetchTransactionById')) {
+    function memberPointFetchTransactionById($connect, $transactionId)
+    {
+        $transactionId = (int) $transactionId;
+        if ($transactionId <= 0 || !memberPointTransactionTableExists($connect)) {
+            return array();
+        }
+
+        $sql = "SELECT * FROM `" . MEMBER_POINT_TRANSACTION . "` WHERE `id` = " . $transactionId . " LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if (!$result || $result->num_rows === 0) {
+            return array();
+        }
+
+        $row = $result->fetch_assoc();
+        return is_array($row) ? $row : array();
+    }
+}
+
+if (!function_exists('memberPointBuildPrivateOrderTransactionSourceKey')) {
+    function memberPointBuildPrivateOrderTransactionSourceKey($sourceTable, $sourceRecordId)
+    {
+        $sourceTable = trim((string) $sourceTable);
+        $sourceRecordId = (int) $sourceRecordId;
+        if ($sourceTable === '' || $sourceRecordId <= 0) {
+            return '';
+        }
+
+        return 'earn_private:' . $sourceTable . ':' . $sourceRecordId;
+    }
+}
+
+if (!function_exists('memberPointBuildTierBonusTransactionSourceKey')) {
+    function memberPointBuildTierBonusTransactionSourceKey($platform, $customerId, $periodKey, $frequency = 'monthly')
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $periodKey = trim((string) $periodKey);
+        $frequency = memberPointNormalizeBonusFrequency($frequency);
+        if ($platform === '' || $customerId <= 0 || $periodKey === '') {
+            return '';
+        }
+
+        return 'tier_bonus:' . $frequency . ':' . $platform . ':' . $customerId . ':' . $periodKey;
+    }
+}
+
+if (!function_exists('memberPointFetchPrivateOrderTransactionRows')) {
+    function memberPointFetchPrivateOrderTransactionRows($connect, $platform, $customerId)
+    {
+        if (!memberPointTransactionTableExists($connect)) {
+            return array();
+        }
+
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if (!in_array($platform, array('shopee', 'lazada'), true) || $customerId <= 0) {
+            return array();
+        }
+
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $sql = "SELECT * FROM `" . MEMBER_POINT_TRANSACTION . "`
+            WHERE `platform` = '" . $safePlatform . "'
+              AND `customer_id` = " . $customerId . "
+              AND `transaction_type` = 'earn'
+              AND `wallet_type` = 'private'
+              AND `source_table` = '" . mysqli_real_escape_string($connect, FB_ORDER_REQ) . "'
+              AND `status` = 'A'
+            ORDER BY `id` DESC";
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return array();
+        }
+
+        $rows = array();
+        while ($row = $result->fetch_assoc()) {
+            $metadata = memberPointDecodeTransactionMetadata($row);
+            $orderDate = trim((string) ($metadata['order_date'] ?? ''));
+            $sourceRecordId = isset($row['source_record_id']) ? (int) $row['source_record_id'] : 0;
+            $referenceLabel = trim((string) ($row['reference_label'] ?? ''));
+            if ($referenceLabel === '') {
+                $referenceLabel = trim((string) ($metadata['reference_label'] ?? ''));
+            }
+            if ($referenceLabel === '') {
+                $referenceLabel = 'Facebook Order #' . $sourceRecordId;
+            }
+
+            $rows[] = array(
+                'record_type' => 'order',
+                'source_key' => isset($row['source_key']) ? (string) $row['source_key'] : '',
+                'platform' => $platform,
+                'source_platform' => 'facebook',
+                'source_table' => FB_ORDER_REQ,
+                'wallet_type' => 'private',
+                'customer_id' => $customerId,
+                'source_order_id' => $sourceRecordId,
+                'source_order_code' => '',
+                'reference_label' => $referenceLabel,
+                'order_date' => $orderDate,
+                'bonus_month' => $orderDate !== '' ? substr($orderDate, 0, 7) : '',
+                'order_amount' => max(0, (float) ($metadata['order_amount'] ?? 0)),
+                'point_rate' => max(0, (float) ($metadata['private_rate'] ?? 0)),
+                'base_points' => max(0, (int) ($row['points_change'] ?? 0)),
+                'bonus_points' => 0,
+                'total_points' => max(0, (int) ($row['points_change'] ?? 0)),
+                'point_status' => trim((string) ($metadata['point_status'] ?? 'available')),
+                'point_status_label' => trim((string) ($metadata['point_status_label'] ?? 'Available')),
+                'usage_scope' => trim((string) ($metadata['usage_scope'] ?? 'Redeem or private order')),
+                'expiry_date' => isset($row['expiry_date']) ? (string) $row['expiry_date'] : '',
+                'rule_label' => trim((string) ($metadata['rule_label'] ?? 'Private order point')),
+                'remark' => trim((string) ($metadata['remark'] ?? '')),
+                'view_url' => memberPointBuildOrderViewUrl('facebook', $sourceRecordId),
+                'metadata' => $metadata,
+            );
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('memberPointSyncEarnTransactions')) {
+    function memberPointSyncEarnTransactions($connect, $platform, $customerId, $customerLabel, $rows)
+    {
+        if (!memberPointTransactionTableExists($connect)) {
+            return false;
+        }
+
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $customerLabel = trim((string) $customerLabel);
+        $rows = is_array($rows) ? $rows : array();
+        if ($platform === '' || $customerId <= 0) {
+            return false;
+        }
+
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $existingMap = array();
+        $existingSql = "SELECT `id`, `source_key` FROM `" . MEMBER_POINT_TRANSACTION . "`
+            WHERE `platform` = '" . $safePlatform . "'
+              AND `customer_id` = " . $customerId . "
+              AND `transaction_type` = 'earn'
+              AND `source_table` = '" . mysqli_real_escape_string($connect, MEMBER_POINT_LEDGER) . "'";
+        $existingResult = mysqli_query($connect, $existingSql);
+        if ($existingResult) {
+            while ($existingRow = $existingResult->fetch_assoc()) {
+                $sourceKey = isset($existingRow['source_key']) ? (string) $existingRow['source_key'] : '';
+                if ($sourceKey !== '') {
+                    $existingMap[$sourceKey] = isset($existingRow['id']) ? (int) $existingRow['id'] : 0;
+                }
+            }
+        }
+
+        $seenKeys = array();
+        foreach ($rows as $rowData) {
+            $ledgerSourceKey = trim((string) ($rowData['source_key'] ?? ''));
+            $pointsChange = (int) ($rowData['total_points'] ?? 0);
+            if ($ledgerSourceKey === '' || $pointsChange <= 0) {
+                continue;
+            }
+
+            $walletSourceKey = memberPointBuildEarnTransactionSourceKey($platform, $customerId, $ledgerSourceKey);
+            if ($walletSourceKey === '') {
+                continue;
+            }
+
+            $seenKeys[] = $walletSourceKey;
+            $safeCustomerLabel = mysqli_real_escape_string($connect, $customerLabel);
+            $walletType = memberPointNormalizeWalletType($rowData['wallet_type'] ?? 'frozen');
+            $safeWalletType = mysqli_real_escape_string($connect, $walletType);
+            $sourcePlatform = memberPointNormalizePlatform(isset($rowData['source_platform']) ? $rowData['source_platform'] : $platform);
+            if ($sourcePlatform === '') {
+                $sourcePlatform = $platform;
+            }
+            $sourceTable = trim((string) ($rowData['source_table'] ?? MEMBER_POINT_LEDGER));
+            if ($sourceTable === '') {
+                $sourceTable = MEMBER_POINT_LEDGER;
+            }
+            $safeSourcePlatform = mysqli_real_escape_string($connect, $sourcePlatform);
+            $safeSourceTable = mysqli_real_escape_string($connect, $sourceTable);
+            $safeSourceKey = mysqli_real_escape_string($connect, $walletSourceKey);
+            $safeReferenceLabel = mysqli_real_escape_string($connect, trim((string) ($rowData['reference_label'] ?? '')));
+            $expiryDate = trim((string) ($rowData['expiry_date'] ?? ''));
+            $safeExpiryDate = $expiryDate !== '' ? mysqli_real_escape_string($connect, $expiryDate) : '';
+            $metadataJson = json_encode(array(
+                'record_type' => isset($rowData['record_type']) ? (string) $rowData['record_type'] : 'order',
+                'wallet_type' => $walletType,
+                'platform' => $platform,
+                'source_platform' => $sourcePlatform,
+                'original_source_key' => $ledgerSourceKey,
+                'source_order_code' => isset($rowData['source_order_code']) ? (string) $rowData['source_order_code'] : '',
+                'reference_label' => isset($rowData['reference_label']) ? (string) $rowData['reference_label'] : '',
+                'order_date' => isset($rowData['order_date']) ? (string) $rowData['order_date'] : '',
+                'expiry_date' => isset($rowData['expiry_date']) ? (string) $rowData['expiry_date'] : '',
+                'rule_label' => isset($rowData['rule_label']) ? (string) $rowData['rule_label'] : '',
+                'remark' => isset($rowData['remark']) ? (string) $rowData['remark'] : '',
+                'point_status' => isset($rowData['point_status']) ? (string) $rowData['point_status'] : '',
+                'point_status_label' => isset($rowData['point_status_label']) ? (string) $rowData['point_status_label'] : '',
+            ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $safeMetadataJson = mysqli_real_escape_string($connect, $metadataJson !== false ? $metadataJson : '{}');
+            $sourceRecordId = isset($rowData['source_order_id']) ? (int) $rowData['source_order_id'] : 0;
+            $safeUserId = mysqli_real_escape_string($connect, defined('USER_ID') ? (string) USER_ID : '');
+
+            if (isset($existingMap[$walletSourceKey]) && $existingMap[$walletSourceKey] > 0) {
+                $updateSql = "UPDATE `" . MEMBER_POINT_TRANSACTION . "`
+                    SET `customer_label` = '" . $safeCustomerLabel . "',
+                        `wallet_type` = '" . $safeWalletType . "',
+                        `points_change` = " . $pointsChange . ",
+                        `source_platform` = '" . $safeSourcePlatform . "',
+                        `source_table` = '" . $safeSourceTable . "',
+                        `source_record_id` = " . $sourceRecordId . ",
+                        `reference_label` = " . ($safeReferenceLabel !== '' ? "'" . $safeReferenceLabel . "'" : "NULL") . ",
+                        `expiry_date` = " . ($safeExpiryDate !== '' ? "'" . $safeExpiryDate . "'" : "NULL") . ",
+                        `metadata_json` = '" . $safeMetadataJson . "',
+                        `update_by` = '" . $safeUserId . "',
+                        `update_date` = CURDATE(),
+                        `update_time` = CURTIME(),
+                        `status` = 'A'
+                    WHERE `id` = " . (int) $existingMap[$walletSourceKey] . " LIMIT 1";
+                mysqli_query($connect, $updateSql);
+            } else {
+                $insertSql = "INSERT INTO `" . MEMBER_POINT_TRANSACTION . "` (
+                        `platform`, `customer_id`, `customer_label`, `transaction_type`, `wallet_type`, `points_change`,
+                        `source_platform`, `source_table`, `source_record_id`, `source_key`,
+                        `reference_label`, `redeem_setting_id`, `expiry_date`, `metadata_json`,
+                        `create_by`, `create_date`, `create_time`, `update_by`, `update_date`, `update_time`, `status`
+                    ) VALUES (
+                        '" . $safePlatform . "',
+                        " . $customerId . ",
+                        '" . $safeCustomerLabel . "',
+                        'earn',
+                        '" . $safeWalletType . "',
+                        " . $pointsChange . ",
+                        '" . $safeSourcePlatform . "',
+                        '" . $safeSourceTable . "',
+                        " . $sourceRecordId . ",
+                        '" . $safeSourceKey . "',
+                        " . ($safeReferenceLabel !== '' ? "'" . $safeReferenceLabel . "'" : "NULL") . ",
+                        NULL,
+                        " . ($safeExpiryDate !== '' ? "'" . $safeExpiryDate . "'" : "NULL") . ",
+                        '" . $safeMetadataJson . "',
+                        '" . $safeUserId . "',
+                        CURDATE(),
+                        CURTIME(),
+                        '" . $safeUserId . "',
+                        CURDATE(),
+                        CURTIME(),
+                        'A'
+                    )";
+                mysqli_query($connect, $insertSql);
+            }
+        }
+
+        $seenKeys = array_values(array_unique(array_filter(array_map('strval', $seenKeys), 'strlen')));
+        foreach ($existingMap as $existingKey => $existingId) {
+            if (in_array($existingKey, $seenKeys, true)) {
+                continue;
+            }
+
+            $safeUserId = mysqli_real_escape_string($connect, defined('USER_ID') ? (string) USER_ID : '');
+            mysqli_query(
+                $connect,
+                "UPDATE `" . MEMBER_POINT_TRANSACTION . "`
+                    SET `status` = 'D',
+                        `update_by` = '" . $safeUserId . "',
+                        `update_date` = CURDATE(),
+                        `update_time` = CURTIME()
+                    WHERE `id` = " . (int) $existingId . " LIMIT 1"
+            );
+        }
+
+        return true;
+    }
+}
+
+if (!function_exists('memberPointGetTransactionSummary')) {
+    function memberPointGetTransactionSummary($connect, $platform, $customerId)
+    {
+        $summary = array(
+            'active_points' => 0,
+            'lifetime_points' => 0,
+            'redeemed_points' => 0,
+            'next_expiry' => '',
+            'latest_expiry' => '',
+        );
+
+        if (!memberPointTransactionTableExists($connect)) {
+            return $summary;
+        }
+
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if ($platform === '' || $customerId <= 0) {
+            return $summary;
+        }
+
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $sql = "SELECT
+                COALESCE(SUM(CASE WHEN `status` = 'A' AND `points_change` > 0 THEN `points_change` ELSE 0 END), 0) AS `lifetime_points`,
+                COALESCE(SUM(CASE WHEN `status` = 'A' AND (`expiry_date` IS NULL OR `expiry_date` >= CURDATE()) THEN `points_change` ELSE 0 END), 0) AS `active_points`,
+                COALESCE(SUM(CASE WHEN `status` = 'A' AND `transaction_type` = 'redeem' THEN ABS(`points_change`) ELSE 0 END), 0) AS `redeemed_points`,
+                MIN(CASE WHEN `status` = 'A' AND `points_change` > 0 AND `expiry_date` IS NOT NULL AND `expiry_date` >= CURDATE() THEN `expiry_date` ELSE NULL END) AS `next_expiry`,
+                MAX(CASE WHEN `status` = 'A' AND `points_change` > 0 AND `expiry_date` IS NOT NULL THEN `expiry_date` ELSE NULL END) AS `latest_expiry`
+            FROM `" . MEMBER_POINT_TRANSACTION . "`
+            WHERE `platform` = '" . $safePlatform . "'
+              AND `customer_id` = " . $customerId;
+        $result = mysqli_query($connect, $sql);
+        if (!$result || $result->num_rows === 0) {
+            return $summary;
+        }
+
+        $row = $result->fetch_assoc();
+        $summary['active_points'] = max(0, (int) round((float) ($row['active_points'] ?? 0)));
+        $summary['lifetime_points'] = max(0, (int) round((float) ($row['lifetime_points'] ?? 0)));
+        $summary['redeemed_points'] = max(0, (int) round((float) ($row['redeemed_points'] ?? 0)));
+        $summary['next_expiry'] = isset($row['next_expiry']) ? (string) $row['next_expiry'] : '';
+        $summary['latest_expiry'] = isset($row['latest_expiry']) ? (string) $row['latest_expiry'] : '';
+
+        return $summary;
+    }
+}
+
+if (!function_exists('memberPointGetAvailableBalance')) {
+    function memberPointGetAvailableBalance($connect, $platform, $customerId)
+    {
+        if (!memberPointTransactionTableExists($connect)) {
+            return 0;
+        }
+
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if ($platform === '' || $customerId <= 0) {
+            return 0;
+        }
+
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $sql = "SELECT COALESCE(SUM(`points_change`), 0) AS `balance`
+            FROM `" . MEMBER_POINT_TRANSACTION . "`
+            WHERE `platform` = '" . $safePlatform . "'
+              AND `customer_id` = " . $customerId . "
+              AND `status` = 'A'
+              AND (`expiry_date` IS NULL OR `expiry_date` >= CURDATE())";
+        $result = mysqli_query($connect, $sql);
+        if (!$result || $result->num_rows === 0) {
+            return 0;
+        }
+
+        $row = $result->fetch_assoc();
+        return max(0, (int) round((float) ($row['balance'] ?? 0)));
+    }
+}
+
+if (!function_exists('memberPointGetRedeemedPoints')) {
+    function memberPointGetRedeemedPoints($connect, $platform, $customerId)
+    {
+        if (!memberPointTransactionTableExists($connect)) {
+            return 0;
+        }
+
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if ($platform === '' || $customerId <= 0) {
+            return 0;
+        }
+
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $sql = "SELECT COALESCE(SUM(ABS(`points_change`)), 0) AS `redeemed_points`
+            FROM `" . MEMBER_POINT_TRANSACTION . "`
+            WHERE `platform` = '" . $safePlatform . "'
+              AND `customer_id` = " . $customerId . "
+              AND `transaction_type` = 'redeem'
+              AND `status` = 'A'";
+        $result = mysqli_query($connect, $sql);
+        if (!$result || $result->num_rows === 0) {
+            return 0;
+        }
+
+        $row = $result->fetch_assoc();
+        return max(0, (int) round((float) ($row['redeemed_points'] ?? 0)));
+    }
+}
+
+if (!function_exists('memberPointBuildLookupPayload')) {
+    function memberPointBuildLookupPayload($connect, $financeConnect, $platform, $customerId, $options = array())
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $options = is_array($options) ? $options : array();
+        $allowedPlatforms = isset($options['allowed_platforms']) && is_array($options['allowed_platforms'])
+            ? array_values(array_unique(array_filter(array_map('memberPointNormalizePlatform', $options['allowed_platforms']), 'strlen')))
+            : array('shopee', 'lazada', 'facebook', 'website');
+
+        if ($platform === '' || $customerId <= 0 || !in_array($platform, $allowedPlatforms, true)) {
+            return array(
+                'success' => false,
+                'message' => 'Invalid member point customer.',
+                'customer_label' => '',
+                'available_points' => 0,
+                'rewards' => array(),
+                'locked' => !empty($options['locked']),
+            );
+        }
+
+        $snapshot = memberPointBuildCustomerSnapshot($connect, $financeConnect, $platform, $customerId, array(), array('sync_ledger' => true));
+        if (empty($snapshot['customer_row'])) {
+            return array(
+                'success' => false,
+                'message' => 'Linked member was not found.',
+                'customer_label' => '',
+                'available_points' => 0,
+                'rewards' => array(),
+                'locked' => !empty($options['locked']),
+            );
+        }
+
+        $customerLabel = isset($snapshot['customer_label']) ? (string) $snapshot['customer_label'] : ('Customer #' . $customerId);
+        $availablePoints = memberPointTransactionTableExists($connect)
+            ? memberPointGetAvailableBalance($connect, $platform, $customerId)
+            : (int) ($snapshot['summary']['active_points'] ?? 0);
+
+        $rewardRows = memberRedeemGetEligibleRows($connect, $availablePoints, array(
+            'marketplace_order_count' => (int) ($snapshot['summary']['marketplace_order_count'] ?? 0),
+            'private_order_count' => (int) ($snapshot['summary']['private_order_count'] ?? 0),
+        ));
+        $rewards = array();
+        foreach ($rewardRows as $rewardRow) {
+            $rewards[] = array(
+                'id' => isset($rewardRow['id']) ? (int) $rewardRow['id'] : 0,
+                'required_points' => isset($rewardRow['point_tier']) ? (int) $rewardRow['point_tier'] : 0,
+                'gift_label' => isset($rewardRow['redeemable_gift']) ? (string) $rewardRow['redeemable_gift'] : '',
+                'strategy_text' => memberRedeemBuildStrategyText($rewardRow),
+                'display_text' => memberPointBuildRewardDisplayText($rewardRow),
+            );
+        }
+
+        return array(
+            'success' => true,
+            'message' => '',
+            'customer_label' => $customerLabel,
+            'available_points' => $availablePoints,
+            'marketplace_order_count' => (int) ($snapshot['summary']['marketplace_order_count'] ?? 0),
+            'private_order_count' => (int) ($snapshot['summary']['private_order_count'] ?? 0),
+            'rewards' => $rewards,
+            'locked' => !empty($options['locked']),
+        );
+    }
+}
+
+if (!function_exists('memberPointSoftDeleteTransactionById')) {
+    function memberPointSoftDeleteTransactionById($connect, $transactionId)
+    {
+        $transactionId = (int) $transactionId;
+        if ($transactionId <= 0 || !memberPointTransactionTableExists($connect)) {
+            return false;
+        }
+
+        $safeUserId = mysqli_real_escape_string($connect, defined('USER_ID') ? (string) USER_ID : '');
+        $sql = "UPDATE `" . MEMBER_POINT_TRANSACTION . "`
+            SET `status` = 'D',
+                `update_by` = '" . $safeUserId . "',
+                `update_date` = CURDATE(),
+                `update_time` = CURTIME()
+            WHERE `id` = " . $transactionId . " LIMIT 1";
+        return (bool) mysqli_query($connect, $sql);
+    }
+}
+
+if (!function_exists('memberPointSoftDeleteTransactionBySourceKey')) {
+    function memberPointSoftDeleteTransactionBySourceKey($connect, $sourceKey)
+    {
+        $sourceKey = trim((string) $sourceKey);
+        if ($sourceKey === '' || !memberPointTransactionTableExists($connect)) {
+            return false;
+        }
+
+        $safeUserId = mysqli_real_escape_string($connect, defined('USER_ID') ? (string) USER_ID : 'cron');
+        $safeSourceKey = mysqli_real_escape_string($connect, $sourceKey);
+        $sql = "UPDATE `" . MEMBER_POINT_TRANSACTION . "`
+            SET `status` = 'D',
+                `update_by` = '" . $safeUserId . "',
+                `update_date` = CURDATE(),
+                `update_time` = CURTIME()
+            WHERE `source_key` = '" . $safeSourceKey . "'";
+        return (bool) mysqli_query($connect, $sql);
+    }
+}
+
+if (!function_exists('memberPointUpsertFacebookPrivateEarnTransaction')) {
+    function memberPointUpsertFacebookPrivateEarnTransaction($connect, $financeConnect, $options = array())
+    {
+        $options = is_array($options) ? $options : array();
+        $orderId = isset($options['order_id']) ? (int) $options['order_id'] : 0;
+        $platform = memberPointNormalizePlatform(isset($options['platform']) ? $options['platform'] : '');
+        $customerId = isset($options['customer_id']) ? (int) $options['customer_id'] : 0;
+        $customerLabel = trim((string) ($options['customer_label'] ?? ''));
+        $orderAmount = max(0, (float) ($options['order_amount'] ?? 0));
+        $orderDate = trim((string) ($options['order_date'] ?? ''));
+        $referenceLabel = trim((string) ($options['reference_label'] ?? ''));
+        $orderName = trim((string) ($options['order_name'] ?? ''));
+        $fbLink = trim((string) ($options['fb_link'] ?? ''));
+
+        if (!memberPointTransactionTableExists($connect)) {
+            return array('success' => false, 'message' => 'Member point transaction table is not ready.');
+        }
+        if ($orderId <= 0) {
+            return array('success' => false, 'message' => 'Invalid Facebook order for member point earn.');
+        }
+
+        $sourceKey = memberPointBuildPrivateOrderTransactionSourceKey(FB_ORDER_REQ, $orderId);
+        if ($sourceKey === '') {
+            return array('success' => false, 'message' => 'Invalid member point private earn source key.');
+        }
+
+        $existingSql = "SELECT `id` FROM `" . MEMBER_POINT_TRANSACTION . "` WHERE `source_key` = '" . mysqli_real_escape_string($connect, $sourceKey) . "' LIMIT 1";
+        $existingResult = mysqli_query($connect, $existingSql);
+        $existingRow = $existingResult && $existingResult->num_rows > 0 ? $existingResult->fetch_assoc() : array();
+        $existingId = isset($existingRow['id']) ? (int) $existingRow['id'] : 0;
+
+        if (!in_array($platform, array('shopee', 'lazada'), true) || $customerId <= 0 || $orderAmount <= 0) {
+            if ($existingId > 0) {
+                memberPointSoftDeleteTransactionById($connect, $existingId);
+            }
+
+            return array(
+                'success' => true,
+                'transaction_id' => $existingId,
+                'points' => 0,
+                'deleted_existing' => $existingId > 0,
+            );
+        }
+
+        $customerRow = memberPointFetchCustomerRow($connect, $financeConnect, $platform, $customerId);
+        if (empty($customerRow)) {
+            return array('success' => false, 'message' => 'Linked member was not found for private point earn.');
+        }
+        if ($customerLabel === '') {
+            $customerLabel = memberPointResolveCustomerDisplayName($customerRow, $platform);
+        }
+
+        if ($orderDate === '') {
+            $orderDate = date('Y-m-d');
+        }
+        $orderDateObject = function_exists('shopeeOmsParseEstimatedDateBaseDate') ? shopeeOmsParseEstimatedDateBaseDate($orderDate) : null;
+        if (!($orderDateObject instanceof DateTimeImmutable)) {
+            $orderDateObject = new DateTimeImmutable('today');
+        }
+        $orderDate = $orderDateObject->format('Y-m-d');
+        $expiryDate = $orderDateObject->modify('+1 year')->format('Y-m-d');
+
+        $refreshStateResult = memberPointRefreshMemberStateForCustomer(
+            $connect,
+            $financeConnect,
+            $platform,
+            $customerId,
+            $customerRow,
+            $orderDate
+        );
+        $qualifyingAmount = isset($refreshStateResult['qualifying_amount']) ? (float) $refreshStateResult['qualifying_amount'] : 0.0;
+        $tierMeta = !empty($refreshStateResult['tier_meta']) && is_array($refreshStateResult['tier_meta'])
+            ? $refreshStateResult['tier_meta']
+            : memberPointResolveTierMeta($qualifyingAmount, true);
+
+        $privateRate = max(0, (float) ($tierMeta['private_rate'] ?? 0.03));
+        $points = memberPointCalculateOrderPoints($orderAmount, $privateRate);
+        if ($points <= 0) {
+            if ($existingId > 0) {
+                memberPointSoftDeleteTransactionById($connect, $existingId);
+            }
+
+            return array(
+                'success' => true,
+                'transaction_id' => $existingId,
+                'points' => 0,
+                'deleted_existing' => $existingId > 0,
+            );
+        }
+
+        if ($referenceLabel === '') {
+            $referenceLabel = 'Facebook Order #' . $orderId;
+        }
+
+        $ruleLabel = (int) round($privateRate * 100) . '% private order point';
+        $metadataJson = json_encode(array(
+            'record_type' => 'order',
+            'wallet_type' => 'private',
+            'source_platform' => 'facebook',
+            'source_label' => 'Facebook private order',
+            'reference_label' => $referenceLabel,
+            'order_date' => $orderDate,
+            'order_amount' => round($orderAmount, 2),
+            'private_rate' => $privateRate,
+            'tier_key' => isset($tierMeta['key']) ? (string) $tierMeta['key'] : 'normal',
+            'tier_label' => isset($tierMeta['label']) ? (string) $tierMeta['label'] : 'Normal Member',
+            'rule_label' => $ruleLabel,
+            'point_status' => 'available',
+            'point_status_label' => 'Available',
+            'usage_scope' => 'Redeem or private order',
+            'order_name' => $orderName,
+            'fb_link' => $fbLink,
+            'transaction_date' => $orderDate,
+        ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $safeMetadataJson = mysqli_real_escape_string($connect, $metadataJson !== false ? $metadataJson : '{}');
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $safeCustomerLabel = mysqli_real_escape_string($connect, $customerLabel);
+        $safeReferenceLabel = mysqli_real_escape_string($connect, $referenceLabel);
+        $safeSourceKey = mysqli_real_escape_string($connect, $sourceKey);
+        $safeUserId = mysqli_real_escape_string($connect, defined('USER_ID') ? (string) USER_ID : 'cron');
+
+        if ($existingId > 0) {
+            $sql = "UPDATE `" . MEMBER_POINT_TRANSACTION . "`
+                SET `platform` = '" . $safePlatform . "',
+                    `customer_id` = " . $customerId . ",
+                    `customer_label` = " . ($safeCustomerLabel !== '' ? "'" . $safeCustomerLabel . "'" : "NULL") . ",
+                    `transaction_type` = 'earn',
+                    `wallet_type` = 'private',
+                    `points_change` = " . $points . ",
+                    `source_platform` = 'facebook',
+                    `source_table` = '" . mysqli_real_escape_string($connect, FB_ORDER_REQ) . "',
+                    `source_record_id` = " . $orderId . ",
+                    `reference_label` = '" . $safeReferenceLabel . "',
+                    `redeem_setting_id` = NULL,
+                    `expiry_date` = '" . mysqli_real_escape_string($connect, $expiryDate) . "',
+                    `metadata_json` = '" . $safeMetadataJson . "',
+                    `update_by` = '" . $safeUserId . "',
+                    `update_date` = CURDATE(),
+                    `update_time` = CURTIME(),
+                    `status` = 'A'
+                WHERE `id` = " . $existingId . " LIMIT 1";
+            $success = (bool) mysqli_query($connect, $sql);
+
+            return array(
+                'success' => $success,
+                'transaction_id' => $existingId,
+                'points' => $points,
+                'tier_meta' => $tierMeta,
+                'message' => $success ? '' : mysqli_error($connect),
+            );
+        }
+
+        $sql = "INSERT INTO `" . MEMBER_POINT_TRANSACTION . "` (
+                `platform`, `customer_id`, `customer_label`, `transaction_type`, `wallet_type`, `points_change`,
+                `source_platform`, `source_table`, `source_record_id`, `source_key`,
+                `reference_label`, `redeem_setting_id`, `expiry_date`, `metadata_json`,
+                `create_by`, `create_date`, `create_time`, `update_by`, `update_date`, `update_time`, `status`
+            ) VALUES (
+                '" . $safePlatform . "',
+                " . $customerId . ",
+                " . ($safeCustomerLabel !== '' ? "'" . $safeCustomerLabel . "'" : "NULL") . ",
+                'earn',
+                'private',
+                " . $points . ",
+                'facebook',
+                '" . mysqli_real_escape_string($connect, FB_ORDER_REQ) . "',
+                " . $orderId . ",
+                '" . $safeSourceKey . "',
+                '" . $safeReferenceLabel . "',
+                NULL,
+                '" . mysqli_real_escape_string($connect, $expiryDate) . "',
+                '" . $safeMetadataJson . "',
+                '" . $safeUserId . "',
+                CURDATE(),
+                CURTIME(),
+                '" . $safeUserId . "',
+                CURDATE(),
+                CURTIME(),
+                'A'
+            )";
+        $success = (bool) mysqli_query($connect, $sql);
+
+        return array(
+            'success' => $success,
+            'transaction_id' => $success ? (int) mysqli_insert_id($connect) : 0,
+            'points' => $points,
+            'tier_meta' => $tierMeta,
+            'message' => $success ? '' : mysqli_error($connect),
+        );
+    }
+}
+
+if (!function_exists('memberPointSyncFacebookPrivateEarnTransactionsForCustomer')) {
+    function memberPointSyncFacebookPrivateEarnTransactionsForCustomer($connect, $financeConnect, $platform, $customerId, $customerRow = array())
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if (!in_array($platform, array('shopee', 'lazada'), true) || $customerId <= 0) {
+            return array(
+                'success' => true,
+                'checked' => 0,
+                'updated' => 0,
+                'errors' => array(),
+            );
+        }
+
+        if (!is_array($customerRow) || empty($customerRow)) {
+            $customerRow = memberPointFetchCustomerRow($connect, $financeConnect, $platform, $customerId);
+        }
+        if (empty($customerRow)) {
+            return array(
+                'success' => false,
+                'checked' => 0,
+                'updated' => 0,
+                'errors' => array('Linked member was not found for Facebook private point sync.'),
+            );
+        }
+
+        $customerLabel = memberPointResolveCustomerDisplayName($customerRow, $platform);
+        $result = array(
+            'success' => true,
+            'checked' => 0,
+            'updated' => 0,
+            'errors' => array(),
+        );
+
+        foreach (memberPointFetchLinkedFacebookOrderRows($connect, $financeConnect, $platform, $customerId) as $facebookOrderRow) {
+            $orderId = isset($facebookOrderRow['id']) ? (int) $facebookOrderRow['id'] : 0;
+            if ($orderId <= 0) {
+                continue;
+            }
+
+            $result['checked']++;
+            $syncResult = memberPointUpsertFacebookPrivateEarnTransaction($connect, $financeConnect, array(
+                'order_id' => $orderId,
+                'platform' => $platform,
+                'customer_id' => $customerId,
+                'customer_label' => $customerLabel,
+                'order_amount' => max(0, (float) ($facebookOrderRow['price'] ?? 0)),
+                'order_date' => isset($facebookOrderRow['create_date']) ? (string) $facebookOrderRow['create_date'] : '',
+                'reference_label' => 'FB-' . $orderId,
+                'order_name' => isset($facebookOrderRow['name']) ? (string) $facebookOrderRow['name'] : '',
+                'fb_link' => isset($facebookOrderRow['fb_link']) ? (string) $facebookOrderRow['fb_link'] : '',
+            ));
+
+            if (!empty($syncResult['success'])) {
+                $result['updated']++;
+            } else {
+                $result['success'] = false;
+                $result['errors'][] = 'Facebook order #' . $orderId . ': ' . (string) ($syncResult['message'] ?? 'Unable to sync private point earn.');
+            }
+        }
+
+        return $result;
+    }
+}
+
+if (!function_exists('memberPointCreateRedeemTransaction')) {
+    function memberPointCreateRedeemTransaction($connect, $financeConnect, $options = array())
+    {
+        $options = is_array($options) ? $options : array();
+        $platform = memberPointNormalizePlatform(isset($options['platform']) ? $options['platform'] : '');
+        $customerId = isset($options['customer_id']) ? (int) $options['customer_id'] : 0;
+        $redeemId = isset($options['redeem_id']) ? (int) $options['redeem_id'] : 0;
+        $redeemKind = strtolower(trim((string) (isset($options['redeem_kind']) ? $options['redeem_kind'] : ($redeemId > 0 ? 'gift' : ''))));
+        $cashbackPoints = isset($options['cashback_points']) ? (int) $options['cashback_points'] : 0;
+        $originalOrderAmount = max(0, (float) (isset($options['original_order_amount']) ? $options['original_order_amount'] : 0));
+        $finalOrderAmount = max(0, (float) (isset($options['final_order_amount']) ? $options['final_order_amount'] : 0));
+        $sourcePlatform = trim((string) (isset($options['source_platform']) ? $options['source_platform'] : 'facebook'));
+        $sourceTable = trim((string) (isset($options['source_table']) ? $options['source_table'] : FB_ORDER_REQ));
+        $sourceRecordId = isset($options['source_record_id']) ? (int) $options['source_record_id'] : 0;
+
+        if (!memberPointTransactionTableExists($connect)) {
+            return array('success' => false, 'message' => 'Member point transaction table is not ready.');
+        }
+        if ($platform === '' || $customerId <= 0 || $sourceTable === '' || $sourceRecordId <= 0) {
+            return array('success' => false, 'message' => 'Invalid member point redeem request.');
+        }
+        if (!in_array($redeemKind, array('gift', 'cashback'), true)) {
+            return array('success' => false, 'message' => 'Invalid member point redeem type.');
+        }
+
+        $lookupPayload = memberPointBuildLookupPayload($connect, $financeConnect, $platform, $customerId, array(
+            'allowed_platforms' => array('shopee', 'lazada', 'facebook', 'website'),
+        ));
+        if (empty($lookupPayload['success'])) {
+            return array('success' => false, 'message' => isset($lookupPayload['message']) ? (string) $lookupPayload['message'] : 'Linked member was not found.');
+        }
+
+        $rewardRow = array();
+        $requiredPoints = 0;
+        $safeReferenceLabel = '';
+        $metadata = array(
+            'transaction_date' => date('Y-m-d'),
+        );
+
+        if ($redeemKind === 'gift') {
+            if ($redeemId <= 0) {
+                return array('success' => false, 'message' => 'Invalid member point redeem request.');
+            }
+
+            $rewardRow = memberPointFetchRedeemRowById($connect, $redeemId);
+            if (empty($rewardRow)) {
+                return array('success' => false, 'message' => 'Selected redeem item is no longer available.');
+            }
+
+            $requiredPoints = isset($rewardRow['point_tier']) ? (int) $rewardRow['point_tier'] : 0;
+            if ($requiredPoints <= 0) {
+                return array('success' => false, 'message' => 'Selected redeem item has invalid required points.');
+            }
+
+            $eligibleRewardIds = array();
+            foreach ((isset($lookupPayload['rewards']) && is_array($lookupPayload['rewards']) ? $lookupPayload['rewards'] : array()) as $eligibleRewardRow) {
+                $eligibleRewardIds[] = isset($eligibleRewardRow['id']) ? (int) $eligibleRewardRow['id'] : 0;
+            }
+
+            if (!in_array($redeemId, $eligibleRewardIds, true)) {
+                if ((int) ($lookupPayload['available_points'] ?? 0) < $requiredPoints) {
+                    return array('success' => false, 'message' => 'The selected member does not have enough available points for this redeem item.');
+                }
+
+                return array('success' => false, 'message' => memberRedeemBuildThresholdFailureMessage($rewardRow));
+            }
+
+            $safeReferenceLabel = mysqli_real_escape_string($connect, memberPointBuildRewardDisplayText($rewardRow));
+            $metadata['gift_label'] = isset($rewardRow['redeemable_gift']) ? (string) $rewardRow['redeemable_gift'] : '';
+            $metadata['required_points'] = $requiredPoints;
+            $metadata['strategy_text'] = memberRedeemBuildStrategyText($rewardRow);
+            $metadata['redeem_kind'] = 'gift';
+        } else {
+            if ($cashbackPoints <= 0) {
+                return array('success' => false, 'message' => 'Cashback points must be greater than zero.');
+            }
+            if ($originalOrderAmount <= 0) {
+                return array('success' => false, 'message' => 'Original order amount is required for cashback.');
+            }
+
+            $maxCashbackPoints = (int) floor($originalOrderAmount * 0.30);
+            if ($maxCashbackPoints <= 0) {
+                return array('success' => false, 'message' => 'Cashback cannot exceed 30% of the order amount.');
+            }
+            if ($cashbackPoints > $maxCashbackPoints) {
+                return array('success' => false, 'message' => 'Cashback points cannot exceed 30% of the order amount.');
+            }
+
+            $expectedFinalAmount = round($originalOrderAmount - $cashbackPoints, 2);
+            if ($expectedFinalAmount < 0) {
+                return array('success' => false, 'message' => 'Cashback cannot reduce the order below zero.');
+            }
+            if (abs($expectedFinalAmount - $finalOrderAmount) > 0.01) {
+                return array('success' => false, 'message' => 'Cashback amount does not match the final order price.');
+            }
+
+            $requiredPoints = $cashbackPoints;
+            $safeReferenceLabel = mysqli_real_escape_string($connect, memberPointBuildCashbackLabel($cashbackPoints, $cashbackPoints));
+            $metadata['redeem_kind'] = 'cashback';
+            $metadata['cashback_points'] = $cashbackPoints;
+            $metadata['cashback_amount'] = round((float) $cashbackPoints, 2);
+            $metadata['original_order_amount'] = round($originalOrderAmount, 2);
+            $metadata['final_order_amount'] = round($finalOrderAmount, 2);
+            $metadata['source_label'] = 'Facebook order cashback';
+            $metadata['reference_label'] = memberPointBuildCashbackLabel($cashbackPoints, $cashbackPoints);
+        }
+
+        $availablePoints = memberPointGetAvailableBalance($connect, $platform, $customerId);
+        if ($availablePoints < $requiredPoints) {
+            return array('success' => false, 'message' => $redeemKind === 'cashback' ? 'Insufficient member points for cashback.' : 'Insufficient member points for the selected redeem item.');
+        }
+
+        $sourceKey = memberPointBuildRedeemTransactionSourceKey($sourceTable, $sourceRecordId);
+        if ($sourceKey === '') {
+            return array('success' => false, 'message' => 'Invalid member point source record.');
+        }
+
+        $safeSourceKey = mysqli_real_escape_string($connect, $sourceKey);
+        $existingSql = "SELECT `id`, `points_change`, `redeem_setting_id` FROM `" . MEMBER_POINT_TRANSACTION . "` WHERE `source_key` = '" . $safeSourceKey . "' AND `status` = 'A' LIMIT 1";
+        $existingResult = mysqli_query($connect, $existingSql);
+        if ($existingResult && $existingResult->num_rows > 0) {
+            $existingRow = $existingResult->fetch_assoc();
+            return array(
+                'success' => true,
+                'already_exists' => true,
+                'transaction_id' => isset($existingRow['id']) ? (int) $existingRow['id'] : 0,
+                'required_points' => $requiredPoints,
+                'redeem_kind' => $redeemKind,
+                'customer_label' => isset($lookupPayload['customer_label']) ? (string) $lookupPayload['customer_label'] : '',
+                'reward_row' => $rewardRow,
+            );
+        }
+
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $safeCustomerLabel = mysqli_real_escape_string($connect, (string) ($lookupPayload['customer_label'] ?? ''));
+        $safeSourcePlatform = mysqli_real_escape_string($connect, $sourcePlatform);
+        $safeSourceTable = mysqli_real_escape_string($connect, $sourceTable);
+        $safeUserId = mysqli_real_escape_string($connect, defined('USER_ID') ? (string) USER_ID : '');
+        if ($redeemKind === 'gift') {
+            $metadata['source_label'] = trim((string) (isset($options['reference_label']) ? $options['reference_label'] : ('Facebook Order #' . $sourceRecordId)));
+        }
+        $metadataJson = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $safeMetadataJson = mysqli_real_escape_string($connect, $metadataJson !== false ? $metadataJson : '{}');
+
+        $insertSql = "INSERT INTO `" . MEMBER_POINT_TRANSACTION . "` (
+                `platform`, `customer_id`, `customer_label`, `transaction_type`, `wallet_type`, `points_change`,
+                `source_platform`, `source_table`, `source_record_id`, `source_key`,
+                `reference_label`, `redeem_setting_id`, `expiry_date`, `metadata_json`,
+                `create_by`, `create_date`, `create_time`, `update_by`, `update_date`, `update_time`, `status`
+            ) VALUES (
+                '" . $safePlatform . "',
+                " . $customerId . ",
+                '" . $safeCustomerLabel . "',
+                'redeem',
+                'redeem',
+                " . (0 - $requiredPoints) . ",
+                '" . $safeSourcePlatform . "',
+                '" . $safeSourceTable . "',
+                " . $sourceRecordId . ",
+                '" . $safeSourceKey . "',
+                '" . $safeReferenceLabel . "',
+                " . (int) $rewardRow['id'] . ",
+                NULL,
+                '" . $safeMetadataJson . "',
+                '" . $safeUserId . "',
+                CURDATE(),
+                CURTIME(),
+                '" . $safeUserId . "',
+                CURDATE(),
+                CURTIME(),
+                'A'
+            )";
+
+        if (!mysqli_query($connect, $insertSql)) {
+            return array('success' => false, 'message' => mysqli_error($connect));
+        }
+
+        $transactionId = (int) mysqli_insert_id($connect);
+        $remainingBalance = memberPointGetAvailableBalance($connect, $platform, $customerId);
+        if ($remainingBalance < 0) {
+            memberPointSoftDeleteTransactionById($connect, $transactionId);
+            return array('success' => false, 'message' => 'Member point balance cannot be negative.');
+        }
+
+        return array(
+            'success' => true,
+            'already_exists' => false,
+            'transaction_id' => $transactionId,
+            'required_points' => $requiredPoints,
+            'redeem_kind' => $redeemKind,
+            'customer_label' => isset($lookupPayload['customer_label']) ? (string) $lookupPayload['customer_label'] : '',
+            'reward_row' => $rewardRow,
+            'insert_sql' => $insertSql,
+        );
+    }
+}
+
+if (!function_exists('memberPointNormalizeBonusMonth')) {
+    function memberPointNormalizeBonusMonth($bonusMonth = '')
+    {
+        $bonusMonth = trim((string) $bonusMonth);
+        if (preg_match('/^\d{4}-\d{2}$/', $bonusMonth)) {
+            return $bonusMonth;
+        }
+
+        return date('Y-m');
+    }
+}
+
+if (!function_exists('memberPointGetMonthDateRangeByKey')) {
+    function memberPointGetMonthDateRangeByKey($monthKey)
+    {
+        $monthKey = memberPointNormalizeBonusMonth($monthKey);
+        $startDate = DateTimeImmutable::createFromFormat('Y-m-d', $monthKey . '-01');
+        if (!($startDate instanceof DateTimeImmutable)) {
+            $startDate = new DateTimeImmutable(date('Y-m-01', strtotime('first day of last month')));
+        }
+
+        $endDate = $startDate->modify('last day of this month');
+        return array(
+            'month_key' => $startDate->format('Y-m'),
+            'start_date' => $startDate->format('Y-m-d'),
+            'end_date' => $endDate->format('Y-m-d'),
+        );
+    }
+}
+
+if (!function_exists('memberPointNormalizeBonusFrequency')) {
+    function memberPointNormalizeBonusFrequency($frequency)
+    {
+        $frequency = strtolower(trim((string) $frequency));
+        $allowed = array('daily', 'weekly', 'monthly', 'yearly');
+        return in_array($frequency, $allowed, true) ? $frequency : 'monthly';
+    }
+}
+
+if (!function_exists('memberPointGetBonusPeriodMeta')) {
+    function memberPointGetBonusPeriodMeta($frequency, $asOfDate = '')
+    {
+        $frequency = memberPointNormalizeBonusFrequency($frequency);
+        $asOfDate = trim((string) $asOfDate);
+        $dateObject = $asOfDate !== '' ? DateTimeImmutable::createFromFormat('Y-m-d', $asOfDate) : false;
+        if (!($dateObject instanceof DateTimeImmutable)) {
+            $dateObject = new DateTimeImmutable('today');
+        }
+
+        $startDate = $dateObject;
+        $endDate = $dateObject;
+        $periodKey = $dateObject->format('Y-m-d');
+        $label = $periodKey;
+
+        if ($frequency === 'weekly') {
+            $startDate = $dateObject->modify('monday this week');
+            $endDate = $dateObject->modify('sunday this week');
+            $periodKey = $startDate->format('o-\WW');
+            $label = $startDate->format('d M Y') . ' - ' . $endDate->format('d M Y');
+        } else if ($frequency === 'monthly') {
+            $monthRange = memberPointGetMonthDateRangeByKey($dateObject->format('Y-m'));
+            $startDate = DateTimeImmutable::createFromFormat('Y-m-d', $monthRange['start_date']);
+            $endDate = DateTimeImmutable::createFromFormat('Y-m-d', $monthRange['end_date']);
+            $periodKey = $monthRange['month_key'];
+            $label = $monthRange['month_key'];
+        } else if ($frequency === 'yearly') {
+            $startDate = DateTimeImmutable::createFromFormat('Y-m-d', $dateObject->format('Y-01-01'));
+            $endDate = DateTimeImmutable::createFromFormat('Y-m-d', $dateObject->format('Y-12-31'));
+            $periodKey = $dateObject->format('Y');
+            $label = $periodKey;
+        }
+
+        if (!($startDate instanceof DateTimeImmutable)) {
+            $startDate = $dateObject;
+        }
+        if (!($endDate instanceof DateTimeImmutable)) {
+            $endDate = $dateObject;
+        }
+
+        return array(
+            'frequency' => $frequency,
+            'period_key' => $periodKey,
+            'period_label' => $label,
+            'start_date' => $startDate->format('Y-m-d'),
+            'end_date' => $endDate->format('Y-m-d'),
+            'expiry_date' => $endDate->modify('+1 year')->format('Y-m-d'),
+            'transaction_date' => $endDate->format('Y-m-d'),
+        );
+    }
+}
+
+if (!function_exists('memberPointBuildSpecialBonusTransactionSourceKey')) {
+    function memberPointBuildSpecialBonusTransactionSourceKey($bonusKey, $platform, $customerId, $periodKey)
+    {
+        $bonusKey = strtolower(trim((string) $bonusKey));
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $periodKey = trim((string) $periodKey);
+        if ($bonusKey === '' || $platform === '' || $customerId <= 0 || $periodKey === '') {
+            return '';
+        }
+
+        return $bonusKey . ':' . $platform . ':' . $customerId . ':' . $periodKey;
+    }
+}
+
+if (!function_exists('memberPointResolveUrbanismBirthdayMonth')) {
+    function memberPointResolveUrbanismBirthdayMonth($connect, $customerLabel)
+    {
+        if (!($connect instanceof mysqli)) {
+            return 0;
+        }
+
+        $customerLabel = strtolower(trim((string) $customerLabel));
+        if ($customerLabel === '') {
+            return 0;
+        }
+
+        $sql = "SELECT `ic` FROM `" . URBAN_CUST_REG . "`
+            WHERE LOWER(TRIM(`name`)) = '" . mysqli_real_escape_string($connect, $customerLabel) . "'
+              AND `status` = 'A'
+            ORDER BY `id` DESC
+            LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if (!$result || $result->num_rows === 0) {
+            return 0;
+        }
+
+        $row = $result->fetch_assoc();
+        $icValue = preg_replace('/\D+/', '', (string) ($row['ic'] ?? ''));
+        if (strlen($icValue) < 4) {
+            return 0;
+        }
+
+        $monthValue = (int) substr($icValue, 2, 2);
+        return ($monthValue >= 1 && $monthValue <= 12) ? $monthValue : 0;
+    }
+}
+
+if (!function_exists('memberPointCalculatePeriodPurchaseSummary')) {
+    function memberPointCalculatePeriodPurchaseSummary($connect, $financeConnect, $platform, $customerId, $customerRow, $startDate, $endDate)
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $startDate = trim((string) $startDate);
+        $endDate = trim((string) $endDate);
+        $summary = array(
+            'purchase_amount' => 0.0,
+            'purchase_times' => 0,
+        );
+
+        if (!in_array($platform, array('shopee', 'lazada'), true) || $customerId <= 0 || $startDate === '' || $endDate === '' || !is_array($customerRow) || empty($customerRow)) {
+            return $summary;
+        }
+
+        $configs = memberPointGetPlatformConfigs();
+        $platformConfig = isset($configs[$platform]) ? $configs[$platform] : array();
+        $dateField = isset($platformConfig['order_date_field']) ? (string) $platformConfig['order_date_field'] : '';
+        $amountField = isset($platformConfig['order_amount_field']) ? (string) $platformConfig['order_amount_field'] : '';
+
+        foreach (memberPointFetchEligibleOrderRows($connect, $financeConnect, $platform, $customerId, $customerRow) as $orderRow) {
+            $orderDateRaw = $dateField !== '' && isset($orderRow[$dateField]) ? trim((string) $orderRow[$dateField]) : '';
+            $orderDate = function_exists('shopeeOmsParseEstimatedDateBaseDate') ? shopeeOmsParseEstimatedDateBaseDate($orderDateRaw) : null;
+            if (!($orderDate instanceof DateTimeImmutable)) {
+                continue;
+            }
+
+            $resolvedDate = $orderDate->format('Y-m-d');
+            if ($resolvedDate < $startDate || $resolvedDate > $endDate) {
+                continue;
+            }
+
+            $summary['purchase_amount'] += max(0, (float) ($amountField !== '' && isset($orderRow[$amountField]) ? $orderRow[$amountField] : 0));
+            $summary['purchase_times']++;
+        }
+
+        foreach (memberPointFetchLinkedFacebookOrderRows($connect, $financeConnect, $platform, $customerId, array('as_of_date' => $endDate)) as $facebookOrderRow) {
+            $facebookDate = trim((string) ($facebookOrderRow['create_date'] ?? ''));
+            if ($facebookDate === '' || $facebookDate < $startDate || $facebookDate > $endDate) {
+                continue;
+            }
+
+            $summary['purchase_amount'] += max(0, (float) ($facebookOrderRow['price'] ?? 0));
+            $summary['purchase_times']++;
+        }
+
+        $summary['purchase_amount'] = round($summary['purchase_amount'], 2);
+        return $summary;
+    }
+}
+
+if (!function_exists('memberPointUpsertConfigBonusTransaction')) {
+    function memberPointUpsertConfigBonusTransaction($connect, $options = array())
+    {
+        $options = is_array($options) ? $options : array();
+        $platform = memberPointNormalizePlatform($options['platform'] ?? '');
+        $customerId = (int) ($options['customer_id'] ?? 0);
+        $customerLabel = trim((string) ($options['customer_label'] ?? ''));
+        $points = max(0, (int) ($options['points'] ?? 0));
+        $bonusKey = strtolower(trim((string) ($options['bonus_key'] ?? '')));
+        $bonusLabel = trim((string) ($options['bonus_label'] ?? 'Bonus'));
+        $recordType = strtolower(trim((string) ($options['record_type'] ?? 'special_bonus')));
+        $periodMeta = is_array($options['period_meta'] ?? null) ? $options['period_meta'] : array();
+        $sourceTable = trim((string) ($options['source_table'] ?? MEMBER_BONUS_SPECIAL_SETTING));
+        $sourceRecordId = (int) ($options['source_record_id'] ?? 0);
+        $metadata = is_array($options['metadata'] ?? null) ? $options['metadata'] : array();
+
+        if (!memberPointTransactionTableExists($connect)) {
+            return array('success' => false, 'message' => 'Member point transaction table is not ready.');
+        }
+        if ($platform === '' || $customerId <= 0 || $bonusKey === '') {
+            return array('success' => false, 'message' => 'Invalid member bonus transaction target.');
+        }
+
+        $periodKey = trim((string) ($periodMeta['period_key'] ?? ''));
+        $transactionDate = trim((string) ($periodMeta['transaction_date'] ?? date('Y-m-d')));
+        $expiryDate = trim((string) ($periodMeta['expiry_date'] ?? ''));
+        if ($periodKey === '') {
+            $periodKey = $transactionDate;
+        }
+        if ($expiryDate === '') {
+            $expiryDate = date('Y-m-d', strtotime($transactionDate . ' +1 year'));
+        }
+
+        $sourceKey = memberPointBuildSpecialBonusTransactionSourceKey($bonusKey, $platform, $customerId, $periodKey);
+        if ($sourceKey === '') {
+            return array('success' => false, 'message' => 'Invalid member bonus source key.');
+        }
+
+        $existingSql = "SELECT `id` FROM `" . MEMBER_POINT_TRANSACTION . "` WHERE `source_key` = '" . mysqli_real_escape_string($connect, $sourceKey) . "' LIMIT 1";
+        $existingResult = mysqli_query($connect, $existingSql);
+        $existingRow = $existingResult && $existingResult->num_rows > 0 ? $existingResult->fetch_assoc() : array();
+        $existingId = isset($existingRow['id']) ? (int) $existingRow['id'] : 0;
+
+        if ($points <= 0) {
+            if ($existingId > 0) {
+                memberPointSoftDeleteTransactionById($connect, $existingId);
+            }
+
+            return array(
+                'success' => true,
+                'transaction_id' => $existingId,
+                'points' => 0,
+                'deleted_existing' => $existingId > 0,
+                'action' => $existingId > 0 ? 'deleted' : 'skipped',
+            );
+        }
+
+        $metadata = array_merge(array(
+            'record_type' => $recordType,
+            'wallet_type' => 'private',
+            'source_label' => $bonusLabel,
+            'reference_label' => $bonusLabel . ' (' . $periodKey . ')',
+            'transaction_date' => $transactionDate,
+            'point_status' => 'available',
+            'point_status_label' => 'Available',
+            'usage_scope' => 'Redeem or private order',
+            'bonus_points' => $points,
+            'period_key' => $periodKey,
+        ), $metadata);
+
+        $referenceLabel = trim((string) ($metadata['reference_label'] ?? ($bonusLabel . ' (' . $periodKey . ')')));
+        $metadataJson = json_encode($metadata, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $safeMetadataJson = mysqli_real_escape_string($connect, $metadataJson !== false ? $metadataJson : '{}');
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $safeCustomerLabel = mysqli_real_escape_string($connect, $customerLabel);
+        $safeReferenceLabel = mysqli_real_escape_string($connect, $referenceLabel);
+        $safeSourceKey = mysqli_real_escape_string($connect, $sourceKey);
+        $safeUserId = mysqli_real_escape_string($connect, defined('USER_ID') ? (string) USER_ID : 'cron');
+        $safeSourceTable = mysqli_real_escape_string($connect, $sourceTable !== '' ? $sourceTable : MEMBER_BONUS_SPECIAL_SETTING);
+
+        if ($existingId > 0) {
+            $sql = "UPDATE `" . MEMBER_POINT_TRANSACTION . "`
+                SET `platform` = '" . $safePlatform . "',
+                    `customer_id` = " . $customerId . ",
+                    `customer_label` = " . ($safeCustomerLabel !== '' ? "'" . $safeCustomerLabel . "'" : "NULL") . ",
+                    `transaction_type` = 'earn',
+                    `wallet_type` = 'private',
+                    `points_change` = " . $points . ",
+                    `source_platform` = 'system',
+                    `source_table` = '" . $safeSourceTable . "',
+                    `source_record_id` = " . $sourceRecordId . ",
+                    `source_key` = '" . $safeSourceKey . "',
+                    `reference_label` = '" . $safeReferenceLabel . "',
+                    `redeem_setting_id` = NULL,
+                    `expiry_date` = '" . mysqli_real_escape_string($connect, $expiryDate) . "',
+                    `metadata_json` = '" . $safeMetadataJson . "',
+                    `update_by` = '" . $safeUserId . "',
+                    `update_date` = CURDATE(),
+                    `update_time` = CURTIME(),
+                    `status` = 'A'
+                WHERE `id` = " . $existingId . " LIMIT 1";
+            $success = (bool) mysqli_query($connect, $sql);
+            return array(
+                'success' => $success,
+                'transaction_id' => $existingId,
+                'points' => $points,
+                'action' => 'updated',
+                'message' => $success ? '' : mysqli_error($connect),
+            );
+        }
+
+        $sql = "INSERT INTO `" . MEMBER_POINT_TRANSACTION . "` (
+                `platform`, `customer_id`, `customer_label`, `transaction_type`, `wallet_type`, `points_change`,
+                `source_platform`, `source_table`, `source_record_id`, `source_key`,
+                `reference_label`, `redeem_setting_id`, `expiry_date`, `metadata_json`,
+                `create_by`, `create_date`, `create_time`, `update_by`, `update_date`, `update_time`, `status`
+            ) VALUES (
+                '" . $safePlatform . "',
+                " . $customerId . ",
+                " . ($safeCustomerLabel !== '' ? "'" . $safeCustomerLabel . "'" : "NULL") . ",
+                'earn',
+                'private',
+                " . $points . ",
+                'system',
+                '" . $safeSourceTable . "',
+                " . $sourceRecordId . ",
+                '" . $safeSourceKey . "',
+                '" . $safeReferenceLabel . "',
+                NULL,
+                '" . mysqli_real_escape_string($connect, $expiryDate) . "',
+                '" . $safeMetadataJson . "',
+                '" . $safeUserId . "',
+                CURDATE(),
+                CURTIME(),
+                '" . $safeUserId . "',
+                CURDATE(),
+                CURTIME(),
+                'A'
+            )";
+        $success = (bool) mysqli_query($connect, $sql);
+        return array(
+            'success' => $success,
+            'transaction_id' => $success ? (int) mysqli_insert_id($connect) : 0,
+            'points' => $points,
+            'action' => 'created',
+            'message' => $success ? '' : mysqli_error($connect),
+        );
+    }
+}
+
+if (!function_exists('memberPointFetchActiveCustomerRowsForPlatform')) {
+    function memberPointFetchActiveCustomerRowsForPlatform($connect, $financeConnect, $platform)
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        if (!in_array($platform, array('shopee', 'lazada'), true)) {
+            return array();
+        }
+
+        $configs = memberPointGetPlatformConfigs();
+        $platformConfig = isset($configs[$platform]) ? $configs[$platform] : array();
+        $dbConnect = memberPointResolveDbConnect($connect, $financeConnect, isset($platformConfig['customer_db']) ? $platformConfig['customer_db'] : 'cms');
+        $tableName = isset($platformConfig['customer_table']) ? (string) $platformConfig['customer_table'] : '';
+        if (!($dbConnect instanceof mysqli) || $tableName === '') {
+            return array();
+        }
+
+        $sqls = array(
+            "SELECT * FROM `" . $tableName . "` WHERE `status` = 'A' ORDER BY `id` ASC",
+            "SELECT * FROM `" . $tableName . "` ORDER BY `id` ASC",
+        );
+
+        foreach ($sqls as $sql) {
+            $result = mysqli_query($dbConnect, $sql);
+            if (!$result) {
+                continue;
+            }
+
+            $rows = array();
+            while ($row = $result->fetch_assoc()) {
+                if (is_array($row) && isset($row['id']) && (int) $row['id'] > 0) {
+                    $rows[] = $row;
+                }
+            }
+
+            return $rows;
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('memberPointCalculateQualifyingSummaryAsOf')) {
+    function memberPointCalculateQualifyingSummaryAsOf($connect, $financeConnect, $platform, $customerId, $customerRow, $asOfDate)
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $asOfDate = trim((string) $asOfDate);
+        $startDate = memberPointGetStartDate();
+        $summary = array(
+            'qualifying_amount' => 0.0,
+            'order_count' => 0,
+        );
+
+        if (!in_array($platform, array('shopee', 'lazada'), true) || $customerId <= 0 || !is_array($customerRow) || empty($customerRow)) {
+            return $summary;
+        }
+
+        $rawOrderRows = memberPointFetchEligibleOrderRows($connect, $financeConnect, $platform, $customerId, $customerRow);
+        $platformConfigs = memberPointGetPlatformConfigs();
+        $platformConfig = isset($platformConfigs[$platform]) ? $platformConfigs[$platform] : array();
+        $dateField = isset($platformConfig['order_date_field']) ? (string) $platformConfig['order_date_field'] : '';
+        $amountField = isset($platformConfig['order_amount_field']) ? (string) $platformConfig['order_amount_field'] : '';
+
+        foreach ($rawOrderRows as $orderRow) {
+            $orderDateRaw = $dateField !== '' && isset($orderRow[$dateField]) ? trim((string) $orderRow[$dateField]) : '';
+            $orderDate = function_exists('shopeeOmsParseEstimatedDateBaseDate') ? shopeeOmsParseEstimatedDateBaseDate($orderDateRaw) : null;
+            if (!($orderDate instanceof DateTimeImmutable)) {
+                continue;
+            }
+
+            $resolvedOrderDate = $orderDate->format('Y-m-d');
+            if ($resolvedOrderDate < $startDate || ($asOfDate !== '' && $resolvedOrderDate > $asOfDate)) {
+                continue;
+            }
+
+            $summary['qualifying_amount'] += max(0, (float) ($amountField !== '' && isset($orderRow[$amountField]) ? $orderRow[$amountField] : 0));
+            $summary['order_count']++;
+        }
+
+        $linkedFacebookOrderRows = memberPointFetchLinkedFacebookOrderRows($connect, $financeConnect, $platform, $customerId, array(
+            'as_of_date' => $asOfDate,
+        ));
+        foreach ($linkedFacebookOrderRows as $facebookOrderRow) {
+            $summary['qualifying_amount'] += max(0, (float) ($facebookOrderRow['price'] ?? 0));
+            $summary['order_count']++;
+        }
+
+        $summary['qualifying_amount'] = round($summary['qualifying_amount'], 2);
+        return $summary;
+    }
+}
+
+if (!function_exists('memberPointRefreshMemberStateForCustomer')) {
+    function memberPointRefreshMemberStateForCustomer($connect, $financeConnect, $platform, $customerId, $customerRow = array(), $asOfDate = '')
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $asOfDate = trim((string) $asOfDate);
+        if (!in_array($platform, array('shopee', 'lazada'), true) || $customerId <= 0) {
+            return array(
+                'success' => false,
+                'message' => 'Invalid member state refresh target.',
+                'qualifying_amount' => 0.0,
+                'tier_meta' => array(),
+            );
+        }
+
+        if (!is_array($customerRow) || empty($customerRow)) {
+            $customerRow = memberPointFetchCustomerRow($connect, $financeConnect, $platform, $customerId);
+        }
+        if (empty($customerRow)) {
+            return array(
+                'success' => false,
+                'message' => 'Linked member was not found for state refresh.',
+                'qualifying_amount' => 0.0,
+                'tier_meta' => array(),
+            );
+        }
+
+        $qualifyingSummary = memberPointCalculateQualifyingSummaryAsOf($connect, $financeConnect, $platform, $customerId, $customerRow, $asOfDate);
+        $qualifyingAmount = isset($qualifyingSummary['qualifying_amount']) ? (float) $qualifyingSummary['qualifying_amount'] : 0.0;
+        $tierMeta = memberPointResolveTierMeta($qualifyingAmount, true);
+        $bonusMonth = $asOfDate !== '' ? substr($asOfDate, 0, 7) : date('Y-m');
+        $customerLabel = memberPointResolveCustomerDisplayName($customerRow, $platform);
+        $stateResult = memberPointUpsertMemberState($connect, $platform, $customerId, $customerLabel, $tierMeta, $qualifyingAmount, $bonusMonth);
+
+        return array(
+            'success' => !empty($stateResult['success']),
+            'message' => isset($stateResult['message']) ? (string) $stateResult['message'] : '',
+            'qualifying_amount' => round($qualifyingAmount, 2),
+            'tier_meta' => $tierMeta,
+            'state_result' => $stateResult,
+            'customer_row' => $customerRow,
+            'customer_label' => $customerLabel,
+        );
+    }
+}
+
+if (!function_exists('memberPointRefreshAllActiveMemberStates')) {
+    function memberPointRefreshAllActiveMemberStates($connect, $financeConnect, $asOfDate = '')
+    {
+        $asOfDate = trim((string) $asOfDate);
+        $summary = array(
+            'checked' => 0,
+            'updated' => 0,
+            'errors' => array(),
+        );
+
+        foreach (array('shopee', 'lazada') as $platform) {
+            $customerRows = memberPointFetchActiveCustomerRowsForPlatform($connect, $financeConnect, $platform);
+            foreach ($customerRows as $customerRow) {
+                $customerId = isset($customerRow['id']) ? (int) $customerRow['id'] : 0;
+                if ($customerId <= 0) {
+                    continue;
+                }
+
+                $summary['checked']++;
+                $refreshResult = memberPointRefreshMemberStateForCustomer($connect, $financeConnect, $platform, $customerId, $customerRow, $asOfDate);
+                if (!empty($refreshResult['success'])) {
+                    $summary['updated']++;
+                } else {
+                    $summary['errors'][] = ucfirst($platform) . ' #' . $customerId . ': ' . (string) ($refreshResult['message'] ?? 'Unable to refresh member state.');
+                }
+            }
+        }
+
+        return $summary;
+    }
+}
+
+if (!function_exists('memberPointUpsertTierBonusTransaction')) {
+    function memberPointUpsertTierBonusTransaction($connect, $platform, $customerId, $customerLabel, $tierMeta, $bonusMonth, $qualifyingAmount)
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $customerLabel = trim((string) $customerLabel);
+        $tierMeta = is_array($tierMeta) ? $tierMeta : array();
+        $bonusFrequency = memberPointNormalizeBonusFrequency($tierMeta['bonus_frequency'] ?? 'monthly');
+        $periodMeta = memberPointGetBonusPeriodMeta($bonusFrequency, trim((string) $bonusMonth) !== '' ? (trim((string) $bonusMonth) . '-01') : '');
+        $bonusPoints = max(0, (int) ($tierMeta['bonus_points'] ?? ($tierMeta['monthly_bonus_points'] ?? 0)));
+
+        if ($platform === '' || $customerId <= 0) {
+            return array('success' => false, 'message' => 'Invalid member point tier bonus target.');
+        }
+
+        $periodKey = trim((string) ($periodMeta['period_key'] ?? ''));
+        $frequencyLabel = ucfirst($bonusFrequency);
+        $referenceLabel = $frequencyLabel . ' Tier Bonus (' . $periodKey . ')';
+        $metadata = array(
+            'record_type' => 'tier_bonus',
+            'bonus_frequency' => $bonusFrequency,
+            'source_label' => $frequencyLabel . ' tier bonus',
+            'reference_label' => $referenceLabel,
+            'bonus_month' => $bonusFrequency === 'monthly' ? $periodKey : substr((string) ($periodMeta['end_date'] ?? ''), 0, 7),
+            'period_key' => $periodKey,
+            'tier_key' => isset($tierMeta['key']) ? (string) $tierMeta['key'] : 'normal',
+            'tier_label' => isset($tierMeta['label']) ? (string) $tierMeta['label'] : 'Normal Member',
+            'qualifying_amount' => round(max(0, (float) $qualifyingAmount), 2),
+            'rule_label' => $frequencyLabel . ' tier bonus +' . $bonusPoints,
+        );
+
+        return memberPointUpsertConfigBonusTransaction($connect, array(
+            'platform' => $platform,
+            'customer_id' => $customerId,
+            'customer_label' => $customerLabel,
+            'points' => $bonusPoints,
+            'bonus_key' => 'tier_bonus:' . $bonusFrequency,
+            'bonus_label' => $frequencyLabel . ' Tier Bonus',
+            'record_type' => 'tier_bonus',
+            'period_meta' => $periodMeta,
+            'source_table' => MEMBER_BONUS_TIER_SETTING,
+            'source_record_id' => (int) ($tierMeta['id'] ?? 0),
+            'metadata' => $metadata,
+        ));
+    }
+}
+
+if (!function_exists('memberPointApplySpecialBonusTransactions')) {
+    function memberPointApplySpecialBonusTransactions($connect, $financeConnect, $platform, $customerRow, $asOfDate = '')
+    {
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = isset($customerRow['id']) ? (int) $customerRow['id'] : 0;
+        $customerLabel = memberPointResolveCustomerDisplayName($customerRow, $platform);
+        $result = array(
+            'created' => 0,
+            'updated' => 0,
+            'errors' => array(),
+        );
+
+        if (!in_array($platform, array('shopee', 'lazada'), true) || $customerId <= 0) {
+            return $result;
+        }
+
+        $specialConfigs = memberPointGetSpecialBonusConfigs();
+        $monthlyPeriodMeta = memberPointGetBonusPeriodMeta('monthly', $asOfDate);
+
+        if (isset($specialConfigs['birthday'])) {
+            $birthdayConfig = $specialConfigs['birthday'];
+            $birthdayMonth = memberPointResolveUrbanismBirthdayMonth($connect, $customerLabel);
+            $currentMonth = (int) date('n', strtotime((string) ($monthlyPeriodMeta['end_date'] ?? date('Y-m-d'))));
+            $birthdayPoints = ($birthdayMonth > 0 && $birthdayMonth === $currentMonth) ? max(0, (int) ($birthdayConfig['bonus_points'] ?? 0)) : 0;
+
+            $birthdayResult = memberPointUpsertConfigBonusTransaction($connect, array(
+                'platform' => $platform,
+                'customer_id' => $customerId,
+                'customer_label' => $customerLabel,
+                'points' => $birthdayPoints,
+                'bonus_key' => 'birthday_bonus',
+                'bonus_label' => 'Birthday Bonus',
+                'record_type' => 'birthday_bonus',
+                'period_meta' => $monthlyPeriodMeta,
+                'source_table' => MEMBER_BONUS_SPECIAL_SETTING,
+                'source_record_id' => (int) ($birthdayConfig['id'] ?? 0),
+                'metadata' => array(
+                    'remark' => (string) ($birthdayConfig['remark'] ?? ''),
+                    'birthday_month' => $birthdayMonth,
+                ),
+            ));
+            if (!empty($birthdayResult['success'])) {
+                if (($birthdayResult['action'] ?? '') === 'created') {
+                    $result['created']++;
+                } else if (($birthdayResult['action'] ?? '') === 'updated') {
+                    $result['updated']++;
+                }
+            } else {
+                $result['errors'][] = ucfirst($platform) . ' #' . $customerId . ': ' . (string) ($birthdayResult['message'] ?? 'Unable to save birthday bonus transaction.');
+            }
+        }
+
+        if (isset($specialConfigs['monthly_purchase'])) {
+            $monthlyPurchaseConfig = $specialConfigs['monthly_purchase'];
+            $purchaseSummary = memberPointCalculatePeriodPurchaseSummary(
+                $connect,
+                $financeConnect,
+                $platform,
+                $customerId,
+                $customerRow,
+                (string) ($monthlyPeriodMeta['start_date'] ?? ''),
+                (string) ($monthlyPeriodMeta['end_date'] ?? '')
+            );
+            $minimumAmount = max(0, (float) ($monthlyPurchaseConfig['minimum_purchase_amount'] ?? 0));
+            $minimumTimes = max(0, (int) ($monthlyPurchaseConfig['minimum_purchase_times'] ?? 0));
+            $isQualified = ($minimumAmount > 0 && (float) ($purchaseSummary['purchase_amount'] ?? 0) >= $minimumAmount)
+                || ($minimumTimes > 0 && (int) ($purchaseSummary['purchase_times'] ?? 0) >= $minimumTimes);
+            $monthlyPurchasePoints = $isQualified ? max(0, (int) ($monthlyPurchaseConfig['bonus_points'] ?? 0)) : 0;
+
+            $monthlyPurchaseResult = memberPointUpsertConfigBonusTransaction($connect, array(
+                'platform' => $platform,
+                'customer_id' => $customerId,
+                'customer_label' => $customerLabel,
+                'points' => $monthlyPurchasePoints,
+                'bonus_key' => 'monthly_purchase_bonus',
+                'bonus_label' => 'Monthly Purchase Bonus',
+                'record_type' => 'monthly_purchase_bonus',
+                'period_meta' => $monthlyPeriodMeta,
+                'source_table' => MEMBER_BONUS_SPECIAL_SETTING,
+                'source_record_id' => (int) ($monthlyPurchaseConfig['id'] ?? 0),
+                'metadata' => array(
+                    'remark' => (string) ($monthlyPurchaseConfig['remark'] ?? ''),
+                    'minimum_purchase_amount' => $minimumAmount,
+                    'minimum_purchase_times' => $minimumTimes,
+                    'purchase_amount' => round((float) ($purchaseSummary['purchase_amount'] ?? 0), 2),
+                    'purchase_times' => (int) ($purchaseSummary['purchase_times'] ?? 0),
+                ),
+            ));
+            if (!empty($monthlyPurchaseResult['success'])) {
+                if (($monthlyPurchaseResult['action'] ?? '') === 'created') {
+                    $result['created']++;
+                } else if (($monthlyPurchaseResult['action'] ?? '') === 'updated') {
+                    $result['updated']++;
+                }
+            } else {
+                $result['errors'][] = ucfirst($platform) . ' #' . $customerId . ': ' . (string) ($monthlyPurchaseResult['message'] ?? 'Unable to save monthly purchase bonus transaction.');
+            }
+        }
+
+        return $result;
+    }
+}
+
+if (!function_exists('memberPointRunMonthlyTierCron')) {
+    function memberPointRunMonthlyTierCron($connect, $financeConnect, $options = array())
+    {
+        $options = is_array($options) ? $options : array();
+        $requestedBonusMonth = trim((string) ($options['bonus_month'] ?? ''));
+        if ($requestedBonusMonth !== '') {
+            $monthRange = memberPointGetMonthDateRangeByKey($requestedBonusMonth);
+            $bonusMonth = isset($monthRange['month_key']) ? (string) $monthRange['month_key'] : '';
+            $asOfDate = isset($monthRange['end_date']) ? (string) $monthRange['end_date'] : date('Y-m-d');
+        } else {
+            $bonusMonth = date('Y-m');
+            $asOfDate = date('Y-m-d');
+        }
+        $platforms = array('shopee', 'lazada');
+        $resultSummary = array(
+            'success' => true,
+            'bonus_month' => $bonusMonth,
+            'as_of_date' => $asOfDate,
+            'members_checked' => 0,
+            'upgrades' => 0,
+            'bonus_created' => 0,
+            'bonus_updated' => 0,
+            'errors' => array(),
+        );
+
+        foreach ($platforms as $platform) {
+            $customerRows = memberPointFetchActiveCustomerRowsForPlatform($connect, $financeConnect, $platform);
+            foreach ($customerRows as $customerRow) {
+                $customerId = isset($customerRow['id']) ? (int) $customerRow['id'] : 0;
+                if ($customerId <= 0) {
+                    continue;
+                }
+
+                $qualifyingSummary = memberPointCalculateQualifyingSummaryAsOf($connect, $financeConnect, $platform, $customerId, $customerRow, $asOfDate);
+                $tierMeta = memberPointResolveTierMeta(isset($qualifyingSummary['qualifying_amount']) ? (float) $qualifyingSummary['qualifying_amount'] : 0);
+                $customerLabel = memberPointResolveCustomerDisplayName($customerRow, $platform);
+                $previousState = memberPointFetchMemberState($connect, $platform, $customerId);
+                $previousTierKey = isset($previousState['current_tier_key']) ? strtolower(trim((string) $previousState['current_tier_key'])) : '';
+
+                $stateResult = memberPointUpsertMemberState(
+                    $connect,
+                    $platform,
+                    $customerId,
+                    $customerLabel,
+                    $tierMeta,
+                    isset($qualifyingSummary['qualifying_amount']) ? (float) $qualifyingSummary['qualifying_amount'] : 0,
+                    $bonusMonth
+                );
+                if (empty($stateResult['success'])) {
+                    $resultSummary['errors'][] = ucfirst($platform) . ' #' . $customerId . ': ' . (string) ($stateResult['message'] ?? 'Unable to save member tier state.');
+                    continue;
+                }
+
+                if ($previousTierKey !== '' && $previousTierKey !== (string) ($tierMeta['key'] ?? 'normal')) {
+                    $resultSummary['upgrades']++;
+                }
+
+                $bonusResult = memberPointUpsertTierBonusTransaction(
+                    $connect,
+                    $platform,
+                    $customerId,
+                    $customerLabel,
+                    $tierMeta,
+                    $bonusMonth,
+                    isset($qualifyingSummary['qualifying_amount']) ? (float) $qualifyingSummary['qualifying_amount'] : 0
+                );
+                if (empty($bonusResult['success'])) {
+                    $resultSummary['errors'][] = ucfirst($platform) . ' #' . $customerId . ': ' . (string) ($bonusResult['message'] ?? 'Unable to save tier bonus transaction.');
+                    continue;
+                }
+
+                if (($bonusResult['action'] ?? '') === 'created') {
+                    $resultSummary['bonus_created']++;
+                } elseif (($bonusResult['action'] ?? '') === 'updated') {
+                    $resultSummary['bonus_updated']++;
+                }
+
+                $specialBonusResult = memberPointApplySpecialBonusTransactions($connect, $financeConnect, $platform, $customerRow, $asOfDate);
+                $resultSummary['bonus_created'] += (int) ($specialBonusResult['created'] ?? 0);
+                $resultSummary['bonus_updated'] += (int) ($specialBonusResult['updated'] ?? 0);
+                foreach ((array) ($specialBonusResult['errors'] ?? array()) as $specialBonusError) {
+                    if (trim((string) $specialBonusError) !== '') {
+                        $resultSummary['errors'][] = (string) $specialBonusError;
+                    }
+                }
+
+                $resultSummary['members_checked']++;
+            }
+        }
+
+        return $resultSummary;
+    }
+}
+
+if (!function_exists('memberPointDecodeTransactionMetadata')) {
+    function memberPointDecodeTransactionMetadata($row)
+    {
+        $metadataJson = isset($row['metadata_json']) ? (string) $row['metadata_json'] : '';
+        if ($metadataJson === '') {
+            return array();
+        }
+
+        $metadata = json_decode($metadataJson, true);
+        return is_array($metadata) ? $metadata : array();
+    }
+}
+
+if (!function_exists('memberPointBuildTransactionSourceUrl')) {
+    function memberPointBuildTransactionSourceUrl($row)
+    {
+        $row = is_array($row) ? $row : array();
+        $transactionType = trim((string) ($row['transaction_type'] ?? ''));
+        $sourcePlatform = memberPointNormalizePlatform(isset($row['source_platform']) ? $row['source_platform'] : '');
+        $sourceRecordId = isset($row['source_record_id']) ? (int) $row['source_record_id'] : 0;
+        $metadata = memberPointDecodeTransactionMetadata($row);
+        $recordType = trim((string) ($metadata['record_type'] ?? ''));
+
+        if ($transactionType === 'earn' && $recordType === 'order' && $sourcePlatform !== '' && $sourceRecordId > 0) {
+            return memberPointBuildOrderViewUrl($sourcePlatform, $sourceRecordId);
+        }
+
+        if ($transactionType === 'redeem' && $sourcePlatform !== '' && $sourceRecordId > 0) {
+            return memberPointBuildOrderViewUrl($sourcePlatform, $sourceRecordId);
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('memberPointFetchTransactionHistory')) {
+    function memberPointFetchTransactionHistory($connect, $platform, $customerId)
+    {
+        if (!memberPointTransactionTableExists($connect)) {
+            return array();
+        }
+
+        $platform = memberPointNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if ($platform === '' || $customerId <= 0) {
+            return array();
+        }
+
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $sql = "SELECT * FROM `" . MEMBER_POINT_TRANSACTION . "`
+            WHERE `platform` = '" . $safePlatform . "'
+              AND `customer_id` = " . $customerId . "
+              AND `status` = 'A'
+            ORDER BY `id` DESC";
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return array();
+        }
+
+        $rows = array();
+        while ($row = $result->fetch_assoc()) {
+            $metadata = memberPointDecodeTransactionMetadata($row);
+            $transactionType = trim((string) ($row['transaction_type'] ?? ''));
+            $recordType = trim((string) ($metadata['record_type'] ?? ''));
+            $redeemKind = trim((string) ($metadata['redeem_kind'] ?? ''));
+            $sourcePlatform = memberPointNormalizePlatform(isset($row['source_platform']) ? $row['source_platform'] : '');
+            $pointsChange = (int) ($row['points_change'] ?? 0);
+            $eventDate = trim((string) ($metadata['order_date'] ?? ''));
+            $bonusMonth = trim((string) ($metadata['bonus_month'] ?? ''));
+            if ($eventDate === '') {
+                $eventDate = trim((string) ($metadata['transaction_date'] ?? ''));
+            }
+            if ($eventDate === '' && preg_match('/^\d{4}-\d{2}$/', $bonusMonth)) {
+                $eventDate = $bonusMonth . '-01';
+            }
+            if ($eventDate === '') {
+                $eventDate = trim((string) ($row['create_date'] ?? ''));
+            }
+
+            $sourceLabel = trim((string) ($metadata['source_label'] ?? ''));
+            if ($sourceLabel === '' && $redeemKind === 'cashback') {
+                $sourceLabel = 'Facebook order cashback';
+            }
+            if ($sourceLabel === '' && in_array($recordType, array('tier_bonus', 'monthly_bonus'), true)) {
+                $sourceLabel = 'Monthly Bonus';
+            }
+            if ($sourceLabel === '' && $recordType === 'birthday_bonus') {
+                $sourceLabel = 'Birthday Bonus';
+            }
+            if ($sourceLabel === '' && $recordType === 'monthly_purchase_bonus') {
+                $sourceLabel = 'Monthly Purchase Bonus';
+            }
+            if ($sourceLabel === '') {
+                if ($transactionType === 'redeem' && $sourcePlatform !== '') {
+                    $sourceLabel = ucfirst($sourcePlatform) . ' order';
+                } else {
+                    $sourceLabel = ucfirst($sourcePlatform !== '' ? $sourcePlatform : $platform);
+                }
+            }
+
+            $statusLabel = trim((string) ($metadata['point_status_label'] ?? ''));
+            if ($statusLabel === '') {
+                if ($redeemKind === 'cashback') {
+                    $statusLabel = 'Cashback';
+                } else {
+                    $statusLabel = $transactionType === 'redeem' ? 'Deducted' : 'Available';
+                }
+            }
+
+            $referenceLabel = trim((string) ($row['reference_label'] ?? ''));
+            if ($referenceLabel === '') {
+                $referenceLabel = trim((string) ($metadata['reference_label'] ?? ''));
+            }
+            if ($referenceLabel === '' && $redeemKind === 'cashback') {
+                $referenceLabel = memberPointBuildCashbackLabel(
+                    isset($metadata['cashback_points']) ? (int) $metadata['cashback_points'] : abs($pointsChange),
+                    isset($metadata['cashback_amount']) ? (float) $metadata['cashback_amount'] : abs($pointsChange)
+                );
+            }
+            if ($referenceLabel === '' && in_array($recordType, array('tier_bonus', 'monthly_bonus'), true)) {
+                $referenceLabel = $bonusMonth !== '' ? ('Monthly Bonus (' . $bonusMonth . ')') : 'Monthly Bonus';
+            }
+            if ($referenceLabel === '' && $recordType === 'birthday_bonus') {
+                $referenceLabel = 'Birthday Bonus';
+            }
+            if ($referenceLabel === '' && $recordType === 'monthly_purchase_bonus') {
+                $referenceLabel = $bonusMonth !== '' ? ('Monthly Purchase Bonus (' . $bonusMonth . ')') : 'Monthly Purchase Bonus';
+            }
+            if ($referenceLabel === '') {
+                $referenceLabel = $transactionType === 'redeem' ? 'Redeem Transaction' : 'Point Transaction';
+            }
+
+            $transactionTypeLabel = 'Earn';
+            if ($redeemKind === 'cashback') {
+                $transactionTypeLabel = 'Cashback';
+            } else if ($transactionType === 'redeem') {
+                $transactionTypeLabel = 'Redeem';
+            } else if (in_array($recordType, array('tier_bonus', 'monthly_bonus', 'birthday_bonus', 'monthly_purchase_bonus'), true)) {
+                $transactionTypeLabel = 'Bonus';
+            }
+
+            $rows[] = array(
+                'id' => isset($row['id']) ? (int) $row['id'] : 0,
+                'transaction_type' => $transactionType,
+                'transaction_type_label' => $transactionTypeLabel,
+                'reference_label' => $referenceLabel,
+                'source_label' => $sourceLabel,
+                'event_date' => $eventDate,
+                'points_change' => $pointsChange,
+                'status_label' => $statusLabel,
+                'expiry_date' => isset($row['expiry_date']) ? (string) $row['expiry_date'] : '',
+                'view_url' => memberPointBuildTransactionSourceUrl($row),
+                'metadata' => $metadata,
+                'source_platform' => $sourcePlatform,
+            );
+        }
+
+        usort($rows, function ($left, $right) {
+            $dateCompare = strcmp((string) ($right['event_date'] ?? ''), (string) ($left['event_date'] ?? ''));
+            if ($dateCompare !== 0) {
+                return $dateCompare;
+            }
+
+            return (int) ($right['id'] ?? 0) <=> (int) ($left['id'] ?? 0);
+        });
+
+        return $rows;
+    }
+}
+
 if (!function_exists('customerAnalysisNormalizePlatformKey')) {
     function customerAnalysisNormalizePlatformKey($platformKey, $allowAll = false)
     {

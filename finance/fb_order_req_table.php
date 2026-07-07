@@ -274,6 +274,8 @@ function fbReqFetchAssoc($result)
                             <th scope="col">Order Status</th>
                             <th scope="col">Estimate Received Date</th>
                             <th scope="col">Redeem</th>
+                            <th scope="col">Linked Member</th>
+                            <th scope="col">Redeemed Points</th>
                             <th scope="col">Name</th>
                             <th scope="col">Facebook Link</th>
                             <th scope="col">Contact</th>
@@ -420,6 +422,22 @@ function fbReqFetchAssoc($result)
                                     <?php } ?>
                                 </td>
                                 <td scope="row">
+                                    <?php
+                                    $linkedMemberPlatform = memberPointNormalizePlatform(isset($row['member_point_platform']) ? $row['member_point_platform'] : '');
+                                    $linkedMemberLabel = trim((string) ($row['member_point_customer_label'] ?? ''));
+                                    $linkedMemberPlatformLabel = $linkedMemberPlatform !== '' ? ucfirst($linkedMemberPlatform) : '';
+                                    ?>
+                                    <?php if ($linkedMemberPlatformLabel !== '' || $linkedMemberLabel !== '') { ?>
+                                        <?php if ($linkedMemberPlatformLabel !== '') { ?>
+                                            <span class="badge bg-secondary"><?= htmlspecialchars($linkedMemberPlatformLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                                        <?php } ?>
+                                        <?= htmlspecialchars($linkedMemberLabel, ENT_QUOTES, 'UTF-8') ?>
+                                    <?php } ?>
+                                </td>
+                                <td scope="row">
+                                    <?= !empty($row['member_point_redeem_points']) ? (int) $row['member_point_redeem_points'] : '' ?>
+                                </td>
+                                <td scope="row">
                                     <?= htmlspecialchars((string) ($row['name'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                 </td>
                                 <td scope="row">
@@ -481,6 +499,8 @@ function fbReqFetchAssoc($result)
                             <th scope="col">Order Status</th>
                             <th scope="col">Estimate Received Date</th>
                             <th scope="col">Redeem</th>
+                            <th scope="col">Linked Member</th>
+                            <th scope="col">Redeemed Points</th>
                             <th scope="col">Name</th>
                             <th scope="col">Facebook Link</th>
                             <th scope="col">Contact</th>
