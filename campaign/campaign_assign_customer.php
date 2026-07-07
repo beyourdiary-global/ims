@@ -162,6 +162,84 @@ function campaignAssignNormalizeKey($value)
     return strtolower(trim(preg_replace('/\s+/', ' ', (string) $value)));
 }
 
+function campaignAssignConnectionCacheKey($conn)
+{
+    if (!($conn instanceof mysqli)) {
+        return 'invalid';
+    }
+
+    return function_exists('spl_object_hash') ? spl_object_hash($conn) : md5(get_class($conn) . '|' . (string) ($conn->thread_id ?? 0));
+}
+
+function campaignAssignTableExists($conn, $tblName)
+{
+    static $cache = array();
+
+    $tblName = trim((string) $tblName);
+    if (!($conn instanceof mysqli) || $tblName === '') {
+        return false;
+    }
+
+    $cacheKey = campaignAssignConnectionCacheKey($conn) . '|' . strtolower($tblName);
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+
+    $safeTable = $conn->real_escape_string($tblName);
+    $result = $conn->query("SHOW TABLES LIKE '" . $safeTable . "'");
+    $exists = ($result instanceof mysqli_result) && $result->num_rows > 0;
+    if ($result instanceof mysqli_result) {
+        $result->free();
+    }
+
+    $cache[$cacheKey] = $exists;
+    return $exists;
+}
+
+function campaignAssignColumnExists($conn, $tblName, $columnName)
+{
+    static $cache = array();
+
+    $tblName = trim((string) $tblName);
+    $columnName = trim((string) $columnName);
+    if ($tblName === '' || $columnName === '' || !campaignAssignTableExists($conn, $tblName)) {
+        return false;
+    }
+
+    $cacheKey = campaignAssignConnectionCacheKey($conn) . '|' . strtolower($tblName) . '|' . strtolower($columnName);
+    if (isset($cache[$cacheKey])) {
+        return $cache[$cacheKey];
+    }
+
+    $safeColumn = $conn->real_escape_string($columnName);
+    $result = $conn->query("SHOW COLUMNS FROM `" . str_replace('`', '``', $tblName) . "` LIKE '" . $safeColumn . "'");
+    $exists = ($result instanceof mysqli_result) && $result->num_rows > 0;
+    if ($result instanceof mysqli_result) {
+        $result->free();
+    }
+
+    $cache[$cacheKey] = $exists;
+    return $exists;
+}
+
+function campaignAssignExistingColumns($conn, $tblName, $columns)
+{
+    $existingColumns = array();
+
+    foreach ((array) $columns as $column) {
+        $column = trim((string) $column);
+        if ($column === '' || isset($existingColumns[$column])) {
+            continue;
+        }
+
+        if (campaignAssignColumnExists($conn, $tblName, $column)) {
+            $existingColumns[$column] = $column;
+        }
+    }
+
+    return array_values($existingColumns);
+}
+
 function campaignAssignEmptySummary()
 {
     return array(
@@ -172,6 +250,68 @@ function campaignAssignEmptySummary()
         'brands' => array(),
         'orders' => array(),
     );
+}
+
+function campaignAssignSummaryAppendValues(&$target, $values)
+{
+    if (!is_array($target)) {
+        $target = array();
+    }
+
+    foreach (customerRecordNormalizeFilterValues((array) $values) as $value) {
+        $target[$value] = $value;
+    }
+}
+
+function campaignAssignSummaryAddOrder(&$summary, $orderKey, $orderAmount, $orderDate, $packageValues, $brandValues)
+{
+    $summary = is_array($summary) ? $summary : campaignAssignEmptySummary();
+    $orderKey = trim((string) $orderKey);
+    if ($orderKey === '') {
+        return;
+    }
+
+    if (!isset($summary['orders']) || !is_array($summary['orders'])) {
+        $summary['orders'] = array();
+    }
+
+    if (isset($summary['orders'][$orderKey])) {
+        return;
+    }
+
+    $normalizedPackageValues = customerRecordNormalizeFilterValues((array) $packageValues);
+    $normalizedBrandValues = customerRecordNormalizeFilterValues((array) $brandValues);
+    $normalizedOrderDate = trim((string) $orderDate);
+
+    $summary['orders'][$orderKey] = array(
+        'amount' => (float) $orderAmount,
+        'date' => $normalizedOrderDate,
+        'packages' => $normalizedPackageValues,
+        'brands' => $normalizedBrandValues,
+    );
+
+    $summary['total_order'] = (int) ($summary['total_order'] ?? 0) + 1;
+    $summary['total_spent'] = (float) ($summary['total_spent'] ?? 0) + (float) $orderAmount;
+
+    if ($normalizedOrderDate !== '' && (($summary['last_order_date'] ?? '') === '' || $normalizedOrderDate > $summary['last_order_date'])) {
+        $summary['last_order_date'] = $normalizedOrderDate;
+    }
+
+    campaignAssignSummaryAppendValues($summary['packages'], $normalizedPackageValues);
+    campaignAssignSummaryAppendValues($summary['brands'], $normalizedBrandValues);
+}
+
+function campaignAssignFinalizeSummary($summary)
+{
+    $summary = is_array($summary) ? $summary : campaignAssignEmptySummary();
+    $summary['orders'] = isset($summary['orders']) && is_array($summary['orders']) ? $summary['orders'] : array();
+    $summary['total_order'] = isset($summary['total_order']) ? (int) $summary['total_order'] : count($summary['orders']);
+    $summary['total_spent'] = isset($summary['total_spent']) ? (float) $summary['total_spent'] : 0.00;
+    $summary['last_order_date'] = isset($summary['last_order_date']) ? (string) $summary['last_order_date'] : '';
+    $summary['packages'] = array_values(is_array($summary['packages'] ?? null) ? $summary['packages'] : array());
+    $summary['brands'] = array_values(is_array($summary['brands'] ?? null) ? $summary['brands'] : array());
+
+    return $summary;
 }
 
 function campaignAssignRecalculateSummary($summary)
@@ -210,18 +350,19 @@ function campaignAssignMergeSummary($baseSummary, $additionalSummary)
     $baseSummary = is_array($baseSummary) ? $baseSummary : campaignAssignEmptySummary();
     $additionalSummary = is_array($additionalSummary) ? $additionalSummary : campaignAssignEmptySummary();
 
-    if (!isset($baseSummary['orders']) || !is_array($baseSummary['orders'])) {
-        $baseSummary['orders'] = array();
-    }
-
     $additionalOrders = isset($additionalSummary['orders']) && is_array($additionalSummary['orders']) ? $additionalSummary['orders'] : array();
     foreach ($additionalOrders as $orderKey => $orderData) {
-        if (!isset($baseSummary['orders'][$orderKey])) {
-            $baseSummary['orders'][$orderKey] = $orderData;
-        }
+        campaignAssignSummaryAddOrder(
+            $baseSummary,
+            $orderKey,
+            (float) ($orderData['amount'] ?? 0),
+            (string) ($orderData['date'] ?? ''),
+            (array) ($orderData['packages'] ?? array()),
+            (array) ($orderData['brands'] ?? array())
+        );
     }
 
-    return campaignAssignRecalculateSummary($baseSummary);
+    return $baseSummary;
 }
 
 function campaignAssignCollectOptionValues(&$target, $values)
@@ -325,11 +466,13 @@ function campaignAssignPlatformConfigs($connect, $finance_connect)
             'customer_id_cols' => array('id', 'name'),
             'name_cols' => array('name', 'customer_name'),
             'contact_cols' => array('contact', 'phone', 'ship_rec_contact'),
+            'customer_lookup_cols' => array('fb_link'),
             'brand_cols' => array('brand'),
             'order_conn' => $finance_connect,
             'order_table' => defined('FB_ORDER_REQ') ? FB_ORDER_REQ : 'facebook_order_request',
             'order_no_cols' => array('order_id', 'orderID', 'id'),
             'order_customer_cols' => array('name', 'contact', 'ship_rec_contact', 'ship_rec_name'),
+            'order_lookup_cols' => array('fb_link'),
             'order_date_cols' => array('date', 'order_date', 'create_date', 'update_date'),
             'order_amount_cols' => array('price', 'total', 'final_amt', 'final_amount', 'amount'),
             'order_package_cols' => array('package', 'pkg', 'package_id'),
@@ -390,7 +533,7 @@ function campaignAssignResolveLookupValues($connect, $tblName, $value)
         return array($value);
     }
 
-    if (!campaignTableExists($connect, $tblName) || !campaignColumnExists($connect, $tblName, 'name')) {
+    if (!campaignAssignTableExists($connect, $tblName) || !campaignAssignColumnExists($connect, $tblName, 'name')) {
         return customerRecordNormalizeFilterValues($parts);
     }
 
@@ -413,7 +556,7 @@ function campaignAssignResolveLookupValues($connect, $tblName, $value)
 
     $rows = array();
     $sql = "SELECT `id`, `name` FROM `" . str_replace('`', '``', $tblName) . "` WHERE `id` IN (" . implode(',', $ids) . ")";
-    if (campaignColumnExists($connect, $tblName, 'status')) {
+    if (campaignAssignColumnExists($connect, $tblName, 'status')) {
         $sql .= " AND `status`='A'";
     }
     $result = mysqli_query($connect, $sql);
@@ -455,28 +598,108 @@ function campaignAssignResolveBrandValues($connect, $value)
     return defined('BRAND') ? campaignAssignResolveLookupValues($connect, BRAND, $value) : customerRecordNormalizeFilterValues(campaignAssignSplitCsvValues($value));
 }
 
-function campaignAssignBuildCustomerLookupMap($config)
+function campaignAssignExtractNumericLookupIds($value)
+{
+    $parts = campaignAssignSplitCsvValues($value);
+    if (empty($parts)) {
+        return array();
+    }
+
+    $ids = array();
+    foreach ($parts as $part) {
+        if (!ctype_digit((string) $part)) {
+            return array();
+        }
+
+        $id = (int) $part;
+        if ($id > 0) {
+            $ids[$id] = $id;
+        }
+    }
+
+    return array_values($ids);
+}
+
+function campaignAssignBuildLookupNameMap($connect, $tblName, $ids)
 {
     $lookupMap = array();
-    $customerConn = isset($config['conn']) ? $config['conn'] : null;
-    $customerTable = isset($config['table']) ? (string) $config['table'] : '';
-
-    if (!($customerConn instanceof mysqli) || !campaignTableExists($customerConn, $customerTable)) {
+    $ids = array_values(array_unique(array_filter(array_map('intval', (array) $ids))));
+    if (empty($ids) || !($connect instanceof mysqli) || !campaignAssignTableExists($connect, $tblName) || !campaignAssignColumnExists($connect, $tblName, 'name')) {
         return $lookupMap;
     }
 
-    $neededColumns = array_values(array_unique(array_filter(array_merge(
+    $sql = "SELECT `id`, `name` FROM `" . str_replace('`', '``', $tblName) . "` WHERE `id` IN (" . implode(',', $ids) . ")";
+    if (campaignAssignColumnExists($connect, $tblName, 'status')) {
+        $sql .= " AND `status`='A'";
+    }
+
+    $result = mysqli_query($connect, $sql);
+    if ($result instanceof mysqli_result) {
+        while ($row = $result->fetch_assoc()) {
+            $id = isset($row['id']) ? (int) $row['id'] : 0;
+            $name = trim((string) ($row['name'] ?? ''));
+            if ($id > 0 && $name !== '') {
+                $lookupMap[$id] = $name;
+            }
+        }
+    }
+
+    return $lookupMap;
+}
+
+function campaignAssignResolveLookupValuesFromMap($value, $lookupMap)
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return array();
+    }
+
+    $parts = campaignAssignSplitCsvValues($value);
+    if (empty($parts)) {
+        return array($value);
+    }
+
+    $ids = campaignAssignExtractNumericLookupIds($value);
+    if (empty($ids)) {
+        return customerRecordNormalizeFilterValues($parts);
+    }
+
+    $names = array();
+    foreach ($ids as $id) {
+        if (isset($lookupMap[$id]) && trim((string) $lookupMap[$id]) !== '') {
+            $names[] = $lookupMap[$id];
+        }
+    }
+
+    return !empty($names) ? customerRecordNormalizeFilterValues($names) : customerRecordNormalizeFilterValues($parts);
+}
+
+function campaignAssignResolveSingleLookupValueFromMap($value, $lookupMap)
+{
+    $values = campaignAssignResolveLookupValuesFromMap($value, $lookupMap);
+    if (!empty($values)) {
+        return (string) reset($values);
+    }
+
+    return trim((string) $value);
+}
+
+function campaignAssignFetchCustomerRows($customerConn, $customerTable, $config = array())
+{
+    if (!($customerConn instanceof mysqli) || !campaignAssignTableExists($customerConn, $customerTable)) {
+        return array();
+    }
+
+    $neededColumns = campaignAssignExistingColumns($customerConn, $customerTable, array_merge(
         (array) ($config['id_cols'] ?? array()),
         (array) ($config['customer_id_cols'] ?? array()),
         (array) ($config['name_cols'] ?? array()),
-        (array) ($config['contact_cols'] ?? array())
-    ), function ($column) use ($customerConn, $customerTable) {
-        $column = trim((string) $column);
-        return $column !== '' && campaignColumnExists($customerConn, $customerTable, $column);
-    })));
-
+        (array) ($config['contact_cols'] ?? array()),
+        (array) ($config['customer_lookup_cols'] ?? array()),
+        (array) ($config['brand_cols'] ?? array())
+    ));
     if (empty($neededColumns)) {
-        return $lookupMap;
+        return array();
     }
 
     $selectColumns = array();
@@ -485,16 +708,40 @@ function campaignAssignBuildCustomerLookupMap($config)
     }
 
     $sql = "SELECT " . implode(', ', $selectColumns) . " FROM `" . str_replace('`', '``', $customerTable) . "`";
-    if (campaignColumnExists($customerConn, $customerTable, 'status')) {
+    if (campaignAssignColumnExists($customerConn, $customerTable, 'status')) {
         $sql .= " WHERE `status`='A'";
     }
 
+    $rows = array();
     $result = mysqli_query($customerConn, $sql);
-    if (!($result instanceof mysqli_result)) {
+    if ($result instanceof mysqli_result) {
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+        }
+    }
+
+    return $rows;
+}
+
+function campaignAssignBuildCustomerLookupMap($config, $customerRows = null)
+{
+    $lookupMap = array();
+    $customerConn = isset($config['conn']) ? $config['conn'] : null;
+    $customerTable = isset($config['table']) ? (string) $config['table'] : '';
+
+    if (!($customerConn instanceof mysqli) || !campaignAssignTableExists($customerConn, $customerTable)) {
         return $lookupMap;
     }
 
-    while ($row = $result->fetch_assoc()) {
+    if (!is_array($customerRows)) {
+        $customerRows = campaignAssignFetchCustomerRows($customerConn, $customerTable, $config);
+    }
+
+    if (empty($customerRows)) {
+        return $lookupMap;
+    }
+
+    foreach ($customerRows as $row) {
         $rowKeys = array();
         foreach (array_merge($config['id_cols'], $config['customer_id_cols'], $config['name_cols'], $config['contact_cols']) as $column) {
             if (isset($row[$column]) && trim((string) $row[$column]) !== '') {
@@ -519,23 +766,20 @@ function campaignAssignBuildCustomerLookupMap($config)
 
 function campaignAssignFetchActiveOrderRows($orderConn, $orderTable, $config = array())
 {
-    if (!($orderConn instanceof mysqli) || !campaignTableExists($orderConn, $orderTable)) {
+    if (!($orderConn instanceof mysqli) || !campaignAssignTableExists($orderConn, $orderTable)) {
         return array();
     }
 
-    $neededColumns = array_values(array_unique(array_filter(array_merge(
+    $neededColumns = campaignAssignExistingColumns($orderConn, $orderTable, array_merge(
         array('id'),
         (array) ($config['order_no_cols'] ?? array()),
         (array) ($config['order_customer_cols'] ?? array()),
+        (array) ($config['order_lookup_cols'] ?? array()),
         (array) ($config['order_date_cols'] ?? array()),
         (array) ($config['order_amount_cols'] ?? array()),
         (array) ($config['order_package_cols'] ?? array()),
         (array) ($config['order_brand_cols'] ?? array())
-    ), function ($column) use ($orderConn, $orderTable) {
-        $column = trim((string) $column);
-        return $column !== '' && campaignColumnExists($orderConn, $orderTable, $column);
-    })));
-
+    ));
     if (empty($neededColumns)) {
         return array();
     }
@@ -546,10 +790,10 @@ function campaignAssignFetchActiveOrderRows($orderConn, $orderTable, $config = a
     }
 
     $sql = "SELECT " . implode(', ', $selectColumns) . " FROM `" . str_replace('`', '``', (string) $orderTable) . "`";
-    if (campaignColumnExists($orderConn, $orderTable, 'status')) {
+    if (campaignAssignColumnExists($orderConn, $orderTable, 'status')) {
         $sql .= " WHERE `status`='A'";
     }
-    if (campaignColumnExists($orderConn, $orderTable, 'id')) {
+    if (campaignAssignColumnExists($orderConn, $orderTable, 'id')) {
         $sql .= " ORDER BY `id` DESC";
     }
 
@@ -583,24 +827,48 @@ function campaignAssignAddOrderToSummaryMap(&$summaryMap, $keys, $orderKey, $ord
             $summaryMap[$key] = campaignAssignEmptySummary();
         }
 
-        $summaryMap[$key]['orders'][$orderKey] = $orderData;
-        $summaryMap[$key] = campaignAssignRecalculateSummary($summaryMap[$key]);
+        campaignAssignSummaryAddOrder(
+            $summaryMap[$key],
+            $orderKey,
+            $orderData['amount'],
+            $orderData['date'],
+            $orderData['packages'],
+            $orderData['brands']
+        );
     }
 }
 
-function campaignAssignBuildOrderSummaryMap($config, $connect)
+function campaignAssignBuildOrderSummaryMap($config, $customerRows, $orderRows, $packageLookupMap = array(), $brandLookupMap = array())
 {
     $summaryMap = array();
-    $orderConn = isset($config['order_conn']) ? $config['order_conn'] : null;
     $orderTable = isset($config['order_table']) ? $config['order_table'] : '';
-    if (!($orderConn instanceof mysqli) || !campaignTableExists($orderConn, $orderTable)) {
+    if (empty($customerRows) || empty($orderRows)) {
         return $summaryMap;
     }
 
-    $customerLookupMap = campaignAssignBuildCustomerLookupMap($config);
-    $orderRows = campaignAssignFetchActiveOrderRows($orderConn, $orderTable, $config);
+    $platformKey = strtolower(trim((string) ($config['platform_key'] ?? '')));
+    $seriesLookup = function_exists('customerLabelGetSeriesLookup') ? customerLabelGetSeriesLookup($GLOBALS['connect'] ?? null) : array('brand_by_id' => array());
+    $customerIndexes = function_exists('customerLabelBuildCustomerIndexes')
+        ? customerLabelBuildCustomerIndexes($platformKey, $customerRows, $seriesLookup)
+        : array('rows_by_id' => array(), 'lookup' => array(), 'composite' => array());
+    if (empty($customerIndexes['rows_by_id'])) {
+        foreach ((array) $customerRows as $customerRow) {
+            $customerId = isset($customerRow['id']) ? (int) $customerRow['id'] : 0;
+            if ($customerId > 0) {
+                $customerIndexes['rows_by_id'][$customerId] = $customerRow;
+            }
+        }
+    }
+
+    if (empty($customerIndexes['rows_by_id'])) {
+        return $summaryMap;
+    }
 
     foreach ($orderRows as $order) {
+        if (function_exists('customerLabelIsExcludedOrder') && customerLabelIsExcludedOrder($order)) {
+            continue;
+        }
+
         $orderId = campaignAssignRowValue($order, array('id'));
         $orderNo = campaignAssignRowValue($order, isset($config['order_no_cols']) ? $config['order_no_cols'] : array('orderID', 'order_id', 'oder_number', 'id'));
         $orderKey = strtolower((string) $orderTable) . '|' . ($orderId !== '' ? $orderId : $orderNo);
@@ -608,18 +876,10 @@ function campaignAssignBuildOrderSummaryMap($config, $connect)
             continue;
         }
 
-        $orderKeys = array();
-        foreach ((array) ($config['order_customer_cols'] ?? array()) as $column) {
-            if (isset($order[$column]) && trim((string) $order[$column]) !== '') {
-                $valueKey = campaignAssignNormalizeKey($order[$column]);
-                $orderKeys[] = $valueKey;
-                if (isset($customerLookupMap[$valueKey])) {
-                    $orderKeys = array_merge($orderKeys, $customerLookupMap[$valueKey]);
-                }
-            }
-        }
-
-        if (empty($orderKeys)) {
+        $resolvedCustomerId = function_exists('customerLabelResolveOrderCustomerId')
+            ? (int) customerLabelResolveOrderCustomerId($platformKey, $order, $customerIndexes)
+            : 0;
+        if ($resolvedCustomerId <= 0 || !isset($customerIndexes['rows_by_id'][$resolvedCustomerId])) {
             continue;
         }
 
@@ -630,12 +890,12 @@ function campaignAssignBuildOrderSummaryMap($config, $connect)
 
         campaignAssignAddOrderToSummaryMap(
             $summaryMap,
-            $orderKeys,
+            array((string) $resolvedCustomerId),
             $orderKey,
             $orderAmount,
             $orderDate,
-            campaignAssignResolvePackageValues($connect, $packageValue),
-            campaignAssignResolveBrandValues($connect, $brandValue)
+            campaignAssignResolveLookupValuesFromMap($packageValue, $packageLookupMap),
+            campaignAssignResolveLookupValuesFromMap($brandValue, $brandLookupMap)
         );
     }
 
@@ -745,12 +1005,10 @@ if (post('actionBtn') === 'assignCustomers' || post('actionBtn') === 'removeCust
 }
 
 $platformConfigs = campaignAssignPlatformConfigs($connect, isset($finance_connect) ? $finance_connect : $connect);
-$assignedRows = array();
 $assignedLookup = array();
-$assignedResult = $connect->query("SELECT * FROM `" . CAMPAIGN_CUSTOMER . "` WHERE `campaign_id` = " . (int) $campaignId . " AND `status` = 'A' ORDER BY `id` DESC");
+$assignedResult = $connect->query("SELECT `platform`, `customer_id` FROM `" . CAMPAIGN_CUSTOMER . "` WHERE `campaign_id` = " . (int) $campaignId . " AND `status` = 'A'");
 if ($assignedResult) {
     while ($assignedRow = $assignedResult->fetch_assoc()) {
-        $assignedRows[] = $assignedRow;
         $assignedLookup[strtolower((string) ($assignedRow['platform'] ?? '')) . '||' . campaignAssignNormalizeKey($assignedRow['customer_id'] ?? '')] = true;
     }
 }
@@ -764,26 +1022,45 @@ $platformFilterOptions = array();
 foreach ($platformConfigs as $platformName => $config) {
     $customerConn = $config['conn'];
     $customerTable = $config['table'];
-    if (!($customerConn instanceof mysqli) || !campaignTableExists($customerConn, $customerTable)) {
+    if (!($customerConn instanceof mysqli) || !campaignAssignTableExists($customerConn, $customerTable)) {
         continue;
     }
 
-    $customerResult = getData('*', '', '', $customerTable, $customerConn);
-    $platformRows = array();
-    if ($customerResult instanceof mysqli_result) {
-        while ($platformRow = $customerResult->fetch_assoc()) {
-            $platformRows[] = $platformRow;
-        }
-    }
-
+    $platformRows = campaignAssignFetchCustomerRows($customerConn, $customerTable, $config);
     if (empty($platformRows)) {
         continue;
     }
 
     $labelData = customerLabelPrepareCustomerRows($connect, $config['platform_key'], $platformRows);
+    $platformRows = isset($labelData['rows']) && is_array($labelData['rows']) ? $labelData['rows'] : array();
+    if (empty($platformRows)) {
+        continue;
+    }
+
+    $orderRows = campaignAssignFetchActiveOrderRows($config['order_conn'] ?? null, $config['order_table'] ?? '', $config);
+    $packageLookupIds = array();
+    $brandLookupIds = array();
+
+    foreach ($platformRows as $platformRow) {
+        foreach (campaignAssignExtractNumericLookupIds(campaignAssignRowValue($platformRow, $config['brand_cols'])) as $brandId) {
+            $brandLookupIds[$brandId] = $brandId;
+        }
+    }
+
+    foreach ($orderRows as $orderRow) {
+        foreach (campaignAssignExtractNumericLookupIds(campaignAssignRowValue($orderRow, $config['order_package_cols'])) as $packageId) {
+            $packageLookupIds[$packageId] = $packageId;
+        }
+        foreach (campaignAssignExtractNumericLookupIds(campaignAssignRowValue($orderRow, $config['order_brand_cols'])) as $brandId) {
+            $brandLookupIds[$brandId] = $brandId;
+        }
+    }
+
+    $packageLookupMap = defined('PKG') ? campaignAssignBuildLookupNameMap($connect, PKG, array_values($packageLookupIds)) : array();
+    $brandLookupMap = defined('BRAND') ? campaignAssignBuildLookupNameMap($connect, BRAND, array_values($brandLookupIds)) : array();
     $labelMap = isset($labelData['label_map']) ? $labelData['label_map'] : array();
     $tagMap = isset($labelData['tag_map']) ? $labelData['tag_map'] : array();
-    $orderSummaryMap = campaignAssignBuildOrderSummaryMap($config, $connect);
+    $orderSummaryMap = campaignAssignBuildOrderSummaryMap($config, $platformRows, $orderRows, $packageLookupMap, $brandLookupMap);
 
     foreach ($platformRows as $platformRow) {
         $internalId = campaignAssignRowValue($platformRow, $config['id_cols']);
@@ -803,25 +1080,16 @@ foreach ($platformConfigs as $platformName => $config) {
         $brandValues = array();
         $rowBrandValue = campaignAssignRowValue($platformRow, $config['brand_cols']);
         if ($rowBrandValue !== '') {
-            $resolvedBrandName = campaignResolveLookupName($connect, BRAND, $rowBrandValue);
+            $resolvedBrandName = campaignAssignResolveSingleLookupValueFromMap($rowBrandValue, $brandLookupMap);
             if ($resolvedBrandName !== '') {
                 $brandValues[] = $resolvedBrandName;
             }
         }
 
         $customerContact = campaignAssignRowValue($platformRow, $config['contact_cols']);
-        $summary = campaignAssignEmptySummary();
-        $summaryKeys = array_unique(array_filter(array(
-            campaignAssignNormalizeKey($internalId),
-            campaignAssignNormalizeKey($customerId),
-            campaignAssignNormalizeKey($customerName),
-            campaignAssignNormalizeKey($customerContact),
-        )));
-        foreach ($summaryKeys as $summaryKey) {
-            if (isset($orderSummaryMap[$summaryKey])) {
-                $summary = campaignAssignMergeSummary($summary, $orderSummaryMap[$summaryKey]);
-            }
-        }
+        $summary = isset($orderSummaryMap[(int) $internalId])
+            ? campaignAssignFinalizeSummary($orderSummaryMap[(int) $internalId])
+            : campaignAssignFinalizeSummary(campaignAssignEmptySummary());
 
         $brandValues = customerRecordNormalizeFilterValues(array_merge($brandValues, $summary['brands']));
         $packageValues = customerRecordNormalizeFilterValues($summary['packages']);
