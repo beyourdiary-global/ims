@@ -130,7 +130,7 @@
       var range = document.createRange ? document.createRange() : null;
       var fallbackHtml = String(html || "");
 
-      if (!fallbackHtml && text) {
+      if (!fallbackHtml) {
         fallbackHtml = $("<div>")
           .text(String(text || ""))
           .html()
