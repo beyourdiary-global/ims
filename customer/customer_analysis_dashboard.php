@@ -462,6 +462,9 @@ ob_end_flush();
         .customer-analysis-dashboard {
             background: #f6f8fb;
             min-height: 100vh;
+            width: 100%;
+            padding-top: 1rem;
+            padding-bottom: 1.5rem;
         }
 
         .customer-analysis-stack {
@@ -587,14 +590,16 @@ ob_end_flush();
     </style>
 </head>
 <body>
-<div class="container-fluid customer-analysis-dashboard py-4">
-    <div class="col-12 col-xl-11 mx-auto customer-analysis-stack">
-        <?= $renderHeaderSection() ?>
+<div class="page-load-cover">
+    <div id="dispTable" class="container-fluid customer-analysis-dashboard d-flex justify-content-center mt-3">
+        <div class="col-12 col-md-11 customer-analysis-stack">
+            <?= $renderHeaderSection() ?>
 
-        <div id="customerAnalysisSections">
-            <?= $renderYearSection() ?>
-            <?= $renderMonthSection() ?>
-            <?= $renderWeekSection() ?>
+            <div id="customerAnalysisSections">
+                <?= $renderYearSection() ?>
+                <?= $renderMonthSection() ?>
+                <?= $renderWeekSection() ?>
+            </div>
         </div>
     </div>
 </div>
