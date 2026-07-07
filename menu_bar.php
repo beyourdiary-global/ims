@@ -236,12 +236,14 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
+            array('Customer Dashboard', 'mdi mdi-chart-bar', $SITEURL . '/customer/customer_analysis_dashboard.php', '160'),
             array('Shopee Customer', 'mdi mdi-deal-outline', $SITEURL . '/shopee/shopee_cust_info_table.php', '85'),
             array('Lazada Customer', 'mdi mdi-deal-outline', $SITEURL . '/finance/lazada_cust_rcd_table.php', '91'),
             array('Facebook Customer', 'mdi mdi-deal-outline', $SITEURL . '/customer/fb_cust_deals_table.php', '75'),
             array('Website Customer', 'mdi mdi-deal-outline', $SITEURL . '/customer/website_customer_record_table.php', '84'),
             array('Whatsapp Customer', 'mdi mdi-deal-outline', $SITEURL . '/customer/customerInfoTable.php', '38'),
             array('Customer Follow-Up', 'mdi mdi-account-clock-outline', $SITEURL . '/customer/customer_follow_up_list.php', '151'),
+            array('Daily Follow Up Report', 'mdi mdi-history', $SITEURL . '/customer/customer_daily_follow_up_report.php', '161'),
             array('Customer Daily Report', 'mdi mdi-file-chart-outline', $SITEURL . '/customer/customer_daily_report.php', '150'),
             array('Campaign', 'mdi mdi-bullhorn-outline', $SITEURL . '/campaign/campaign_table.php', '153'),
             array(
@@ -269,11 +271,13 @@ $menuList = array(
                     array('Message Shortcuts', 'mdi mdi-message-text-outline', $SITEURL . '/settings/message_shortcuts_table.php', '144'),
                     array('Tag', 'mdi mdi-account-group-outline', $SITEURL . '/customer/tagTable.php', '35'),
                     array('Campaign Rule Setting', 'mdi mdi-cog-outline', $SITEURL . '/campaign/campaign_rule_setting_table.php', '154'),
+                    array('Member Bonus Management', 'mdi mdi-star-cog-outline', $SITEURL . '/settings/member_bonus_management.php', '164'),
+                    array('Member Redeem Setting', 'mdi mdi-gift-outline', $SITEURL . '/settings/member_redeem_setting.php', '163'),
                 ),
-                'pin' => array('29', '142', '143', '144', '35', '154'),
+                'pin' => array('29', '142', '143', '144', '35', '154', '164', '163'),
             ),
         ),
-        'pin' => array('85', '91', '75', '84', '38', '150', '151', '153', '159', '29', '142', '143', '144', '35', '154')
+        'pin' => array('160', '159', '85', '91', '75', '84', '38', '150', '151', '153', '29', '142', '143', '144', '35', '154', '164', '163')
     ),
     array(
         'Order',

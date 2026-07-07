@@ -1,4 +1,5 @@
 <?php
+ob_start();
 $currentPagePin = 69;
 $pageTitle = "Facebook Order Request";
 
@@ -85,6 +86,409 @@ foreach ($forWarehouseRows as $forWarehouseRow) {
 }
 $forPopupErrorMessage = '';
 
+function fbOrderReqMemberPointJsonExit($payload)
+{
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function fbOrderReqMemberPointPlatformLabel($platform)
+{
+    $platform = memberPointNormalizePlatform($platform);
+    if ($platform === 'shopee') {
+        return 'Shopee';
+    }
+    if ($platform === 'lazada') {
+        return 'Lazada';
+    }
+    if ($platform === 'facebook') {
+        return 'Facebook';
+    }
+    if ($platform === 'website') {
+        return 'Website';
+    }
+
+    return ucfirst($platform);
+}
+
+function fbOrderReqBuildLinkedMemberLabel($platform, $customerLabel)
+{
+    $platformLabel = fbOrderReqMemberPointPlatformLabel($platform);
+    $customerLabel = trim((string) $customerLabel);
+    if ($platformLabel === '') {
+        return $customerLabel;
+    }
+    if ($customerLabel === '') {
+        return $platformLabel;
+    }
+
+    return $platformLabel . ' | ' . $customerLabel;
+}
+
+function fbOrderReqBuildRedeemLabel($connect, $redeemId, $fallbackPoints = 0)
+{
+    $rewardRow = memberPointFetchRedeemRowById($connect, $redeemId);
+    if (!empty($rewardRow)) {
+        return memberPointBuildRewardDisplayText($rewardRow);
+    }
+
+    $fallbackPoints = (int) $fallbackPoints;
+    return $fallbackPoints > 0 ? ($fallbackPoints . ' points') : '';
+}
+
+function fbOrderReqBuildCashbackLabel($points, $amount = null)
+{
+    if (function_exists('memberPointBuildCashbackLabel')) {
+        return memberPointBuildCashbackLabel($points, $amount);
+    }
+
+    $points = max(0, (int) $points);
+    if ($amount === null) {
+        $amount = (float) $points;
+    }
+    $amount = max(0, (float) $amount);
+
+    return 'Cashback ' . number_format($amount, 2, '.', '') . ' RM (' . $points . ' points)';
+}
+
+function fbOrderReqDeleteOrderById($financeConnect, $tableName, $orderId)
+{
+    $orderId = (int) $orderId;
+    if (!($financeConnect instanceof mysqli) || $orderId <= 0 || trim((string) $tableName) === '') {
+        return false;
+    }
+
+    $sql = "DELETE FROM `" . $tableName . "` WHERE `id` = " . $orderId . " LIMIT 1";
+    return (bool) mysqli_query($financeConnect, $sql);
+}
+
+function fbOrderReqRestoreOrderRow($financeConnect, $tableName, $orderId, $row)
+{
+    $orderId = (int) $orderId;
+    if (!($financeConnect instanceof mysqli) || $orderId <= 0 || trim((string) $tableName) === '' || !is_array($row) || empty($row)) {
+        return false;
+    }
+
+    $stringColumns = array(
+        'name', 'fb_link', 'contact', 'sales_pic', 'country', 'brand', 'series', 'package',
+        'fb_page', 'channel', 'price', 'pay_method', 'ship_rec_name', 'ship_rec_add',
+        'ship_rec_contact', 'remark', 'attachment', 'order_status', 'airbill_no',
+        'airbill_attachment', 'member_point_platform', 'member_point_customer_label',
+        'update_by',
+    );
+    $intColumns = array(
+        'stock_out_warehouse_id', 'member_point_customer_id', 'member_point_redeem_id',
+        'member_point_redeem_points', 'member_point_transaction_id',
+    );
+
+    $assignments = array();
+    foreach ($stringColumns as $columnName) {
+        $columnValue = isset($row[$columnName]) ? $row[$columnName] : null;
+        if ($columnValue === null || $columnValue === '') {
+            $assignments[] = "`" . $columnName . "` = NULL";
+        } else {
+            $assignments[] = "`" . $columnName . "` = '" . mysqli_real_escape_string($financeConnect, (string) $columnValue) . "'";
+        }
+    }
+
+    foreach ($intColumns as $columnName) {
+        $columnValue = isset($row[$columnName]) ? $row[$columnName] : null;
+        if ($columnValue === null || $columnValue === '') {
+            $assignments[] = "`" . $columnName . "` = NULL";
+        } else {
+            $assignments[] = "`" . $columnName . "` = " . (int) $columnValue;
+        }
+    }
+
+    if (isset($row['update_date']) && trim((string) $row['update_date']) !== '') {
+        $assignments[] = "`update_date` = '" . mysqli_real_escape_string($financeConnect, (string) $row['update_date']) . "'";
+    } else {
+        $assignments[] = "`update_date` = NULL";
+    }
+    if (isset($row['update_time']) && trim((string) $row['update_time']) !== '') {
+        $assignments[] = "`update_time` = '" . mysqli_real_escape_string($financeConnect, (string) $row['update_time']) . "'";
+    } else {
+        $assignments[] = "`update_time` = NULL";
+    }
+
+    $sql = "UPDATE `" . $tableName . "` SET " . implode(', ', $assignments) . " WHERE `id` = " . $orderId . " LIMIT 1";
+    return (bool) mysqli_query($financeConnect, $sql);
+}
+
+function fbOrderReqWriteMemberPointAudit($connect, $pageTitle, $logAct, $message, $queryRec = '', $oldVal = '', $changes = '')
+{
+    audit_log(array(
+        'log_act' => $logAct,
+        'cdate' => $GLOBALS['cdate'] ?? date('Y-m-d'),
+        'ctime' => $GLOBALS['ctime'] ?? date('H:i:s'),
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'query_rec' => $queryRec,
+        'query_table' => FB_ORDER_REQ,
+        'oldval' => $oldVal,
+        'changes' => $changes,
+        'act_msg' => $message,
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ));
+}
+
+function fbOrderReqCustomerJsonExit($payload)
+{
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+
+    header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
+function fbOrderReqFetchCustomerDealRow($connect, $customerId)
+{
+    $customerId = (int) $customerId;
+    if (!($connect instanceof mysqli) || $customerId <= 0) {
+        return array();
+    }
+
+    $result = getData('*', "id = '" . $customerId . "' AND status = 'A'", 'LIMIT 1', FB_CUST_DEALS, $connect);
+    if (!$result || $result->num_rows <= 0) {
+        return array();
+    }
+
+    $row = $result->fetch_assoc();
+    return is_array($row) ? $row : array();
+}
+
+function fbOrderReqFindCustomerDealId($connect, $customerName, $customerLink)
+{
+    if (!($connect instanceof mysqli)) {
+        return 0;
+    }
+
+    $customerName = trim((string) $customerName);
+    $customerLink = trim((string) $customerLink);
+    if ($customerName === '' || $customerLink === '') {
+        return 0;
+    }
+
+    $result = getData(
+        'id',
+        "name = '" . mysqli_real_escape_string($connect, $customerName) . "' AND fb_link = '" . mysqli_real_escape_string($connect, $customerLink) . "' AND status = 'A'",
+        'LIMIT 1',
+        FB_CUST_DEALS,
+        $connect
+    );
+    if (!$result || $result->num_rows <= 0) {
+        return 0;
+    }
+
+    $row = $result->fetch_assoc();
+    return isset($row['id']) ? (int) $row['id'] : 0;
+}
+
+function fbOrderReqResolveLookupLabel($connect, $tableName, $id, $columnName = 'name', $dbConnect = null)
+{
+    $id = (int) $id;
+    $tableName = trim((string) $tableName);
+    $columnName = trim((string) $columnName);
+    $activeConnect = $dbConnect instanceof mysqli ? $dbConnect : $connect;
+    if (!($activeConnect instanceof mysqli) || $id <= 0 || $tableName === '' || $columnName === '') {
+        return '';
+    }
+
+    $result = getData($columnName, "id = '" . $id . "' AND status = 'A'", 'LIMIT 1', $tableName, $activeConnect);
+    if (!$result || $result->num_rows <= 0) {
+        return '';
+    }
+
+    $row = $result->fetch_assoc();
+    return isset($row[$columnName]) ? trim((string) $row[$columnName]) : '';
+}
+
+function fbOrderReqBuildCustomerAjaxPayload($connect, $financeConnect, $customerRow)
+{
+    if (!is_array($customerRow) || empty($customerRow)) {
+        return array(
+            'success' => false,
+            'message' => 'Facebook customer not found.',
+        );
+    }
+
+    return array(
+        'success' => true,
+        'customer' => array(
+            'id' => isset($customerRow['id']) ? (int) $customerRow['id'] : 0,
+            'name' => isset($customerRow['name']) ? trim((string) $customerRow['name']) : '',
+            'fb_link' => isset($customerRow['fb_link']) ? trim((string) $customerRow['fb_link']) : '',
+            'contact' => isset($customerRow['contact']) ? trim((string) $customerRow['contact']) : '',
+            'sales_pic' => isset($customerRow['sales_pic']) ? (int) $customerRow['sales_pic'] : 0,
+            'sales_pic_label' => fbOrderReqResolveLookupLabel($connect, USR_USER, isset($customerRow['sales_pic']) ? (int) $customerRow['sales_pic'] : 0, 'name'),
+            'country' => isset($customerRow['country']) ? (int) $customerRow['country'] : 0,
+            'country_label' => fbOrderReqResolveLookupLabel($connect, COUNTRIES, isset($customerRow['country']) ? (int) $customerRow['country'] : 0, 'nicename'),
+            'brand' => isset($customerRow['brand']) ? (int) $customerRow['brand'] : 0,
+            'brand_label' => fbOrderReqResolveLookupLabel($connect, BRAND, isset($customerRow['brand']) ? (int) $customerRow['brand'] : 0, 'name'),
+            'series' => isset($customerRow['series']) ? (int) $customerRow['series'] : 0,
+            'series_label' => fbOrderReqResolveLookupLabel($connect, BRD_SERIES, isset($customerRow['series']) ? (int) $customerRow['series'] : 0, 'name'),
+            'fb_page' => isset($customerRow['fb_page']) ? (int) $customerRow['fb_page'] : 0,
+            'fb_page_label' => fbOrderReqResolveLookupLabel($connect, FB_PAGE_ACC, isset($customerRow['fb_page']) ? (int) $customerRow['fb_page'] : 0, 'name', $financeConnect),
+            'channel' => isset($customerRow['channel']) ? (int) $customerRow['channel'] : 0,
+            'channel_label' => fbOrderReqResolveLookupLabel($connect, CHANEL_SC_MD, isset($customerRow['channel']) ? (int) $customerRow['channel'] : 0, 'name', $financeConnect),
+            'ship_rec_name' => isset($customerRow['ship_rec_name']) ? trim((string) $customerRow['ship_rec_name']) : '',
+            'ship_rec_contact' => isset($customerRow['ship_rec_contact']) ? trim((string) $customerRow['ship_rec_contact']) : '',
+            'ship_rec_add' => isset($customerRow['ship_rec_add']) ? trim((string) $customerRow['ship_rec_add']) : '',
+            'remark' => isset($customerRow['remark']) ? trim((string) $customerRow['remark']) : '',
+        ),
+    );
+}
+
+function fbOrderReqSearchCustomerDeals($connect, $keyword, $limit = 15)
+{
+    $keyword = trim((string) $keyword);
+    $limit = max(1, (int) $limit);
+    $limit = min($limit, 30);
+    if (!($connect instanceof mysqli) || $keyword === '') {
+        return array();
+    }
+
+    $escapedKeyword = mysqli_real_escape_string($connect, $keyword);
+    $sql = "SELECT `id`, `name`, `fb_link`, `contact`
+            FROM `" . FB_CUST_DEALS . "`
+            WHERE `status` = 'A'
+              AND (
+                `name` LIKE '%" . $escapedKeyword . "%'
+                OR `fb_link` LIKE '%" . $escapedKeyword . "%'
+                OR `contact` LIKE '%" . $escapedKeyword . "%'
+              )
+            ORDER BY `name` ASC, `id` DESC
+            LIMIT " . $limit;
+    $result = mysqli_query($connect, $sql);
+    if (!$result) {
+        return array();
+    }
+
+    $rows = array();
+    while ($row = mysqli_fetch_assoc($result)) {
+        if (!is_array($row)) {
+            continue;
+        }
+        $rows[] = array(
+            'id' => isset($row['id']) ? (int) $row['id'] : 0,
+            'name' => isset($row['name']) ? trim((string) $row['name']) : '',
+            'fb_link' => isset($row['fb_link']) ? trim((string) $row['fb_link']) : '',
+            'contact' => isset($row['contact']) ? trim((string) $row['contact']) : '',
+        );
+    }
+
+    return $rows;
+}
+
+function fbOrderReqSyncSelectedCustomerDeal($connect, $customerId, $customerData, $pageTitle = '')
+{
+    $customerId = (int) $customerId;
+    if (!($connect instanceof mysqli) || $customerId <= 0 || !is_array($customerData) || empty($customerData)) {
+        return array(
+            'success' => true,
+            'updated' => false,
+        );
+    }
+
+    $currentRow = fbOrderReqFetchCustomerDealRow($connect, $customerId);
+    if (empty($currentRow)) {
+        return array(
+            'success' => false,
+            'updated' => false,
+            'message' => 'Selected Facebook customer record was not found.',
+        );
+    }
+
+    $stringColumns = array(
+        'name', 'fb_link', 'contact', 'ship_rec_name', 'ship_rec_add', 'ship_rec_contact', 'remark',
+    );
+    $idColumns = array(
+        'sales_pic', 'country', 'brand', 'series', 'fb_page', 'channel',
+    );
+
+    $assignments = array();
+    $oldValues = array();
+    $newValues = array();
+    $changedFields = array();
+
+    foreach ($stringColumns as $columnName) {
+        $newValue = trim((string) (isset($customerData[$columnName]) ? $customerData[$columnName] : ''));
+        $oldValue = trim((string) (isset($currentRow[$columnName]) ? $currentRow[$columnName] : ''));
+        if ($newValue === $oldValue) {
+            continue;
+        }
+
+        $assignments[] = "`" . $columnName . "` = '" . mysqli_real_escape_string($connect, $newValue) . "'";
+        $oldValues[] = ($oldValue === '' ? 'Empty Value' : $oldValue);
+        $newValues[] = ($newValue === '' ? 'Empty Value' : $newValue);
+        $changedFields[] = $columnName;
+    }
+
+    foreach ($idColumns as $columnName) {
+        $newValue = (int) (isset($customerData[$columnName]) ? $customerData[$columnName] : 0);
+        $oldValue = (int) (isset($currentRow[$columnName]) ? $currentRow[$columnName] : 0);
+        if ($newValue === $oldValue) {
+            continue;
+        }
+
+        $assignments[] = "`" . $columnName . "` = " . $newValue;
+        $oldValues[] = $oldValue > 0 ? (string) $oldValue : 'Empty Value';
+        $newValues[] = $newValue > 0 ? (string) $newValue : 'Empty Value';
+        $changedFields[] = $columnName;
+    }
+
+    if (empty($assignments)) {
+        return array(
+            'success' => true,
+            'updated' => false,
+        );
+    }
+
+    $assignments[] = "`update_date` = curdate()";
+    $assignments[] = "`update_time` = curtime()";
+    $assignments[] = "`update_by` = '" . mysqli_real_escape_string($connect, (string) USER_ID) . "'";
+
+    $query = "UPDATE `" . FB_CUST_DEALS . "` SET " . implode(', ', $assignments) . " WHERE `id` = " . $customerId . " LIMIT 1";
+    $updated = mysqli_query($connect, $query);
+    if (!$updated) {
+        return array(
+            'success' => false,
+            'updated' => false,
+            'message' => mysqli_error($connect),
+        );
+    }
+
+    audit_log(array(
+        'log_act' => 'Edit',
+        'cdate' => $GLOBALS['cdate'] ?? date('Y-m-d'),
+        'ctime' => $GLOBALS['ctime'] ?? date('H:i:s'),
+        'uid' => USER_ID,
+        'cby' => USER_ID,
+        'query_rec' => $query,
+        'query_table' => FB_CUST_DEALS,
+        'oldval' => implodeWithComma($oldValues),
+        'changes' => implodeWithComma($newValues),
+        'act_msg' => USER_NAME . " updated linked Facebook customer record #<b>" . $customerId . "</b> from <b><i>" . $pageTitle . "</i></b>.",
+        'page' => $pageTitle,
+        'connect' => $connect,
+    ));
+
+    return array(
+        'success' => true,
+        'updated' => true,
+        'query' => $query,
+        'changed_fields' => $changedFields,
+    );
+}
+
 // to display data to input
 if ($dataId) { //edit/remove/view
     $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
@@ -98,6 +502,35 @@ if ($dataId) { //edit/remove/view
         $_SESSION['tempValConfirmBox'] = true;
         $act = "F";
     }
+}
+
+$memberPointAjaxRequested = ((string) input('member_point_ajax') === '1') || ((string) post('member_point_ajax') === '1');
+if ($memberPointAjaxRequested) {
+    $ajaxPlatform = memberPointNormalizePlatform(postSpaceFilter('member_point_platform'));
+    $ajaxCustomerId = (int) postSpaceFilter('member_point_customer_id');
+    $ajaxLocked = $act === 'E' && !empty($row['member_point_transaction_id']);
+    $payload = memberPointBuildLookupPayload($connect, $finance_connect, $ajaxPlatform, $ajaxCustomerId, array(
+        'allowed_platforms' => array('shopee', 'lazada'),
+        'locked' => $ajaxLocked,
+    ));
+    fbOrderReqMemberPointJsonExit($payload);
+}
+
+$fbCustomerAjaxRequested = ((string) input('fb_customer_ajax') === '1') || ((string) post('fb_customer_ajax') === '1');
+if ($fbCustomerAjaxRequested) {
+    $ajaxCustomerId = (int) postSpaceFilter('customer_id');
+    $customerRow = fbOrderReqFetchCustomerDealRow($connect, $ajaxCustomerId);
+    fbOrderReqCustomerJsonExit(fbOrderReqBuildCustomerAjaxPayload($connect, $finance_connect, $customerRow));
+}
+
+$fbCustomerSearchAjaxRequested = ((string) input('fb_customer_search_ajax') === '1') || ((string) post('fb_customer_search_ajax') === '1');
+if ($fbCustomerSearchAjaxRequested) {
+    $searchKeyword = postSpaceFilter('search');
+    $resultRows = fbOrderReqSearchCustomerDeals($connect, $searchKeyword, 15);
+    fbOrderReqCustomerJsonExit(array(
+        'success' => true,
+        'results' => $resultRows,
+    ));
 }
 
 if ($pendingStatusUpdate !== '' && !$forShouldSaveBeforeStatusUpdate) {
@@ -149,6 +582,7 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
     }
 
     $for_name = postSpaceFilter('for_name');
+    $for_customer_id = (int) postSpaceFilter('for_customer_id');
     $for_link = postSpaceFilter('for_link');
     $for_ctc = postSpaceFilter('for_contact');
     $for_pic = postSpaceFilter('for_pic_hidden');
@@ -198,11 +632,52 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
     }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
+    $memberPointAllowedPlatforms = array('shopee', 'lazada');
+    $memberPointAllowedUseTypes = array('none', 'gift', 'cashback');
+    $memberPointPostedPlatform = memberPointNormalizePlatform(postSpaceFilter('member_point_platform'));
+    $memberPointPostedCustomerId = (int) postSpaceFilter('member_point_customer_id');
+    $memberPointPostedCustomerLabel = trim((string) postSpaceFilter('member_point_customer_label'));
+    $memberPointPostedUseType = strtolower(trim((string) postSpaceFilter('member_point_use_type')));
+    if (!in_array($memberPointPostedUseType, $memberPointAllowedUseTypes, true)) {
+        $memberPointPostedUseType = 'none';
+    }
+    $memberPointPostedRedeemId = (int) postSpaceFilter('member_point_redeem_id');
+    $memberPointPostedCashbackPoints = (int) postSpaceFilter('member_point_cashback_points');
+    $memberPointPostedOriginalPrice = max(0, (float) postSpaceFilter('member_point_original_price'));
+    $memberPointLocked = $action === 'updRecord' && !empty($row['member_point_transaction_id']);
+    $memberPointPlatform = $memberPointLocked ? memberPointNormalizePlatform(isset($row['member_point_platform']) ? $row['member_point_platform'] : '') : $memberPointPostedPlatform;
+    $memberPointCustomerId = $memberPointLocked ? (int) (isset($row['member_point_customer_id']) ? $row['member_point_customer_id'] : 0) : $memberPointPostedCustomerId;
+    $memberPointCustomerLabel = $memberPointLocked ? trim((string) (isset($row['member_point_customer_label']) ? $row['member_point_customer_label'] : '')) : $memberPointPostedCustomerLabel;
+    $memberPointUseType = $memberPointLocked ? 'none' : $memberPointPostedUseType;
+    $memberPointRedeemId = $memberPointLocked ? (int) (isset($row['member_point_redeem_id']) ? $row['member_point_redeem_id'] : 0) : $memberPointPostedRedeemId;
+    $memberPointCashbackPoints = $memberPointLocked ? 0 : $memberPointPostedCashbackPoints;
+    $memberPointOriginalPrice = $memberPointLocked ? 0 : $memberPointPostedOriginalPrice;
+    $memberPointRedeemPoints = $memberPointLocked ? (int) (isset($row['member_point_redeem_points']) ? $row['member_point_redeem_points'] : 0) : 0;
+    $memberPointTransactionId = $memberPointLocked ? (int) (isset($row['member_point_transaction_id']) ? $row['member_point_transaction_id'] : 0) : 0;
+    $memberPointLookup = array();
+    $memberPointSelectedReward = array();
+    $memberPointSelectedRewardLabel = '';
+    $memberPointLinkChanged = false;
+    $memberPointRedeemCreated = false;
+    $memberPointAuditOldLink = '';
+    $memberPointAuditNewLink = '';
+    $memberPointAuditFailureMessage = '';
+    $memberPointCreatedTransactionId = 0;
+    $memberPointEffectiveLabel = '';
+    $memberPointPrivateEarnCreated = false;
+    $memberPointPrivateEarnPoints = 0;
+    $memberPointPrivateEarnTierLabel = '';
 
     switch ($action) {
         case 'addRecord':
         case 'updRecord':
             $error = 0;
+
+            if ($for_customer_id <= 0 && $action === 'updRecord') {
+                $for_customer_id = fbOrderReqFindCustomerDealId($connect, $for_name, $for_link);
+            }
+
+            $selectedFbCustomerRow = fbOrderReqFetchCustomerDealRow($connect, $for_customer_id);
 
             if ($_FILES["for_attach"]["size"] != 0) {
                 // move file
@@ -352,6 +827,137 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                 }
             }
 
+            if (!$memberPointLocked) {
+                if (!in_array($memberPointUseType, $memberPointAllowedUseTypes, true)) {
+                    $memberPointUseType = 'none';
+                }
+                if ($memberPointUseType !== 'gift') {
+                    $memberPointRedeemId = 0;
+                }
+                if ($memberPointUseType !== 'cashback') {
+                    $memberPointCashbackPoints = 0;
+                    $memberPointOriginalPrice = 0;
+                }
+
+                if ($memberPointPlatform !== '' && !in_array($memberPointPlatform, $memberPointAllowedPlatforms, true)) {
+                    $member_point_platform_err = 'Please select a valid member point platform.';
+                    $error = 1;
+                }
+
+                if ($memberPointCustomerId > 0 && $memberPointPlatform === '') {
+                    $member_point_platform_err = 'Please select Shopee or Lazada before linking a member.';
+                    $error = 1;
+                }
+
+                if ($memberPointPlatform !== '' && $memberPointCustomerId <= 0) {
+                    $member_point_customer_err = 'Please select a valid member.';
+                    $error = 1;
+                }
+
+                if ($memberPointUseType !== 'none' && ($memberPointPlatform === '' || $memberPointCustomerId <= 0)) {
+                    $member_point_redeem_err = 'Please link a valid member before applying member point redemption or cashback.';
+                    $error = 1;
+                }
+
+                if ($memberPointPlatform !== '' && $memberPointCustomerId > 0 && !$error) {
+                    $memberPointLookup = memberPointBuildLookupPayload($connect, $finance_connect, $memberPointPlatform, $memberPointCustomerId, array(
+                        'allowed_platforms' => $memberPointAllowedPlatforms,
+                        'sync_ledger' => true,
+                    ));
+
+                    if (empty($memberPointLookup['success'])) {
+                        $member_point_customer_err = isset($memberPointLookup['message']) ? (string) $memberPointLookup['message'] : 'Unable to load member point details.';
+                        $error = 1;
+                    } else {
+                        $memberPointCustomerLabel = isset($memberPointLookup['customer_label']) ? trim((string) $memberPointLookup['customer_label']) : $memberPointCustomerLabel;
+                        $memberPointEffectiveLabel = fbOrderReqBuildLinkedMemberLabel($memberPointPlatform, $memberPointCustomerLabel);
+                    }
+                }
+
+                if ($memberPointUseType === 'gift' && !$error) {
+                    if ($memberPointRedeemId <= 0) {
+                        $member_point_redeem_err = 'Please select a redeem item.';
+                        $error = 1;
+                    }
+                }
+
+                if ($memberPointUseType === 'gift' && $memberPointRedeemId > 0 && !$error) {
+                    $memberPointSelectedReward = memberPointFetchRedeemRowById($connect, $memberPointRedeemId);
+                    if (empty($memberPointSelectedReward)) {
+                        $member_point_redeem_err = 'Selected redeem item is no longer available.';
+                        $error = 1;
+                    } else {
+                        $memberPointRequiredPoints = (int) (isset($memberPointSelectedReward['point_tier']) ? $memberPointSelectedReward['point_tier'] : 0);
+                        $memberPointAvailablePoints = (int) (isset($memberPointLookup['available_points']) ? $memberPointLookup['available_points'] : 0);
+                        $memberPointEligibleRewardIds = array_map(function ($rewardRow) {
+                            return isset($rewardRow['id']) ? (int) $rewardRow['id'] : 0;
+                        }, isset($memberPointLookup['rewards']) && is_array($memberPointLookup['rewards']) ? $memberPointLookup['rewards'] : array());
+                        if ($memberPointRequiredPoints <= 0) {
+                            $member_point_redeem_err = 'Selected redeem item has an invalid point tier.';
+                            $error = 1;
+                        } else if ($memberPointAvailablePoints < $memberPointRequiredPoints) {
+                            $member_point_redeem_err = 'The selected member does not have enough available points for this redeem item.';
+                            $error = 1;
+                        } else if (!in_array($memberPointRedeemId, $memberPointEligibleRewardIds, true)) {
+                            $member_point_redeem_err = memberRedeemBuildThresholdFailureMessage($memberPointSelectedReward);
+                            $error = 1;
+                        } else {
+                            $memberPointRedeemPoints = $memberPointRequiredPoints;
+                            $memberPointSelectedRewardLabel = memberPointBuildRewardDisplayText($memberPointSelectedReward);
+                        }
+                    }
+                } else if ($memberPointUseType === 'cashback' && !$error) {
+                    $memberPointAvailablePoints = (int) (isset($memberPointLookup['available_points']) ? $memberPointLookup['available_points'] : 0);
+                    $memberPointOriginalPrice = $memberPointPostedOriginalPrice > 0 ? $memberPointPostedOriginalPrice : 0;
+                    $memberPointCashbackPoints = max(0, (int) $memberPointPostedCashbackPoints);
+
+                    if ($memberPointOriginalPrice <= 0) {
+                        $member_point_redeem_err = 'Original order amount is required before applying cashback.';
+                        $error = 1;
+                    } else if ($memberPointCashbackPoints <= 0) {
+                        $member_point_redeem_err = 'Cashback points must be greater than zero.';
+                        $error = 1;
+                    } else {
+                        $memberPointCashbackLimit = (int) floor($memberPointOriginalPrice * 0.30);
+                        if ($memberPointCashbackLimit <= 0) {
+                            $member_point_redeem_err = 'Cashback cannot exceed 30% of the order amount.';
+                            $error = 1;
+                        } else if ($memberPointCashbackPoints > $memberPointAvailablePoints) {
+                            $member_point_redeem_err = 'The selected member does not have enough available points for cashback.';
+                            $error = 1;
+                        } else if ($memberPointCashbackPoints > $memberPointCashbackLimit) {
+                            $member_point_redeem_err = 'Cashback points cannot exceed 30% of the order amount.';
+                            $error = 1;
+                        } else {
+                            $memberPointExpectedFinalPrice = round($memberPointOriginalPrice - $memberPointCashbackPoints, 2);
+                            if ($memberPointExpectedFinalPrice < 0) {
+                                $member_point_redeem_err = 'Cashback cannot reduce the order amount below zero.';
+                                $error = 1;
+                            } else if (abs($memberPointExpectedFinalPrice - (float) $for_price) > 0.01) {
+                                $member_point_redeem_err = 'Cashback deduction does not match the order price.';
+                                $error = 1;
+                            } else {
+                                $memberPointRedeemPoints = $memberPointCashbackPoints;
+                                $memberPointSelectedRewardLabel = fbOrderReqBuildCashbackLabel($memberPointCashbackPoints, $memberPointCashbackPoints);
+                            }
+                        }
+                    }
+                }
+            } else {
+                $memberPointEffectiveLabel = fbOrderReqBuildLinkedMemberLabel($memberPointPlatform, $memberPointCustomerLabel);
+                $memberPointLockedTransaction = $memberPointTransactionId > 0 ? memberPointFetchTransactionById($connect, $memberPointTransactionId) : array();
+                $memberPointLockedMetadata = !empty($memberPointLockedTransaction) ? memberPointDecodeTransactionMetadata($memberPointLockedTransaction) : array();
+                if (trim((string) ($memberPointLockedMetadata['redeem_kind'] ?? '')) === 'cashback') {
+                    $memberPointUseType = 'cashback';
+                    $memberPointSelectedRewardLabel = fbOrderReqBuildCashbackLabel($memberPointRedeemPoints, isset($memberPointLockedMetadata['cashback_amount']) ? (float) $memberPointLockedMetadata['cashback_amount'] : $memberPointRedeemPoints);
+                } else if ($memberPointRedeemId > 0) {
+                    $memberPointUseType = 'gift';
+                    $memberPointSelectedRewardLabel = fbOrderReqBuildRedeemLabel($connect, $memberPointRedeemId, $memberPointRedeemPoints);
+                } else {
+                    $memberPointUseType = 'none';
+                }
+            }
+
             if ($error) {
                 break;
             }
@@ -372,7 +978,27 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
 
             if ($action == 'addRecord') {
                 try {
-                    //check values
+                    if ($for_customer_id > 0 && !empty($selectedFbCustomerRow)) {
+                        $selectedCustomerSyncResult = fbOrderReqSyncSelectedCustomerDeal($connect, $for_customer_id, array(
+                            'name' => $for_name,
+                            'fb_link' => $for_link,
+                            'contact' => $for_ctc,
+                            'sales_pic' => $for_pic,
+                            'country' => $for_country,
+                            'brand' => $for_brand,
+                            'series' => $for_series,
+                            'fb_page' => $for_fbpage,
+                            'channel' => $for_channel,
+                            'ship_rec_name' => $for_rec_name,
+                            'ship_rec_add' => $for_rec_add,
+                            'ship_rec_contact' => $for_rec_ctc,
+                            'remark' => $for_remark,
+                        ), $pageTitle);
+                        if (empty($selectedCustomerSyncResult['success'])) {
+                            throw new Exception(isset($selectedCustomerSyncResult['message']) ? (string) $selectedCustomerSyncResult['message'] : 'Unable to update the selected Facebook customer record.');
+                        }
+                    }
+
                     if ($for_name) {
                         array_push($newvalarr, $for_name);
                         array_push($datafield, 'name');
@@ -381,77 +1007,62 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                         array_push($newvalarr, $for_link);
                         array_push($datafield, 'facebook link');
                     }
-
                     if ($for_ctc) {
                         array_push($newvalarr, $for_ctc);
                         array_push($datafield, 'contact');
                     }
-
                     if ($for_pic) {
                         array_push($newvalarr, $for_pic);
                         array_push($datafield, 'pic');
                     }
-
                     if ($for_country) {
                         array_push($newvalarr, $for_country);
                         array_push($datafield, 'country');
                     }
-
                     if ($for_brand) {
                         array_push($newvalarr, $for_brand);
                         array_push($datafield, 'brand');
                     }
-
                     if ($for_series) {
                         array_push($newvalarr, $for_series);
                         array_push($datafield, 'series');
                     }
-
                     if ($for_pkg) {
                         array_push($newvalarr, $for_pkg);
                         array_push($datafield, 'package');
                     }
-
                     if ($for_fbpage) {
                         array_push($newvalarr, $for_fbpage);
                         array_push($datafield, 'fb page');
                     }
-
                     if ($for_channel) {
                         array_push($newvalarr, $for_channel);
                         array_push($datafield, 'channel');
                     }
-
                     if ($for_price) {
                         array_push($newvalarr, $for_price);
                         array_push($datafield, 'price');
                     }
-
                     if ($for_pay) {
                         array_push($newvalarr, $for_pay);
                         array_push($datafield, 'payment method');
                     }
-
                     if ($for_rec_name) {
                         array_push($newvalarr, $for_rec_name);
                         array_push($datafield, 'receiver name');
                     }
-
                     if ($for_rec_ctc) {
                         array_push($newvalarr, $for_rec_ctc);
                         array_push($datafield, 'receiver contact');
                     }
-
                     if ($for_rec_add) {
                         array_push($newvalarr, $for_rec_add);
                         array_push($datafield, 'receiver address');
                     }
-
                     if ($for_attach) {
                         array_push($newvalarr, $for_attach);
                         array_push($datafield, 'attachment');
                     }
-
                     if ($for_remark) {
                         array_push($newvalarr, $for_remark);
                         array_push($datafield, 'remark');
@@ -472,23 +1083,132 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                         array_push($newvalarr, $for_airbill_attachment);
                         array_push($datafield, 'airbill_attachment');
                     }
-
-                    $tblName2 = FB_CUST_DEALS;
-                    $query = "INSERT INTO " . $tblName . " (name,fb_link,contact,sales_pic,country,brand,series,package,fb_page,channel,price,pay_method,ship_rec_name,ship_rec_add,ship_rec_contact,remark,attachment,order_status,stock_out_warehouse_id,airbill_no,airbill_attachment,create_by,create_date,create_time) VALUES ('$for_name','$for_link','$for_ctc','$for_pic','$for_country','$for_brand','$for_series','$for_pkg','$for_fbpage','$for_channel','$for_price','$for_pay','$for_rec_name','$for_rec_add','$for_rec_ctc','$for_remark','$for_attach','$for_order_status_sql'," . ($for_stock_out_warehouse_id > 0 ? $for_stock_out_warehouse_id : 'NULL') . ",'$for_airbill_no_sql','" . mysqli_real_escape_string($finance_connect, $for_airbill_attachment) . "','" . USER_ID . "',curdate(),curtime())";
-                   
-                    $result2 = getData('*', "name = '$for_name' AND fb_link = '$for_link'", '', $tblName2, $connect);
-                    
-                    if (!$result2 || $result2->num_rows == 0) {
-                        $query2 = "INSERT INTO " . $tblName2 . " (name, fb_link, contact, sales_pic, country, brand, fb_page, channel, series,ship_rec_name, ship_rec_add, ship_rec_contact, remark, create_by, create_date,create_time)  VALUES ('$for_name','$for_link','$for_ctc','$for_pic','$for_country','$for_brand','$for_fbpage','$for_channel','$for_series','$for_rec_name','$for_rec_add','$for_rec_ctc','$for_remark','" . USER_ID . "',curdate(),curtime())";
-                        $returnData2 = mysqli_query($connect, $query2);
+                    if ($memberPointPlatform !== '' && $memberPointCustomerId > 0) {
+                        $memberPointLinkChanged = true;
+                        $memberPointAuditNewLink = fbOrderReqBuildLinkedMemberLabel($memberPointPlatform, $memberPointCustomerLabel);
+                        array_push($newvalarr, $memberPointAuditNewLink);
+                        array_push($datafield, 'linked member');
                     }
-                    // Execute the query
+                    if ($memberPointUseType !== 'none' && $memberPointSelectedRewardLabel !== '') {
+                        array_push($newvalarr, $memberPointSelectedRewardLabel);
+                        array_push($datafield, 'member point redeem');
+                    }
+
+                    $memberPointPlatformSql = $memberPointPlatform !== '' ? "'" . mysqli_real_escape_string($finance_connect, $memberPointPlatform) . "'" : "NULL";
+                    $memberPointCustomerIdSql = $memberPointCustomerId > 0 ? $memberPointCustomerId : "NULL";
+                    $memberPointCustomerLabelSql = $memberPointCustomerLabel !== '' ? "'" . mysqli_real_escape_string($finance_connect, $memberPointCustomerLabel) . "'" : "NULL";
+                    $memberPointRedeemIdSql = ($memberPointUseType === 'gift' && $memberPointRedeemId > 0) ? $memberPointRedeemId : "NULL";
+                    $memberPointRedeemPointsSql = 0;
+                    $memberPointTransactionIdSql = "NULL";
+
+                    $query = "INSERT INTO " . $tblName . " (name,fb_link,contact,sales_pic,country,brand,series,package,fb_page,channel,price,pay_method,ship_rec_name,ship_rec_add,ship_rec_contact,remark,attachment,order_status,stock_out_warehouse_id,airbill_no,airbill_attachment,member_point_platform,member_point_customer_id,member_point_customer_label,member_point_redeem_id,member_point_redeem_points,member_point_transaction_id,create_by,create_date,create_time) VALUES ('$for_name','$for_link','$for_ctc','$for_pic','$for_country','$for_brand','$for_series','$for_pkg','$for_fbpage','$for_channel','$for_price','$for_pay','$for_rec_name','$for_rec_add','$for_rec_ctc','$for_remark','$for_attach','$for_order_status_sql'," . ($for_stock_out_warehouse_id > 0 ? $for_stock_out_warehouse_id : 'NULL') . ",'$for_airbill_no_sql','" . mysqli_real_escape_string($finance_connect, $for_airbill_attachment) . "'," . $memberPointPlatformSql . "," . $memberPointCustomerIdSql . "," . $memberPointCustomerLabelSql . "," . $memberPointRedeemIdSql . "," . $memberPointRedeemPointsSql . "," . $memberPointTransactionIdSql . ",'" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
                     if (!$returnData) {
                         throw new Exception(mysqli_error($finance_connect));
                     }
 
                     $dataId = (int) mysqli_insert_id($finance_connect);
+                    $shouldAttemptRedeemOnAdd = $dataId > 0 && !$memberPointLocked && (
+                        ($memberPointUseType === 'gift' && $memberPointRedeemId > 0) ||
+                        ($memberPointUseType === 'cashback' && $memberPointCashbackPoints > 0)
+                    );
+                    if ($shouldAttemptRedeemOnAdd) {
+                        $memberPointRedeemResult = memberPointCreateRedeemTransaction($connect, $finance_connect, array(
+                            'platform' => $memberPointPlatform,
+                            'customer_id' => $memberPointCustomerId,
+                            'customer_label' => $memberPointCustomerLabel,
+                            'redeem_id' => $memberPointRedeemId,
+                            'redeem_kind' => $memberPointUseType === 'cashback' ? 'cashback' : 'gift',
+                            'cashback_points' => $memberPointUseType === 'cashback' ? $memberPointCashbackPoints : 0,
+                            'original_order_amount' => $memberPointUseType === 'cashback' ? $memberPointOriginalPrice : 0,
+                            'final_order_amount' => $memberPointUseType === 'cashback' ? (float) $for_price : 0,
+                            'source_platform' => 'facebook',
+                            'source_table' => $tblName,
+                            'source_record_id' => $dataId,
+                            'reference_label' => 'Facebook Order #' . $dataId,
+                            'metadata' => array(
+                                'order_name' => $for_name,
+                                'fb_link' => $for_link,
+                            ),
+                        ));
+
+                        if (empty($memberPointRedeemResult['success'])) {
+                            fbOrderReqDeleteOrderById($finance_connect, $tblName, $dataId);
+                            $memberPointAuditFailureMessage = isset($memberPointRedeemResult['message']) ? (string) $memberPointRedeemResult['message'] : 'Unable to deduct member points.';
+                            fbOrderReqWriteMemberPointAudit(
+                                $connect,
+                                $pageTitle,
+                                'add',
+                                USER_NAME . ' failed to create a member point redeem transaction for Facebook order #' . $dataId . '. The order insert was rolled back.',
+                                'member_point_redeem_failed',
+                                '',
+                                $memberPointAuditFailureMessage
+                            );
+                            unset($query, $returnData);
+                            throw new Exception($memberPointAuditFailureMessage);
+                        }
+
+                        $memberPointCreatedTransactionId = (int) (isset($memberPointRedeemResult['transaction_id']) ? $memberPointRedeemResult['transaction_id'] : 0);
+                        $memberPointRedeemPoints = (int) (isset($memberPointRedeemResult['required_points']) ? $memberPointRedeemResult['required_points'] : $memberPointRedeemPoints);
+                        $memberPointRedeemCreated = $memberPointCreatedTransactionId > 0;
+                        $memberPointTransactionId = $memberPointCreatedTransactionId;
+                        $updateMemberPointRedeemIdSql = ($memberPointUseType === 'gift' && $memberPointRedeemId > 0) ? $memberPointRedeemId : 'NULL';
+                        $updateMemberPointSql = "UPDATE `" . $tblName . "` SET `member_point_redeem_id` = " . $updateMemberPointRedeemIdSql . ", `member_point_redeem_points` = " . $memberPointRedeemPoints . ", `member_point_transaction_id` = " . $memberPointCreatedTransactionId . " WHERE `id` = " . $dataId . " LIMIT 1";
+                        if (!mysqli_query($finance_connect, $updateMemberPointSql)) {
+                            memberPointSoftDeleteTransactionById($connect, $memberPointCreatedTransactionId);
+                            fbOrderReqDeleteOrderById($finance_connect, $tblName, $dataId);
+                            $memberPointAuditFailureMessage = 'Unable to finalize member point redeem details on the saved Facebook order.';
+                            fbOrderReqWriteMemberPointAudit(
+                                $connect,
+                                $pageTitle,
+                                'add',
+                                USER_NAME . ' failed to finalize the member point redeem update for Facebook order #' . $dataId . '. The order insert was rolled back.',
+                                'member_point_redeem_finalize_failed',
+                                '',
+                                $memberPointAuditFailureMessage
+                            );
+                            unset($query, $returnData);
+                            throw new Exception($memberPointAuditFailureMessage);
+                        }
+                    }
+
+                    if ($dataId > 0) {
+                        $memberPointPrivateEarnResult = memberPointUpsertFacebookPrivateEarnTransaction($connect, $finance_connect, array(
+                            'order_id' => $dataId,
+                            'platform' => $memberPointPlatform,
+                            'customer_id' => $memberPointCustomerId,
+                            'customer_label' => $memberPointCustomerLabel,
+                            'order_amount' => (float) $for_price,
+                            'order_date' => $cdate,
+                            'reference_label' => 'Facebook Order #' . $dataId,
+                            'order_name' => $for_name,
+                            'fb_link' => $for_link,
+                        ));
+
+                        if (empty($memberPointPrivateEarnResult['success'])) {
+                            if ($memberPointCreatedTransactionId > 0) {
+                                memberPointSoftDeleteTransactionById($connect, $memberPointCreatedTransactionId);
+                            }
+                            fbOrderReqDeleteOrderById($finance_connect, $tblName, $dataId);
+                            $memberPointAuditFailureMessage = isset($memberPointPrivateEarnResult['message']) ? (string) $memberPointPrivateEarnResult['message'] : 'Unable to finalize private member point earn.';
+                            fbOrderReqWriteMemberPointAudit(
+                                $connect,
+                                $pageTitle,
+                                'add',
+                                USER_NAME . ' failed to create a private member point earn transaction for Facebook order #' . $dataId . '. The order insert was rolled back.',
+                                'member_point_private_earn_failed',
+                                '',
+                                $memberPointAuditFailureMessage
+                            );
+                            unset($query, $returnData);
+                            throw new Exception($memberPointAuditFailureMessage);
+                        }
+
+                        $memberPointPrivateEarnPoints = (int) (isset($memberPointPrivateEarnResult['points']) ? $memberPointPrivateEarnResult['points'] : 0);
+                        $memberPointPrivateEarnTierLabel = trim((string) (($memberPointPrivateEarnResult['tier_meta']['label'] ?? '')));
+                        $memberPointPrivateEarnCreated = $memberPointPrivateEarnPoints > 0 && empty($memberPointPrivateEarnResult['deleted_existing']);
+                    }
+
                     if ($for_order_status === 'TP' && $dataId > 0) {
                         $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataId, 'facebook');
                         $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID, 'facebook');
@@ -499,7 +1219,7 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                             }
                         }
                     }
-                    
+
                     $_SESSION['tempValConfirmBox'] = true;
                 } catch (Exception $e) {
                     $errorMsg = $e->getMessage();
@@ -508,95 +1228,110 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                 }
             } else {
                 try {
-                    // take old value
                     $result = getData('*', "id = '$dataId'", 'LIMIT 1', $tblName, $finance_connect);
                     $row = $result->fetch_assoc();
+                    $previousRow = $row;
+                    if ($for_customer_id > 0 && !empty($selectedFbCustomerRow)) {
+                        $selectedCustomerSyncResult = fbOrderReqSyncSelectedCustomerDeal($connect, $for_customer_id, array(
+                            'name' => $for_name,
+                            'fb_link' => $for_link,
+                            'contact' => $for_ctc,
+                            'sales_pic' => $for_pic,
+                            'country' => $for_country,
+                            'brand' => $for_brand,
+                            'series' => $for_series,
+                            'fb_page' => $for_fbpage,
+                            'channel' => $for_channel,
+                            'ship_rec_name' => $for_rec_name,
+                            'ship_rec_add' => $for_rec_add,
+                            'ship_rec_contact' => $for_rec_ctc,
+                            'remark' => $for_remark,
+                        ), $pageTitle);
+                        if (empty($selectedCustomerSyncResult['success'])) {
+                            throw new Exception(isset($selectedCustomerSyncResult['message']) ? (string) $selectedCustomerSyncResult['message'] : 'Unable to update the selected Facebook customer record.');
+                        }
+                    }
+                    $memberPointLocked = !empty($row['member_point_transaction_id']);
+                    if ($memberPointLocked) {
+                        $memberPointPlatform = memberPointNormalizePlatform(isset($row['member_point_platform']) ? $row['member_point_platform'] : '');
+                        $memberPointCustomerId = (int) (isset($row['member_point_customer_id']) ? $row['member_point_customer_id'] : 0);
+                        $memberPointCustomerLabel = trim((string) (isset($row['member_point_customer_label']) ? $row['member_point_customer_label'] : ''));
+                        $memberPointRedeemId = (int) (isset($row['member_point_redeem_id']) ? $row['member_point_redeem_id'] : 0);
+                        $memberPointRedeemPoints = (int) (isset($row['member_point_redeem_points']) ? $row['member_point_redeem_points'] : 0);
+                        $memberPointTransactionId = (int) (isset($row['member_point_transaction_id']) ? $row['member_point_transaction_id'] : 0);
+                        $memberPointSelectedRewardLabel = $memberPointRedeemId > 0 ? fbOrderReqBuildRedeemLabel($connect, $memberPointRedeemId, $memberPointRedeemPoints) : '';
+                    }
 
-                    // check value
                     if ($row['name'] != $for_name) {
                         array_push($oldvalarr, $row['name']);
                         array_push($chgvalarr, $for_name);
                         array_push($datafield, 'name');
                     }
-
                     if ($row['fb_link'] != $for_link) {
                         array_push($oldvalarr, $row['fb_link']);
                         array_push($chgvalarr, $for_link);
                         array_push($datafield, 'fb link');
                     }
-
                     if ($row['contact'] != $for_ctc) {
                         array_push($oldvalarr, $row['contact']);
                         array_push($chgvalarr, $for_ctc);
                         array_push($datafield, 'contact');
                     }
-
                     if ($row['sales_pic'] != $for_pic) {
                         array_push($oldvalarr, $row['sales_pic']);
                         array_push($chgvalarr, $for_pic);
                         array_push($datafield, 'pic');
                     }
-
                     if ($row['country'] != $for_country) {
                         array_push($oldvalarr, $row['country']);
                         array_push($chgvalarr, $for_country);
                         array_push($datafield, 'country');
                     }
-
                     if ($row['brand'] != $for_brand) {
                         array_push($oldvalarr, $row['brand']);
                         array_push($chgvalarr, $for_brand);
                         array_push($datafield, 'brand');
                     }
-
                     if ($row['series'] != $for_series) {
                         array_push($oldvalarr, $row['series']);
                         array_push($chgvalarr, $for_series);
                         array_push($datafield, 'series');
                     }
-
                     if ($row['package'] != $for_pkg) {
                         array_push($oldvalarr, $row['package']);
                         array_push($chgvalarr, $for_pkg);
                         array_push($datafield, 'package');
                     }
-
                     if ($row['fb_page'] != $for_fbpage) {
                         array_push($oldvalarr, $row['fb_page']);
                         array_push($chgvalarr, $for_fbpage);
                         array_push($datafield, 'fb_page');
                     }
-
                     if ($row['channel'] != $for_channel) {
                         array_push($oldvalarr, $row['channel']);
                         array_push($chgvalarr, $for_channel);
                         array_push($datafield, 'channel');
                     }
-
                     if ($row['price'] != $for_price) {
                         array_push($oldvalarr, $row['price']);
                         array_push($chgvalarr, $for_price);
                         array_push($datafield, 'price');
                     }
-
                     if ($row['pay_method'] != $for_pay) {
                         array_push($oldvalarr, $row['pay_method']);
                         array_push($chgvalarr, $for_pay);
                         array_push($datafield, 'payment method');
                     }
-
                     if ($row['ship_rec_name'] != $for_rec_name) {
                         array_push($oldvalarr, $row['ship_rec_name']);
                         array_push($chgvalarr, $for_rec_name);
                         array_push($datafield, 'shipping receiver name');
                     }
-
                     if ($row['ship_rec_contact'] != $for_rec_ctc) {
                         array_push($oldvalarr, $row['ship_rec_contact']);
                         array_push($chgvalarr, $for_rec_ctc);
                         array_push($datafield, 'shipping receiver contact');
                     }
-
                     if ($row['ship_rec_add'] != $for_rec_add) {
                         array_push($oldvalarr, $row['ship_rec_add']);
                         array_push($chgvalarr, $for_rec_add);
@@ -636,23 +1371,169 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                         array_push($datafield, 'airbill_attachment');
                     }
 
-                    // convert into string
+                    $memberPointAuditOldLink = fbOrderReqBuildLinkedMemberLabel(
+                        isset($row['member_point_platform']) ? $row['member_point_platform'] : '',
+                        isset($row['member_point_customer_label']) ? $row['member_point_customer_label'] : ''
+                    );
+                    $memberPointAuditNewLink = fbOrderReqBuildLinkedMemberLabel($memberPointPlatform, $memberPointCustomerLabel);
+                    if ($memberPointAuditOldLink !== $memberPointAuditNewLink) {
+                        $memberPointLinkChanged = true;
+                        array_push($oldvalarr, $memberPointAuditOldLink !== '' ? $memberPointAuditOldLink : 'Empty Value');
+                        array_push($chgvalarr, $memberPointAuditNewLink !== '' ? $memberPointAuditNewLink : 'Empty Value');
+                        array_push($datafield, 'linked member');
+                    }
+
+                    $memberPointOldRedeemLabel = '';
+                    $memberPointOldTransactionId = (int) (isset($row['member_point_transaction_id']) ? $row['member_point_transaction_id'] : 0);
+                    if ($memberPointOldTransactionId > 0) {
+                        $memberPointOldTransaction = memberPointFetchTransactionById($connect, $memberPointOldTransactionId);
+                        $memberPointOldMetadata = !empty($memberPointOldTransaction) ? memberPointDecodeTransactionMetadata($memberPointOldTransaction) : array();
+                        if (trim((string) ($memberPointOldMetadata['redeem_kind'] ?? '')) === 'cashback') {
+                            $memberPointOldRedeemLabel = fbOrderReqBuildCashbackLabel(
+                                (int) (isset($row['member_point_redeem_points']) ? $row['member_point_redeem_points'] : 0),
+                                isset($memberPointOldMetadata['cashback_amount']) ? (float) $memberPointOldMetadata['cashback_amount'] : (int) (isset($row['member_point_redeem_points']) ? $row['member_point_redeem_points'] : 0)
+                            );
+                        }
+                    }
+                    if ($memberPointOldRedeemLabel === '' && (int) (isset($row['member_point_redeem_id']) ? $row['member_point_redeem_id'] : 0) > 0) {
+                        $memberPointOldRedeemLabel = fbOrderReqBuildRedeemLabel($connect, (int) $row['member_point_redeem_id'], (int) (isset($row['member_point_redeem_points']) ? $row['member_point_redeem_points'] : 0));
+                    }
+                    $memberPointNewRedeemLabel = $memberPointUseType !== 'none'
+                        ? ($memberPointSelectedRewardLabel !== '' ? $memberPointSelectedRewardLabel : ($memberPointRedeemId > 0 ? fbOrderReqBuildRedeemLabel($connect, $memberPointRedeemId, $memberPointRedeemPoints) : fbOrderReqBuildCashbackLabel($memberPointRedeemPoints, $memberPointRedeemPoints)))
+                        : '';
+                    if ($memberPointOldRedeemLabel !== $memberPointNewRedeemLabel) {
+                        array_push($oldvalarr, $memberPointOldRedeemLabel !== '' ? $memberPointOldRedeemLabel : 'Empty Value');
+                        array_push($chgvalarr, $memberPointNewRedeemLabel !== '' ? $memberPointNewRedeemLabel : 'Empty Value');
+                        array_push($datafield, 'member point redeem');
+                    }
+
                     $oldval = implode(",", $oldvalarr);
                     $chgval = implode(",", $chgvalarr);
-                    $_SESSION['tempValConfirmBox'] = true;
 
-                    if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET name = '$for_name', fb_link = '$for_link', contact = '$for_ctc', sales_pic = '$for_pic', country = '$for_country', brand = '$for_brand', series = '$for_series', package = '$for_pkg', fb_page = '$for_fbpage', channel = '$for_channel', price = '$for_price', pay_method = '$for_pay', ship_rec_name = '$for_rec_name', ship_rec_add = '$for_rec_add', ship_rec_contact = '$for_rec_ctc', remark ='$for_remark', attachment ='$for_attach', order_status = '$for_order_status_sql', stock_out_warehouse_id = " . ($for_stock_out_warehouse_id > 0 ? $for_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$for_airbill_no_sql', airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $for_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                    $shouldAttemptRedeemOnEdit = !$memberPointLocked
+                        && (int) (isset($row['member_point_transaction_id']) ? $row['member_point_transaction_id'] : 0) <= 0
+                        && (
+                            ($memberPointUseType === 'gift' && $memberPointRedeemId > 0) ||
+                            ($memberPointUseType === 'cashback' && $memberPointCashbackPoints > 0)
+                        );
+                    $memberPointPlatformSql = $memberPointPlatform !== '' ? "'" . mysqli_real_escape_string($finance_connect, $memberPointPlatform) . "'" : "NULL";
+                    $memberPointCustomerIdSql = $memberPointCustomerId > 0 ? $memberPointCustomerId : "NULL";
+                    $memberPointCustomerLabelSql = $memberPointCustomerLabel !== '' ? "'" . mysqli_real_escape_string($finance_connect, $memberPointCustomerLabel) . "'" : "NULL";
+                    $memberPointRedeemIdSql = ($memberPointUseType === 'gift' && $memberPointRedeemId > 0) ? $memberPointRedeemId : "NULL";
+                    $memberPointRedeemPointsSql = $memberPointLocked ? $memberPointRedeemPoints : 0;
+                    $memberPointTransactionIdSql = $memberPointLocked && $memberPointTransactionId > 0 ? $memberPointTransactionId : "NULL";
+
+                    if (count($oldvalarr) > 0 || $shouldAttemptRedeemOnEdit) {
+                        $query = "UPDATE " . $tblName . " SET name = '$for_name', fb_link = '$for_link', contact = '$for_ctc', sales_pic = '$for_pic', country = '$for_country', brand = '$for_brand', series = '$for_series', package = '$for_pkg', fb_page = '$for_fbpage', channel = '$for_channel', price = '$for_price', pay_method = '$for_pay', ship_rec_name = '$for_rec_name', ship_rec_add = '$for_rec_add', ship_rec_contact = '$for_rec_ctc', remark ='$for_remark', attachment ='$for_attach', order_status = '$for_order_status_sql', stock_out_warehouse_id = " . ($for_stock_out_warehouse_id > 0 ? $for_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$for_airbill_no_sql', airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $for_airbill_attachment) . "', member_point_platform = " . $memberPointPlatformSql . ", member_point_customer_id = " . $memberPointCustomerIdSql . ", member_point_customer_label = " . $memberPointCustomerLabelSql . ", member_point_redeem_id = " . $memberPointRedeemIdSql . ", member_point_redeem_points = " . $memberPointRedeemPointsSql . ", member_point_transaction_id = " . $memberPointTransactionIdSql . ", update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
+                        if (!$returnData) {
+                            throw new Exception(mysqli_error($finance_connect));
+                        }
 
-                        // --- FIX: Delete the old attachment from the folder ---
-                        if ($returnData && isset($row['attachment']) && $row['attachment'] != '' && $row['attachment'] != $for_attach) {
-                            $old_file_path = $img_path . $row['attachment'];
-                            if (file_exists($old_file_path)) {
-                                unlink($old_file_path); // Physically removes the file from the server
+                        if ($shouldAttemptRedeemOnEdit) {
+                            $memberPointRedeemResult = memberPointCreateRedeemTransaction($connect, $finance_connect, array(
+                                'platform' => $memberPointPlatform,
+                                'customer_id' => $memberPointCustomerId,
+                                'customer_label' => $memberPointCustomerLabel,
+                                'redeem_id' => $memberPointRedeemId,
+                                'redeem_kind' => $memberPointUseType === 'cashback' ? 'cashback' : 'gift',
+                                'cashback_points' => $memberPointUseType === 'cashback' ? $memberPointCashbackPoints : 0,
+                                'original_order_amount' => $memberPointUseType === 'cashback' ? $memberPointOriginalPrice : 0,
+                                'final_order_amount' => $memberPointUseType === 'cashback' ? (float) $for_price : 0,
+                                'source_platform' => 'facebook',
+                                'source_table' => $tblName,
+                                'source_record_id' => (int) $dataId,
+                                'reference_label' => 'Facebook Order #' . (int) $dataId,
+                                'metadata' => array(
+                                    'order_name' => $for_name,
+                                    'fb_link' => $for_link,
+                                ),
+                            ));
+
+                            if (empty($memberPointRedeemResult['success'])) {
+                                fbOrderReqRestoreOrderRow($finance_connect, $tblName, (int) $dataId, $previousRow);
+                                $memberPointAuditFailureMessage = isset($memberPointRedeemResult['message']) ? (string) $memberPointRedeemResult['message'] : 'Unable to deduct member points.';
+                                fbOrderReqWriteMemberPointAudit(
+                                    $connect,
+                                    $pageTitle,
+                                    'edit',
+                                    USER_NAME . ' failed to create a member point redeem transaction for Facebook order #' . (int) $dataId . '. The previous order data was restored.',
+                                    'member_point_redeem_failed',
+                                    '',
+                                    $memberPointAuditFailureMessage
+                                );
+                                unset($query, $returnData);
+                                throw new Exception($memberPointAuditFailureMessage);
+                            }
+
+                            $memberPointCreatedTransactionId = (int) (isset($memberPointRedeemResult['transaction_id']) ? $memberPointRedeemResult['transaction_id'] : 0);
+                            $memberPointRedeemPoints = (int) (isset($memberPointRedeemResult['required_points']) ? $memberPointRedeemResult['required_points'] : $memberPointRedeemPoints);
+                            $memberPointRedeemCreated = $memberPointCreatedTransactionId > 0;
+                            $memberPointTransactionId = $memberPointCreatedTransactionId;
+
+                            $finalizeMemberPointRedeemIdSql = ($memberPointUseType === 'gift' && $memberPointRedeemId > 0) ? $memberPointRedeemId : 'NULL';
+                            $finalizeRedeemSql = "UPDATE `" . $tblName . "` SET `member_point_redeem_id` = " . $finalizeMemberPointRedeemIdSql . ", `member_point_redeem_points` = " . $memberPointRedeemPoints . ", `member_point_transaction_id` = " . $memberPointCreatedTransactionId . " WHERE `id` = " . (int) $dataId . " LIMIT 1";
+                            if (!mysqli_query($finance_connect, $finalizeRedeemSql)) {
+                                memberPointSoftDeleteTransactionById($connect, $memberPointCreatedTransactionId);
+                                fbOrderReqRestoreOrderRow($finance_connect, $tblName, (int) $dataId, $previousRow);
+                                $memberPointAuditFailureMessage = 'Unable to finalize member point redeem details on the edited Facebook order.';
+                                fbOrderReqWriteMemberPointAudit(
+                                    $connect,
+                                    $pageTitle,
+                                    'edit',
+                                    USER_NAME . ' failed to finalize the member point redeem update for Facebook order #' . (int) $dataId . '. The previous order data was restored.',
+                                    'member_point_redeem_finalize_failed',
+                                    '',
+                                    $memberPointAuditFailureMessage
+                                );
+                                unset($query, $returnData);
+                                throw new Exception($memberPointAuditFailureMessage);
                             }
                         }
 
+                        $memberPointPrivateEarnResult = memberPointUpsertFacebookPrivateEarnTransaction($connect, $finance_connect, array(
+                            'order_id' => (int) $dataId,
+                            'platform' => $memberPointPlatform,
+                            'customer_id' => $memberPointCustomerId,
+                            'customer_label' => $memberPointCustomerLabel,
+                            'order_amount' => (float) $for_price,
+                            'order_date' => isset($previousRow['create_date']) ? (string) $previousRow['create_date'] : $cdate,
+                            'reference_label' => 'Facebook Order #' . (int) $dataId,
+                            'order_name' => $for_name,
+                            'fb_link' => $for_link,
+                        ));
+
+                        if (empty($memberPointPrivateEarnResult['success'])) {
+                            if ($memberPointCreatedTransactionId > 0) {
+                                memberPointSoftDeleteTransactionById($connect, $memberPointCreatedTransactionId);
+                            }
+                            fbOrderReqRestoreOrderRow($finance_connect, $tblName, (int) $dataId, $previousRow);
+                            $memberPointAuditFailureMessage = isset($memberPointPrivateEarnResult['message']) ? (string) $memberPointPrivateEarnResult['message'] : 'Unable to finalize private member point earn.';
+                            fbOrderReqWriteMemberPointAudit(
+                                $connect,
+                                $pageTitle,
+                                'edit',
+                                USER_NAME . ' failed to create a private member point earn transaction for Facebook order #' . (int) $dataId . '. The previous order data was restored.',
+                                'member_point_private_earn_failed',
+                                '',
+                                $memberPointAuditFailureMessage
+                            );
+                            unset($query, $returnData);
+                            throw new Exception($memberPointAuditFailureMessage);
+                        }
+
+                        $memberPointPrivateEarnPoints = (int) (isset($memberPointPrivateEarnResult['points']) ? $memberPointPrivateEarnResult['points'] : 0);
+                        $memberPointPrivateEarnTierLabel = trim((string) (($memberPointPrivateEarnResult['tier_meta']['label'] ?? '')));
+                        $memberPointPrivateEarnCreated = $memberPointPrivateEarnPoints > 0;
+
+                        if (isset($previousRow['attachment']) && $previousRow['attachment'] != '' && $previousRow['attachment'] != $for_attach) {
+                            $old_file_path = $img_path . $previousRow['attachment'];
+                            if (file_exists($old_file_path)) {
+                                unlink($old_file_path);
+                            }
+                        }
+
+                        $_SESSION['tempValConfirmBox'] = true;
                     } else {
                         $act = 'NC';
                     }
@@ -691,6 +1572,50 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                     $log['act_msg'] = actMsgLog($dataId, $datafield, '', $oldvalarr, $chgvalarr, $tblName, $pageAction, (isset($returnData) ? '' : $errorMsg));
                 }
                 audit_log($log);
+            }
+
+            if (!empty($returnData)) {
+                if ($memberPointLinkChanged) {
+                    fbOrderReqWriteMemberPointAudit(
+                        $connect,
+                        $pageTitle,
+                        strtolower((string) $pageAction),
+                        USER_NAME . ' saved member point link details for Facebook order #' . (int) $dataId . '.',
+                        'member_point_link',
+                        $memberPointAuditOldLink,
+                        $memberPointAuditNewLink
+                    );
+                }
+
+                if ($memberPointRedeemCreated && $memberPointTransactionId > 0) {
+                    $memberPointRedeemAuditLabel = $memberPointSelectedRewardLabel !== '' ? $memberPointSelectedRewardLabel : fbOrderReqBuildRedeemLabel($connect, $memberPointRedeemId, $memberPointRedeemPoints);
+                    fbOrderReqWriteMemberPointAudit(
+                        $connect,
+                        $pageTitle,
+                        strtolower((string) $pageAction),
+                        USER_NAME . ' created member point redeem transaction #' . $memberPointTransactionId . ' for Facebook order #' . (int) $dataId . '.',
+                        'member_point_redeem_transaction',
+                        '',
+                        $memberPointRedeemAuditLabel . ' (' . $memberPointRedeemPoints . ' points)'
+                    );
+                }
+
+                if ($memberPointPrivateEarnCreated && $memberPointPlatform !== '' && $memberPointCustomerId > 0) {
+                    $memberPointPrivateEarnAuditText = $memberPointPrivateEarnPoints . ' private points';
+                    if ($memberPointPrivateEarnTierLabel !== '') {
+                        $memberPointPrivateEarnAuditText .= ' (' . $memberPointPrivateEarnTierLabel . ')';
+                    }
+
+                    fbOrderReqWriteMemberPointAudit(
+                        $connect,
+                        $pageTitle,
+                        strtolower((string) $pageAction),
+                        USER_NAME . ' synced private member point earn for Facebook order #' . (int) $dataId . '.',
+                        'member_point_private_earn',
+                        '',
+                        $memberPointPrivateEarnAuditText
+                    );
+                }
             }
 
             if ($action === 'updRecord' && $forShouldSaveBeforeStatusUpdate) {
@@ -831,6 +1756,89 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
     $redirectPage,
     $pageTitle
 );
+
+$memberPointRenderPlatform = isset($memberPointPlatform) ? memberPointNormalizePlatform($memberPointPlatform) : memberPointNormalizePlatform(isset($row['member_point_platform']) ? $row['member_point_platform'] : '');
+$memberPointRenderCustomerId = isset($memberPointCustomerId) ? (int) $memberPointCustomerId : (int) (isset($row['member_point_customer_id']) ? $row['member_point_customer_id'] : 0);
+$memberPointRenderCustomerLabel = isset($memberPointCustomerLabel) ? trim((string) $memberPointCustomerLabel) : trim((string) (isset($row['member_point_customer_label']) ? $row['member_point_customer_label'] : ''));
+$memberPointRenderRedeemId = isset($memberPointRedeemId) ? (int) $memberPointRedeemId : (int) (isset($row['member_point_redeem_id']) ? $row['member_point_redeem_id'] : 0);
+$memberPointRenderRedeemPoints = isset($memberPointRedeemPoints) ? (int) $memberPointRedeemPoints : (int) (isset($row['member_point_redeem_points']) ? $row['member_point_redeem_points'] : 0);
+$memberPointRenderTransactionId = (int) (isset($row['member_point_transaction_id']) ? $row['member_point_transaction_id'] : 0);
+$memberPointRenderLocked = ($act === 'E' && $memberPointRenderTransactionId > 0);
+$memberPointRenderDisabled = $act === '' || $memberPointRenderLocked;
+$memberPointRenderTransactionRow = $memberPointRenderTransactionId > 0 ? memberPointFetchTransactionById($connect, $memberPointRenderTransactionId) : array();
+$memberPointRenderTransactionMetadata = !empty($memberPointRenderTransactionRow) ? memberPointDecodeTransactionMetadata($memberPointRenderTransactionRow) : array();
+$memberPointRenderUseType = isset($memberPointUseType) && in_array($memberPointUseType, array('none', 'gift', 'cashback'), true) ? $memberPointUseType : 'none';
+$memberPointRenderCashbackPoints = isset($memberPointCashbackPoints) ? max(0, (int) $memberPointCashbackPoints) : 0;
+$memberPointRenderOriginalPrice = isset($memberPointOriginalPrice) ? max(0, (float) $memberPointOriginalPrice) : 0;
+$memberPointRenderLookup = array(
+    'success' => false,
+    'customer_label' => $memberPointRenderCustomerLabel,
+    'available_points' => 0,
+    'rewards' => array(),
+    'message' => '',
+    'locked' => $memberPointRenderLocked,
+);
+
+if ($memberPointRenderPlatform !== '' && $memberPointRenderCustomerId > 0) {
+    if (isset($memberPointLookup['success']) && $memberPointRenderPlatform === (isset($memberPointPlatform) ? $memberPointPlatform : '') && $memberPointRenderCustomerId === (int) (isset($memberPointCustomerId) ? $memberPointCustomerId : 0)) {
+        $memberPointRenderLookup = $memberPointLookup;
+    } else {
+        $memberPointRenderLookup = memberPointBuildLookupPayload($connect, $finance_connect, $memberPointRenderPlatform, $memberPointRenderCustomerId, array(
+            'allowed_platforms' => array('shopee', 'lazada'),
+            'locked' => $memberPointRenderLocked,
+            'sync_ledger' => true,
+        ));
+    }
+}
+
+if (!empty($memberPointRenderLookup['success']) && trim((string) $memberPointRenderLookup['customer_label']) !== '') {
+    $memberPointRenderCustomerLabel = trim((string) $memberPointRenderLookup['customer_label']);
+}
+
+$memberPointRenderRewards = !empty($memberPointRenderLookup['rewards']) && is_array($memberPointRenderLookup['rewards']) ? $memberPointRenderLookup['rewards'] : array();
+if ($memberPointRenderLocked && trim((string) ($memberPointRenderTransactionMetadata['redeem_kind'] ?? '')) === 'cashback') {
+    $memberPointRenderUseType = 'cashback';
+    $memberPointRenderCashbackPoints = $memberPointRenderRedeemPoints;
+    $memberPointRenderOriginalPrice = isset($memberPointRenderTransactionMetadata['original_order_amount'])
+        ? max(0, (float) $memberPointRenderTransactionMetadata['original_order_amount'])
+        : max(0, (float) (isset($row['price']) ? $row['price'] : 0) + $memberPointRenderCashbackPoints);
+}
+if ($memberPointRenderUseType === 'cashback' && $memberPointRenderCashbackPoints <= 0) {
+    $memberPointRenderCashbackPoints = $memberPointRenderRedeemPoints > 0 ? $memberPointRenderRedeemPoints : 0;
+}
+if ($memberPointRenderUseType === 'cashback' && $memberPointRenderOriginalPrice <= 0 && isset($row['price'])) {
+    $memberPointRenderOriginalPrice = max(0, (float) $row['price']);
+}
+$memberPointRenderSelectedRewardLabel = '';
+if ($memberPointRenderUseType === 'cashback' && $memberPointRenderCashbackPoints > 0) {
+    $memberPointRenderSelectedRewardLabel = fbOrderReqBuildCashbackLabel(
+        $memberPointRenderCashbackPoints,
+        isset($memberPointRenderTransactionMetadata['cashback_amount']) ? (float) $memberPointRenderTransactionMetadata['cashback_amount'] : $memberPointRenderCashbackPoints
+    );
+} else if ($memberPointRenderRedeemId > 0) {
+    $memberPointRenderUseType = $memberPointRenderUseType === 'none' ? 'gift' : $memberPointRenderUseType;
+    $memberPointRenderSelectedRewardLabel = fbOrderReqBuildRedeemLabel($connect, $memberPointRenderRedeemId, $memberPointRenderRedeemPoints);
+}
+$memberPointRenderRewardIds = array();
+foreach ($memberPointRenderRewards as $memberPointRenderReward) {
+    $memberPointRenderRewardIds[] = (int) (isset($memberPointRenderReward['id']) ? $memberPointRenderReward['id'] : 0);
+}
+if ($memberPointRenderUseType === 'gift' && $memberPointRenderRedeemId > 0 && !in_array($memberPointRenderRedeemId, $memberPointRenderRewardIds, true)) {
+    $memberPointRenderRewards[] = array(
+        'id' => $memberPointRenderRedeemId,
+        'required_points' => $memberPointRenderRedeemPoints,
+        'gift_label' => $memberPointRenderSelectedRewardLabel,
+        'strategy_text' => '',
+        'display_text' => $memberPointRenderSelectedRewardLabel,
+    );
+}
+
+$memberPointRenderLinkedMember = fbOrderReqBuildLinkedMemberLabel($memberPointRenderPlatform, $memberPointRenderCustomerLabel);
+$memberPointRenderAvailablePoints = (int) (isset($memberPointRenderLookup['available_points']) ? $memberPointRenderLookup['available_points'] : 0);
+$memberPointRenderSummaryRewards = array();
+foreach ($memberPointRenderRewards as $memberPointRewardRow) {
+    $memberPointRenderSummaryRewards[] = isset($memberPointRewardRow['display_text']) ? (string) $memberPointRewardRow['display_text'] : '';
+}
 ?>
 
 <!DOCTYPE html>
@@ -987,12 +1995,105 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
             position: relative;
         }
 
+        .member-point-summary-card {
+            border: 1px solid #d9e2ef;
+            border-radius: 12px;
+            background: #f8fbff;
+            padding: 16px 18px;
+            min-height: 100%;
+        }
+
+        .member-point-summary-card h6 {
+            margin-bottom: 8px;
+            font-size: 0.95rem;
+            font-weight: 700;
+        }
+
+        .member-point-summary-value {
+            font-size: 1.35rem;
+            font-weight: 700;
+            color: #274c7d;
+        }
+
+        .member-point-reward-list {
+            margin: 0;
+            padding-left: 18px;
+        }
+
+        .member-point-reward-list li {
+            margin-bottom: 6px;
+        }
+
+        .member-point-platform-badge {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            padding: 4px 10px;
+            border-radius: 999px;
+            font-size: 0.78rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.03em;
+            margin-right: 8px;
+        }
+
+        .member-point-platform-badge[data-platform="shopee"] {
+            background: #fff0ea;
+            color: #d04d1c;
+        }
+
+        .member-point-platform-badge[data-platform="lazada"] {
+            background: #eef0ff;
+            color: #4548b6;
+        }
+
+        .member-point-cashback-summary {
+            border: 1px solid #d9e2ef;
+            border-radius: 10px;
+            background: #f8fbff;
+            padding: 12px 14px;
+        }
+
+        .member-point-cashback-summary-line {
+            display: flex;
+            justify-content: space-between;
+            gap: 12px;
+            margin-bottom: 4px;
+        }
+
+        .member-point-cashback-summary-line:last-child {
+            margin-bottom: 0;
+        }
+
         @media (max-width: 767px) {
             .fb-order-req-form-wrap {
                 max-width: 100%;
             }
         }
     </style>
+
+    <?php
+    $forCustomerIdValue = 0;
+    if (isset($for_customer_id) && (int) $for_customer_id > 0) {
+        $forCustomerIdValue = (int) $for_customer_id;
+    } elseif (isset($row['name']) || isset($row['fb_link'])) {
+        $forCustomerIdValue = fbOrderReqFindCustomerDealId(
+            $connect,
+            isset($row['name']) ? $row['name'] : '',
+            isset($row['fb_link']) ? $row['fb_link'] : ''
+        );
+    }
+
+    $forNameDisplayValue = isset($for_name) && trim((string) $for_name) !== ''
+        ? trim((string) $for_name)
+        : (isset($row['name']) ? trim((string) $row['name']) : '');
+    $forLinkDisplayValue = isset($for_link) && trim((string) $for_link) !== ''
+        ? trim((string) $for_link)
+        : (isset($row['fb_link']) ? trim((string) $row['fb_link']) : '');
+    $forContactDisplayValue = isset($for_ctc) && trim((string) $for_ctc) !== ''
+        ? trim((string) $for_ctc)
+        : (isset($row['contact']) ? trim((string) $row['contact']) : '');
+    ?>
 
 </head>
 
@@ -1038,17 +2139,13 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
                 <div class="form-group">
                     <div class="row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-4 mb-3 autocomplete">
                             <label class="form-label form_lbl" id="for_name_lbl" for="for_name">Name<span
                                     class="requireRed">*</span></label>
-                            <?php 
-                             unset($echoVal);
-
-                             if (isset($row['name']))
-                                 $echoVal = $row['name'];
-                            ?>
-                            <input class="form-control" type="text" name="for_name" id="for_name" value="<?php echo !empty($echoVal) ? $row['name'] : '' ?>" <?php if ($act == '')
+                            <input class="form-control" type="text" name="for_name" id="for_name" value="<?= htmlspecialchars($forNameDisplayValue, ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '')
                                 echo 'disabled' ?>>
+                            <input type="hidden" name="for_customer_id" id="for_customer_id" value="<?= (int) $forCustomerIdValue ?>">
+                            <small class="text-muted d-block mt-1">Select an existing Facebook customer to auto-fill the customer details.</small>
                             <?php if (isset($name_err)) { ?>
                                 <div id="err_msg">
                                     <span class="mt-n1">
@@ -1060,13 +2157,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" id="for_link_lbl" for="for_link">Facebook Link<span
                                     class="requireRed">*</span></label>
-                                    <?php 
-                             unset($echoVal);
-
-                             if (isset($row['fb_link']))
-                                 $echoVal = $row['fb_link'];
-                            ?>
-                            <input class="form-control" type="text" name="for_link" id="for_link" value="<?php echo !empty($echoVal) ? $row['fb_link'] : '' ?>" <?php if ($act == '')
+                            <input class="form-control" type="text" name="for_link" id="for_link" value="<?= htmlspecialchars($forLinkDisplayValue, ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '')
                                 echo 'disabled' ?>>
                             <?php if (isset($link_err)) { ?>
                                 <div id="err_msg">
@@ -1079,13 +2170,7 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         <div class="col-md-4 mb-3">
                             <label class="form-label form_lbl" id="for_contact_lbl" for="for_contact">Contact<span
                                     class="requireRed">*</span></label>
-                            <input class="form-control" type="number" step="0.01" name="for_contact" id="for_contact" value="<?php
-                            if (isset($dataExisted) && isset($row['contact']) && !isset($for_contact)) {
-                                echo $row['contact'];
-                            } else if (isset($for_contact)) {
-                                echo $for_contact;
-                            }
-                            ?>" <?php if ($act == '')
+                            <input class="form-control" type="number" step="0.01" name="for_contact" id="for_contact" value="<?= htmlspecialchars($forContactDisplayValue, ENT_QUOTES, 'UTF-8') ?>" <?php if ($act == '')
                                 echo 'disabled' ?>>
                             <?php if (isset($contact_err)) { ?>
                                 <div id="err_msg">
@@ -1366,6 +2451,23 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                     $echoVal = $row['price'];
                                 ?>
                                 <input class="form-control" type="text" name="for_price" id="for_price" value="<?php echo !empty($echoVal) ? $row['price'] : '' ?>" <?php if ($act == '') echo 'disabled' ?>>
+                                <input type="hidden" name="member_point_original_price" id="member_point_original_price" value="<?= $memberPointRenderOriginalPrice > 0 ? htmlspecialchars(number_format($memberPointRenderOriginalPrice, 2, '.', ''), ENT_QUOTES, 'UTF-8') : '' ?>">
+                                <div id="member_point_cashback_price_summary" class="member-point-cashback-summary mt-2" style="display:none;">
+                                    <div class="small text-muted mb-1">Cashback price summary</div>
+                                    <div class="member-point-cashback-summary-line">
+                                        <span>Original Price</span>
+                                        <strong id="member_point_original_price_display">RM 0.00</strong>
+                                    </div>
+                                    <div class="member-point-cashback-summary-line">
+                                        <span>Cashback Deduction</span>
+                                        <strong id="member_point_cashback_deduction_display">- RM 0.00</strong>
+                                    </div>
+                                    <div class="member-point-cashback-summary-line">
+                                        <span>Customer Pay</span>
+                                        <strong id="member_point_cashback_final_price_display">RM 0.00</strong>
+                                    </div>
+                                    <div id="member_point_cashback_limit_hint" class="small text-muted mt-1"></div>
+                                </div>
                                 <?php if (isset($price_err)) { ?>
                                     <div id="err_msg">
                                         <span class="mt-n1"><?php echo $price_err; ?></span>
@@ -1629,6 +2731,122 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         </div>
                     </div>
                 </fieldset>
+                <fieldset class="border p-2 mb-3" style="border-radius: 3px;">
+                    <legend class="float-none w-auto p-2">Member Points</legend>
+                    <div class="form-group">
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="member_point_platform">Platform</label>
+                                <select class="form-select" name="member_point_platform" id="member_point_platform" <?= $memberPointRenderDisabled ? 'disabled' : '' ?>>
+                                    <option value="">Select Platform</option>
+                                    <option value="shopee" <?= $memberPointRenderPlatform === 'shopee' ? 'selected' : '' ?>>Shopee</option>
+                                    <option value="lazada" <?= $memberPointRenderPlatform === 'lazada' ? 'selected' : '' ?>>Lazada</option>
+                                </select>
+                                <?php if ($memberPointRenderDisabled) { ?>
+                                    <input type="hidden" name="member_point_platform" value="<?= htmlspecialchars($memberPointRenderPlatform, ENT_QUOTES, 'UTF-8') ?>">
+                                <?php } ?>
+                                <?php if (isset($member_point_platform_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $member_point_platform_err; ?></span>
+                                    </div>
+                                <?php } ?>
+                            </div>
+                            <div class="col-md-8 mb-3 autocomplete">
+                                <label class="form-label form_lbl" for="member_point_customer_search">Linked Member</label>
+                                <input
+                                    class="form-control"
+                                    type="text"
+                                    name="member_point_customer_search"
+                                    id="member_point_customer_search"
+                                    value="<?= htmlspecialchars($memberPointRenderCustomerLabel, ENT_QUOTES, 'UTF-8') ?>"
+                                    placeholder="Select Shopee or Lazada customer"
+                                    <?= $memberPointRenderDisabled ? 'readonly' : '' ?>>
+                                <input type="hidden" name="member_point_customer_id" id="member_point_customer_id" value="<?= (int) $memberPointRenderCustomerId ?>">
+                                <input type="hidden" name="member_point_customer_label" id="member_point_customer_label" value="<?= htmlspecialchars($memberPointRenderCustomerLabel, ENT_QUOTES, 'UTF-8') ?>">
+                                <?php if (isset($member_point_customer_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $member_point_customer_err; ?></span>
+                                    </div>
+                                <?php } ?>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-md-4 mb-3">
+                                <div class="member-point-summary-card">
+                                    <h6>Available Points</h6>
+                                    <div id="member_point_available_points" class="member-point-summary-value"><?= (int) $memberPointRenderAvailablePoints ?></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="member-point-summary-card">
+                                    <h6>Linked Customer</h6>
+                                    <div id="member_point_customer_summary"><?= $memberPointRenderLinkedMember !== '' ? htmlspecialchars($memberPointRenderLinkedMember, ENT_QUOTES, 'UTF-8') : 'No member linked' ?></div>
+                                </div>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <div class="member-point-summary-card">
+                                    <h6>Redeemable Items</h6>
+                                    <div id="member_point_reward_summary">
+                                        <?php if (!empty($memberPointRenderSummaryRewards)) { ?>
+                                            <ul id="member_point_reward_list" class="member-point-reward-list">
+                                                <?php foreach ($memberPointRenderSummaryRewards as $memberPointRewardText) { ?>
+                                                    <li><?= htmlspecialchars((string) $memberPointRewardText, ENT_QUOTES, 'UTF-8') ?></li>
+                                                <?php } ?>
+                                            </ul>
+                                        <?php } else { ?>
+                                            <div id="member_point_reward_empty">No redeemable gift.</div>
+                                            <ul id="member_point_reward_list" class="member-point-reward-list" style="display:none;"></ul>
+                                        <?php } ?>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-12 mb-3">
+                                <label class="form-label form_lbl" for="member_point_use_type">Apply Member Points</label>
+                                <select class="form-select" name="member_point_use_type" id="member_point_use_type" <?= $memberPointRenderDisabled ? 'disabled' : '' ?>>
+                                    <option value="none" <?= $memberPointRenderUseType === 'none' ? 'selected' : '' ?>>No Redeem</option>
+                                    <option value="gift" <?= $memberPointRenderUseType === 'gift' ? 'selected' : '' ?>>Redeem Gift</option>
+                                    <option value="cashback" <?= $memberPointRenderUseType === 'cashback' ? 'selected' : '' ?>>Use Cashback</option>
+                                </select>
+                                <?php if ($memberPointRenderDisabled) { ?>
+                                    <input type="hidden" name="member_point_use_type" value="<?= htmlspecialchars($memberPointRenderUseType, ENT_QUOTES, 'UTF-8') ?>">
+                                <?php } ?>
+                            </div>
+                            <div class="col-md-12 mb-3" id="member_point_gift_wrap">
+                                <label class="form-label form_lbl" for="member_point_redeem_id">Redeem Item</label>
+                                <select class="form-select" name="member_point_redeem_id" id="member_point_redeem_id" <?= $memberPointRenderDisabled ? 'disabled' : '' ?>>
+                                    <option value="">No Redeem</option>
+                                    <?php foreach ($memberPointRenderRewards as $memberPointRewardOption) { ?>
+                                        <?php $memberPointRewardOptionId = (int) (isset($memberPointRewardOption['id']) ? $memberPointRewardOption['id'] : 0); ?>
+                                        <?php $memberPointRewardOptionText = isset($memberPointRewardOption['display_text']) ? (string) $memberPointRewardOption['display_text'] : ''; ?>
+                                        <option value="<?= $memberPointRewardOptionId ?>" <?= $memberPointRenderRedeemId === $memberPointRewardOptionId ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars($memberPointRewardOptionText, ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php } ?>
+                                </select>
+                                <small class="text-muted d-block mt-1">Gift redemption deducts the required member points after this Facebook order is saved.</small>
+                                <?php if ($memberPointRenderDisabled) { ?>
+                                    <input type="hidden" name="member_point_redeem_id" value="<?= (int) $memberPointRenderRedeemId ?>">
+                                <?php } ?>
+                            </div>
+                            <div class="col-md-12 mb-3" id="member_point_cashback_wrap">
+                                <label class="form-label form_lbl" for="member_point_cashback_points">Cashback Points</label>
+                                <input class="form-control" type="number" min="0" step="1" name="member_point_cashback_points" id="member_point_cashback_points" value="<?= (int) $memberPointRenderCashbackPoints ?>" <?= $memberPointRenderDisabled ? 'readonly' : '' ?>>
+                                <small class="text-muted d-block mt-1">1 point = RM1. Single cashback cannot exceed 30% of the order amount, and Shopee/Lazada points can only be used on this private order flow.</small>
+                                <div id="member_point_cashback_help" class="small text-muted mt-1"></div>
+                                <?php if ($memberPointRenderDisabled) { ?>
+                                    <input type="hidden" name="member_point_cashback_points" value="<?= (int) $memberPointRenderCashbackPoints ?>">
+                                <?php } ?>
+                            </div>
+                            <div class="col-md-12">
+                                <?php if (isset($member_point_redeem_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $member_point_redeem_err; ?></span>
+                                    </div>
+                                <?php } ?>
+                            </div>
+                        </div>
+                    </div>
+                </fieldset>
 
                 <div class="form-group mb-3">
                     <label class="form-label form_lbl" id="for_remark_lbl" for="for_remark">Remark</label>
@@ -1840,6 +3058,37 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
 
         var page = "<?= $pageTitle ?>";
         var action = "<?php echo isset($act) ? $act : ' '; ?>";
+        window.fbOrderReqConfig = {
+            siteUrl: <?= json_encode($SITEURL) ?>,
+            tables: {
+                user: <?= json_encode(USR_USER) ?>,
+                countries: <?= json_encode(COUNTRIES) ?>,
+                brand: <?= json_encode(BRAND) ?>,
+                series: <?= json_encode(BRD_SERIES) ?>,
+                package: <?= json_encode(PKG) ?>,
+                facebookPage: <?= json_encode(FB_PAGE_ACC) ?>,
+                channel: <?= json_encode(CHANEL_SC_MD) ?>,
+                paymentMethod: <?= json_encode(FIN_PAY_METH) ?>
+            },
+            memberPoint: {
+                locked: <?= $memberPointRenderLocked ? 'true' : 'false' ?>,
+                viewOnly: <?= $act === '' ? 'true' : 'false' ?>,
+                initialUseType: <?= json_encode($memberPointRenderUseType) ?>,
+                initialCashbackPoints: <?= (int) $memberPointRenderCashbackPoints ?>,
+                initialOriginalPrice: <?= json_encode($memberPointRenderOriginalPrice > 0 ? number_format($memberPointRenderOriginalPrice, 2, '.', '') : '') ?>,
+                lookupUrl: window.location.href.split('#')[0],
+                platforms: {
+                    shopee: {
+                        searchType: 'buyer_username',
+                        dbTable: <?= json_encode(SHOPEE_CUST_INFO) ?>
+                    },
+                    lazada: {
+                        searchType: 'name',
+                        dbTable: <?= json_encode(LAZADA_CUST_RCD) ?>
+                    }
+                }
+            }
+        };
 
         checkCurrentPage(page, action);
 

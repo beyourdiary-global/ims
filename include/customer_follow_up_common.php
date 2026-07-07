@@ -433,6 +433,23 @@ if (!function_exists('customerFollowUpGetAttachmentRelativeDir')) {
     }
 }
 
+if (!function_exists('customerFollowUpNormalizeAttachmentPath')) {
+    function customerFollowUpNormalizeAttachmentPath($attachmentPath)
+    {
+        $attachmentPath = trim(str_replace('\\', '/', (string) $attachmentPath), '/');
+
+        if ($attachmentPath === '') {
+            return '';
+        }
+
+        if (strpos($attachmentPath, '../') !== false || strpos($attachmentPath, '..\\') !== false) {
+            return '';
+        }
+
+        return $attachmentPath;
+    }
+}
+
 if (!function_exists('customerFollowUpStoreAttachmentUpload')) {
     function customerFollowUpStoreAttachmentUpload($fileInfo, $connect, $allowedExt = array('png', 'jpg', 'jpeg', 'pdf', 'webp'), $context = array())
     {
@@ -440,7 +457,15 @@ if (!function_exists('customerFollowUpStoreAttachmentUpload')) {
             return array('success' => false, 'path' => '', 'message' => 'Attachment is required.');
         }
 
+        if (is_array($fileInfo['name']) || is_array($fileInfo['tmp_name']) || (isset($fileInfo['error']) && is_array($fileInfo['error']))) {
+            return array('success' => false, 'path' => '', 'message' => 'Only one attachment is allowed.');
+        }
+
         $uploadError = isset($fileInfo['error']) ? (int) $fileInfo['error'] : UPLOAD_ERR_OK;
+        if ($uploadError === UPLOAD_ERR_NO_FILE) {
+            return array('success' => false, 'path' => '', 'message' => 'Attachment is required.');
+        }
+
         if ($uploadError !== UPLOAD_ERR_OK) {
             return array('success' => false, 'path' => '', 'message' => 'Failed to upload attachment.');
         }
@@ -485,12 +510,12 @@ if (!function_exists('customerFollowUpStoreAttachmentUpload')) {
 if (!function_exists('customerFollowUpBuildAttachmentUrl')) {
     function customerFollowUpBuildAttachmentUrl($attachmentPath)
     {
-        $attachmentPath = trim(str_replace('\\', '/', (string) $attachmentPath), '/');
+        $attachmentPath = customerFollowUpNormalizeAttachmentPath($attachmentPath);
         if ($attachmentPath === '' || !defined('SITEURL')) {
             return '';
         }
 
-        return rtrim((string) SITEURL, '/') . '/' . $attachmentPath;
+        return rtrim((string) SITEURL, '/') . '/' . ltrim((string) $attachmentPath, '/');
     }
 }
 
@@ -1971,17 +1996,74 @@ if (!function_exists('customerFollowUpProcessAppealExtras')) {
             }
         }
 
-        $newTagName = trim((string) (isset($formData['appeal_new_tag_name']) ? $formData['appeal_new_tag_name'] : ''));
+        $baseResult = customerFollowUpProcessTagAssignmentExtras(
+            $connect,
+            $followUpRow,
+            $roundRow,
+            array(
+                'existing_tag_ids' => $existingTagIds,
+                'new_tag_name' => isset($formData['appeal_new_tag_name']) ? $formData['appeal_new_tag_name'] : '',
+                'user_record_log' => isset($formData['appeal_user_record_log']) ? $formData['appeal_user_record_log'] : '',
+            ),
+            $actorUserId,
+            $attachmentPath,
+            array(
+                'context_invalid_message' => 'Customer context is invalid for appeal.',
+                'selected_tag_unavailable_message' => 'Selected appeal tag is not available.',
+                'assign_existing_failed_message' => 'Failed to assign the selected appeal tag.',
+                'create_tag_failed_message' => 'Failed to create the new appeal tag.',
+                'assign_new_failed_message' => 'Failed to assign the new appeal tag.',
+                'save_user_record_log_failed_message' => 'Failed to save the appeal user record log.',
+                'assign_action_type' => 'assign_tag_follow_up_appeal',
+                'assign_action_remark_prefix' => 'Appeal assigned tag: ',
+                'assign_action_empty_remark' => 'Appeal assigned existing tag.',
+                'create_action_type' => 'create_tag_follow_up_appeal',
+                'create_action_remark_prefix' => 'Appeal created and assigned tag: ',
+            )
+        );
+
+        if (empty($baseResult['success']) || !isset($baseResult['details']) || !is_array($baseResult['details'])) {
+            return $baseResult;
+        }
+
+        $baseDetails = $baseResult['details'];
+        $baseResult['details'] = array(
+            'appeal_existing_tag_id' => isset($baseDetails['existing_tag_id']) ? (int) $baseDetails['existing_tag_id'] : 0,
+            'appeal_existing_tag_label' => isset($baseDetails['existing_tag_label']) ? (string) $baseDetails['existing_tag_label'] : '',
+            'appeal_existing_tag_ids' => isset($baseDetails['existing_tag_ids']) && is_array($baseDetails['existing_tag_ids']) ? array_values($baseDetails['existing_tag_ids']) : array(),
+            'appeal_existing_tag_labels' => isset($baseDetails['existing_tag_labels']) && is_array($baseDetails['existing_tag_labels']) ? array_values($baseDetails['existing_tag_labels']) : array(),
+            'appeal_new_tag_name' => isset($baseDetails['new_tag_name']) ? (string) $baseDetails['new_tag_name'] : '',
+            'appeal_user_record_log' => isset($baseDetails['user_record_log']) ? (string) $baseDetails['user_record_log'] : '',
+        );
+
+        return $baseResult;
+    }
+}
+
+if (!function_exists('customerFollowUpProcessTagAssignmentExtras')) {
+    function customerFollowUpProcessTagAssignmentExtras($connect, $followUpRow, $roundRow, $tagInput, $actorUserId, $attachmentPath = '', $options = array())
+    {
+        $existingTagIds = array();
+        if (isset($tagInput['existing_tag_ids']) && is_array($tagInput['existing_tag_ids'])) {
+            foreach ($tagInput['existing_tag_ids'] as $existingTagIdValue) {
+                $existingTagIdValue = (int) $existingTagIdValue;
+                if ($existingTagIdValue > 0 && !in_array($existingTagIdValue, $existingTagIds, true)) {
+                    $existingTagIds[] = $existingTagIdValue;
+                }
+            }
+        }
+
+        $newTagName = trim((string) (isset($tagInput['new_tag_name']) ? $tagInput['new_tag_name'] : ''));
         $manualUserRecordLog = customerFollowUpNormalizeOptionalUserRecordLogContent(
-            isset($formData['appeal_user_record_log']) ? $formData['appeal_user_record_log'] : ''
+            isset($tagInput['user_record_log']) ? $tagInput['user_record_log'] : ''
         );
         $resultDetails = array(
-            'appeal_existing_tag_id' => !empty($existingTagIds) ? (int) $existingTagIds[0] : 0,
-            'appeal_existing_tag_label' => '',
-            'appeal_existing_tag_ids' => $existingTagIds,
-            'appeal_existing_tag_labels' => array(),
-            'appeal_new_tag_name' => $newTagName,
-            'appeal_user_record_log' => $manualUserRecordLog,
+            'existing_tag_id' => !empty($existingTagIds) ? (int) $existingTagIds[0] : 0,
+            'existing_tag_label' => '',
+            'existing_tag_ids' => $existingTagIds,
+            'existing_tag_labels' => array(),
+            'new_tag_name' => $newTagName,
+            'user_record_log' => $manualUserRecordLog,
         );
 
         if (empty($existingTagIds) && $newTagName === '' && $manualUserRecordLog === '') {
@@ -1993,22 +2075,36 @@ if (!function_exists('customerFollowUpProcessAppealExtras')) {
         $followUpId = isset($followUpRow['id']) ? (int) $followUpRow['id'] : 0;
         $roundId = isset($roundRow['id']) ? (int) $roundRow['id'] : 0;
         if (!($connect instanceof mysqli) || $platform === '' || $customerId <= 0 || $followUpId <= 0) {
-            return array('success' => false, 'message' => 'Customer context is invalid for appeal.');
+            return array(
+                'success' => false,
+                'message' => isset($options['context_invalid_message']) ? (string) $options['context_invalid_message'] : 'Customer context is invalid for tag assignment.',
+            );
         }
+
+        $selectedTagUnavailableMessage = isset($options['selected_tag_unavailable_message']) ? (string) $options['selected_tag_unavailable_message'] : 'Selected tag is not available.';
+        $assignExistingFailedMessage = isset($options['assign_existing_failed_message']) ? (string) $options['assign_existing_failed_message'] : 'Failed to assign the selected tag.';
+        $createTagFailedMessage = isset($options['create_tag_failed_message']) ? (string) $options['create_tag_failed_message'] : 'Failed to create the new tag.';
+        $assignNewFailedMessage = isset($options['assign_new_failed_message']) ? (string) $options['assign_new_failed_message'] : 'Failed to assign the new tag.';
+        $saveUserRecordLogFailedMessage = isset($options['save_user_record_log_failed_message']) ? (string) $options['save_user_record_log_failed_message'] : 'Failed to save the user record log.';
+        $assignActionType = isset($options['assign_action_type']) ? trim((string) $options['assign_action_type']) : 'assign_tag_follow_up_appeal';
+        $assignActionRemarkPrefix = isset($options['assign_action_remark_prefix']) ? (string) $options['assign_action_remark_prefix'] : 'Assigned tag: ';
+        $assignActionEmptyRemark = isset($options['assign_action_empty_remark']) ? (string) $options['assign_action_empty_remark'] : 'Assigned existing tag.';
+        $createActionType = isset($options['create_action_type']) ? trim((string) $options['create_action_type']) : 'create_tag_follow_up_appeal';
+        $createActionRemarkPrefix = isset($options['create_action_remark_prefix']) ? (string) $options['create_action_remark_prefix'] : 'Created and assigned tag: ';
 
         foreach ($existingTagIds as $existingTagId) {
             $existingTagRow = customerFollowUpReadTagRow($connect, $existingTagId);
             if (empty($existingTagRow) || strtoupper(trim((string) (isset($existingTagRow['status']) ? $existingTagRow['status'] : 'A'))) !== 'A') {
-                return array('success' => false, 'message' => 'Selected appeal tag is not available.');
+                return array('success' => false, 'message' => $selectedTagUnavailableMessage);
             }
 
             $assignExistingResult = customerFollowUpAssignTagById($connect, $platform, $customerId, $existingTagId, 'customer_follow_up', $followUpId, $actorUserId);
             if (empty($assignExistingResult['success'])) {
-                return array('success' => false, 'message' => 'Failed to assign the selected appeal tag.');
+                return array('success' => false, 'message' => $assignExistingFailedMessage);
             }
 
+            $existingTagName = trim((string) (isset($existingTagRow['name']) ? $existingTagRow['name'] : ''));
             if (!empty($assignExistingResult['changed'])) {
-                $existingTagName = trim((string) (isset($existingTagRow['name']) ? $existingTagRow['name'] : ''));
                 customerFollowUpLogTagChange(
                     $connect,
                     $followUpId,
@@ -2016,17 +2112,16 @@ if (!function_exists('customerFollowUpProcessAppealExtras')) {
                     $platform,
                     $customerId,
                     $existingTagId,
-                    'assign_tag_follow_up_appeal',
+                    $assignActionType,
                     (string) $actorUserId,
-                    $existingTagName !== '' ? ('Appeal assigned tag: ' . $existingTagName) : 'Appeal assigned existing tag.'
+                    $existingTagName !== '' ? ($assignActionRemarkPrefix . $existingTagName) : $assignActionEmptyRemark
                 );
             }
 
-            $existingTagName = trim((string) (isset($existingTagRow['name']) ? $existingTagRow['name'] : ''));
-            if ($resultDetails['appeal_existing_tag_label'] === '') {
-                $resultDetails['appeal_existing_tag_label'] = $existingTagName;
+            if ($resultDetails['existing_tag_label'] === '') {
+                $resultDetails['existing_tag_label'] = $existingTagName;
             }
-            $resultDetails['appeal_existing_tag_labels'][] = $existingTagName;
+            $resultDetails['existing_tag_labels'][] = $existingTagName;
         }
 
         if ($newTagName !== '') {
@@ -2043,12 +2138,12 @@ if (!function_exists('customerFollowUpProcessAppealExtras')) {
 
             $createdTagId = customerFollowUpFindOrCreateTagId($connect, $newTagName, (string) $actorUserId);
             if ($createdTagId <= 0) {
-                return array('success' => false, 'message' => 'Failed to create the new appeal tag.');
+                return array('success' => false, 'message' => $createTagFailedMessage);
             }
 
             $assignNewResult = customerFollowUpAssignTagById($connect, $platform, $customerId, $createdTagId, 'customer_follow_up', $followUpId, $actorUserId);
             if (empty($assignNewResult['success'])) {
-                return array('success' => false, 'message' => 'Failed to assign the new appeal tag.');
+                return array('success' => false, 'message' => $assignNewFailedMessage);
             }
 
             if (!empty($assignNewResult['changed'])) {
@@ -2059,9 +2154,9 @@ if (!function_exists('customerFollowUpProcessAppealExtras')) {
                     $platform,
                     $customerId,
                     $createdTagId,
-                    'create_tag_follow_up_appeal',
+                    $createActionType,
                     (string) $actorUserId,
-                    'Appeal created and assigned tag: ' . $newTagName
+                    $createActionRemarkPrefix . $newTagName
                 );
             }
         }
@@ -2076,11 +2171,76 @@ if (!function_exists('customerFollowUpProcessAppealExtras')) {
             ));
 
             if ($userRecordLogId <= 0) {
-                return array('success' => false, 'message' => 'Failed to save the appeal user record log.');
+                return array('success' => false, 'message' => $saveUserRecordLogFailedMessage);
             }
         }
 
         return array('success' => true, 'message' => '', 'details' => $resultDetails);
+    }
+}
+
+if (!function_exists('customerFollowUpAssignCustomerTags')) {
+    function customerFollowUpAssignCustomerTags($connect, $followUpId, $formData, $actorUserId, $actorUserGroupId)
+    {
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        if (empty($followUpRow)) {
+            return array('success' => false, 'message' => 'Follow-up case not found.');
+        }
+
+        if (!customerFollowUpCanUserManageCase($followUpRow, $actorUserId, $actorUserGroupId, $connect)) {
+            return array('success' => false, 'message' => 'You do not have permission to assign tags for this follow-up.');
+        }
+
+        $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        $result = customerFollowUpProcessTagAssignmentExtras(
+            $connect,
+            $followUpRow,
+            $roundRow,
+            array(
+                'existing_tag_ids' => isset($formData['appeal_tag_ids']) && is_array($formData['appeal_tag_ids']) ? $formData['appeal_tag_ids'] : array(),
+                'new_tag_name' => isset($formData['appeal_new_tag_name']) ? $formData['appeal_new_tag_name'] : '',
+                'user_record_log' => '',
+            ),
+            $actorUserId,
+            '',
+            array(
+                'assign_action_type' => 'assign_tag_manual',
+                'assign_action_remark_prefix' => 'Manually assigned tag: ',
+                'assign_action_empty_remark' => 'Manually assigned existing tag.',
+                'create_action_type' => 'create_tag_manual',
+                'create_action_remark_prefix' => 'Manually created and assigned tag: ',
+            )
+        );
+
+        if (empty($result['success']) || !isset($result['details']) || !is_array($result['details'])) {
+            return $result;
+        }
+
+        $details = $result['details'];
+        $hasAssignedExistingTag = !empty($details['existing_tag_ids']);
+        $hasCreatedNewTag = trim((string) (isset($details['new_tag_name']) ? $details['new_tag_name'] : '')) !== '';
+        if (!$hasAssignedExistingTag && !$hasCreatedNewTag) {
+            return array('success' => false, 'message' => 'Please select at least one existing tag or create a new tag.');
+        }
+
+        $messageParts = array();
+        $existingTagLabels = isset($details['existing_tag_labels']) && is_array($details['existing_tag_labels'])
+            ? array_values(array_filter(array_map('trim', $details['existing_tag_labels']), function ($label) {
+                return $label !== '';
+            }))
+            : array();
+        if (!empty($existingTagLabels)) {
+            $messageParts[] = 'Assigned tag(s) [' . implode(', ', $existingTagLabels) . '].';
+        }
+        if ($hasCreatedNewTag) {
+            $messageParts[] = 'Created and assigned tag [' . trim((string) $details['new_tag_name']) . '].';
+        }
+
+
+        return array(
+            'success' => true,
+            'message' => !empty($messageParts) ? implode(' ', $messageParts) : 'Customer tag updated successfully.',
+        );
     }
 }
 
@@ -2310,9 +2470,18 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             $uploadContext = customerFollowUpBuildReceivedOrderContext($connect, $financeConnect, (string) $followUpRow['platform'], (int) $followUpRow['order_id']);
         }
 
+        if (is_array($fileData) && isset($fileData['error']) && is_array($fileData['error'])) {
+            return array('success' => false, 'message' => 'Only one attachment is allowed.');
+        }
+
         $uploadError = is_array($fileData) && isset($fileData['error']) ? (int) $fileData['error'] : UPLOAD_ERR_NO_FILE;
         if ($uploadError === UPLOAD_ERR_NO_FILE && $isResubmit && $existingAttachmentPath !== '') {
-            $uploadResult = array('success' => true, 'path' => $existingAttachmentPath, 'message' => '', 'reused' => true);
+            $uploadResult = array(
+                'success' => true,
+                'path' => $existingAttachmentPath,
+                'message' => '',
+                'reused' => true
+            );
         } else {
             $uploadResult = customerFollowUpStoreAttachmentUpload($fileData, $connect, array('png', 'jpg', 'jpeg', 'pdf', 'webp'), $uploadContext);
             if (empty($uploadResult['success'])) {
@@ -2415,34 +2584,38 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         $updatedRoundRow = customerFollowUpFetchRoundById($connect, isset($roundRow['id']) ? (int) $roundRow['id'] : 0);
         $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
         $appealExtraLogData = array();
-        if ($isAppeal) {
-            $appealExtraResult = customerFollowUpProcessAppealExtras(
-                $connect,
-                $updatedFollowUpRow,
-                $updatedRoundRow,
-                $formData,
-                (string) $actorUserId,
-                isset($uploadResult['path']) ? $uploadResult['path'] : ''
-            );
-            if (empty($appealExtraResult['success'])) {
-                mysqli_rollback($connect);
-                if ($uploadedNewAttachment) {
-                    customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
-                }
-                $failureResult = array(
-                    'success' => false,
-                    'message' => isset($appealExtraResult['message']) ? $appealExtraResult['message'] : 'Failed to submit appeal.',
-                );
-                if (isset($appealExtraResult['field_errors']) && is_array($appealExtraResult['field_errors'])) {
-                    $failureResult['field_errors'] = $appealExtraResult['field_errors'];
-                }
-                return $failureResult;
+
+        $appealExtraResult = customerFollowUpProcessAppealExtras(
+            $connect,
+            $updatedFollowUpRow,
+            $updatedRoundRow,
+            $formData,
+            (string) $actorUserId,
+            isset($uploadResult['path']) ? $uploadResult['path'] : ''
+        );
+
+        if (empty($appealExtraResult['success'])) {
+            mysqli_rollback($connect);
+            if ($uploadedNewAttachment) {
+                customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
             }
 
-            $appealExtraLogData = isset($appealExtraResult['details']) && is_array($appealExtraResult['details'])
-                ? $appealExtraResult['details']
-                : array();
+            $failureMessage = isset($appealExtraResult['message']) ? trim((string) $appealExtraResult['message']) : '';
+            $failureResult = array(
+                'success' => false,
+                'message' => $failureMessage !== '' ? $failureMessage : 'Failed to save follow-up tag or user record log.',
+            );
+
+            if (isset($appealExtraResult['field_errors']) && is_array($appealExtraResult['field_errors'])) {
+                $failureResult['field_errors'] = $appealExtraResult['field_errors'];
+            }
+
+            return $failureResult;
         }
+
+        $appealExtraLogData = isset($appealExtraResult['details']) && is_array($appealExtraResult['details'])
+            ? $appealExtraResult['details']
+            : array();
 
         $actionType = $isResubmit ? 'resubmit_rejected_follow_up' : 'submit_follow_up';
         $actionLabel = $isAppeal ? 'Submitted follow-up appeal' : ($isResubmit ? 'Resubmitted rejected follow-up' : 'Submitted follow-up');
@@ -2458,7 +2631,13 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             'reject_reason' => $isAppeal ? trim((string) (isset($oldRoundState['reject_reason']) ? $oldRoundState['reject_reason'] : '')) : '',
             'attachment_path' => isset($uploadResult['path']) ? (string) $uploadResult['path'] : '',
         );
-        if ($isAppeal) {
+        $hasExtraLogData = (
+            !empty($appealExtraLogData['appeal_existing_tag_ids'])
+            || trim((string) (isset($appealExtraLogData['appeal_new_tag_name']) ? $appealExtraLogData['appeal_new_tag_name'] : '')) !== ''
+            || trim((string) (isset($appealExtraLogData['appeal_user_record_log']) ? $appealExtraLogData['appeal_user_record_log'] : '')) !== ''
+        );
+
+        if ($isAppeal || $hasExtraLogData) {
             $actionNewValue['appeal_existing_tag_id'] = isset($appealExtraLogData['appeal_existing_tag_id']) ? (int) $appealExtraLogData['appeal_existing_tag_id'] : 0;
             $actionNewValue['appeal_existing_tag_label'] = isset($appealExtraLogData['appeal_existing_tag_label']) ? (string) $appealExtraLogData['appeal_existing_tag_label'] : '';
             $actionNewValue['appeal_existing_tag_ids'] = isset($appealExtraLogData['appeal_existing_tag_ids']) && is_array($appealExtraLogData['appeal_existing_tag_ids']) ? array_values($appealExtraLogData['appeal_existing_tag_ids']) : array();
@@ -3907,7 +4086,7 @@ if (!function_exists('customerFollowUpStartFromReceivedOrder')) {
 if (!function_exists('customerFollowUpDeleteAttachmentFile')) {
     function customerFollowUpDeleteAttachmentFile($attachmentPath)
     {
-        $attachmentPath = trim(str_replace('\\', '/', (string) $attachmentPath), '/');
+        $attachmentPath = customerFollowUpNormalizeAttachmentPath($attachmentPath);
         if ($attachmentPath === '') {
             return;
         }

@@ -394,6 +394,105 @@ if (!function_exists('customerTagGetDisplayTags')) {
     }
 }
 
+if (!function_exists('customerTagGetUserRecordLogCustomerColumn')) {
+    function customerTagGetUserRecordLogCustomerColumn($platform)
+    {
+        $platform = strtolower(trim((string) $platform));
+
+        $columnMap = array(
+            'shopee' => 'shopee_cust_id',
+            'lazada' => 'lazada_cust_id',
+            'facebook' => 'facebook_cust_id',
+            'website' => 'website_cust_id',
+            'customer_info' => 'cust_id',
+            'whatsapp' => 'cust_id',
+            'urbanism' => 'urbanism_member_id',
+        );
+
+        return isset($columnMap[$platform]) ? $columnMap[$platform] : '';
+    }
+}
+
+if (!function_exists('customerTagBuildUserRecordLogContent')) {
+    function customerTagBuildUserRecordLogContent($title, $messageHtml)
+    {
+        $title = trim((string) $title);
+        $messageHtml = trim((string) $messageHtml);
+
+        if ($title === '') {
+            $title = 'Customer Tag Updated';
+        }
+
+        if ($messageHtml === '') {
+            return '';
+        }
+
+        return htmlspecialchars($title, ENT_QUOTES, 'UTF-8') . '<br>' . $messageHtml;
+    }
+}
+
+if (!function_exists('customerTagWriteUserRecordLog')) {
+    function customerTagWriteUserRecordLog($connect, $platform, $customerId, $title, $messageHtml)
+    {
+        if (!($connect instanceof mysqli)) {
+            return false;
+        }
+
+        $customerId = (int) $customerId;
+        if ($customerId <= 0) {
+            return false;
+        }
+
+        $customerColumn = customerTagGetUserRecordLogCustomerColumn($platform);
+        if ($customerColumn === '') {
+            return false;
+        }
+
+        $tblName = defined('USER_RECORD_LOG') ? USER_RECORD_LOG : 'user_record_log';
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+        if ($safeTable === '') {
+            return false;
+        }
+
+        $tableResult = mysqli_query($connect, "SHOW TABLES LIKE '" . mysqli_real_escape_string($connect, $safeTable) . "'");
+        if (!$tableResult || $tableResult->num_rows === 0) {
+            return false;
+        }
+
+        $columnResult = mysqli_query($connect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE '" . mysqli_real_escape_string($connect, $customerColumn) . "'");
+        if (!$columnResult || $columnResult->num_rows === 0) {
+            return false;
+        }
+
+        $content = customerTagBuildUserRecordLogContent($title, $messageHtml);
+        if ($content === '') {
+            return false;
+        }
+
+        $userId = defined('USER_ID') ? (string) USER_ID : '';
+
+        $sql = "INSERT INTO `" . $safeTable . "` (
+                `" . $customerColumn . "`,
+                `content`,
+                `created_by`,
+                `created_at`,
+                `updated_by`,
+                `updated_at`,
+                `status`
+            ) VALUES (
+                '" . $customerId . "',
+                '" . mysqli_real_escape_string($connect, $content) . "',
+                '" . mysqli_real_escape_string($connect, $userId) . "',
+                NOW(),
+                '" . mysqli_real_escape_string($connect, $userId) . "',
+                NOW(),
+                'A'
+            )";
+
+        return (bool) mysqli_query($connect, $sql);
+    }
+}
+
 if (!function_exists('customerTagApplyDraftTagsToCustomer')) {
     function customerTagApplyDraftTagsToCustomer($connect, $platform, $customerId, $pageTitle = '', $customerDisplayName = '', $draftTagIds = null, $draftToken = '')
     {
@@ -444,6 +543,14 @@ if (!function_exists('customerTagApplyDraftTagsToCustomer')) {
                     customerTagGetAssignmentTable()
                 );
             }
+
+            customerTagWriteUserRecordLog(
+                $connect,
+                $platform,
+                $customerId,
+                'Customer Tag Assigned',
+                htmlspecialchars((string) (defined('USER_NAME') ? USER_NAME : 'User'), ENT_QUOTES, 'UTF-8') . ' assigned tag ' . htmlspecialchars((string) $tagRow['name'], ENT_QUOTES, 'UTF-8') . ' to customer ' . htmlspecialchars(trim((string) $customerDisplayName), ENT_QUOTES, 'UTF-8')
+            );
         }
 
         customerTagClearDraftTags($platform, $draftToken);
@@ -516,6 +623,39 @@ if (!function_exists('customerTagRenderManageButton')) {
 
         $modalId = customerTagGetModalId($platform, $customerId);
         return '<div class="customer-tag-manage-sticky-wrap"><button type="button" class="btn btn-rounded btn-primary customer-tag-manage-btn" data-bs-toggle="modal" data-bs-target="#' . htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') . '">Manage Tag</button></div>';
+    }
+}
+
+if (!function_exists('customerTagRenderStickyActions')) {
+    function customerTagRenderStickyActions($platform, $customerId, $allowManage = true, $options = array())
+    {
+        $platform = customerTagNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        if ($platform === '' || $customerId < 0) {
+            return '';
+        }
+
+        $buttons = array();
+        $memberPointUrl = isset($options['member_point_url']) ? trim((string) $options['member_point_url']) : '';
+        if ($memberPointUrl !== '' && $customerId > 0) {
+            $memberPointCount = isset($options['member_point_count']) ? (int) $options['member_point_count'] : 0;
+            $buttons[] = '<div class="customer-tag-member-point-sticky-wrap"><a class="btn btn-rounded btn-warning customer-tag-member-point-btn" href="' . htmlspecialchars($memberPointUrl, ENT_QUOTES, 'UTF-8') . '"><span class="customer-tag-member-point-count">' . number_format($memberPointCount) . ' Point</span><span class="customer-tag-member-point-label">Member Point</span></a></div>';
+        }
+
+        $manageButtonHtml = customerTagRenderManageButton($platform, $customerId, $allowManage);
+        if ($manageButtonHtml !== '') {
+            $buttons[] = $manageButtonHtml;
+        }
+
+        if (empty($buttons)) {
+            return '';
+        }
+
+        if (count($buttons) === 1) {
+            return $buttons[0];
+        }
+
+        return '<div class="customer-tag-sticky-actions-wrap">' . implode('', $buttons) . '</div>';
     }
 }
 
@@ -728,6 +868,14 @@ if (!function_exists('customerTagHandlePost')) {
                         $assignResult['query'],
                         customerTagGetAssignmentTable()
                     );
+
+                    customerTagWriteUserRecordLog(
+                        $connect,
+                        $platform,
+                        $customerId,
+                        'Customer Tag Assigned',
+                        htmlspecialchars((string) (defined('USER_NAME') ? USER_NAME : 'User'), ENT_QUOTES, 'UTF-8') . ' assigned tag ' . htmlspecialchars((string) $tagName, ENT_QUOTES, 'UTF-8') . ' to customer ' . htmlspecialchars(trim((string) $customerDisplayName), ENT_QUOTES, 'UTF-8')
+                    );
                 }
 
                 $messageParts = array();
@@ -827,6 +975,14 @@ if (!function_exists('customerTagHandlePost')) {
                     USER_NAME . ' changed customer tag from [<b>' . htmlspecialchars((string) $oldTagRow['name'], ENT_QUOTES, 'UTF-8') . '</b>] to [<b>' . htmlspecialchars((string) $newTagRow['name'], ENT_QUOTES, 'UTF-8') . '</b>] for <b>' . htmlspecialchars($customerLabel, ENT_QUOTES, 'UTF-8') . '</b>.',
                     trim($assignResult['query'] . '; ' . $removeResult['query']),
                     customerTagGetAssignmentTable()
+                );
+
+                customerTagWriteUserRecordLog(
+                    $connect,
+                    $platform,
+                    $customerId,
+                    'Customer Tag Changed',
+                    htmlspecialchars((string) (defined('USER_NAME') ? USER_NAME : 'User'), ENT_QUOTES, 'UTF-8') . ' changed customer tag from [<strong>' . htmlspecialchars((string) $oldTagRow['name'], ENT_QUOTES, 'UTF-8') . '</strong>] to [<strong>' . htmlspecialchars((string) $newTagRow['name'], ENT_QUOTES, 'UTF-8') . '</strong>] for <strong>' . htmlspecialchars($customerLabel, ENT_QUOTES, 'UTF-8') . '</strong>.'
                 );
                 break;
 

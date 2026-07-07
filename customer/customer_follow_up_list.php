@@ -3,12 +3,19 @@ if (ob_get_level() === 0) {
     ob_start();
 }
 
-$customerFollowUpBootstrapIsAjax = (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST')
-    && (
-        (filter_input(INPUT_POST, 'customer_follow_up_ajax') === '1')
-        || (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower(trim((string) $_SERVER['HTTP_X_REQUESTED_WITH'])) === 'xmlhttprequest')
-        || (isset($_SERVER['HTTP_ACCEPT']) && strpos(strtolower((string) $_SERVER['HTTP_ACCEPT']), 'application/json') !== false)
-    );
+$customerFollowUpUserRecordLogEmbedMode = (
+    trim((string) filter_input(INPUT_GET, 'user_record_log_embed')) === '1'
+    || trim((string) filter_input(INPUT_POST, 'user_record_log_embed')) === '1'
+    || trim((string) filter_input(INPUT_POST, 'url_action')) !== ''
+);
+
+$customerFollowUpBootstrapIsAjax = $customerFollowUpUserRecordLogEmbedMode
+    || ((($_SERVER['REQUEST_METHOD'] ?? '') === 'POST')
+        && (
+            (filter_input(INPUT_POST, 'customer_follow_up_ajax') === '1')
+            || (isset($_SERVER['HTTP_X_REQUESTED_WITH']) && strtolower(trim((string) $_SERVER['HTTP_X_REQUESTED_WITH'])) === 'xmlhttprequest')
+            || (isset($_SERVER['HTTP_ACCEPT']) && strpos(strtolower((string) $_SERVER['HTTP_ACCEPT']), 'application/json') !== false)
+        ));
 
 $currentPagePin = 151;
 $pageTitle = 'Customer Follow-Up';
@@ -235,6 +242,36 @@ if (!function_exists('customerFollowUpPageBuildCustomerDetailUrl')) {
     }
 }
 
+if (!function_exists('customerFollowUpPageBuildUserRecordLogEmbedUrl')) {
+    function customerFollowUpPageBuildUserRecordLogEmbedUrl($platform, $customerId, $customerLabel = '', $returnUrl = '')
+    {
+        global $SITEURL;
+
+        $platform = customerFollowUpNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $customerColumn = function_exists('customerFollowUpGetPlatformUserRecordLogColumn')
+            ? customerFollowUpGetPlatformUserRecordLogColumn($platform)
+            : '';
+
+        if ($customerId <= 0 || $customerColumn === '') {
+            return '';
+        }
+
+        $returnUrl = trim((string) $returnUrl);
+        if ($returnUrl === '') {
+            $returnUrl = isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/customer/customer_follow_up_list.php';
+        }
+
+        return rtrim((string) $SITEURL, '/') . '/customer/customer_follow_up_list.php?' . http_build_query(array(
+            'user_record_log_embed' => '1',
+            'customer_id' => $customerId,
+            'customer_column' => $customerColumn,
+            'customer_label' => trim((string) $customerLabel),
+            'return_url' => $returnUrl,
+        ));
+    }
+}
+
 if (!function_exists('customerFollowUpPageRenderCustomerTagLabelCell')) {
     function customerFollowUpPageRenderCustomerTagLabelCell($customerLabelMeta, $customerTagRows)
     {
@@ -258,6 +295,141 @@ if (!function_exists('customerFollowUpPageRenderCustomerTagLabelCell')) {
             ? customerLabelRenderCollapsibleBadgeGroup($badgeItems, 'customer-label-summary-wrap')
             : implode(' ', $badgeItems);
     }
+}
+
+if ($customerFollowUpUserRecordLogEmbedMode) {
+    $embedCustomerId = isset($_REQUEST['customer_id']) ? (int) $_REQUEST['customer_id'] : 0;
+    $embedCustomerColumn = isset($_REQUEST['customer_column']) ? trim((string) $_REQUEST['customer_column']) : '';
+    $embedCustomerLabel = isset($_REQUEST['customer_label']) ? trim((string) $_REQUEST['customer_label']) : '';
+    $embedReturnUrl = isset($_REQUEST['return_url']) ? trim((string) $_REQUEST['return_url']) : '';
+
+    if ($embedCustomerId <= 0 || $embedCustomerColumn === '') {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && function_exists('urlJsonResponse')) {
+            urlJsonResponse(array('ok' => 0, 'message' => 'Customer context is invalid.'));
+        }
+
+        customerFollowUpPageClearOutputBuffers();
+
+        if (!headers_sent()) {
+            header('Content-Type: text/html; charset=UTF-8');
+            header('X-Content-Type-Options: nosniff');
+        }
+
+        echo '<!DOCTYPE html><html><head><meta charset="UTF-8"><title>User Record Log</title></head><body><div style="padding:16px;color:#842029;background:#f8d7da;border:1px solid #f5c2c7;border-radius:8px;">Customer context is invalid.</div></body></html>';
+        exit;
+    }
+
+    $embedAjaxUrl = rtrim((string) $SITEURL, '/') . '/customer/customer_follow_up_list.php?' . http_build_query(array(
+        'user_record_log_embed' => '1',
+        'customer_id' => $embedCustomerId,
+        'customer_column' => $embedCustomerColumn,
+        'customer_label' => $embedCustomerLabel,
+        'return_url' => $embedReturnUrl,
+    ));
+
+    $embedContext = function_exists('urlHandleUserRecordLogRequest')
+        ? urlHandleUserRecordLogRequest($connect, $connect, array(
+            'customer_id' => $embedCustomerId,
+            'customer_column' => $embedCustomerColumn,
+            'customer_label' => $embedCustomerLabel,
+            'customer_only' => true,
+            'return_url' => $embedReturnUrl,
+            'ajax_url' => $embedAjaxUrl,
+            'customer_lookup_connect' => $connect,
+        ))
+        : array();
+
+    customerFollowUpPageClearOutputBuffers();
+
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=UTF-8');
+        header('X-Content-Type-Options: nosniff');
+    }
+    ?>
+    <!DOCTYPE html>
+    <html>
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1">
+        <title>User Record Log</title>
+
+        <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css">
+        <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.2/css/all.min.css">
+        <link rel="stylesheet" href="<?= htmlspecialchars(rtrim((string) $SITEURL, '/') . '/css/main.css?v=' . @filemtime(ROOT . '/css/main.css'), ENT_QUOTES, 'UTF-8') ?>">
+
+        <style>
+            html,
+            body {
+                background: #f8f9fa;
+                padding: 0;
+                margin: 0;
+                width: 100%;
+                min-height: 100%;
+                font-family: "Open Sans", Arial, sans-serif;
+            }
+
+            .customer-follow-up-user-record-log-embed {
+                padding: 16px;
+            }
+
+            .customer-follow-up-user-record-log-embed .user-record-log-module {
+                margin-top: 0 !important;
+            }
+
+            .customer-follow-up-user-record-log-embed .user-record-log-module > .card:first-child {
+                margin-top: 0 !important;
+            }
+        </style>
+
+        <script src="<?= htmlspecialchars(defined('JQUERY_3_6_4_JS') ? JQUERY_3_6_4_JS : 'https://code.jquery.com/jquery-3.6.4.min.js', ENT_QUOTES, 'UTF-8') ?>"></script>
+        <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+        <script>
+            if (typeof window.showNotification !== 'function') {
+                window.showNotification = function (message, type) {
+                    var alertType = type === 'success' ? 'success' : (type === 'error' ? 'danger' : 'info');
+                    var alertBox = document.createElement('div');
+                    alertBox.className = 'alert alert-' + alertType;
+                    alertBox.style.position = 'fixed';
+                    alertBox.style.top = '16px';
+                    alertBox.style.right = '16px';
+                    alertBox.style.zIndex = '9999';
+                    alertBox.style.maxWidth = '360px';
+                    alertBox.textContent = message || '';
+                    document.body.appendChild(alertBox);
+
+                    window.setTimeout(function () {
+                        if (alertBox && alertBox.parentNode) {
+                            alertBox.parentNode.removeChild(alertBox);
+                        }
+                    }, 2200);
+                };
+            }
+        </script>
+    </head>
+    <body>
+        <div class="customer-follow-up-user-record-log-embed">
+            <?php
+            if (function_exists('urlRenderUserRecordLogModule')) {
+                urlRenderUserRecordLogModule($connect, $connect, array(
+                    'context' => $embedContext,
+                    'customer_id' => $embedCustomerId,
+                    'customer_column' => $embedCustomerColumn,
+                    'customer_label' => $embedCustomerLabel,
+                    'customer_only' => true,
+                    'return_url' => $embedReturnUrl,
+                    'ajax_url' => $embedAjaxUrl,
+                    'section_heading' => 'User Record Log',
+                    'show_scope_note' => true,
+                ));
+            } else {
+                echo '<div class="alert alert-danger">User Record Log module is not available.</div>';
+            }
+            ?>
+        </div>
+    </body>
+    </html>
+    <?php
+    exit;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
@@ -349,6 +521,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 'appeal_new_tag_name' => postSpaceFilter('appeal_new_tag_name'),
                 'appeal_user_record_log' => post('appeal_user_record_log'),
             ), isset($_FILES['attachment']) ? $_FILES['attachment'] : array(), USER_ID, USER_GROUP);
+            break;
+
+        case 'assign_customer_tag':
+            $result = customerFollowUpAssignCustomerTags($connect, $followUpId, array(
+                'appeal_tag_ids' => isset($_POST['appeal_tag_ids']) && is_array($_POST['appeal_tag_ids']) ? $_POST['appeal_tag_ids'] : array(),
+                'appeal_new_tag_name' => postSpaceFilter('appeal_new_tag_name'),
+            ), USER_ID, USER_GROUP);
             break;
 
         case 'approve_follow_up':
@@ -821,6 +1000,10 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             object-fit: contain;
         }
 
+
+
+
+
         .customer-follow-up-page .arrival-follow-up-preview-note {
             font-size: 0.85rem;
             color: #6c757d;
@@ -833,6 +1016,34 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             color: #6c757d;
             margin-bottom: 0.5rem;
             word-break: break-all;
+        }
+
+        .customer-follow-up-user-record-log-dialog {
+            max-width: min(1320px, 96vw);
+        }
+
+        .customer-follow-up-user-record-log-modal-body {
+            padding: 0;
+            background: #f8f9fa;
+        }
+
+        .customer-follow-up-user-record-log-iframe {
+            display: block;
+            width: 100%;
+            height: 82vh;
+            border: 0;
+            background: #f8f9fa;
+        }
+
+        @media (max-width: 767px) {
+            .customer-follow-up-user-record-log-dialog {
+                max-width: 100vw;
+                margin: 0;
+            }
+
+            .customer-follow-up-user-record-log-iframe {
+                height: calc(100vh - 70px);
+            }
         }
 
 
@@ -1240,43 +1451,27 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                             $rowCustomerId = isset($row['customer_id']) ? (int) $row['customer_id'] : 0;
                                             $customerLabelMeta = isset($customerLabelMapByPlatform[$rowPlatform][$rowCustomerId]) ? $customerLabelMapByPlatform[$rowPlatform][$rowCustomerId] : array();
                                             $customerTagRows = isset($customerTagMapByPlatform[$rowPlatform][$rowCustomerId]) ? $customerTagMapByPlatform[$rowPlatform][$rowCustomerId] : array();
+                                            $customerAssignedTagIds = function_exists('customerTagExtractTagIds') ? customerTagExtractTagIds($customerTagRows) : array();
                                             $orderViewUrl = customerFollowUpPageBuildOrderViewUrl($rowPlatform, isset($row['order_id']) ? (int) $row['order_id'] : 0);
                                             $customerDetailUrl = customerFollowUpPageBuildCustomerDetailUrl($connect, isset($finance_connect) ? $finance_connect : null, $rowPlatform, $rowCustomerId);
                                             $orderDisplayValue = (string) (isset($row['order_no']) && $row['order_no'] !== '' ? $row['order_no'] : $row['order_id']);
                                             $customerUsername = (string) (isset($row['customer_username']) ? $row['customer_username'] : '');
-                                            $appealAttachmentPath = trim((string) (isset($latestAppealPayload['attachment_path']) ? $latestAppealPayload['attachment_path'] : (isset($row['attachment']) ? $row['attachment'] : '')));
+                                            $userRecordLogCustomerLabel = $customerUsername !== ''
+                                                ? $customerUsername
+                                                : (string) (isset($row['customer_name']) ? $row['customer_name'] : '');
+                                            $userRecordLogEmbedUrl = customerFollowUpPageBuildUserRecordLogEmbedUrl(
+                                                $rowPlatform,
+                                                $rowCustomerId,
+                                                $userRecordLogCustomerLabel,
+                                                isset($_SERVER['REQUEST_URI']) ? (string) $_SERVER['REQUEST_URI'] : '/customer/customer_follow_up_list.php'
+                                            );
+                                            $rowAttachmentPath = trim((string) (isset($row['attachment']) ? $row['attachment'] : ''));
+                                            $appealAttachmentPath = trim((string) (isset($latestAppealPayload['attachment_path']) ? $latestAppealPayload['attachment_path'] : $rowAttachmentPath));
                                             $appealAttachmentUrl = customerFollowUpBuildAttachmentUrl($appealAttachmentPath);
                                             $appealMessageShortcutId = isset($latestAppealPayload['message_shortcut_id']) ? (int) $latestAppealPayload['message_shortcut_id'] : (isset($row['message_shortcut_id']) ? (int) $row['message_shortcut_id'] : 0);
                                             $appealNextFollowUpDate = trim((string) (isset($latestAppealPayload['next_follow_up_date']) ? $latestAppealPayload['next_follow_up_date'] : $displayNextFollowUpDate));
                                             $appealContactNo = trim((string) (isset($latestAppealPayload['contact_no']) ? $latestAppealPayload['contact_no'] : $effectiveContactNo));
                                             $appealRejectReason = trim((string) (isset($latestAppealPayload['reject_reason']) ? $latestAppealPayload['reject_reason'] : (isset($row['reject_reason']) ? $row['reject_reason'] : '')));
-                                            $appealExistingTagItems = array();
-                                            if (isset($latestAppealPayload['appeal_existing_tag_ids']) && is_array($latestAppealPayload['appeal_existing_tag_ids'])) {
-                                                $appealExistingTagLabels = isset($latestAppealPayload['appeal_existing_tag_labels']) && is_array($latestAppealPayload['appeal_existing_tag_labels'])
-                                                    ? array_values($latestAppealPayload['appeal_existing_tag_labels'])
-                                                    : array();
-                                                foreach (array_values($latestAppealPayload['appeal_existing_tag_ids']) as $appealExistingTagIndex => $appealExistingTagIdValue) {
-                                                    $appealExistingTagIdValue = (int) $appealExistingTagIdValue;
-                                                    if ($appealExistingTagIdValue <= 0) {
-                                                        continue;
-                                                    }
-
-                                                    $appealExistingTagItems[] = array(
-                                                        'id' => $appealExistingTagIdValue,
-                                                        'label' => isset($appealExistingTagLabels[$appealExistingTagIndex]) ? trim((string) $appealExistingTagLabels[$appealExistingTagIndex]) : '',
-                                                    );
-                                                }
-                                            } else {
-                                                $appealExistingTagIdValue = isset($latestAppealPayload['appeal_existing_tag_id']) ? (int) $latestAppealPayload['appeal_existing_tag_id'] : 0;
-                                                if ($appealExistingTagIdValue > 0) {
-                                                    $appealExistingTagItems[] = array(
-                                                        'id' => $appealExistingTagIdValue,
-                                                        'label' => trim((string) (isset($latestAppealPayload['appeal_existing_tag_label']) ? $latestAppealPayload['appeal_existing_tag_label'] : '')),
-                                                    );
-                                                }
-                                            }
-                                            $appealNewTagName = trim((string) (isset($latestAppealPayload['appeal_new_tag_name']) ? $latestAppealPayload['appeal_new_tag_name'] : ''));
-                                            $appealUserRecordLog = (string) (isset($latestAppealPayload['appeal_user_record_log']) ? $latestAppealPayload['appeal_user_record_log'] : '');
 
                                             $canManageOwnCase = customerFollowUpCanUserManageCase($row, USER_ID, USER_GROUP, $connect);
                                             $hasMissingNextFollowUpDate = customerFollowUpIsEmptyDateValue(isset($row['next_follow_up_date']) ? $row['next_follow_up_date'] : '');
@@ -1330,12 +1525,10 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                                             data-contact-no="<?= htmlspecialchars($appealContactNo, ENT_QUOTES, 'UTF-8') ?>"
                                                             data-existing-attachment-path="<?= htmlspecialchars($appealAttachmentPath, ENT_QUOTES, 'UTF-8') ?>"
                                                             data-existing-attachment-url="<?= htmlspecialchars((string) $appealAttachmentUrl, ENT_QUOTES, 'UTF-8') ?>"
+
                                                             data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                                             data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-reject-reason="<?= htmlspecialchars($appealRejectReason, ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-appeal-existing-tag-items="<?= htmlspecialchars((string) json_encode($appealExistingTagItems), ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-appeal-new-tag-name="<?= htmlspecialchars($appealNewTagName, ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-appeal-user-record-log="<?= htmlspecialchars($appealUserRecordLog, ENT_QUOTES, 'UTF-8') ?>">
+                                                            data-reject-reason="<?= htmlspecialchars($appealRejectReason, ENT_QUOTES, 'UTF-8') ?>">
                                                             <i class="fa-solid fa-eye"></i><span class="ms-1">View Appeal</span>
                                                         </button>
                                                     <?php } ?>
@@ -1361,14 +1554,12 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                                             data-message-shortcut-id="<?= isset($row['message_shortcut_id']) ? (int) $row['message_shortcut_id'] : 0 ?>"
                                                             data-next-follow-up-date="<?= htmlspecialchars($displayNextFollowUpDate, ENT_QUOTES, 'UTF-8') ?>"
                                                             data-contact-no="<?= htmlspecialchars($effectiveContactNo, ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-existing-attachment-path="<?= htmlspecialchars((string) (isset($row['attachment']) ? $row['attachment'] : ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-existing-attachment-url="<?= htmlspecialchars((string) customerFollowUpBuildAttachmentUrl(isset($row['attachment']) ? $row['attachment'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-existing-attachment-path="<?= htmlspecialchars($rowAttachmentPath, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-existing-attachment-url="<?= htmlspecialchars((string) customerFollowUpBuildAttachmentUrl($rowAttachmentPath), ENT_QUOTES, 'UTF-8') ?>"
+
                                                             data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                                             data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-reject-reason="<?= htmlspecialchars((string) (isset($row['reject_reason']) ? $row['reject_reason'] : ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-appeal-existing-tag-items="[]"
-                                                            data-appeal-new-tag-name=""
-                                                            data-appeal-user-record-log="">
+                                                            data-reject-reason="<?= htmlspecialchars((string) (isset($row['reject_reason']) ? $row['reject_reason'] : ''), ENT_QUOTES, 'UTF-8') ?>">
                                                             <i class="fa-solid fa-gavel"></i><span class="ms-1">Appeal</span>
                                                         </button>
                                                     <?php } ?>
@@ -1394,15 +1585,45 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                                             data-message-shortcut-id="<?= isset($row['message_shortcut_id']) ? (int) $row['message_shortcut_id'] : 0 ?>"
                                                             data-next-follow-up-date="<?= htmlspecialchars($displayNextFollowUpDate, ENT_QUOTES, 'UTF-8') ?>"
                                                             data-contact-no="<?= htmlspecialchars($effectiveContactNo, ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-existing-attachment-path="<?= htmlspecialchars((string) (isset($row['attachment']) ? $row['attachment'] : ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-existing-attachment-url="<?= htmlspecialchars((string) customerFollowUpBuildAttachmentUrl(isset($row['attachment']) ? $row['attachment'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-existing-attachment-path="<?= htmlspecialchars($rowAttachmentPath, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-existing-attachment-url="<?= htmlspecialchars((string) customerFollowUpBuildAttachmentUrl($rowAttachmentPath), ENT_QUOTES, 'UTF-8') ?>"
+
                                                             data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                                             data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-reject-reason=""
-                                                            data-appeal-existing-tag-items="[]"
-                                                            data-appeal-new-tag-name=""
-                                                            data-appeal-user-record-log="">
+                                                            data-reject-reason="">
                                                             <i class="fa-solid fa-paper-plane"></i>
+                                                        </button>
+                                                    <?php } ?>
+
+                                                    <?php if ($canManageOwnCase) { ?>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-rounded btn-dark"
+                                                            title="Assign Tag"
+                                                            aria-label="Assign Tag"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#assignCustomerTagModal"
+                                                            data-follow-up-id="<?= $followUpId ?>"
+                                                            data-order-no="<?= htmlspecialchars((string) (isset($row['order_no']) ? $row['order_no'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-customer-name="<?= htmlspecialchars((string) (isset($row['customer_name']) ? $row['customer_name'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-customer-username="<?= htmlspecialchars((string) (isset($row['customer_username']) ? $row['customer_username'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-platform-label="<?= htmlspecialchars(customerFollowUpPagePlatformLabel(isset($row['platform']) ? $row['platform'] : ''), ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-customer-assigned-tag-ids="<?= htmlspecialchars((string) json_encode($customerAssignedTagIds), ENT_QUOTES, 'UTF-8') ?>">
+                                                            <i class="fa-solid fa-tags"></i>
+                                                        </button>
+                                                    <?php } ?>
+
+                                                    <?php if ($canManageOwnCase && $userRecordLogEmbedUrl !== '') { ?>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-rounded btn-outline-primary"
+                                                            title="User Record Log"
+                                                            aria-label="User Record Log"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#customerFollowUpUserRecordLogModal"
+                                                            data-user-record-log-url="<?= htmlspecialchars($userRecordLogEmbedUrl, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-user-record-log-customer="<?= htmlspecialchars($userRecordLogCustomerLabel !== '' ? $userRecordLogCustomerLabel : ('Customer #' . $rowCustomerId), ENT_QUOTES, 'UTF-8') ?>">
+                                                            <i class="fa-solid fa-clipboard-list"></i>
                                                         </button>
                                                     <?php } ?>
 
@@ -1812,10 +2033,10 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
 
                         <div class="mb-3">
                             <label class="form-label" for="submit_attachment">
-                                Screenshot / Attachment<span class="customer-follow-up-required-star">*</span>
+                                Customer Chat Screenshot<span class="customer-follow-up-required-star">*</span>
                             </label>
-                            <input type="file" class="form-control" id="submit_attachment" name="attachment" required>
-                            <div class="customer-follow-up-field-error" id="submit_attachment_error">Screenshot / Attachment is required.</div>
+                            <input type="file" class="form-control" id="submit_attachment" name="attachment" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf" required>
+                            <div class="customer-follow-up-field-error" id="submit_attachment_error">Customer Chat Screenshot is required.</div>
                             <div class="arrival-follow-up-preview" id="submit_attachment_preview_wrap">
                                 <a id="submit_existing_attachment_link" class="arrival-follow-up-preview-link d-none" href="#" target="_blank" rel="noopener noreferrer"></a>
                                 <img id="submit_attachment_preview_img" alt="Follow-Up Attachment Preview">
@@ -1868,40 +2089,91 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                 <input type="text" class="form-control" id="submit_contact_no" name="contact_no" placeholder="Enter Contact Number">
                             </div>
                         </div>
-                        <div id="appeal_extra_fields" class="d-none">
-                            <div class="mb-3">
-                                <label class="form-label">Assign Existing Tag</label>
-                                <div class="customer-follow-up-checkbox-list" id="appeal_tag_checkbox_list">
-                                    <?php foreach ($customerTagOptions as $tagOption) {
-                                        $tagOptionId = isset($tagOption['id']) ? (int) $tagOption['id'] : 0;
-                                        if ($tagOptionId <= 0) {
-                                            continue;
-                                        }
-                                        $tagOptionName = trim((string) (isset($tagOption['name']) ? $tagOption['name'] : ''));
-                                        ?>
-                                        <label class="customer-follow-up-checkbox-item">
-                                            <input type="checkbox" class="form-check-input" name="appeal_tag_ids[]" value="<?= $tagOptionId ?>">
-                                            <span><?= htmlspecialchars($tagOptionName !== '' ? $tagOptionName : ('Tag #' . $tagOptionId), ENT_QUOTES, 'UTF-8') ?></span>
-                                        </label>
-                                    <?php } ?>
-                                </div>
-                                <small class="text-muted">Select one or more existing tags to assign.</small>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label" for="appeal_new_tag_name">Create New Tag</label>
-                                <input type="text" class="form-control" id="appeal_new_tag_name" name="appeal_new_tag_name" maxlength="120" placeholder="Enter new tag name">
-                                <div class="customer-follow-up-field-error" id="appeal_new_tag_name_error">This tag name already exists. Please select it from Assign Existing Tag.</div>
-                            </div>
-                            <div class="mb-3">
-                                <label class="form-label" for="appeal_user_record_log">Optional User Record Log</label>
-                                <textarea class="form-control" id="appeal_user_record_log" name="appeal_user_record_log" rows="6"></textarea>
-                                <small class="text-muted">Optional manual note to save into User Record Log for this customer.</small>
-                            </div>
-                        </div>
                     </div>
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" id="submit_follow_up_close_btn" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
                         <button type="submit" class="btn btn-primary" id="submit_follow_up_submit_btn" style="text-transform: none !important;">Submit</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="customerFollowUpUserRecordLogModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-xl modal-dialog-scrollable customer-follow-up-user-record-log-dialog">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="customer_follow_up_user_record_log_title">User Record Log</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body customer-follow-up-user-record-log-modal-body">
+                    <iframe
+                        id="customer_follow_up_user_record_log_iframe"
+                        class="customer-follow-up-user-record-log-iframe"
+                        src="about:blank"
+                        title="User Record Log"></iframe>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="assignCustomerTagModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-dialog-scrollable">
+            <div class="modal-content">
+                <form method="post" class="customer-follow-up-action-form" id="assign_customer_tag_form">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Assign Tag</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="cfu_action" value="assign_customer_tag">
+                        <input type="hidden" name="follow_up_id" id="assign_customer_tag_follow_up_id" value="">
+
+                        <div class="arrival-follow-up-summary mb-3">
+                            <div class="arrival-follow-up-summary-row">
+                                <span class="arrival-follow-up-summary-label">Order ID</span>
+                                <span id="assign_customer_tag_order_code_text"></span>
+                            </div>
+                            <div class="arrival-follow-up-summary-row">
+                                <span class="arrival-follow-up-summary-label">Customer</span>
+                                <span id="assign_customer_tag_customer_text"></span>
+                            </div>
+                            <div class="arrival-follow-up-summary-row">
+                                <span class="arrival-follow-up-summary-label">Platform</span>
+                                <span id="assign_customer_tag_platform_text"></span>
+                            </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Assign Existing Tag</label>
+                            <div class="customer-follow-up-checkbox-list" id="appeal_tag_checkbox_list">
+                                <?php foreach ($customerTagOptions as $tagOption) {
+                                    $tagOptionId = isset($tagOption['id']) ? (int) $tagOption['id'] : 0;
+                                    if ($tagOptionId <= 0) {
+                                        continue;
+                                    }
+                                    $tagOptionName = trim((string) (isset($tagOption['name']) ? $tagOption['name'] : ''));
+                                    ?>
+                                    <label class="customer-follow-up-checkbox-item" data-appeal-tag-option-item="1" data-tag-id="<?= $tagOptionId ?>">
+                                        <input type="checkbox" class="form-check-input" name="appeal_tag_ids[]" value="<?= $tagOptionId ?>">
+                                        <span><?= htmlspecialchars($tagOptionName !== '' ? $tagOptionName : ('Tag #' . $tagOptionId), ENT_QUOTES, 'UTF-8') ?></span>
+                                    </label>
+                                <?php } ?>
+                            </div>
+                            <div class="text-muted d-none" id="appeal_tag_empty_message">No available existing tags to assign.</div>
+                            <small class="text-muted">Select one or more existing tags to assign.</small>
+                        </div>
+                        <div class="mb-3">
+                            <label class="form-label" for="appeal_new_tag_name">Create New Tag</label>
+                            <input type="text" class="form-control" id="appeal_new_tag_name" name="appeal_new_tag_name" maxlength="120" placeholder="Enter new tag name">
+                            <div class="customer-follow-up-field-error" id="appeal_new_tag_name_error">This tag name already exists. Please select it from Assign Existing Tag.</div>
+                        </div>
+
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
+                        <button type="submit" class="btn btn-primary" style="text-transform: none !important;">Assign Tag</button>
                     </div>
                 </form>
             </div>
@@ -2397,14 +2669,28 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             }
         }
 
-        function clearSubmitFollowUpRequiredErrors() {
-            setCustomerFollowUpFieldError('submit_attachment', 'submit_attachment_error', false);
-            setCustomerFollowUpFieldError('submit_message_shortcut_id', 'submit_message_shortcut_error', false);
-            setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', false);
-            setCustomerFollowUpFieldError('appeal_new_tag_name', 'appeal_new_tag_name_error', false);
+        function customerFollowUpSubmitAttachmentHasFiles() {
+            var attachmentInput = document.getElementById('submit_attachment');
+            return !!(attachmentInput && attachmentInput.files && attachmentInput.files.length > 0);
         }
 
-        var appealUserRecordLogEditorPromise = null;
+        function customerFollowUpSetSubmitAttachmentError(hasError) {
+            var attachmentInput = document.getElementById('submit_attachment');
+            if (attachmentInput) {
+                attachmentInput.classList.toggle('is-invalid', !!hasError);
+            }
+
+            var error = document.getElementById('submit_attachment_error');
+            if (error) {
+                error.classList.toggle('is-visible', !!hasError);
+            }
+        }
+
+        function clearSubmitFollowUpRequiredErrors() {
+            customerFollowUpSetSubmitAttachmentError(false);
+            setCustomerFollowUpFieldError('submit_message_shortcut_id', 'submit_message_shortcut_error', false);
+            setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', false);
+        }
 
         function customerFollowUpValidateYmdDate(value) {
             return /^\d{4}-\d{2}-\d{2}$/.test(String(value || '').trim());
@@ -2529,15 +2815,63 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             });
         }
 
-        function customerFollowUpSetAppealTagReadOnly(isReadOnly) {
+        function customerFollowUpNormalizeTagIdList(tagIds) {
+            var normalizedTagIds = [];
+
+            if (!Array.isArray(tagIds)) {
+                return normalizedTagIds;
+            }
+
+            tagIds.forEach(function (tagId) {
+                var normalizedTagId = String(tagId).trim();
+                if (normalizedTagId !== '' && normalizedTagIds.indexOf(normalizedTagId) === -1) {
+                    normalizedTagIds.push(normalizedTagId);
+                }
+            });
+
+            return normalizedTagIds;
+        }
+
+        function customerFollowUpFilterAppealTagOptions(assignedTagIds, keepTagItems) {
             var checkboxList = document.getElementById('appeal_tag_checkbox_list');
             if (!checkboxList) {
                 return;
             }
 
-            Array.prototype.slice.call(checkboxList.querySelectorAll('input[name="appeal_tag_ids[]"]')).forEach(function (checkbox) {
-                checkbox.disabled = !!isReadOnly;
+            var assignedTagIdList = customerFollowUpNormalizeTagIdList(assignedTagIds);
+            var keepTagIdList = [];
+
+            customerFollowUpNormalizeAppealTagItems(keepTagItems).forEach(function (tagItem) {
+                var tagId = String(tagItem && typeof tagItem.id !== 'undefined' ? tagItem.id : '').trim();
+                if (tagId !== '' && keepTagIdList.indexOf(tagId) === -1) {
+                    keepTagIdList.push(tagId);
+                }
             });
+
+            var visibleCount = 0;
+
+            Array.prototype.slice.call(checkboxList.querySelectorAll('[data-appeal-tag-option-item="1"]')).forEach(function (item) {
+                var checkbox = item.querySelector('input[name="appeal_tag_ids[]"]');
+                var tagId = checkbox ? String(checkbox.value).trim() : '';
+                var shouldHide = tagId !== '' && assignedTagIdList.indexOf(tagId) !== -1 && keepTagIdList.indexOf(tagId) === -1;
+
+                item.classList.toggle('d-none', shouldHide);
+
+                if (checkbox) {
+                    if (shouldHide) {
+                        checkbox.checked = false;
+                        checkbox.disabled = true;
+                    } else {
+                        checkbox.disabled = false;
+                        visibleCount++;
+                    }
+                }
+            });
+
+            var emptyMessage = document.getElementById('appeal_tag_empty_message');
+            if (emptyMessage) {
+                emptyMessage.classList.toggle('d-none', visibleCount > 0);
+            }
         }
 
         function customerFollowUpApplySubmitFollowUpFieldErrors(fieldErrors) {
@@ -2664,19 +2998,22 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
         }
 
         function customerFollowUpSetSubmitFollowUpModalReadOnly(isReadOnly) {
-            ['submit_attachment', 'submit_message_shortcut_id', 'submit_next_follow_up_date', 'submit_contact_no', 'appeal_new_tag_name'].forEach(function (fieldId) {
+            ['submit_message_shortcut_id', 'submit_next_follow_up_date', 'submit_contact_no'].forEach(function (fieldId) {
                 var field = document.getElementById(fieldId);
                 if (!field) {
                     return;
                 }
 
-                if (fieldId === 'submit_contact_no' || fieldId === 'appeal_new_tag_name') {
+                if (fieldId === 'submit_contact_no') {
                     field.readOnly = !!isReadOnly;
                 }
                 field.disabled = !!isReadOnly;
             });
 
-            customerFollowUpSetAppealTagReadOnly(isReadOnly);
+            var attachmentInput = document.getElementById('submit_attachment');
+            if (attachmentInput) {
+                attachmentInput.disabled = !!isReadOnly;
+            }
 
             var closeBtn = document.getElementById('submit_follow_up_close_btn');
             if (closeBtn) {
@@ -2694,8 +3031,6 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                 contactEditBtn.disabled = !!isReadOnly;
                 contactEditBtn.classList.toggle('d-none', !!isReadOnly);
             }
-
-            customerFollowUpSetAppealUserRecordLogReadOnly(isReadOnly);
         }
 
         function validateMissingNextFollowUpDateForm() {
@@ -2721,7 +3056,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             var shortcutMissing = !shortcutInput || shortcutInput.value.trim() === '';
             var nextDateMissing = !nextDateInput || nextDateInput.value.trim() === '';
 
-            setCustomerFollowUpFieldError('submit_attachment', 'submit_attachment_error', attachmentMissing);
+            customerFollowUpSetSubmitAttachmentError(attachmentMissing);
             setCustomerFollowUpFieldError('submit_message_shortcut_id', 'submit_message_shortcut_error', shortcutMissing);
             setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', nextDateMissing);
 
@@ -2730,6 +3065,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                 if (nextDateInvalid) {
                     setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', true);
                 }
+
                 var firstInvalidField = attachmentMissing
                     ? attachmentInput
                     : (shortcutMissing ? shortcutInput : nextDateInput);
@@ -2758,6 +3094,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                         if (!validateSubmitFollowUpRequiredFields()) {
                             return;
                         }
+                    } else if (form.id === 'assign_customer_tag_form') {
                         customerFollowUpSyncAppealUserRecordLogEditor();
                     } else {
                         if (typeof form.reportValidity === 'function' && !form.reportValidity()) {
@@ -2820,7 +3157,11 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                 ? payload.field_errors
                                 : {};
 
-                            if (!wasSuccessful && form.id === 'submit_follow_up_form' && Object.keys(fieldErrors).length > 0) {
+                            if (
+                                !wasSuccessful
+                                && (form.id === 'submit_follow_up_form' || form.id === 'assign_customer_tag_form')
+                                && Object.keys(fieldErrors).length > 0
+                            ) {
                                 customerFollowUpApplySubmitFollowUpFieldErrors(fieldErrors);
                                 return;
                             }
@@ -2868,15 +3209,17 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             }
 
             var currentObjectUrl = null;
-            var getExistingAttachment = function () {
-                return {
-                    url: fileInput.getAttribute('data-existing-url') || '',
-                    path: fileInput.getAttribute('data-existing-path') || ''
-                };
-            };
+
             var isImagePath = function (path) {
                 return /\.(png|jpe?g|webp|gif)$/i.test(path || '');
             };
+
+            var getFileNameFromPath = function (path) {
+                path = String(path || '');
+                var parts = path.split('/');
+                return parts.length > 0 ? parts[parts.length - 1] : path;
+            };
+
             var clearExistingLink = function () {
                 if (existingLink) {
                     existingLink.removeAttribute('href');
@@ -2884,35 +3227,39 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                     existingLink.classList.add('d-none');
                 }
             };
+
             var clearPreview = function () {
                 if (currentObjectUrl) {
                     URL.revokeObjectURL(currentObjectUrl);
                     currentObjectUrl = null;
                 }
+
                 previewImage.removeAttribute('src');
                 previewImage.style.display = 'none';
                 previewNote.textContent = '';
                 previewNote.classList.add('d-none');
                 previewWrap.style.display = 'none';
             };
+
             var showExistingAttachment = function () {
-                var existing = getExistingAttachment();
+                var existingPath = fileInput.getAttribute('data-existing-path') || '';
+                var existingUrl = fileInput.getAttribute('data-existing-url') || '';
 
                 clearPreview();
                 clearExistingLink();
 
-                if (!existing.url || !existing.path) {
+                if (!existingUrl || !existingPath) {
                     return;
                 }
 
                 if (existingLink) {
-                    existingLink.href = existing.url;
-                    existingLink.textContent = 'Previous Attachment: ' + existing.path;
+                    existingLink.href = existingUrl;
+                    existingLink.textContent = 'Previous Attachment: ' + getFileNameFromPath(existingPath);
                     existingLink.classList.remove('d-none');
                 }
 
-                if (isImagePath(existing.path)) {
-                    previewImage.src = existing.url;
+                if (isImagePath(existingPath)) {
+                    previewImage.src = existingUrl;
                     previewImage.style.display = 'block';
                     previewNote.textContent = '';
                     previewNote.classList.add('d-none');
@@ -2940,6 +3287,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                 }
 
                 clearExistingLink();
+                customerFollowUpSetSubmitAttachmentError(false);
 
                 if (file.type.indexOf('image/') === 0) {
                     currentObjectUrl = URL.createObjectURL(file);
@@ -2959,6 +3307,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
             });
 
             window.addEventListener('beforeunload', clearPreview);
+
             return {
                 clearPreview: clearPreview,
                 showExistingAttachment: showExistingAttachment
@@ -3039,9 +3388,6 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                 var isViewAppeal = submitMode === 'view_appeal';
                 var isAppealContext = isAppeal || isViewAppeal;
                 var rejectReason = button.getAttribute('data-reject-reason') || '';
-                var appealExistingTagItems = customerFollowUpParseJsonAttribute(button.getAttribute('data-appeal-existing-tag-items') || '[]', []);
-                var appealNewTagName = button.getAttribute('data-appeal-new-tag-name') || '';
-                var appealUserRecordLog = button.getAttribute('data-appeal-user-record-log') || '';
 
                 document.getElementById('submit_follow_up_id').value = followUpId;
                 document.getElementById('submit_mode').value = isAppeal ? 'appeal' : 'submit';
@@ -3059,24 +3405,18 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                 document.getElementById('submit_next_follow_up_date').value = nextFollowUpDate;
                 document.getElementById('submit_next_follow_up_date').max = maxDate;
                 document.getElementById('submit_next_follow_up_hint').textContent = ruleLabel;
+
                 document.getElementById('submit_follow_up_submit_btn').textContent = isAppeal ? 'Submit Appeal' : 'Submit';
                 document.getElementById('submit_reject_reason_text').textContent = rejectReason || 'No reject reason recorded.';
                 document.getElementById('submit_reject_reason_wrap').classList.toggle('d-none', !isAppealContext);
-                document.getElementById('appeal_extra_fields').classList.toggle('d-none', !isAppealContext);
-                customerFollowUpSetAppealTagSelections(isAppealContext ? appealExistingTagItems : []);
-                document.getElementById('appeal_new_tag_name').value = isAppealContext ? appealNewTagName : '';
-                customerFollowUpSetAppealUserRecordLogContent(isAppealContext ? appealUserRecordLog : '');
-                var appealEditorReadyPromise = null;
-                if (isAppealContext) {
-                    appealEditorReadyPromise = customerFollowUpEnsureAppealUserRecordLogEditor();
-                }
 
                 var submitAttachmentInput = document.getElementById('submit_attachment');
                 submitAttachmentInput.value = '';
+
                 submitAttachmentInput.setAttribute('data-existing-path', existingAttachmentPath);
                 submitAttachmentInput.setAttribute('data-existing-url', existingAttachmentUrl);
 
-                submitAttachmentInput.required = !isViewAppeal && !(isAppeal && existingAttachmentPath);
+                submitAttachmentInput.required = !isViewAppeal && !(isAppeal && existingAttachmentPath !== '');
 
                 clearSubmitFollowUpRequiredErrors();
 
@@ -3101,22 +3441,71 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                 }
 
                 customerFollowUpSetSubmitFollowUpModalReadOnly(isViewAppeal);
-                if (appealEditorReadyPromise && typeof appealEditorReadyPromise.then === 'function') {
-                    appealEditorReadyPromise.then(function () {
-                        customerFollowUpSetAppealUserRecordLogContent(appealUserRecordLog);
-                        customerFollowUpSetAppealUserRecordLogReadOnly(isViewAppeal);
-                    });
-                }
             });
 
             submitFollowUpModal.addEventListener('hidden.bs.modal', function () {
                 document.getElementById('submit_mode').value = 'submit';
                 document.getElementById('submit_reject_reason_wrap').classList.add('d-none');
-                document.getElementById('appeal_extra_fields').classList.add('d-none');
-                customerFollowUpResetAppealTagSelections();
-                document.getElementById('appeal_new_tag_name').value = '';
-                customerFollowUpSetAppealUserRecordLogContent('');
                 customerFollowUpSetSubmitFollowUpModalReadOnly(false);
+            });
+        }
+
+        var customerFollowUpUserRecordLogModal = document.getElementById('customerFollowUpUserRecordLogModal');
+        if (customerFollowUpUserRecordLogModal) {
+            customerFollowUpUserRecordLogModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                var iframe = document.getElementById('customer_follow_up_user_record_log_iframe');
+                var title = document.getElementById('customer_follow_up_user_record_log_title');
+
+                if (!button || !iframe) {
+                    return;
+                }
+
+                var userRecordLogUrl = button.getAttribute('data-user-record-log-url') || '';
+                var customerLabel = button.getAttribute('data-user-record-log-customer') || '';
+
+                if (title) {
+                    title.textContent = customerLabel !== ''
+                        ? 'User Record Log - ' + customerLabel
+                        : 'User Record Log';
+                }
+
+                iframe.src = userRecordLogUrl !== '' ? userRecordLogUrl : 'about:blank';
+            });
+
+            customerFollowUpUserRecordLogModal.addEventListener('hidden.bs.modal', function () {
+                var iframe = document.getElementById('customer_follow_up_user_record_log_iframe');
+                if (iframe) {
+                    iframe.src = 'about:blank';
+                }
+            });
+        }        
+
+        var assignCustomerTagModal = document.getElementById('assignCustomerTagModal');
+        if (assignCustomerTagModal) {
+            assignCustomerTagModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                if (!button) {
+                    return;
+                }
+
+                var assignedTagIds = customerFollowUpParseJsonAttribute(button.getAttribute('data-customer-assigned-tag-ids') || '[]', []);
+                document.getElementById('assign_customer_tag_follow_up_id').value = button.getAttribute('data-follow-up-id') || '';
+                document.getElementById('assign_customer_tag_order_code_text').textContent = button.getAttribute('data-order-no') || '-';
+                document.getElementById('assign_customer_tag_customer_text').textContent = button.getAttribute('data-customer-username') || button.getAttribute('data-customer-name') || '-';
+                document.getElementById('assign_customer_tag_platform_text').textContent = button.getAttribute('data-platform-label') || '-';
+
+                customerFollowUpResetAppealTagSelections();
+                customerFollowUpFilterAppealTagOptions(assignedTagIds, []);
+                document.getElementById('appeal_new_tag_name').value = '';
+                setCustomerFollowUpFieldError('appeal_new_tag_name', 'appeal_new_tag_name_error', false);
+            });
+
+            assignCustomerTagModal.addEventListener('hidden.bs.modal', function () {
+                document.getElementById('assign_customer_tag_follow_up_id').value = '';
+                customerFollowUpResetAppealTagSelections();
+                customerFollowUpFilterAppealTagOptions([], []);
+                document.getElementById('appeal_new_tag_name').value = '';
                 setCustomerFollowUpFieldError('appeal_new_tag_name', 'appeal_new_tag_name_error', false);
             });
         }
