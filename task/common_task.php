@@ -734,7 +734,6 @@ if (!function_exists('taskSendMentionAlerts')) {
             $contextType = 'comment';
         }
 
-        $actorName = taskFormatHistoryUserValue($connect, $currentUserId);
         $workItemKey = isset($context['work_item_key']) ? trim((string) $context['work_item_key']) : '';
         $title = isset($context['title']) ? trim((string) $context['title']) : '';
         $workItemLabel = trim($workItemKey . ($title !== '' ? ' ' . $title : ''));
@@ -775,6 +774,62 @@ if (!function_exists('taskSendMentionAlerts')) {
         }
 
         return $createdCount;
+    }
+}
+
+if (!function_exists('taskSendAssigneeReassignmentAlert')) {
+    function taskSendAssigneeReassignmentAlert($connect, $itemId, $previousAssigneeUserId, $newAssigneeUserId, $currentUserId, $cdate, $ctime)
+    {
+        if (!($connect instanceof mysqli) || !function_exists('systemAlertCreate')) {
+            return 0;
+        }
+
+        $itemId = (int) $itemId;
+        $previousAssigneeUserId = (int) $previousAssigneeUserId;
+        $newAssigneeUserId = (int) $newAssigneeUserId;
+        $currentUserId = (int) $currentUserId;
+
+        if ($itemId <= 0 || $previousAssigneeUserId <= 0 || $newAssigneeUserId <= 0 || $previousAssigneeUserId === $newAssigneeUserId) {
+            return 0;
+        }
+
+        $context = taskGetMentionAlertContext($connect, $itemId);
+        if (empty($context)) {
+            return 0;
+        }
+
+        $projectId = isset($context['project_id']) ? (int) $context['project_id'] : 0;
+        $recipients = taskResolveMentionAlertRecipients($connect, $projectId, array($newAssigneeUserId), 0);
+        if (empty($recipients[$newAssigneeUserId])) {
+            return 0;
+        }
+
+        $actorName = taskFormatHistoryUserValue($connect, $currentUserId);
+        $workItemKey = isset($context['work_item_key']) ? trim((string) $context['work_item_key']) : '';
+        $title = isset($context['title']) ? trim((string) $context['title']) : '';
+        $workItemLabel = trim($workItemKey . ($title !== '' ? ' ' . $title : ''));
+        if ($workItemLabel === '') {
+            $workItemLabel = 'work item #' . $itemId;
+        }
+
+        $alertId = systemAlertCreate($connect, array(
+            'module_key' => 'project_task',
+            'notification_type' => 'task_item_reassigned',
+            'target_user_id' => $newAssigneeUserId,
+            'target_user_group_id' => function_exists('systemAlertGetUserGroupId') ? systemAlertGetUserGroupId($connect, $newAssigneeUserId) : 0,
+            'title' => 'Work item reassigned',
+            'message' => 'The ' . $workItemLabel . ' have been assigned to you.',
+            'action_url' => isset($context['action_url']) ? (string) $context['action_url'] : '',
+            'action_label' => 'Open Work Item',
+            'related_table' => 'task_item',
+            'related_id' => $itemId,
+            'display_date' => $cdate,
+            'create_by' => $currentUserId > 0 ? (string) $currentUserId : 'SYSTEM',
+            'create_date' => $cdate,
+            'create_time' => $ctime,
+        ));
+
+        return (int) $alertId > 0 ? 1 : 0;
     }
 }
 
@@ -6204,6 +6259,7 @@ if (!function_exists('taskUpdateItemDetail')) {
 
         if ($oldAssigneeUserId !== $assigneeUserId) {
             taskLogItemHistory($connect, $itemId, 'update_field', 'Assignee', taskFormatHistoryUserValue($connect, $oldAssigneeUserId), taskFormatHistoryUserValue($connect, $assigneeUserId), 'changed Assignee', $currentUserId, $cdate, $ctime);
+            taskSendAssigneeReassignmentAlert($connect, $itemId, $oldAssigneeUserId, $assigneeUserId, $currentUserId, $cdate, $ctime);
         }
         if ($oldReporterUserId !== $reporterUserId) {
             taskLogItemHistory($connect, $itemId, 'update_field', 'Reporter', taskFormatHistoryUserValue($connect, $oldReporterUserId), taskFormatHistoryUserValue($connect, $reporterUserId), 'changed Reporter', $currentUserId, $cdate, $ctime);
@@ -8225,6 +8281,7 @@ if (!function_exists('taskSetItemAssignee')) {
                 $cdate,
                 $ctime
             );
+            taskSendAssigneeReassignmentAlert($connect, $itemId, $previousAssigneeUserId, $assigneeUserId, $currentUserId, $cdate, $ctime);
         }
 
         $itemSql = "SELECT assignee_user_id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' LIMIT 1";
