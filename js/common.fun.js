@@ -4812,7 +4812,161 @@ function commonBuildMobileStickyFormActions() {
   commonDestroyMobileStickyFormActionsOverlay();
 }
 
+let commonGlobalScrollTopButtonState = null;
+
+function commonGetGlobalScrollTopDocumentHeight() {
+  let body = document.body;
+  let docElement = document.documentElement;
+  return Math.max(
+    body ? body.scrollHeight : 0,
+    body ? body.offsetHeight : 0,
+    docElement ? docElement.scrollHeight : 0,
+    docElement ? docElement.offsetHeight : 0,
+    docElement ? docElement.clientHeight : 0,
+  );
+}
+
+function commonShouldShowGlobalScrollTopButton() {
+  let viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  if (viewportHeight <= 0) {
+    return false;
+  }
+
+  let documentHeight = commonGetGlobalScrollTopDocumentHeight();
+  if (documentHeight < viewportHeight * 2) {
+    return false;
+  }
+
+  return (window.scrollY || window.pageYOffset || 0) > viewportHeight;
+}
+
+function commonEnsureGlobalScrollTopButton() {
+  let buttons = document.querySelectorAll("#globalScrollTopBtn");
+  let button = buttons.length > 0 ? buttons[0] : null;
+
+  for (let i = 1; i < buttons.length; i++) {
+    if (buttons[i] && buttons[i].parentNode) {
+      buttons[i].parentNode.removeChild(buttons[i]);
+    }
+  }
+
+  if (!button) {
+    button = document.createElement("button");
+    button.type = "button";
+    button.id = "globalScrollTopBtn";
+    button.setAttribute("aria-label", "Back to Top");
+    button.setAttribute("data-tooltip", "Back to Top");
+    button.setAttribute("title", "Back to Top");
+    button.hidden = true;
+    button.innerHTML = '<i class="fas fa-chevron-up" aria-hidden="true"></i>';
+
+    if (document.body) {
+      document.body.appendChild(button);
+    }
+  }
+
+  if (!button) {
+    return null;
+  }
+
+  if (!button.getAttribute("aria-label")) {
+    button.setAttribute("aria-label", "Back to Top");
+  }
+
+  button.setAttribute("data-tooltip", "Back to Top");
+  button.setAttribute("title", "Back to Top");
+
+  if (button.dataset.globalScrollTopBound !== "1") {
+    button.addEventListener("click", function () {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    });
+    button.dataset.globalScrollTopBound = "1";
+  }
+
+  return button;
+}
+
+function commonUpdateGlobalScrollTopButton() {
+  let button = commonEnsureGlobalScrollTopButton();
+  if (!button) {
+    return;
+  }
+
+  let shouldShowButton = commonShouldShowGlobalScrollTopButton();
+  button.hidden = !shouldShowButton;
+  button.classList.toggle("is-visible", shouldShowButton);
+  button.setAttribute("aria-hidden", shouldShowButton ? "false" : "true");
+}
+
+function commonQueueGlobalScrollTopButtonUpdate() {
+  let button = commonEnsureGlobalScrollTopButton();
+  if (!button) {
+    return;
+  }
+
+  if (!commonGlobalScrollTopButtonState) {
+    commonUpdateGlobalScrollTopButton();
+    return;
+  }
+
+  if (commonGlobalScrollTopButtonState.rafHandle) {
+    window.cancelAnimationFrame(commonGlobalScrollTopButtonState.rafHandle);
+  }
+
+  commonGlobalScrollTopButtonState.rafHandle = window.requestAnimationFrame(function () {
+    commonGlobalScrollTopButtonState.rafHandle = 0;
+    commonUpdateGlobalScrollTopButton();
+  });
+}
+
+function commonInitGlobalScrollTopButton() {
+  let button = commonEnsureGlobalScrollTopButton();
+  if (!button) {
+    return;
+  }
+
+  if (!commonGlobalScrollTopButtonState) {
+    let state = {
+      rafHandle: 0,
+      resizeObserver: null,
+    };
+
+    window.addEventListener(
+      "scroll",
+      function () {
+        commonQueueGlobalScrollTopButtonUpdate();
+      },
+      { passive: true },
+    );
+    window.addEventListener("resize", commonQueueGlobalScrollTopButtonUpdate);
+    window.addEventListener("orientationchange", commonQueueGlobalScrollTopButtonUpdate);
+    window.addEventListener("load", commonQueueGlobalScrollTopButtonUpdate);
+
+    if ("ResizeObserver" in window) {
+      state.resizeObserver = new ResizeObserver(function () {
+        commonQueueGlobalScrollTopButtonUpdate();
+      });
+
+      if (document.documentElement) {
+        state.resizeObserver.observe(document.documentElement);
+      }
+
+      if (document.body) {
+        state.resizeObserver.observe(document.body);
+      }
+    }
+
+    commonGlobalScrollTopButtonState = state;
+  }
+
+  commonQueueGlobalScrollTopButtonUpdate();
+}
+
 function commonInitMobileActionEnhancements() {
+  commonInitGlobalScrollTopButton();
   commonApplyVisibleActionLabels();
   commonApplyButtonTitles();
   commonBuildMobileFloatingAddButton();
