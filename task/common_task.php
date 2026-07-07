@@ -611,6 +611,483 @@ if (!function_exists('taskBuildWorkItemActionUrl')) {
     }
 }
 
+if (!function_exists('taskBuildProjectBoardUrl')) {
+    function taskBuildProjectBoardUrl($projectId)
+    {
+        $projectId = (int) $projectId;
+        $params = array();
+        if ($projectId > 0) {
+            $params['project_id'] = $projectId;
+        }
+
+        return siteUrlWithQuery(ROUTE_TASK_BOARD, $params);
+    }
+}
+
+if (!function_exists('taskFormatDigestDate')) {
+    function taskFormatDigestDate($dateValue)
+    {
+        $dateValue = trim((string) $dateValue);
+        if ($dateValue === '') {
+            return '';
+        }
+
+        $timestamp = strtotime($dateValue);
+        if ($timestamp === false) {
+            return $dateValue;
+        }
+
+        return date('j M Y', $timestamp);
+    }
+}
+
+if (!function_exists('taskFormatDigestDateTime')) {
+    function taskFormatDigestDateTime($dateValue, $timeValue = '')
+    {
+        $dateValue = trim((string) $dateValue);
+        $timeValue = trim((string) $timeValue);
+        if ($dateValue === '') {
+            return '';
+        }
+
+        $combined = $dateValue;
+        if ($timeValue !== '') {
+            $combined .= ' ' . $timeValue;
+        }
+
+        $timestamp = strtotime($combined);
+        if ($timestamp === false) {
+            return trim($dateValue . ($timeValue !== '' ? ' ' . $timeValue : ''));
+        }
+
+        return date('j M Y g:i A', $timestamp);
+    }
+}
+
+if (!function_exists('taskGetDueDigestReferenceDate')) {
+    function taskGetDueDigestReferenceDate($referenceDate = '')
+    {
+        $referenceDate = trim((string) $referenceDate);
+        if ($referenceDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $referenceDate)) {
+            return $referenceDate;
+        }
+
+        return date('Y-m-d');
+    }
+}
+
+if (!function_exists('taskGetDueDigestProjectLastSortMap')) {
+    function taskGetDueDigestProjectLastSortMap($connect, $projectIds)
+    {
+        $map = array();
+        $projectIds = taskUniquePositiveIntIds($projectIds);
+        if (empty($projectIds)) {
+            return $map;
+        }
+
+        $sql = "SELECT project_id, MAX(sort_order) AS max_sort_order
+                FROM " . TASK_COLUMN . "
+                WHERE status='A' AND project_id IN (" . implode(',', $projectIds) . ")
+                GROUP BY project_id";
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return $map;
+        }
+
+        while ($row = $result->fetch_assoc()) {
+            $projectId = isset($row['project_id']) ? (int) $row['project_id'] : 0;
+            if ($projectId <= 0) {
+                continue;
+            }
+
+            $map[$projectId] = isset($row['max_sort_order']) ? (int) $row['max_sort_order'] : 0;
+        }
+
+        return $map;
+    }
+}
+
+if (!function_exists('taskBuildDueDigestEmailJobs')) {
+    function taskBuildDueDigestEmailJobs($connect, $referenceDate = '')
+    {
+        $jobs = array();
+        $referenceDate = taskGetDueDigestReferenceDate($referenceDate);
+        if (!($connect instanceof mysqli)) {
+            return array(
+                'reference_date' => $referenceDate,
+                'jobs' => array(),
+                'matched_item_count' => 0,
+                'eligible_item_count' => 0,
+                'skipped_item_count' => 0,
+            );
+        }
+
+        $safeReferenceDate = mysqli_real_escape_string($connect, $referenceDate);
+        $sql = "SELECT
+                    id,
+                    project_id,
+                    project_key_id,
+                    column_id,
+                    title,
+                    due_date,
+                    assignee_user_id,
+                    reporter_user_id,
+                    create_date,
+                    create_time,
+                    update_date,
+                    update_time
+                FROM " . TASK_ITEM . "
+                WHERE status='A'
+                  AND assignee_user_id > 0
+                  AND due_date IS NOT NULL
+                  AND due_date <> ''
+                  AND due_date <= '" . $safeReferenceDate . "'
+                ORDER BY project_id ASC, assignee_user_id ASC, due_date ASC, id ASC";
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return array(
+                'reference_date' => $referenceDate,
+                'jobs' => array(),
+                'matched_item_count' => 0,
+                'eligible_item_count' => 0,
+                'skipped_item_count' => 0,
+            );
+        }
+
+        $rows = array();
+        $projectIds = array();
+        $assigneeIds = array();
+        $reporterIds = array();
+        $projectKeyIds = array();
+        $columnIds = array();
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+            $projectIds[] = isset($row['project_id']) ? (int) $row['project_id'] : 0;
+            $assigneeIds[] = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+            $reporterIds[] = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
+            $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+            $columnIds[] = isset($row['column_id']) ? (int) $row['column_id'] : 0;
+        }
+
+        $projectIds = taskUniquePositiveIntIds($projectIds);
+        $assigneeIds = taskUniquePositiveIntIds($assigneeIds);
+        $reporterIds = taskUniquePositiveIntIds($reporterIds);
+        $projectKeyIds = taskUniquePositiveIntIds($projectKeyIds);
+        $columnIds = taskUniquePositiveIntIds($columnIds);
+
+        if (empty($rows) || empty($projectIds) || empty($assigneeIds)) {
+            return array(
+                'reference_date' => $referenceDate,
+                'jobs' => array(),
+                'matched_item_count' => count($rows),
+                'eligible_item_count' => 0,
+                'skipped_item_count' => count($rows),
+            );
+        }
+
+        $projectLastSortMap = taskGetDueDigestProjectLastSortMap($connect, $projectIds);
+        $projectKeyMap = taskFetchProjectKeyMap($connect, $projectKeyIds, true);
+        $columnMap = taskFetchColumnInfoMap($connect, $columnIds, true);
+        $assigneeNameMap = taskFetchUserDisplayMap($connect, $assigneeIds, true);
+        $reporterNameMap = taskFetchUserDisplayMap($connect, $reporterIds, false);
+        $projectNameMap = array();
+
+        $projectResult = mysqli_query(
+            $connect,
+            "SELECT id, name
+             FROM " . TASK_PROJECT . "
+             WHERE status='A'
+               AND id IN (" . implode(',', $projectIds) . ")"
+        );
+        if ($projectResult) {
+            while ($projectRow = $projectResult->fetch_assoc()) {
+                $projectId = isset($projectRow['id']) ? (int) $projectRow['id'] : 0;
+                if ($projectId <= 0) {
+                    continue;
+                }
+
+                $projectNameMap[$projectId] = isset($projectRow['name']) ? trim((string) $projectRow['name']) : '';
+            }
+        }
+
+        $projectKeySettingMap = array();
+        foreach ($projectIds as $projectId) {
+            $projectKeySetting = taskGetProjectKeySetting($connect, $projectId);
+            $projectKeySettingMap[$projectId] = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
+        }
+
+        $assigneeEmailMap = array();
+        $emailResult = mysqli_query(
+            $connect,
+            "SELECT id, email
+             FROM " . USR_USER . "
+             WHERE status='A'
+               AND id IN (" . implode(',', $assigneeIds) . ")"
+        );
+        if ($emailResult) {
+            while ($emailRow = $emailResult->fetch_assoc()) {
+                $userId = isset($emailRow['id']) ? (int) $emailRow['id'] : 0;
+                $email = trim((string) (isset($emailRow['email']) ? $emailRow['email'] : ''));
+                if ($userId > 0 && $email !== '' && (function_exists('isEmail') ? isEmail($email) : filter_var($email, FILTER_VALIDATE_EMAIL))) {
+                    $assigneeEmailMap[$userId] = $email;
+                }
+            }
+        }
+
+        $moduleAccessCache = array();
+        $projectAccessCache = array();
+        $eligibleItemCount = 0;
+
+        foreach ($rows as $row) {
+            $itemId = isset($row['id']) ? (int) $row['id'] : 0;
+            $projectId = isset($row['project_id']) ? (int) $row['project_id'] : 0;
+            $assigneeUserId = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+            if ($itemId <= 0 || $projectId <= 0 || $assigneeUserId <= 0) {
+                continue;
+            }
+
+            $columnId = isset($row['column_id']) ? (int) $row['column_id'] : 0;
+            if (!isset($projectNameMap[$projectId]) || !isset($columnMap[$columnId])) {
+                continue;
+            }
+
+            $columnName = isset($columnMap[$columnId]['name']) ? trim((string) $columnMap[$columnId]['name']) : '';
+            $columnSortOrder = isset($columnMap[$columnId]['sort_order']) ? (int) $columnMap[$columnId]['sort_order'] : 0;
+            $projectLastSortOrder = isset($projectLastSortMap[$projectId]) ? (int) $projectLastSortMap[$projectId] : 0;
+            $isDone = taskIsDoneColumnName($columnName)
+                || ($projectLastSortOrder > 0 && $columnSortOrder >= $projectLastSortOrder);
+            if ($isDone) {
+                continue;
+            }
+
+            if (!isset($assigneeEmailMap[$assigneeUserId])) {
+                continue;
+            }
+
+            if (!array_key_exists($assigneeUserId, $moduleAccessCache)) {
+                $moduleAccessCache[$assigneeUserId] = function_exists('systemAlertUserHasAccessToModule')
+                    ? systemAlertUserHasAccessToModule($connect, $assigneeUserId, 'project_task')
+                    : true;
+            }
+            if (empty($moduleAccessCache[$assigneeUserId])) {
+                continue;
+            }
+
+            $projectAccessKey = $projectId . ':' . $assigneeUserId;
+            if (!array_key_exists($projectAccessKey, $projectAccessCache)) {
+                $projectAccessCache[$projectAccessKey] = taskHasAnyProjectAccess($connect, $projectId, $assigneeUserId);
+            }
+            if (empty($projectAccessCache[$projectAccessKey])) {
+                continue;
+            }
+
+            $projectKeyId = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+            $projectKey = isset($projectKeyMap[$projectKeyId]) ? (string) $projectKeyMap[$projectKeyId] : '';
+            if ($projectKey === '') {
+                $projectKey = taskNormalizeProjectKey(isset($projectKeySettingMap[$projectId]) ? $projectKeySettingMap[$projectId] : '');
+            }
+
+            $dueDate = isset($row['due_date']) ? trim((string) $row['due_date']) : '';
+            $reporterUserId = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
+            $lastUpdateDate = trim((string) (isset($row['update_date']) ? $row['update_date'] : ''));
+            $lastUpdateTime = trim((string) (isset($row['update_time']) ? $row['update_time'] : ''));
+            if ($lastUpdateDate === '') {
+                $lastUpdateDate = trim((string) (isset($row['create_date']) ? $row['create_date'] : ''));
+            }
+            if ($lastUpdateTime === '') {
+                $lastUpdateTime = trim((string) (isset($row['create_time']) ? $row['create_time'] : ''));
+            }
+
+            $jobKey = $projectId . ':' . $assigneeUserId;
+            if (!isset($jobs[$jobKey])) {
+                $assigneeName = isset($assigneeNameMap[$assigneeUserId]) ? trim((string) $assigneeNameMap[$assigneeUserId]) : '';
+                if ($assigneeName === '') {
+                    $assigneeName = 'User #' . $assigneeUserId;
+                }
+
+                $projectName = isset($projectNameMap[$projectId]) ? trim((string) $projectNameMap[$projectId]) : '';
+                $jobs[$jobKey] = array(
+                    'job_key' => $jobKey,
+                    'project_id' => $projectId,
+                    'project_name' => $projectName !== '' ? $projectName : ('Project #' . $projectId),
+                    'assignee_user_id' => $assigneeUserId,
+                    'assignee_name' => $assigneeName,
+                    'assignee_email' => $assigneeEmailMap[$assigneeUserId],
+                    'board_url' => taskBuildProjectBoardUrl($projectId),
+                    'reference_date' => $referenceDate,
+                    'items' => array(),
+                    'overdue_count' => 0,
+                    'due_today_count' => 0,
+                );
+            }
+
+            $isOverdue = $dueDate !== '' && $dueDate < $referenceDate;
+            if ($isOverdue) {
+                $jobs[$jobKey]['overdue_count']++;
+            } else {
+                $jobs[$jobKey]['due_today_count']++;
+            }
+
+            $jobs[$jobKey]['items'][] = array(
+                'id' => $itemId,
+                'work_item_key' => taskBuildWorkItemKey($projectKey, $itemId),
+                'title' => isset($row['title']) ? trim((string) $row['title']) : '',
+                'due_date' => $dueDate,
+                'due_date_label' => taskFormatDigestDate($dueDate),
+                'reporter_name' => $reporterUserId > 0 && isset($reporterNameMap[$reporterUserId]) ? (string) $reporterNameMap[$reporterUserId] : '',
+                'last_update_date' => $lastUpdateDate,
+                'last_update_time' => $lastUpdateTime,
+                'last_update_label' => taskFormatDigestDateTime($lastUpdateDate, $lastUpdateTime),
+                'is_overdue' => $isOverdue ? 1 : 0,
+                'action_url' => taskBuildWorkItemActionUrl($projectId, $itemId),
+            );
+            $eligibleItemCount++;
+        }
+
+        foreach ($jobs as $jobKey => $job) {
+            if (empty($job['items'])) {
+                unset($jobs[$jobKey]);
+                continue;
+            }
+
+            usort($job['items'], function ($left, $right) {
+                $leftDue = isset($left['due_date']) ? (string) $left['due_date'] : '';
+                $rightDue = isset($right['due_date']) ? (string) $right['due_date'] : '';
+                if ($leftDue !== $rightDue) {
+                    return strcmp($leftDue, $rightDue);
+                }
+
+                $leftStamp = trim((string) (isset($left['last_update_date']) ? $left['last_update_date'] : '') . ' ' . (isset($left['last_update_time']) ? $left['last_update_time'] : ''));
+                $rightStamp = trim((string) (isset($right['last_update_date']) ? $right['last_update_date'] : '') . ' ' . (isset($right['last_update_time']) ? $right['last_update_time'] : ''));
+                if ($leftStamp !== $rightStamp) {
+                    return strcmp($rightStamp, $leftStamp);
+                }
+
+                $leftId = isset($left['id']) ? (int) $left['id'] : 0;
+                $rightId = isset($right['id']) ? (int) $right['id'] : 0;
+                return $leftId <=> $rightId;
+            });
+
+            $job['item_count'] = count($job['items']);
+            $job['subject'] = $job['assignee_name'] . ', you have work due in CMS ' . $job['project_name'];
+            $jobs[$jobKey] = $job;
+        }
+
+        return array(
+            'reference_date' => $referenceDate,
+            'jobs' => array_values($jobs),
+            'matched_item_count' => count($rows),
+            'eligible_item_count' => $eligibleItemCount,
+            'skipped_item_count' => max(0, count($rows) - $eligibleItemCount),
+        );
+    }
+}
+
+if (!function_exists('taskBuildDueDigestEmailSummaryText')) {
+    function taskBuildDueDigestEmailSummaryText($itemCount, $overdueCount, $dueTodayCount)
+    {
+        $itemCount = (int) $itemCount;
+        $overdueCount = (int) $overdueCount;
+        $dueTodayCount = (int) $dueTodayCount;
+
+        $parts = array();
+        if ($overdueCount > 0) {
+            $parts[] = $overdueCount . ' overdue';
+        }
+        if ($dueTodayCount > 0) {
+            $parts[] = $dueTodayCount . ' due today';
+        }
+        $baseLabel = $itemCount . ' work item' . ($itemCount === 1 ? '' : 's');
+        if (empty($parts)) {
+            return $baseLabel . ' due';
+        }
+
+        return $baseLabel . ' (' . implode(' and ', $parts) . ')';
+    }
+}
+
+if (!function_exists('taskBuildDueDigestEmailHtml')) {
+    function taskBuildDueDigestEmailHtml($job)
+    {
+        $assigneeName = trim((string) (isset($job['assignee_name']) ? $job['assignee_name'] : ''));
+        $projectName = trim((string) (isset($job['project_name']) ? $job['project_name'] : ''));
+        $boardUrl = trim((string) (isset($job['board_url']) ? $job['board_url'] : ''));
+        $referenceDate = taskGetDueDigestReferenceDate(isset($job['reference_date']) ? $job['reference_date'] : '');
+        $itemCount = isset($job['item_count']) ? (int) $job['item_count'] : 0;
+        $overdueCount = isset($job['overdue_count']) ? (int) $job['overdue_count'] : 0;
+        $dueTodayCount = isset($job['due_today_count']) ? (int) $job['due_today_count'] : 0;
+        $summaryText = taskBuildDueDigestEmailSummaryText($itemCount, $overdueCount, $dueTodayCount);
+        $safeAssigneeName = htmlspecialchars($assigneeName !== '' ? $assigneeName : 'there', ENT_QUOTES, 'UTF-8');
+        $safeProjectName = htmlspecialchars($projectName, ENT_QUOTES, 'UTF-8');
+
+        $rowsHtml = '';
+        foreach ((array) (isset($job['items']) ? $job['items'] : array()) as $item) {
+            $actionUrl = isset($item['action_url']) ? (string) $item['action_url'] : '';
+            $workItemKey = htmlspecialchars((string) (isset($item['work_item_key']) ? $item['work_item_key'] : ''), ENT_QUOTES, 'UTF-8');
+            $title = htmlspecialchars((string) (isset($item['title']) ? $item['title'] : ''), ENT_QUOTES, 'UTF-8');
+            $dueDateLabel = htmlspecialchars((string) (isset($item['due_date_label']) ? $item['due_date_label'] : ''), ENT_QUOTES, 'UTF-8');
+            $reporterName = trim((string) (isset($item['reporter_name']) ? $item['reporter_name'] : ''));
+            $lastUpdateLabel = htmlspecialchars((string) (isset($item['last_update_label']) ? $item['last_update_label'] : ''), ENT_QUOTES, 'UTF-8');
+            $dueStyle = !empty($item['is_overdue']) ? 'color:#C62828;font-weight:700;' : 'color:#B26A00;font-weight:600;';
+            $safeUrl = htmlspecialchars($actionUrl, ENT_QUOTES, 'UTF-8');
+            $reporterDisplay = $reporterName !== '' ? htmlspecialchars($reporterName, ENT_QUOTES, 'UTF-8') : '-';
+
+            $rowsHtml .= '
+                <tr>
+                    <td style="padding:14px 12px;border-bottom:1px solid #E5E7EB;vertical-align:top;">
+                        <div style="font-size:12px;font-weight:700;line-height:1.4;margin:0 0 6px;">
+                            <a href="' . $safeUrl . '" style="color:#0F4C81;text-decoration:none;">' . $workItemKey . '</a>
+                        </div>
+                        <div style="font-size:13px;line-height:1.5;">
+                            <a href="' . $safeUrl . '" style="color:#111827;text-decoration:none;">' . $title . '</a>
+                        </div>
+                    </td>
+                    <td style="padding:14px 12px;border-bottom:1px solid #E5E7EB;vertical-align:top;' . $dueStyle . '">' . $dueDateLabel . '</td>
+                    <td style="padding:14px 12px;border-bottom:1px solid #E5E7EB;vertical-align:top;color:#4B5563;">' . $reporterDisplay . '</td>
+                    <td style="padding:14px 12px;border-bottom:1px solid #E5E7EB;vertical-align:top;color:#4B5563;">' . $lastUpdateLabel . '</td>
+                </tr>';
+        }
+
+        return '
+            <html>
+                <meta http-equiv="Content-Type" content="text/html; charset=UTF-8">
+                <meta http-equiv="X-UA-Compatible" content="IE=edge,chrome=1">
+                <meta name="viewport" content="width=device-width, initial-scale=1.0, minimum-scale=1.0, maximum-scale=3.0">
+                <head>
+                    <title>' . htmlspecialchars((string) (isset($job['subject']) ? $job['subject'] : 'Project Task Due Reminder'), ENT_QUOTES, 'UTF-8') . '</title>
+                </head>
+                <body style="margin:0;background-color:#F3F6FB;font-family:sans-serif;color:#111827;">
+                    <div style="display:grid;gap:12px;min-width:350px;margin:20px auto;width:680px;max-width:calc(100% - 24px);">
+                        <table style="border-spacing:0;width:100%;background-color:#FFFFFF;border-radius:18px;">
+                            <tr>
+                                <td style="padding:28px 30px;">
+                                    <p style="font-size:22px;font-weight:700;margin:0 0 10px;">Project Task Due Reminder</p>
+                                    <p style="font-size:14px;line-height:1.6;margin:0 0 8px;">Hi ' . $safeAssigneeName . ',</p>
+                                    <p style="font-size:14px;line-height:1.7;margin:0 0 16px;">You have <b>' . htmlspecialchars($summaryText, ENT_QUOTES, 'UTF-8') . '</b> in CMS <b>' . $safeProjectName . '</b>.</p>
+                                    <p style="font-size:13px;color:#6B7280;margin:0 0 18px;">Reference date: ' . htmlspecialchars(taskFormatDigestDate($referenceDate), ENT_QUOTES, 'UTF-8') . '</p>
+                                    <table style="width:100%;border-collapse:collapse;border:1px solid #E5E7EB;border-radius:14px;overflow:hidden;">
+                                        <thead>
+                                            <tr style="background-color:#F8FAFC;">
+                                                <th align="left" style="padding:12px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#4B5563;text-transform:uppercase;letter-spacing:0.04em;">Work Item</th>
+                                                <th align="left" style="padding:12px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#4B5563;text-transform:uppercase;letter-spacing:0.04em;">Due Date</th>
+                                                <th align="left" style="padding:12px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#4B5563;text-transform:uppercase;letter-spacing:0.04em;">Reporter</th>
+                                                <th align="left" style="padding:12px;border-bottom:1px solid #E5E7EB;font-size:12px;color:#4B5563;text-transform:uppercase;letter-spacing:0.04em;">Last Update</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>' . $rowsHtml . '</tbody>
+                                    </table>
+                                    <div style="margin:20px 0 0;">
+                                        <a href="' . htmlspecialchars($boardUrl, ENT_QUOTES, 'UTF-8') . '" style="display:inline-block;padding:11px 18px;border-radius:10px;background-color:#0F4C81;color:#FFFFFF;text-decoration:none;font-size:13px;font-weight:700;">View all works</a>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                </body>
+            </html>';
+    }
+}
+
 if (!function_exists('taskGetMentionAlertContext')) {
     function taskGetMentionAlertContext($connect, $itemId)
     {
