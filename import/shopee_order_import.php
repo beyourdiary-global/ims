@@ -5135,98 +5135,154 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
             updateAirbillToggle.addEventListener('change', toggleAirbillFields);
         }
 
-        function clearBuyerAutocompleteBox() {
-        var buyerInput = previewForm.querySelector('#buyer');
-        if (!buyerInput) return;
+        function clearAutocompleteBoxByIds(elementID) {
+            if (!elementID) return;
+            var resultNode = document.getElementById('searchResult_' + elementID);
+            var clearNode = document.getElementById('clear_' + elementID);
+            if (resultNode) {
+                resultNode.remove();
+            }
+            if (clearNode) {
+                clearNode.remove();
+            }
+        }
 
-        var autocompleteBox = buyerInput.closest('.autocomplete');
-        if (!autocompleteBox) return;
-
-        Array.prototype.slice.call(autocompleteBox.children).forEach(function (child) {
-            if (child === buyerInput || child.id === 'buyer' || child.id === 'buyer_hidden') {
+        function runLookupSearch(config) {
+            if (!config || typeof searchInput !== 'function') {
                 return;
             }
 
-            child.remove();
-        });
-    }
+            searchInput({
+                search: config.search,
+                searchType: config.searchType,
+                elementID: config.elementID,
+                hiddenElementID: config.hiddenElementID,
+                dbTable: config.dbTable
+            }, '<?= $SITEURL ?>');
+        }
 
-    var buyerInput = previewForm.querySelector('#buyer');
-    var useDetectedBuyerBtn = previewForm.querySelector('#use_detected_buyer_btn');
-    if (buyerInput) {
-        buyerInput.addEventListener('keyup', function () {
-            var buyerHidden = previewForm.querySelector('#buyer_hidden');
+        function bindAutocompleteLookup(input, configFactory) {
+            if (!input || typeof configFactory !== 'function' || input.dataset.lookupBound === '1') {
+                return;
+            }
 
-            var param = {
-                search: buyerInput.value,
-                searchType: 'buyer_username',
-                elementID: 'buyer',
-                hiddenElementID: 'buyer_hidden',
-                dbTable: '<?= SHOPEE_CUST_INFO ?>',
+            input.dataset.lookupBound = '1';
+            var blurTimer = null;
+            var triggerSearch = function () {
+                var config = configFactory(input);
+                if (!config) {
+                    return;
+                }
+
+                if (blurTimer) {
+                    clearTimeout(blurTimer);
+                    blurTimer = null;
+                }
+
+                runLookupSearch(config);
             };
 
-            if (typeof searchInput === 'function') {
-                searchInput(param, '<?= $SITEURL ?>');
+            input.addEventListener('keyup', triggerSearch);
+            input.addEventListener('focus', function () {
+                if (String(input.value || '').trim() !== '') {
+                    triggerSearch();
+                }
+            });
+            input.addEventListener('blur', function () {
+                var config = configFactory(input);
+                if (!config) {
+                    return;
+                }
 
-                setTimeout(function () {
-                    syncBuyerHiddenField();
+                blurTimer = setTimeout(function () {
+                    clearAutocompleteBoxByIds(config.elementID);
+                }, 180);
+            });
+        }
 
-                    if (!buyerHidden || buyerHidden.value.trim() === '') {
-                        clearBuyerAutocompleteBox();
-                    }
-                }, 80);
+        function bindPreviewLookupRows() {
+            previewForm.querySelectorAll('.sor-pkg-input').forEach(function (input) {
+                bindAutocompleteLookup(input, function (targetInput) {
+                    return {
+                        search: targetInput.value,
+                        searchType: 'name',
+                        elementID: targetInput.id,
+                        hiddenElementID: targetInput.getAttribute('data-hidden-target'),
+                        dbTable: '<?= PKG ?>'
+                    };
+                });
+            });
 
-                setTimeout(function () {
-                    syncBuyerHiddenField();
+            previewForm.querySelectorAll('.sor-brand-input').forEach(function (input) {
+                bindAutocompleteLookup(input, function (targetInput) {
+                    return {
+                        search: targetInput.value,
+                        searchType: 'name',
+                        elementID: targetInput.id,
+                        hiddenElementID: targetInput.getAttribute('data-hidden-target'),
+                        dbTable: '<?= BRAND ?>'
+                    };
+                });
+            });
+        }
 
-                    if (!buyerHidden || buyerHidden.value.trim() === '') {
-                        clearBuyerAutocompleteBox();
-                    }
-                }, 200);
+        bindPreviewLookupRows();
+
+        var buyerInput = previewForm.querySelector('#buyer');
+        var useDetectedBuyerBtn = previewForm.querySelector('#use_detected_buyer_btn');
+        if (buyerInput) {
+            bindAutocompleteLookup(buyerInput, function () {
+                return {
+                    search: buyerInput.value,
+                    searchType: 'buyer_username',
+                    elementID: 'buyer',
+                    hiddenElementID: 'buyer_hidden',
+                    dbTable: '<?= SHOPEE_CUST_INFO ?>'
+                };
+            });
+
+            buyerInput.addEventListener('keyup', syncBuyerHiddenField);
+            buyerInput.addEventListener('input', syncBuyerHiddenField);
+            buyerInput.addEventListener('change', syncBuyerHiddenField);
+            buyerInput.addEventListener('blur', syncBuyerHiddenField);
+            syncBuyerHiddenField();
+        }
+
+        previewForm.addEventListener('click', function (event) {
+            if (event.target && event.target.id === 'add_pkg_btn') {
+                setTimeout(bindPreviewLookupRows, 0);
             }
 
-            syncBuyerHiddenField();
+            if (event.target && event.target.id === 'add_brand_btn') {
+                setTimeout(bindPreviewLookupRows, 0);
+            }
         });
 
-        buyerInput.addEventListener('input', function () {
-            var buyerHidden = previewForm.querySelector('#buyer_hidden');
-
-            setTimeout(function () {
-                syncBuyerHiddenField();
-
-                if (!buyerHidden || buyerHidden.value.trim() === '') {
-                    clearBuyerAutocompleteBox();
-                }
-            }, 100);
-        });
-
-        buyerInput.addEventListener('change', function () {
-            syncBuyerHiddenField();
-            clearBuyerAutocompleteBox();
-        });
-
-        buyerInput.addEventListener('blur', function () {
-            syncBuyerHiddenField();
-            setTimeout(clearBuyerAutocompleteBox, 80);
-        });
-
-        syncBuyerHiddenField();
-    }
-
-    if (buyerInput && useDetectedBuyerBtn) {
-        useDetectedBuyerBtn.addEventListener('click', function () {
-            var detectedBuyer = String(useDetectedBuyerBtn.getAttribute('data-detected-buyer') || '').trim();
-            if (detectedBuyer === '') {
+        previewForm.addEventListener('focusin', function (event) {
+            var target = event.target;
+            if (!(target instanceof HTMLElement)) {
                 return;
             }
 
-            buyerInput.value = detectedBuyer;
-            syncBuyerHiddenField();
-            clearBuyerAutocompleteBox();
-            clearInlineError(buyerInput);
-            buyerInput.focus();
+            if (target.classList.contains('sor-pkg-input') || target.classList.contains('sor-brand-input')) {
+                bindPreviewLookupRows();
+            }
         });
-    }
+
+        if (buyerInput && useDetectedBuyerBtn) {
+            useDetectedBuyerBtn.addEventListener('click', function () {
+                var detectedBuyer = String(useDetectedBuyerBtn.getAttribute('data-detected-buyer') || '').trim();
+                if (detectedBuyer === '') {
+                    return;
+                }
+
+                buyerInput.value = detectedBuyer;
+                syncBuyerHiddenField();
+                clearAutocompleteBoxByIds('buyer');
+                clearInlineError(buyerInput);
+                buyerInput.focus();
+            });
+        }
 
         var airbillAttachmentInput = previewForm.querySelector('#airbill_attachment');
         var airbillAttachmentPreviewWrap = previewForm.querySelector('#airbill_attachment_preview_wrap');
