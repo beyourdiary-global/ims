@@ -384,6 +384,34 @@ if (!function_exists('taskNormalizeWorklogDate')) {
     }
 }
 
+if (!function_exists('taskNormalizeBoardDate')) {
+    function taskNormalizeBoardDate($value, $fallback = '')
+    {
+        $text = trim((string) $value);
+        if ($text === '') {
+            return $fallback;
+        }
+
+        foreach (array('Y-m-d', 'Y/m/d', 'd/m/Y', 'd-m-Y', 'm/d/Y', 'm-d-Y') as $format) {
+            $dt = DateTime::createFromFormat('!' . $format, $text);
+            if ($dt instanceof DateTime && $dt->format($format) === $text) {
+                return $dt->format('Y-m-d');
+            }
+        }
+
+        if (preg_match('/^\d{4}-\d{2}-\d{2}\s+\d{2}:\d{2}:\d{2}$/', $text)) {
+            return substr($text, 0, 10);
+        }
+
+        $timestamp = strtotime($text);
+        if ($timestamp !== false) {
+            return date('Y-m-d', $timestamp);
+        }
+
+        return $fallback;
+    }
+}
+
 if (!function_exists('taskNormalizeWorklogTime')) {
     function taskNormalizeWorklogTime($value, $fallback = '')
     {
@@ -642,7 +670,7 @@ if (!function_exists('taskBuildProjectBoardUrl')) {
 if (!function_exists('taskFormatDigestDate')) {
     function taskFormatDigestDate($dateValue)
     {
-        $dateValue = trim((string) $dateValue);
+        $dateValue = taskNormalizeBoardDate($dateValue, trim((string) $dateValue));
         if ($dateValue === '') {
             return '';
         }
@@ -659,7 +687,7 @@ if (!function_exists('taskFormatDigestDate')) {
 if (!function_exists('taskFormatDigestDateTime')) {
     function taskFormatDigestDateTime($dateValue, $timeValue = '')
     {
-        $dateValue = trim((string) $dateValue);
+        $dateValue = taskNormalizeBoardDate($dateValue, trim((string) $dateValue));
         $timeValue = trim((string) $timeValue);
         if ($dateValue === '') {
             return '';
@@ -682,8 +710,8 @@ if (!function_exists('taskFormatDigestDateTime')) {
 if (!function_exists('taskGetDueDigestReferenceDate')) {
     function taskGetDueDigestReferenceDate($referenceDate = '')
     {
-        $referenceDate = trim((string) $referenceDate);
-        if ($referenceDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $referenceDate)) {
+        $referenceDate = taskNormalizeBoardDate($referenceDate);
+        if ($referenceDate !== '') {
             return $referenceDate;
         }
 
@@ -737,26 +765,30 @@ if (!function_exists('taskBuildDueDigestEmailJobs')) {
             );
         }
 
-        $safeReferenceDate = mysqli_real_escape_string($connect, $referenceDate);
+        $taskItemHasProjectKeyId = function_exists('siColumnExistsByName') ? siColumnExistsByName($connect, TASK_ITEM, 'project_key_id') : true;
+        $taskItemHasReporterUserId = function_exists('siColumnExistsByName') ? siColumnExistsByName($connect, TASK_ITEM, 'reporter_user_id') : true;
+        $taskItemHasUpdateDate = function_exists('siColumnExistsByName') ? siColumnExistsByName($connect, TASK_ITEM, 'update_date') : true;
+        $taskItemHasUpdateTime = function_exists('siColumnExistsByName') ? siColumnExistsByName($connect, TASK_ITEM, 'update_time') : true;
+        $taskItemHasCreateTime = function_exists('siColumnExistsByName') ? siColumnExistsByName($connect, TASK_ITEM, 'create_time') : true;
+
         $sql = "SELECT
                     id,
                     project_id,
-                    project_key_id,
+                    " . ($taskItemHasProjectKeyId ? 'project_key_id' : '0 AS project_key_id') . ",
                     column_id,
                     title,
                     due_date,
                     assignee_user_id,
-                    reporter_user_id,
+                    " . ($taskItemHasReporterUserId ? 'reporter_user_id' : '0 AS reporter_user_id') . ",
                     create_date,
-                    create_time,
-                    update_date,
-                    update_time
+                    " . ($taskItemHasCreateTime ? 'create_time' : "'' AS create_time") . ",
+                    " . ($taskItemHasUpdateDate ? 'update_date' : "'' AS update_date") . ",
+                    " . ($taskItemHasUpdateTime ? 'update_time' : "'' AS update_time") . "
                 FROM " . TASK_ITEM . "
                 WHERE status='A'
                   AND assignee_user_id > 0
                   AND due_date IS NOT NULL
-                  AND due_date <> ''
-                  AND due_date <= '" . $safeReferenceDate . "'
+                  AND TRIM(CAST(due_date AS CHAR)) <> ''
                 ORDER BY project_id ASC, assignee_user_id ASC, due_date ASC, id ASC";
         $result = mysqli_query($connect, $sql);
         if (!$result) {
@@ -851,6 +883,7 @@ if (!function_exists('taskBuildDueDigestEmailJobs')) {
 
         $moduleAccessCache = array();
         $projectAccessCache = array();
+        $matchedItemCount = 0;
         $eligibleItemCount = 0;
 
         foreach ($rows as $row) {
@@ -874,6 +907,13 @@ if (!function_exists('taskBuildDueDigestEmailJobs')) {
             if ($isDone) {
                 continue;
             }
+
+            $dueDate = taskNormalizeBoardDate(isset($row['due_date']) ? $row['due_date'] : '');
+            if ($dueDate === '' || $dueDate > $referenceDate) {
+                continue;
+            }
+
+            $matchedItemCount++;
 
             if (!isset($assigneeEmailMap[$assigneeUserId])) {
                 continue;
@@ -901,8 +941,6 @@ if (!function_exists('taskBuildDueDigestEmailJobs')) {
             if ($projectKey === '') {
                 $projectKey = taskNormalizeProjectKey(isset($projectKeySettingMap[$projectId]) ? $projectKeySettingMap[$projectId] : '');
             }
-
-            $dueDate = isset($row['due_date']) ? trim((string) $row['due_date']) : '';
             $reporterUserId = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
             $lastUpdateDate = trim((string) (isset($row['update_date']) ? $row['update_date'] : ''));
             $lastUpdateTime = trim((string) (isset($row['update_time']) ? $row['update_time'] : ''));
@@ -991,9 +1029,9 @@ if (!function_exists('taskBuildDueDigestEmailJobs')) {
         return array(
             'reference_date' => $referenceDate,
             'jobs' => array_values($jobs),
-            'matched_item_count' => count($rows),
+            'matched_item_count' => $matchedItemCount,
             'eligible_item_count' => $eligibleItemCount,
-            'skipped_item_count' => max(0, count($rows) - $eligibleItemCount),
+            'skipped_item_count' => max(0, $matchedItemCount - $eligibleItemCount),
         );
     }
 }
@@ -6508,6 +6546,11 @@ if (!function_exists('taskGetItemDetail')) {
             $storedRemainingSeconds
         );
 
+        $normalizedDueDate = taskNormalizeBoardDate(isset($row['due_date']) ? $row['due_date'] : '');
+        $normalizedStartDate = taskNormalizeBoardDate(isset($row['start_date']) ? $row['start_date'] : '');
+        $normalizedAmendementDate = taskNormalizeBoardDate(isset($row['amendement_date']) ? $row['amendement_date'] : '');
+        $normalizedSecondAmendementDate = taskNormalizeBoardDate(isset($row['second_amendement_date']) ? $row['second_amendement_date'] : '');
+
         $detail = array(
             'id' => $itemId,
             'column_id' => isset($row['column_id']) ? (int) $row['column_id'] : 0,
@@ -6547,15 +6590,15 @@ if (!function_exists('taskGetItemDetail')) {
             'combined_remaining_seconds' => isset($timeTrackingDetail['combined_remaining_seconds']) ? (int) $timeTrackingDetail['combined_remaining_seconds'] : 0,
             'can_include_child_time_tracking' => isset($timeTrackingDetail['can_include_child_time_tracking']) ? (int) $timeTrackingDetail['can_include_child_time_tracking'] : 0,
             'include_child_time_tracking' => isset($timeTrackingDetail['include_child_time_tracking']) ? (int) $timeTrackingDetail['include_child_time_tracking'] : 0,
-            'due_date' => isset($row['due_date']) && $row['due_date'] !== null ? (string) $row['due_date'] : '',
-            'start_date' => isset($row['start_date']) && $row['start_date'] !== null ? (string) $row['start_date'] : '',
+            'due_date' => $normalizedDueDate,
+            'start_date' => $normalizedStartDate,
             'create_date' => isset($row['create_date']) && $row['create_date'] !== null ? (string) $row['create_date'] : '',
             'create_time' => isset($row['create_time']) && $row['create_time'] !== null ? (string) $row['create_time'] : '',
             'update_date' => isset($row['update_date']) && $row['update_date'] !== null ? (string) $row['update_date'] : '',
             'update_time' => isset($row['update_time']) && $row['update_time'] !== null ? (string) $row['update_time'] : '',
-            'amendement_date' => isset($row['amendement_date']) && $row['amendement_date'] !== null ? (string) $row['amendement_date'] : '',
+            'amendement_date' => $normalizedAmendementDate,
             'amendement_time_minutes' => taskSqlTimeToMinutes(isset($row['amendement_time']) ? $row['amendement_time'] : ''),
-            'second_amendement_date' => isset($row['second_amendement_date']) && $row['second_amendement_date'] !== null ? (string) $row['second_amendement_date'] : '',
+            'second_amendement_date' => $normalizedSecondAmendementDate,
             'second_amendement_time_minutes' => taskSqlTimeToMinutes(isset($row['second_amendement_time']) ? $row['second_amendement_time'] : ''),
             'labels' => $labels,
             'is_parent_type' => $isEpic ? 1 : 0,
@@ -6665,23 +6708,23 @@ if (!function_exists('taskUpdateItemDetail')) {
         $safeAmendementDate = 'NULL';
         $safeSecondAmendementDate = 'NULL';
 
-        $dueDate = trim((string) $dueDate);
-        $startDate = trim((string) $startDate);
-        $amendementDate = trim((string) $amendementDate);
-        $secondAmendementDate = trim((string) $secondAmendementDate);
+        $dueDate = taskNormalizeBoardDate($dueDate);
+        $startDate = taskNormalizeBoardDate($startDate);
+        $amendementDate = taskNormalizeBoardDate($amendementDate);
+        $secondAmendementDate = taskNormalizeBoardDate($secondAmendementDate);
 
-        if ($dueDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) {
+        if ($dueDate !== '') {
             $safeDueDate = "'" . taskEsc($connect, $dueDate) . "'";
         }
-        if ($startDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $startDate)) {
+        if ($startDate !== '') {
             $safeStartDate = "'" . taskEsc($connect, $startDate) . "'";
         } elseif ($safeDueDate !== 'NULL') {
             $safeStartDate = $safeDueDate;
         }
-        if ($amendementDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $amendementDate)) {
+        if ($amendementDate !== '') {
             $safeAmendementDate = "'" . taskEsc($connect, $amendementDate) . "'";
         }
-        if ($secondAmendementDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $secondAmendementDate)) {
+        if ($secondAmendementDate !== '') {
             $safeSecondAmendementDate = "'" . taskEsc($connect, $secondAmendementDate) . "'";
         }
 
@@ -6752,10 +6795,10 @@ if (!function_exists('taskUpdateItemDetail')) {
         sort($oldStatusIds);
         sort($newStatusIds);
 
-        $oldStartDate = isset($existingRow['start_date']) && $existingRow['start_date'] !== null ? (string) $existingRow['start_date'] : '';
-        $oldDueDate = isset($existingRow['due_date']) && $existingRow['due_date'] !== null ? (string) $existingRow['due_date'] : '';
-        $oldAmendementDate = isset($existingRow['amendement_date']) && $existingRow['amendement_date'] !== null ? (string) $existingRow['amendement_date'] : '';
-        $oldSecondAmendementDate = isset($existingRow['second_amendement_date']) && $existingRow['second_amendement_date'] !== null ? (string) $existingRow['second_amendement_date'] : '';
+        $oldStartDate = taskNormalizeBoardDate(isset($existingRow['start_date']) ? $existingRow['start_date'] : '');
+        $oldDueDate = taskNormalizeBoardDate(isset($existingRow['due_date']) ? $existingRow['due_date'] : '');
+        $oldAmendementDate = taskNormalizeBoardDate(isset($existingRow['amendement_date']) ? $existingRow['amendement_date'] : '');
+        $oldSecondAmendementDate = taskNormalizeBoardDate(isset($existingRow['second_amendement_date']) ? $existingRow['second_amendement_date'] : '');
         $oldAmendementTimeMinutes = taskSqlTimeToMinutes(isset($existingRow['amendement_time']) ? $existingRow['amendement_time'] : '');
         $oldSecondAmendementTimeMinutes = taskSqlTimeToMinutes(isset($existingRow['second_amendement_time']) ? $existingRow['second_amendement_time'] : '');
 
@@ -8273,12 +8316,14 @@ if (!function_exists('taskCreateItem')) {
             $sortOrder = isset($sortRow['next_sort']) ? (int) $sortRow['next_sort'] : 1;
         }
 
+        $dueDate = taskNormalizeBoardDate($dueDate);
+
         $safeTitle = taskEsc($connect, substr($title, 0, 255));
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
         $safeDueDate = 'NULL';
-        if ($dueDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $dueDate)) {
+        if ($dueDate !== '') {
             $safeDueDate = "'" . taskEsc($connect, $dueDate) . "'";
         }
 
