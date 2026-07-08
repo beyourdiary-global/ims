@@ -452,6 +452,9 @@ var worklogTimerState = {
 
 var worklogTickerId = null;
 var worklogStoragePrefix = "task_board_worklog_timer_v1_";
+var worklogScopedStoragePrefix = "task_board_worklog_timer_v2_";
+var worklogActiveStoragePrefix = "task_board_worklog_timer_active_v1_";
+var worklogCookiePrefix = "task_board_worklog_timer_cookie_v1_";
 
 function nextItemDetailHistoryRequestSeq() {
   itemDetailModalState.historyRequestSeq =
@@ -1954,51 +1957,269 @@ function getWorklogStorageKey(itemId) {
   return worklogStoragePrefix + String(Number(itemId || 0));
 }
 
-function readWorklogTimerState(itemId) {
-  var id = Number(itemId || 0);
-  if (!id) {
-    return {
-      itemId: 0,
-      elapsedSeconds: 0,
-      running: false,
-      startedAtMs: 0,
-      collapsed: false,
-    };
-  }
+function getScopedWorklogStorageKey(itemId) {
+  return (
+    worklogScopedStoragePrefix +
+    String(currentUserId > 0 ? currentUserId : 0) +
+    "_project_" +
+    String(boardProjectId > 0 ? boardProjectId : 0) +
+    "_item_" +
+    String(Number(itemId || 0))
+  );
+}
 
-  var fallback = {
-    itemId: id,
+function getActiveWorklogStorageKey() {
+  return (
+    worklogActiveStoragePrefix +
+    String(currentUserId > 0 ? currentUserId : 0) +
+    "_project_" +
+    String(boardProjectId > 0 ? boardProjectId : 0)
+  );
+}
+
+function getScopedWorklogCookieKey(itemId) {
+  return (
+    worklogCookiePrefix +
+    String(currentUserId > 0 ? currentUserId : 0) +
+    "_project_" +
+    String(boardProjectId > 0 ? boardProjectId : 0) +
+    "_item_" +
+    String(Number(itemId || 0))
+  );
+}
+
+function buildNormalizedWorklogTimerState(itemId) {
+  return {
+    itemId: Number(itemId || 0),
     elapsedSeconds: 0,
     running: false,
     startedAtMs: 0,
     collapsed: false,
   };
+}
 
+function normalizeStoredWorklogTimerState(raw, fallback) {
+  var base =
+    fallback && typeof fallback === "object"
+      ? $.extend({}, fallback)
+      : buildNormalizedWorklogTimerState(0);
+  var parsed = raw && typeof raw === "object" ? raw : {};
+
+  base.itemId = Number(base.itemId || parsed.itemId || 0);
+  base.elapsedSeconds = Math.max(0, Number(parsed.elapsedSeconds || 0));
+  base.running = !!parsed.running;
+  base.startedAtMs = base.running
+    ? Math.max(0, Number(parsed.startedAtMs || 0))
+    : 0;
+  if (base.running && !base.startedAtMs) {
+    base.running = false;
+  }
+  base.collapsed =
+    typeof parsed.collapsed === "undefined"
+      ? !!base.collapsed
+      : !!parsed.collapsed;
+
+  return base;
+}
+
+function readWorklogTimerStateFromStorage(storageKey, fallback) {
   try {
-    var raw = window.localStorage.getItem(getWorklogStorageKey(id));
+    var raw = window.localStorage.getItem(String(storageKey || ""));
     if (!raw) {
-      return fallback;
+      return null;
     }
 
     var parsed = JSON.parse(raw);
     if (!parsed || typeof parsed !== "object") {
-      return fallback;
+      return null;
     }
 
-    fallback.elapsedSeconds = Math.max(0, Number(parsed.elapsedSeconds || 0));
-    fallback.running = !!parsed.running;
-    fallback.startedAtMs = fallback.running
-      ? Math.max(0, Number(parsed.startedAtMs || 0))
-      : 0;
-    if (fallback.running && !fallback.startedAtMs) {
-      fallback.running = false;
-    }
-    fallback.collapsed = !!parsed.collapsed;
+    return normalizeStoredWorklogTimerState(parsed, fallback);
   } catch (e) {
-    return fallback;
+    return null;
+  }
+}
+
+function getWorklogTimerCookieValue(cookieKey) {
+  var name = String(cookieKey || "").trim();
+  if (!name) {
+    return "";
   }
 
-  return fallback;
+  var cookies = String(document.cookie || "").split(";");
+  for (var i = 0; i < cookies.length; i++) {
+    var entry = String(cookies[i] || "").trim();
+    if (entry.indexOf(name + "=") !== 0) {
+      continue;
+    }
+
+    try {
+      return decodeURIComponent(entry.slice(name.length + 1));
+    } catch (e) {
+      return entry.slice(name.length + 1);
+    }
+  }
+
+  return "";
+}
+
+function writeWorklogTimerCookie(cookieKey, value) {
+  var name = String(cookieKey || "").trim();
+  if (!name) {
+    return;
+  }
+
+  var expiresAt = new Date();
+  expiresAt.setDate(expiresAt.getDate() + 30);
+  document.cookie =
+    name +
+    "=" +
+    encodeURIComponent(String(value || "")) +
+    "; expires=" +
+    expiresAt.toUTCString() +
+    "; path=/; SameSite=Lax";
+}
+
+function removeWorklogTimerCookie(cookieKey) {
+  var name = String(cookieKey || "").trim();
+  if (!name) {
+    return;
+  }
+
+  document.cookie =
+    name +
+    "=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax";
+}
+
+function readWorklogTimerStateFromCookie(cookieKey, fallback) {
+  var raw = getWorklogTimerCookieValue(cookieKey);
+  if (!raw) {
+    return null;
+  }
+
+  try {
+    var parsed = JSON.parse(raw);
+    if (!parsed || typeof parsed !== "object") {
+      return null;
+    }
+
+    return normalizeStoredWorklogTimerState(parsed, fallback);
+  } catch (e) {
+    return null;
+  }
+}
+
+function currentWorklogSecondsFromState(stateData, referenceNow) {
+  var data = stateData && typeof stateData === "object" ? stateData : {};
+  var base = Math.max(0, Math.floor(Number(data.elapsedSeconds || 0)));
+  if (!data.running) {
+    return base;
+  }
+
+  var startedAt = Math.max(0, Math.floor(Number(data.startedAtMs || 0)));
+  if (!startedAt) {
+    return base;
+  }
+
+  var now = Math.max(0, Math.floor(Number(referenceNow || Date.now())));
+  return Math.max(0, base + Math.floor((now - startedAt) / 1000));
+}
+
+function createPersistableWorklogTimerState(stateData, options) {
+  var data = stateData && typeof stateData === "object" ? stateData : {};
+  var settings = options && typeof options === "object" ? options : {};
+  var id = Number(data.itemId || 0);
+  var running = !!data.running;
+  var now = Math.max(0, Math.floor(Number(settings.now || Date.now())));
+
+  return {
+    itemId: id,
+    elapsedSeconds: currentWorklogSecondsFromState(data, now),
+    running: running,
+    startedAtMs: running ? now : 0,
+    collapsed: !!data.collapsed,
+  };
+}
+
+function clearActiveWorklogTimerState(itemId) {
+  try {
+    var activeKey = getActiveWorklogStorageKey();
+    var existing = readWorklogTimerStateFromStorage(activeKey, null);
+    if (!existing) {
+      return;
+    }
+
+    if (
+      Number(itemId || 0) > 0 &&
+      Number(existing.itemId || 0) !== Number(itemId || 0)
+    ) {
+      return;
+    }
+
+    window.localStorage.removeItem(activeKey);
+  } catch (e) { }
+}
+
+function readWorklogTimerState(itemId) {
+  var id = Number(itemId || 0);
+  if (!id) {
+    return buildNormalizedWorklogTimerState(0);
+  }
+
+  var fallback = buildNormalizedWorklogTimerState(id);
+  var scopedState = readWorklogTimerStateFromStorage(
+    getScopedWorklogStorageKey(id),
+    fallback,
+  );
+  var cookieState = readWorklogTimerStateFromCookie(
+    getScopedWorklogCookieKey(id),
+    fallback,
+  );
+  var legacyState = readWorklogTimerStateFromStorage(
+    getWorklogStorageKey(id),
+    fallback,
+  );
+  var activeState = readWorklogTimerStateFromStorage(
+    getActiveWorklogStorageKey(),
+    null,
+  );
+  var bestState = fallback;
+  var candidates = [];
+  var i;
+
+  if (scopedState) {
+    candidates.push(scopedState);
+  }
+  if (cookieState) {
+    candidates.push(cookieState);
+  }
+  if (!scopedState && legacyState) {
+    candidates.push(legacyState);
+  }
+  if (activeState && Number(activeState.itemId || 0) === id) {
+    candidates.push(normalizeStoredWorklogTimerState(activeState, fallback));
+  }
+
+  for (i = 0; i < candidates.length; i++) {
+    var candidate = candidates[i];
+    if (!candidate) {
+      continue;
+    }
+
+    var bestSeconds = currentWorklogSecondsFromState(bestState);
+    var candidateSeconds = currentWorklogSecondsFromState(candidate);
+    if (
+      (candidate.running && !bestState.running) ||
+      candidateSeconds > bestSeconds ||
+      (candidateSeconds === bestSeconds &&
+        !!candidate.collapsed &&
+        !bestState.collapsed)
+    ) {
+      bestState = normalizeStoredWorklogTimerState(candidate, fallback);
+    }
+  }
+
+  return normalizeStoredWorklogTimerState(bestState, fallback);
 }
 
 function writeWorklogTimerState(stateData) {
@@ -2008,43 +2229,31 @@ function writeWorklogTimerState(stateData) {
     return;
   }
 
+  var snapshot = createPersistableWorklogTimerState(data);
+  var cookieKey = getScopedWorklogCookieKey(id);
+  var shouldPersistCookie =
+    !!snapshot.running || Number(snapshot.elapsedSeconds || 0) > 0;
   try {
-    window.localStorage.setItem(
-      getWorklogStorageKey(id),
-      JSON.stringify({
-        itemId: id,
-        elapsedSeconds: Math.max(
-          0,
-          Math.floor(Number(data.elapsedSeconds || 0)),
-        ),
-        running: !!data.running,
-        startedAtMs: !!data.running
-          ? Math.max(0, Math.floor(Number(data.startedAtMs || 0)))
-          : 0,
-        collapsed: !!data.collapsed,
-      }),
-    );
+    var snapshotJson = JSON.stringify(snapshot);
+    window.localStorage.setItem(getScopedWorklogStorageKey(id), snapshotJson);
+    window.localStorage.removeItem(getWorklogStorageKey(id));
+
+    if (shouldPersistCookie) {
+      writeWorklogTimerCookie(cookieKey, snapshotJson);
+    } else {
+      removeWorklogTimerCookie(cookieKey);
+    }
+
+    if (snapshot.running) {
+      window.localStorage.setItem(getActiveWorklogStorageKey(), snapshotJson);
+    } else {
+      clearActiveWorklogTimerState(id);
+    }
   } catch (e) { }
 }
 
 function currentWorklogSeconds() {
-  var base = Math.max(
-    0,
-    Math.floor(Number(worklogTimerState.elapsedSeconds || 0)),
-  );
-  if (!worklogTimerState.running) {
-    return base;
-  }
-
-  var startedAt = Math.max(
-    0,
-    Math.floor(Number(worklogTimerState.startedAtMs || 0)),
-  );
-  if (!startedAt) {
-    return base;
-  }
-
-  return Math.max(0, base + Math.floor((Date.now() - startedAt) / 1000));
+  return currentWorklogSecondsFromState(worklogTimerState);
 }
 
 function formatWorklogSegment(value) {
@@ -2134,6 +2343,20 @@ function openWorklogTimerForItem(itemId) {
 
 function persistWorklogTimerState() {
   writeWorklogTimerState(worklogTimerState);
+}
+
+function syncWorklogTimerStateBeforeLifecyclePersist() {
+  if (!Number(worklogTimerState.itemId || 0)) {
+    return;
+  }
+
+  worklogTimerState.elapsedSeconds = currentWorklogSeconds();
+  worklogTimerState.startedAtMs = worklogTimerState.running ? Date.now() : 0;
+}
+
+function persistWorklogTimerStateForLifecycle() {
+  syncWorklogTimerStateBeforeLifecyclePersist();
+  persistWorklogTimerState();
 }
 
 function startOrContinueWorklogTimer() {
@@ -2228,6 +2451,40 @@ function saveWorklogForCurrentItem() {
     },
   );
 }
+
+window.addEventListener("pagehide", persistWorklogTimerStateForLifecycle);
+window.addEventListener("beforeunload", persistWorklogTimerStateForLifecycle);
+document.addEventListener("visibilitychange", function () {
+  if (document.visibilityState === "hidden") {
+    persistWorklogTimerStateForLifecycle();
+    return;
+  }
+
+  if (!Number(worklogTimerState.itemId || 0)) {
+    return;
+  }
+
+  worklogTimerState = readWorklogTimerState(worklogTimerState.itemId);
+  applyWorklogTimerUi();
+});
+window.addEventListener("storage", function (event) {
+  var activeItemId = Number(worklogTimerState.itemId || 0);
+  if (!activeItemId) {
+    return;
+  }
+
+  var changedKey = String((event && event.key) || "");
+  if (
+    changedKey !== getScopedWorklogStorageKey(activeItemId) &&
+    changedKey !== getWorklogStorageKey(activeItemId) &&
+    changedKey !== getActiveWorklogStorageKey()
+  ) {
+    return;
+  }
+
+  worklogTimerState = readWorklogTimerState(activeItemId);
+  applyWorklogTimerUi();
+});
 
 function normalizeIdList(list) {
   return (Array.isArray(list) ? list : [])
