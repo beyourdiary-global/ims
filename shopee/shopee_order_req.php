@@ -336,6 +336,65 @@ foreach ($sorWarehouseRows as $warehouseRow) {
 }
 $sorWarehouseNameMap = shopeeOmsLoadWarehouseNameMap($connect);
 $sorDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect, $sorWarehouseRows);
+$sorBuildStoredPackageRows = function ($orderRow) use ($connect) {
+    $packageRows = array();
+    if (!is_array($orderRow)) {
+        return $packageRows;
+    }
+
+    $snapshotRows = shopeeOmsDecodePackageQtySnapshot(isset($orderRow['package_qty_json']) ? $orderRow['package_qty_json'] : '');
+    if (!empty($snapshotRows)) {
+        $packageIds = array();
+        foreach ($snapshotRows as $snapshotRow) {
+            $packageId = isset($snapshotRow['package_id']) ? (int) $snapshotRow['package_id'] : 0;
+            if ($packageId > 0) {
+                $packageIds[] = $packageId;
+            }
+        }
+
+        $packageNameMap = !empty($packageIds) ? shopeeOmsGetPackageNameMap($connect, $packageIds) : array();
+        foreach ($snapshotRows as $snapshotRow) {
+            $packageId = isset($snapshotRow['package_id']) ? (int) $snapshotRow['package_id'] : 0;
+            $packageName = trim((string) (isset($snapshotRow['package_name']) ? $snapshotRow['package_name'] : ''));
+            if ($packageName === '' && $packageId > 0 && isset($packageNameMap[$packageId])) {
+                $packageName = (string) $packageNameMap[$packageId];
+            }
+
+            $qty = isset($snapshotRow['qty']) ? (int) $snapshotRow['qty'] : 1;
+            if ($qty <= 0) {
+                $qty = 1;
+            }
+
+            for ($i = 0; $i < $qty; $i++) {
+                $packageRows[] = array(
+                    'id' => $packageId > 0 ? $packageId : '',
+                    'name' => $packageName,
+                );
+            }
+        }
+
+        if (!empty($packageRows)) {
+            return $packageRows;
+        }
+    }
+
+    $selectedPkgIds = array_filter(array_map('trim', explode(',', (string) (isset($orderRow['package']) ? $orderRow['package'] : ''))), 'strlen');
+    foreach ($selectedPkgIds as $pkgId) {
+        $pkgIdInt = (int) $pkgId;
+        $pkgName = '';
+        if ($pkgIdInt > 0) {
+            $pkgRst = getData('name', "id = '$pkgIdInt'", 'LIMIT 1', PKG, $connect);
+            if ($pkgRst && $pkgRst->num_rows > 0) {
+                $pkgData = $pkgRst->fetch_assoc();
+                $pkgName = $pkgData['name'];
+            }
+        }
+
+        $packageRows[] = array('id' => $pkgIdInt, 'name' => $pkgName);
+    }
+
+    return $packageRows;
+};
 
 if (!($dataId) && !($act)) {
     renderNotificationScript('Invalid action.', 'error', $redirectPage, 1200, true);
@@ -2176,8 +2235,6 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             $postedPkgIds = postSpaceFilter('sor_pkg_hidden') ?: array();
                             if (isset($sor_pkg) && $sor_pkg !== '') {
                                 $selectedPkgIds = array_filter(array_map('trim', explode(',', $sor_pkg)), 'strlen');
-                            } else if (isset($row['package']) && $row['package'] !== '') {
-                                $selectedPkgIds = array_filter(array_map('trim', explode(',', $row['package'])), 'strlen');
                             }
 
                             $pkgRows = array();
@@ -2194,6 +2251,8 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                     }
                                     $pkgRows[] = array('id' => $pkgIdInt, 'name' => $pkgName);
                                 }
+                            } else if (isset($row) && is_array($row)) {
+                                $pkgRows = $sorBuildStoredPackageRows($row);
                             } else if (!empty($postedPkgNames)) {
                                 foreach ($postedPkgNames as $idx => $pkgName) {
                                     $postedPkgId = isset($postedPkgIds[$idx]) ? (int) $postedPkgIds[$idx] : 0;
