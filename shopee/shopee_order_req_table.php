@@ -626,6 +626,25 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                     }
                                 }
                             }
+                            $packageDisplayParts = array();
+                            if (function_exists('shopeeOmsResolveOrderPackageRows')) {
+                                $resolvedPackageRows = shopeeOmsResolveOrderPackageRows($connect, $row);
+                                foreach ($resolvedPackageRows as $packageRow) {
+                                    $packageName = trim((string) (isset($packageRow['package_name']) ? $packageRow['package_name'] : ''));
+                                    if ($packageName === '') {
+                                        continue;
+                                    }
+
+                                    $packageQty = isset($packageRow['qty']) ? (int) $packageRow['qty'] : 1;
+                                    if ($packageQty <= 0) {
+                                        $packageQty = 1;
+                                    }
+
+                                    $packageDisplayParts[] = $packageQty > 1
+                                        ? ($packageName . ' x' . $packageQty)
+                                        : $packageName;
+                                }
+                            }
                             $brandIds = array_values(array_filter(array_map('trim', explode(',', (string) ($row['brand'] ?? ''))), 'strlen'));
                             $brandNames = array();
                             if (count($brandIds) > 0) {
@@ -646,7 +665,9 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 }
                             }
                             $brand = array('name' => implode(', ', $brandNames));
-                            if (!empty($pkgNames)) {
+                            if (!empty($packageDisplayParts)) {
+                                $pkg['name'] = implode(', ', $packageDisplayParts);
+                            } else if (!empty($pkgNames)) {
                                 $pkg['name'] = implode(', ', $pkgNames);
                             }
 

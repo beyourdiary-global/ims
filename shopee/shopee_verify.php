@@ -647,7 +647,28 @@ if ($result instanceof mysqli_result) {
                                     }
                                 }
                             }
-                            if (!empty($pkgNames)) {
+                            $packageDisplayParts = array();
+                            if (function_exists('shopeeOmsResolveOrderPackageRows')) {
+                                $resolvedPackageRows = shopeeOmsResolveOrderPackageRows($connect, $row);
+                                foreach ($resolvedPackageRows as $packageRow) {
+                                    $packageName = trim((string) (isset($packageRow['package_name']) ? $packageRow['package_name'] : ''));
+                                    if ($packageName === '') {
+                                        continue;
+                                    }
+
+                                    $packageQty = isset($packageRow['qty']) ? (int) $packageRow['qty'] : 1;
+                                    if ($packageQty <= 0) {
+                                        $packageQty = 1;
+                                    }
+
+                                    $packageDisplayParts[] = $packageQty > 1
+                                        ? ($packageName . ' x' . $packageQty)
+                                        : $packageName;
+                                }
+                            }
+                            if (!empty($packageDisplayParts)) {
+                                $pkg['name'] = implode(', ', $packageDisplayParts);
+                            } else if (!empty($pkgNames)) {
                                 $pkg['name'] = implode(', ', $pkgNames);
                             }
 
