@@ -107,7 +107,7 @@
       names: [],
       ids: [],
       altValues: [],
-      invalidMessage: "Parent SKU package not found in database.",
+      invalidMessage: "Parent SKU item code not found in database.",
     },
     product_names: {
       names: [],
