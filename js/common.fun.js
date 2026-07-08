@@ -3686,7 +3686,11 @@ function getCustomerRecordFilterStorageSnapshot() {
       continue;
     }
 
-    if (/_filters$/.test(key) || /_filter_panel_open$/.test(key)) {
+    if (
+      /_filters$/.test(key) ||
+      /_filter_panel_open$/.test(key) ||
+      /^task_board_worklog_timer_(?:v1_|v2_|active_v1_)/.test(key)
+    ) {
       preservedEntries[key] = localStorage.getItem(key);
     }
   }
