@@ -292,10 +292,9 @@ function buildPackageReferenceLookup($connect)
 {
     $lookup = array(
         'rows_by_id' => array(),
-        'active_name_to_id' => array(),
         'active_item_code_to_id' => array(),
+        'active_item_code_to_ids' => array(),
         'display_name_by_id' => array(),
-        'active_names' => array(),
         'active_item_codes' => array(),
     );
 
@@ -324,42 +323,57 @@ function buildPackageReferenceLookup($connect)
                 continue;
             }
 
-            if ($packageName !== '') {
-                $lookup['active_name_to_id'][normalizePackageReferenceKey($packageName)] = $packageId;
-                $lookup['active_names'][] = $packageName;
-            }
             if ($itemCode !== '') {
                 $lookup['active_item_code_to_id'][normalizePackageReferenceKey($itemCode)] = $packageId;
+                if (!isset($lookup['active_item_code_to_ids'][normalizePackageReferenceKey($itemCode)])) {
+                    $lookup['active_item_code_to_ids'][normalizePackageReferenceKey($itemCode)] = array();
+                }
+                $lookup['active_item_code_to_ids'][normalizePackageReferenceKey($itemCode)][] = $packageId;
                 $lookup['active_item_codes'][] = $itemCode;
             }
         }
     }
 
-    $lookup['active_names'] = array_values(array_unique($lookup['active_names']));
     $lookup['active_item_codes'] = array_values(array_unique($lookup['active_item_codes']));
     return $lookup;
 }
 
-function resolvePackageReferenceId($rawValue, $packageLookup)
+function resolvePackageReferenceCandidateIds($rawValue, $packageLookup)
 {
     $rawValue = normalizeCellText((string) $rawValue);
     if ($rawValue === '') {
-        return 0;
+        return array();
     }
 
+    $candidateIds = array();
     if (ctype_digit($rawValue)) {
         $packageId = (int) $rawValue;
         if (isset($packageLookup['rows_by_id'][$packageId]) && strtoupper(trim((string) $packageLookup['rows_by_id'][$packageId]['status'])) === 'A') {
-            return $packageId;
+            $candidateIds[] = $packageId;
         }
     }
 
     $lookupKey = normalizePackageReferenceKey($rawValue);
-    if (isset($packageLookup['active_name_to_id'][$lookupKey])) {
-        return (int) $packageLookup['active_name_to_id'][$lookupKey];
+    if (isset($packageLookup['active_item_code_to_ids'][$lookupKey]) && is_array($packageLookup['active_item_code_to_ids'][$lookupKey])) {
+        foreach ($packageLookup['active_item_code_to_ids'][$lookupKey] as $packageId) {
+            $packageId = (int) $packageId;
+            if ($packageId > 0) {
+                $candidateIds[] = $packageId;
+            }
+        }
+    } else if (isset($packageLookup['active_item_code_to_id'][$lookupKey])) {
+        $candidateIds[] = (int) $packageLookup['active_item_code_to_id'][$lookupKey];
     }
-    if (isset($packageLookup['active_item_code_to_id'][$lookupKey])) {
-        return (int) $packageLookup['active_item_code_to_id'][$lookupKey];
+
+    $candidateIds = array_values(array_unique(array_filter(array_map('intval', $candidateIds))));
+    return $candidateIds;
+}
+
+function resolvePackageReferenceId($rawValue, $packageLookup)
+{
+    $candidateIds = resolvePackageReferenceCandidateIds($rawValue, $packageLookup);
+    if (!empty($candidateIds)) {
+        return (int) $candidateIds[0];
     }
 
     return 0;
@@ -430,6 +444,32 @@ function packageImportWouldCreateCircularRelation($packageId, $parentPackageId, 
     }
 
     return false;
+}
+
+function resolvePackageReferenceIdAvoidingCircular($rawValue, $packageLookup, $currentPackageId, $parentMap)
+{
+    $candidateIds = resolvePackageReferenceCandidateIds($rawValue, $packageLookup);
+    if (empty($candidateIds)) {
+        return 0;
+    }
+
+    $currentPackageId = (int) $currentPackageId;
+    foreach ($candidateIds as $candidateId) {
+        $candidateId = (int) $candidateId;
+        if ($candidateId <= 0) {
+            continue;
+        }
+        if ($currentPackageId > 0 && $candidateId === $currentPackageId) {
+            continue;
+        }
+        if ($currentPackageId > 0 && packageImportWouldCreateCircularRelation($currentPackageId, $candidateId, $parentMap)) {
+            continue;
+        }
+
+        return $candidateId;
+    }
+
+    return (int) $candidateIds[0];
 }
 
 $brandRevMap = getReverseMapping($connect, BRAND, 'id', 'name');
@@ -512,7 +552,7 @@ if ($action === 'preview') {
                         $fieldErrors['cost_curr_name'] = 'Cost currency not found in database.';
                     }
                     if ($csvParentSku !== '' && $resolvedParentPackageId <= 0) {
-                        $fieldErrors['parent_sku'] = 'Parent SKU package not found in database.';
+                        $fieldErrors['parent_sku'] = 'Parent SKU item code not found in database.';
                     }
 
                     $brandDisplay = $csvBrand;
@@ -609,6 +649,7 @@ if ($action === 'preview') {
                         $preparedPreviewRows[] = array(
                             'is_new' => $isNew,
                             'existing_id' => !$isNew ? (int) $id : 0,
+                            'raw_parent_sku' => $csvParentSku,
                             'resolved_parent_package_id' => $resolvedParentPackageId,
                             'changes' => $changes,
                             'field_errors' => $fieldErrors,
@@ -640,6 +681,18 @@ if ($action === 'preview') {
                 foreach ($preparedPreviewRows as $preparedRow) {
                     $currentPackageId = isset($preparedRow['existing_id']) ? (int) $preparedRow['existing_id'] : 0;
                     $resolvedParentPackageId = isset($preparedRow['resolved_parent_package_id']) ? (int) $preparedRow['resolved_parent_package_id'] : 0;
+                    $rawParentSku = normalizeCellText((string) (isset($preparedRow['raw_parent_sku']) ? $preparedRow['raw_parent_sku'] : ''));
+
+                    if ($rawParentSku !== '' && $currentPackageId > 0) {
+                        $preferredParentPackageId = resolvePackageReferenceIdAvoidingCircular($rawParentSku, $packageLookup, $currentPackageId, $previewParentMap);
+                        if ($preferredParentPackageId > 0 && $preferredParentPackageId !== $resolvedParentPackageId) {
+                            $resolvedParentPackageId = $preferredParentPackageId;
+                            $preparedRow['resolved_parent_package_id'] = $resolvedParentPackageId;
+                            $preparedRow['parent_package_id'] = $resolvedParentPackageId;
+                            $preparedRow['parent_sku'] = getPackageDisplayNameById($resolvedParentPackageId, $packageLookup);
+                            $previewParentMap[$currentPackageId] = $resolvedParentPackageId;
+                        }
+                    }
 
                     if ($resolvedParentPackageId > 0 && $currentPackageId > 0) {
                         if ($currentPackageId === $resolvedParentPackageId) {
@@ -728,7 +781,7 @@ else if ($action === 'update') {
             $fieldErrors['agent_cost'] = 'Agent Cost field is required!';
         }
         if ($parentSkuRaw !== '' && $resolvedParentPackageId <= 0) {
-            $fieldErrors['parent_sku'] = 'Parent SKU package not found in database.';
+            $fieldErrors['parent_sku'] = 'Parent SKU item code not found in database.';
         }
 
         // Ignore unknown product names. Product field should not block update/preview.
@@ -748,6 +801,7 @@ else if ($action === 'update') {
         $preparedUpdateRows[] = array(
             'row' => $row,
             'existing_id' => ($row['is_new'] ? 0 : (int) (isset($row['id']) ? $row['id'] : 0)),
+            'raw_parent_sku' => $parentSkuRaw,
             'resolved_parent_package_id' => $resolvedParentPackageId,
         );
     }
@@ -756,6 +810,19 @@ else if ($action === 'update') {
     foreach ($preparedUpdateRows as $idx => $preparedRow) {
         $currentPackageId = isset($preparedRow['existing_id']) ? (int) $preparedRow['existing_id'] : 0;
         $resolvedParentPackageId = isset($preparedRow['resolved_parent_package_id']) ? (int) $preparedRow['resolved_parent_package_id'] : 0;
+        $rawParentSku = normalizeCellText((string) (isset($preparedRow['raw_parent_sku']) ? $preparedRow['raw_parent_sku'] : ''));
+
+        if ($rawParentSku !== '' && $currentPackageId > 0) {
+            $preferredParentPackageId = resolvePackageReferenceIdAvoidingCircular($rawParentSku, $packageLookup, $currentPackageId, $updateParentMap);
+            if ($preferredParentPackageId > 0 && $preferredParentPackageId !== $resolvedParentPackageId) {
+                $resolvedParentPackageId = $preferredParentPackageId;
+                $preparedUpdateRows[$idx]['resolved_parent_package_id'] = $resolvedParentPackageId;
+                $previewData[$idx]['parent_package_id'] = $resolvedParentPackageId;
+                $previewData[$idx]['parent_sku'] = getPackageDisplayNameById($resolvedParentPackageId, $packageLookup);
+                $updateParentMap[$currentPackageId] = $resolvedParentPackageId;
+            }
+        }
+
         if ($resolvedParentPackageId <= 0 || $currentPackageId <= 0) {
             continue;
         }
@@ -1032,11 +1099,11 @@ else if ($action === 'update') {
                                                 <div class="col-md-4">
                                                     <label class="form-label">Parent SKU / Warehouse SKU</label>
                                                     <div class="autocomplete">
-                                                        <input type="text" id="pkgi_parent_sku_<?= $index ?>" class="form-control <?= isset($chg['parent_sku']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search" data-lookup-field="parent_sku" data-search-type="name" data-db-table="<?= PKG ?>" name="data[<?= $index ?>][parent_sku]" value="<?= htmlspecialchars(isset($row['parent_sku']) ? $row['parent_sku'] : '') ?>">
+                                                        <input type="text" id="pkgi_parent_sku_<?= $index ?>" class="form-control <?= isset($chg['parent_sku']) ? 'highlight-change' : '' ?> js-lookup-single js-live-search" data-lookup-field="parent_sku" data-search-type="item_code" data-db-table="<?= PKG ?>" name="data[<?= $index ?>][parent_sku]" value="<?= htmlspecialchars(isset($row['parent_sku']) ? $row['parent_sku'] : '') ?>">
                                                         <input type="hidden" id="pkgi_parent_sku_<?= $index ?>_hidden" value="">
                                                     </div>
                                                     <?php if (isset($ferr['parent_sku'])) { ?><div class="field-error" data-field="parent_sku"><?= htmlspecialchars($ferr['parent_sku']) ?></div><?php } ?>
-                                                    <small class="text-muted">Match exact active package name or item code. Leave empty for no parent SKU.</small>
+                                                    <small class="text-muted">Match exact active package item code. Leave empty for no parent SKU.</small>
                                                 </div>
                                                 <div class="col-md-6">
                                                     <label class="form-label">Products Included</label>
@@ -1116,9 +1183,10 @@ else if ($action === 'update') {
                  ids: <?= json_encode(isset($currencyNameMap) ? array_map('strval', array_keys($currencyNameMap)) : []) ?>
              },
              parent_sku: {
-                 names: <?= json_encode(isset($packageLookup['active_names']) ? array_values($packageLookup['active_names']) : []) ?>,
+                 names: <?= json_encode(isset($packageLookup['active_item_codes']) ? array_values($packageLookup['active_item_codes']) : []) ?>,
                  ids: <?= json_encode(isset($packageLookup['rows_by_id']) ? array_map('strval', array_keys($packageLookup['rows_by_id'])) : []) ?>,
-                 altValues: <?= json_encode(isset($packageLookup['active_item_codes']) ? array_values($packageLookup['active_item_codes']) : []) ?>
+                 altValues: [],
+                 invalidMessage: "Parent SKU item code not found in database."
              },
              product_names: {
                  names: <?= json_encode(isset($productNameMap) ? array_values($productNameMap) : []) ?>,
