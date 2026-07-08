@@ -28,8 +28,33 @@ if (!function_exists('taskBoardAuditLog')) {
     }
 }
 
+if (!function_exists('taskSummaryJsonResponse')) {
+    function taskSummaryJsonResponse($payload, $statusCode = 200)
+    {
+        http_response_code((int) $statusCode);
+        header('Content-Type: application/json; charset=UTF-8');
+
+        $json = json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE);
+        if ($json === false) {
+            http_response_code(500);
+            echo '{"ok":0,"message":"Unable to encode response."}';
+            exit;
+        }
+
+        echo $json;
+        exit;
+    }
+}
+
 /* ───── AJAX POST handler ───── */
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('summary_action') !== '') {
+$hasSummaryAjaxAction = (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['summary_action'])
+    && !is_array($_POST['summary_action'])
+    && trim((string) $_POST['summary_action']) !== ''
+);
+
+if ($hasSummaryAjaxAction) {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
@@ -42,24 +67,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('summary_action') !== '') {
     }
     $submittedToken = post('csrf_token');
     if (!hash_equals($_SESSION['csrf_token'], $submittedToken)) {
-        header('Content-Type: application/json');
-        echo json_encode(array('ok' => 0, 'message' => 'Invalid session token.'));
-        exit;
+        taskSummaryJsonResponse(array('ok' => 0, 'message' => 'Invalid session token.'), 403);
     }
 
     $pinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
     if (!taskIsActionAllowed('view', $pinAccess)) {
-        header('Content-Type: application/json');
-        echo json_encode(array('ok' => 0, 'message' => 'No permission.'));
-        exit;
+        taskSummaryJsonResponse(array('ok' => 0, 'message' => 'No permission.'), 403);
     }
 
     $action = trim((string) post('summary_action'));
     $currentProjectId = taskResolveCurrentProjectId($connect, 0);
     if (!taskUserCanAccessProjectPageByPin($connect, $currentProjectId, $taskPermissionPin)) {
-        header('Content-Type: application/json');
-        echo json_encode(array('ok' => 0, 'message' => 'You do not have access to this project summary.'));
-        exit;
+        taskSummaryJsonResponse(array('ok' => 0, 'message' => 'You do not have access to this project summary.'), 403);
     }
 
     $filters = array();
@@ -85,9 +104,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('summary_action') !== '') {
             $filters['search'] = trim((string) post('search'));
         }
         $result = taskGetGlobalActivity($connect, $page, $perPage, $filters, $currentProjectId);
-        header('Content-Type: application/json');
-        echo json_encode(array('ok' => 1, 'data' => $result));
-        exit;
+        taskSummaryJsonResponse(array('ok' => 1, 'data' => $result));
     }
 
     if ($action === 'get_stats') {
@@ -96,14 +113,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('summary_action') !== '') {
         }
         $stats = taskGetSummaryStats($connect, $filters, $currentProjectId);
         $activity = taskGetGlobalActivity($connect, 1, 10, $filters, $currentProjectId);
-        header('Content-Type: application/json');
-        echo json_encode(array('ok' => 1, 'stats' => $stats, 'activity' => $activity));
-        exit;
+        taskSummaryJsonResponse(array('ok' => 1, 'stats' => $stats, 'activity' => $activity));
     }
 
-    header('Content-Type: application/json');
-    echo json_encode(array('ok' => 0, 'message' => 'Unknown action.'));
-    exit;
+    taskSummaryJsonResponse(array('ok' => 0, 'message' => 'Unknown action.'), 400);
 }
 
 include_once '../menuHeader.php';
