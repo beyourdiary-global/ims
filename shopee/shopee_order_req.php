@@ -99,6 +99,21 @@ $sorConfirmReceiveWithFollowUp = postSpaceFilter('confirmReceiveFollowUpBtn') ==
 $sorShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E' && !$sorSkipSaveBeforeStatusUpdate && !$sorSaveBeforeStatusOnly;
 $sorTriggerStatusTransitionAfterSave = false;
 $sorFollowUpShortcutOptions = customerFollowUpGetMessageShortcutOptions($connect);
+$sorBotMsgContext = 'shopee';
+$sorBotMsgOrderTable = SHOPEE_SG_ORDER_REQ;
+$sorBotMsgTemplateOptions = customizeBotMsgGetTemplateOptions($connect, $sorBotMsgContext);
+$sorBotMsgDefaultTemplateId = customizeBotMsgGetDefaultTemplateId($connect, $sorBotMsgContext);
+$sorBotMsgTemplateNameMap = array();
+foreach ($sorBotMsgTemplateOptions as $sorBotMsgTemplateOption) {
+    $templateOptionId = isset($sorBotMsgTemplateOption['id']) ? (int) $sorBotMsgTemplateOption['id'] : 0;
+    if ($templateOptionId > 0) {
+        $sorBotMsgTemplateNameMap[$templateOptionId] = isset($sorBotMsgTemplateOption['template_name']) ? (string) $sorBotMsgTemplateOption['template_name'] : ('Template #' . $templateOptionId);
+    }
+}
+$sorExistingBotMsgTemplateId = ($dataId && $act !== 'I')
+    ? customizeBotMsgGetOrderTemplateId($connect, $sorBotMsgContext, $sorBotMsgOrderTable, (int) $dataId)
+    : 0;
+$sorOriginalBotMsgTemplateId = $sorExistingBotMsgTemplateId > 0 ? $sorExistingBotMsgTemplateId : $sorBotMsgDefaultTemplateId;
 $sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($sorIsLiveSite) {
     if ($sorIsLiveSite || !is_array($notifyResult) || !empty($notifyResult['sent'])) {
         return '';
@@ -925,6 +940,10 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     $sor_airbill = postSpaceFilter('sor_airbill');
     $sor_customer_name = postSpaceFilter('sor_customer_name');
     $sor_customer_address = postSpaceFilter('sor_customer_address');
+    $sor_bot_msg_template_id = (int) postSpaceFilter('sor_bot_msg_template_id');
+    if ($sor_bot_msg_template_id <= 0 || !isset($sorBotMsgTemplateNameMap[$sor_bot_msg_template_id])) {
+        $sor_bot_msg_template_id = $sorBotMsgDefaultTemplateId;
+    }
     if ((int) $dataId > 0 && ($sor_customer_name !== '' || $sor_customer_address !== '')) {
         shopeeOmsRememberWarehouseDeliveryInfo('shopee', (int) $dataId, array(
             'customer_name' => $sor_customer_name,
@@ -1323,6 +1342,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
 
                     if ($returnData) {
                         $dataId = (int) mysqli_insert_id($finance_connect);
+                        customizeBotMsgSaveOrderTemplate($connect, $sorBotMsgContext, $sorBotMsgOrderTable, $dataId, $sor_bot_msg_template_id);
                         shopeeOmsRememberWarehouseDeliveryInfo('shopee', $dataId, array(
                             'customer_name' => $sor_customer_name,
                             'customer_address' => $sor_customer_address,
@@ -1530,6 +1550,11 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         array_push($chgvalarr, trim((string) $sor_customer_address) !== '' ? $sor_customer_address : 'Empty Value');
                         array_push($datafield, 'customer_address');
                     }
+                    if ((int) $sorOriginalBotMsgTemplateId !== (int) $sor_bot_msg_template_id) {
+                        array_push($oldvalarr, isset($sorBotMsgTemplateNameMap[$sorOriginalBotMsgTemplateId]) ? $sorBotMsgTemplateNameMap[$sorOriginalBotMsgTemplateId] : 'Empty Value');
+                        array_push($chgvalarr, isset($sorBotMsgTemplateNameMap[$sor_bot_msg_template_id]) ? $sorBotMsgTemplateNameMap[$sor_bot_msg_template_id] : 'Empty Value');
+                        array_push($datafield, 'bot_message_template');
+                    }
                     if ($sorStockOutWarehouseEditable) {
                         if ($existingStoredStockOutWarehouseId > 0) {
                             $updatedStoredStockOutWarehouseId = $sor_stock_out_warehouse_id;
@@ -1588,6 +1613,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
 
                         $returnData = mysqli_query($finance_connect, $query);
                         if ($returnData) {
+                            customizeBotMsgSaveOrderTemplate($connect, $sorBotMsgContext, $sorBotMsgOrderTable, (int) $dataId, $sor_bot_msg_template_id);
                             $newValuesForHistory = array(
                                 'orderID' => $sor_order,
                                 'customer_address' => $sor_customer_address,
@@ -2423,6 +2449,25 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                     <span class="mt-n1"><?php echo $stock_out_warehouse_err; ?></span>
                                 </div>
                             <?php } ?>
+                        </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label form_lbl" for="sor_bot_msg_template_id">Bot Message Template</label>
+                            <?php
+                            $currentSorBotMsgTemplateId = post('actionBtn')
+                                ? (int) postSpaceFilter('sor_bot_msg_template_id')
+                                : ($sorOriginalBotMsgTemplateId > 0 ? (int) $sorOriginalBotMsgTemplateId : (int) $sorBotMsgDefaultTemplateId);
+                            if ($currentSorBotMsgTemplateId <= 0) {
+                                $currentSorBotMsgTemplateId = (int) $sorBotMsgDefaultTemplateId;
+                            }
+                            ?>
+                            <select class="form-select" id="sor_bot_msg_template_id" name="sor_bot_msg_template_id" <?= $act == '' ? 'disabled' : '' ?>>
+                                <?php foreach ($sorBotMsgTemplateOptions as $sorBotMsgTemplateOption) { ?>
+                                    <?php $templateOptionId = isset($sorBotMsgTemplateOption['id']) ? (int) $sorBotMsgTemplateOption['id'] : 0; ?>
+                                    <option value="<?= $templateOptionId ?>" <?= $currentSorBotMsgTemplateId === $templateOptionId ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars((string) $sorBotMsgTemplateOption['template_name'] . (customizeBotMsgIsDefaultRow($sorBotMsgTemplateOption) ? ' (Default)' : ''), ENT_QUOTES, 'UTF-8') ?>
+                                    </option>
+                                <?php } ?>
+                            </select>
                         </div>
                         <div class="col-md-2 mb-3 shopee-airbill-toggle-col">
                             <?php
