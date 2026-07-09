@@ -1066,6 +1066,571 @@ if (!function_exists('sorImpParseMixMatchCandyInvoiceItems')) {
     }
 }
 
+if (!function_exists('sorImpUrbanismCategoryFromText')) {
+    function sorImpUrbanismCategoryFromText($text)
+    {
+        $text = strtolower(trim((string) $text));
+        if ($text === '') {
+            return '';
+        }
+
+        if (strpos($text, 'sunz max') !== false || strpos($text, 'sunzmax') !== false) {
+            return 'sunzmax';
+        }
+        if (strpos($text, 'moonz') !== false) {
+            return 'moonz';
+        }
+        if (strpos($text, 'sunz') !== false) {
+            return 'sunz';
+        }
+        if (strpos($text, 'starz') !== false) {
+            return 'starz';
+        }
+        if (strpos($text, 'carbzero') !== false || strpos($text, 'carb zero') !== false) {
+            return 'carbzero';
+        }
+        if (strpos($text, 'urbanism') !== false) {
+            return 'urbanism';
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('sorImpUrbanismCategoryLabel')) {
+    function sorImpUrbanismCategoryLabel($category)
+    {
+        $category = strtolower(trim((string) $category));
+        $labelMap = array(
+            'moonz' => 'Moonz',
+            'sunz' => 'Sunz',
+            'sunzmax' => 'Sunz Max',
+            'starz' => 'Starz',
+            'carbzero' => 'CarbZero',
+            'urbanism' => 'Urbanism',
+        );
+
+        return isset($labelMap[$category]) ? $labelMap[$category] : ucfirst($category);
+    }
+}
+
+if (!function_exists('sorImpUrbanismExtractSegmentCounts')) {
+    function sorImpUrbanismExtractSegmentCounts($text)
+    {
+        $counts = array();
+        $text = strtoupper(trim((string) $text));
+        if ($text === '') {
+            return $counts;
+        }
+
+        $patterns = array(
+            'sunzmax' => '/(?:(\d+)\s*(?:BOXES|BOX|BXS?)\s*(?:FULL\s*)?SUNZ\s*MAX\b|(?:FULL\s*)?SUNZ\s*MAX\b[^0-9]{0,8}(\d+)\b)/i',
+            'moonz' => '/(?:(\d+)\s*(?:BOXES|BOX|BXS?)\s*(?:FULL\s*)?MOONZ\b|(?:FULL\s*)?MOONZ\b[^0-9]{0,8}(\d+)\b)/i',
+            'sunz' => '/(?:(\d+)\s*(?:BOXES|BOX|BXS?)\s*(?:FULL\s*)?SUNZ\b(?!\s*MAX)|(?:FULL\s*)?SUNZ\b(?!\s*MAX)[^0-9]{0,8}(\d+)\b)/i',
+            'starz' => '/(?:(\d+)\s*(?:BOXES|BOX|BXS?)\s*STARZ\b|STARZ\b[^0-9]{0,8}(\d+)\b)/i',
+            'carbzero' => '/(?:(\d+)\s*(?:BOTTLES|BOTTLE)\s*CARB\s*ZERO\b|CARB\s*ZERO\b[^0-9]{0,8}(\d+)\b)/i',
+            'urbanism' => '/(?:(\d+)\s*(?:BOXES|BOX|BXS?)\s*(?:MIX\s+)?URBANISM\b|(?:MIX\s+)?URBANISM\b[^0-9]{0,8}(\d+)\b)/i',
+        );
+
+        foreach ($patterns as $category => $pattern) {
+            if (preg_match_all($pattern, $text, $matches, PREG_SET_ORDER)) {
+                foreach ($matches as $matchRow) {
+                    $qtyRaw = '';
+                    if (isset($matchRow[1]) && trim((string) $matchRow[1]) !== '') {
+                        $qtyRaw = (string) $matchRow[1];
+                    } elseif (isset($matchRow[2]) && trim((string) $matchRow[2]) !== '') {
+                        $qtyRaw = (string) $matchRow[2];
+                    }
+                    $qty = (int) $qtyRaw;
+                    if ($qty <= 0) {
+                        continue;
+                    }
+                    if (!isset($counts[$category])) {
+                        $counts[$category] = 0;
+                    }
+                    $counts[$category] += $qty;
+                }
+            }
+        }
+
+        return $counts;
+    }
+}
+
+if (!function_exists('sorImpUrbanismBuildPackageRecipe')) {
+    function sorImpUrbanismBuildPackageRecipe($packageRow)
+    {
+        $itemDescription = isset($packageRow['item_description']) ? (string) $packageRow['item_description'] : '';
+        $packageName = isset($packageRow['name']) ? (string) $packageRow['name'] : '';
+        $sourceText = trim($itemDescription !== '' ? $itemDescription : $packageName);
+        $sourceText = preg_replace('/\s+/', ' ', (string) $sourceText);
+
+        $paidPart = $sourceText;
+        $freePart = '';
+        if (preg_match('/^(.*?)\bFREE\b(.*)$/iu', $sourceText, $matches)) {
+            $paidPart = isset($matches[1]) ? (string) $matches[1] : '';
+            $freePart = isset($matches[2]) ? (string) $matches[2] : '';
+        }
+
+        return array(
+            'paid' => sorImpUrbanismExtractSegmentCounts($paidPart),
+            'free' => sorImpUrbanismExtractSegmentCounts($freePart),
+        );
+    }
+}
+
+if (!function_exists('sorImpExtractMoneyHint')) {
+    function sorImpExtractMoneyHint($text)
+    {
+        $text = (string) $text;
+        if ($text === '') {
+            return 0.00;
+        }
+
+        if (preg_match('/\(\s*(?:RM|MYR|SGD|USD)?\s*([\d,]+(?:\.\d{1,2})?)\s*\)/iu', $text, $matches)) {
+            return (float) str_replace(',', '', (string) $matches[1]);
+        }
+        if (preg_match('/(?:RM|MYR|SGD|USD)\s*([\d,]+(?:\.\d{1,2})?)/iu', $text, $matches)) {
+            return (float) str_replace(',', '', (string) $matches[1]);
+        }
+
+        return 0.00;
+    }
+}
+
+if (!function_exists('sorImpResolveUrbanismShorthandPackage')) {
+    function sorImpResolveUrbanismShorthandPackage($text, $packages, $fallbackPriceHint = 0.00)
+    {
+        $text = trim((string) $text);
+        if ($text === '' || !preg_match('/\b(?:moonz|sunz|starz|carb\s*zero|carbzero|urbanism)\b/i', $text)) {
+            return null;
+        }
+
+        $lineRecipe = sorImpUrbanismBuildPackageRecipe(array(
+            'name' => $text,
+            'item_description' => $text,
+        ));
+        $linePaid = isset($lineRecipe['paid']) && is_array($lineRecipe['paid']) ? $lineRecipe['paid'] : array();
+        if (count($linePaid) === 0) {
+            return null;
+        }
+
+        $priceHint = sorImpExtractMoneyHint($text);
+        if ($priceHint <= 0 && (float) $fallbackPriceHint > 0) {
+            $priceHint = (float) $fallbackPriceHint;
+        }
+
+        $nameFragment = '';
+        foreach ($linePaid as $category => $qty) {
+            $qty = (int) $qty;
+            if ($qty <= 0) {
+                continue;
+            }
+            if ($category === 'carbzero') {
+                $nameFragment = 'urbanism carbzero ' . $qty . ' bottle';
+            } elseif ($category === 'moonz') {
+                $nameFragment = 'urbanism full moonz ' . $qty . ' box';
+            } elseif ($category === 'sunz') {
+                $nameFragment = 'urbanism full sunz ' . $qty . ' box';
+            } elseif ($category === 'sunzmax') {
+                $nameFragment = 'urbanism sunz max ' . $qty . ' box';
+            } elseif ($category === 'starz') {
+                $nameFragment = 'urbanism starz ' . $qty . ' box';
+            }
+            if ($nameFragment !== '') {
+                break;
+            }
+        }
+
+        $bestPkg = null;
+        $bestScore = PHP_INT_MIN;
+        foreach ($packages as $pkg) {
+            $pkgName = isset($pkg['name']) ? (string) $pkg['name'] : '';
+            if ($pkgName === '' || !preg_match('/\burbanism\b/i', $pkgName)) {
+                continue;
+            }
+            if (preg_match('/\b3\.0\b|\bpluz\b/i', $pkgName)) {
+                continue;
+            }
+
+            $recipe = sorImpUrbanismBuildPackageRecipe($pkg);
+            $score = 0;
+
+            foreach ($linePaid as $category => $qty) {
+                $packagePaidQty = isset($recipe['paid'][$category]) ? (int) $recipe['paid'][$category] : 0;
+                if ($packagePaidQty === (int) $qty) {
+                    $score += 36;
+                } elseif ($packagePaidQty > 0) {
+                    $score -= abs($packagePaidQty - (int) $qty) * 18;
+                } else {
+                    $score -= 40;
+                }
+            }
+
+            $lineCategories = array_keys($linePaid);
+            foreach ($recipe['paid'] as $category => $qty) {
+                if (!in_array($category, $lineCategories, true)) {
+                    $score -= 6;
+                }
+            }
+
+            if (preg_match('/\(\s*my\s*\)/i', $pkgName)) {
+                $score += 8;
+            }
+
+            $pkgNameLookup = sorImpLookup($pkgName);
+            if ($nameFragment !== '') {
+                $fragmentLookup = sorImpLookup($nameFragment);
+                if ($fragmentLookup !== '' && $pkgNameLookup !== '') {
+                    if ($pkgNameLookup === $fragmentLookup) {
+                        $score += 48;
+                    } elseif (strpos($pkgNameLookup, $fragmentLookup) === 0) {
+                        $score += 36;
+                    } elseif (strpos($pkgNameLookup, $fragmentLookup) !== false) {
+                        $score += 20;
+                    }
+                }
+            }
+
+            if ($priceHint > 0) {
+                $pkgPrice = isset($pkg['price']) ? (float) $pkg['price'] : 0.00;
+                if ($pkgPrice > 0) {
+                    $score -= (int) round(abs($pkgPrice - $priceHint) / 20);
+                    if (abs($pkgPrice - $priceHint) < 0.01) {
+                        $score += 12;
+                    }
+                }
+            }
+
+            if (preg_match('/\bfree\b/i', $text)) {
+                $score += array_sum(isset($recipe['free']) ? $recipe['free'] : array()) > 0 ? 10 : -10;
+            } elseif (preg_match('/\bfree\b/i', $pkgName)) {
+                $score -= 25;
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestPkg = $pkg;
+            }
+        }
+
+        if (!$bestPkg || $bestScore < 20) {
+            return null;
+        }
+
+        return $bestPkg;
+    }
+}
+
+if (!function_exists('sorImpParseUrbanismSupplementalInvoiceItems')) {
+    function sorImpParseUrbanismSupplementalInvoiceItems($text, $packages)
+    {
+        $lineItems = array();
+        if (!preg_match('/\bchoose\s+any\b/i', (string) $text) || !preg_match('/\burbanism\b/i', (string) $text)) {
+            return $lineItems;
+        }
+
+        $lines = sorImpGetPdfTextLines($text);
+        if (count($lines) === 0) {
+            return $lineItems;
+        }
+
+        $seenPackageIds = array();
+        foreach ($lines as $lineRaw) {
+            $line = trim((string) $lineRaw);
+            if ($line === '') {
+                continue;
+            }
+
+            if (
+                preg_match('/^(mix\s*&\s*match|choose\s+any|free\s+item|qty\b|product\b|sku\b|sub\s*total|subtotal|total\b|grand\s*total|remarks?|note|thank\s+you)\b/i', $line) ||
+                preg_match('/\burbanism\s+candy\b/i', $line)
+            ) {
+                continue;
+            }
+
+            if (!preg_match('/\([^\)]*(?:RM|MYR|SGD|USD)?\s*\d+(?:\.\d{1,2})?[^\)]*\)/i', $line)) {
+                continue;
+            }
+
+            $lineTotalHint = sorImpExtractMoneyHint($line);
+            $resolvedPkg = sorImpResolveUrbanismShorthandPackage($line, $packages, $lineTotalHint);
+            if (!$resolvedPkg || !isset($resolvedPkg['id'])) {
+                continue;
+            }
+
+            $resolvedPkgId = (int) $resolvedPkg['id'];
+            if ($resolvedPkgId > 0 && isset($seenPackageIds[$resolvedPkgId])) {
+                continue;
+            }
+
+            $lineItems[] = array(
+                'index' => count($lineItems) + 1,
+                'package_text' => isset($resolvedPkg['name']) ? (string) $resolvedPkg['name'] : sorImpSanitizeExtractedName($line),
+                'products' => array(),
+                'row_qty' => 1,
+                'line_total_price' => $lineTotalHint > 0 ? (float) $lineTotalHint : 0.00,
+                'has_section_marker' => true,
+            );
+            if ($resolvedPkgId > 0) {
+                $seenPackageIds[$resolvedPkgId] = true;
+            }
+        }
+
+        return $lineItems;
+    }
+}
+
+if (!function_exists('sorImpParseUrbanismChooseAnyHint')) {
+    function sorImpParseUrbanismChooseAnyHint($text)
+    {
+        $hint = array(
+            'package_label' => '',
+            'choose_any_qty' => 0,
+            'paid' => array(),
+            'free' => array(),
+            'products' => array(),
+            'line_total_price' => 0.00,
+        );
+
+        if (!preg_match('/\bchoose\s+any\b/i', (string) $text) || !preg_match('/\burbanism\b/i', (string) $text)) {
+            return $hint;
+        }
+
+        $lines = sorImpGetPdfTextLines($text);
+        if (count($lines) === 0) {
+            return $hint;
+        }
+
+        $headerIdx = -1;
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = trim((string) $lines[$i]);
+            if (preg_match('/^product(?:\s+sku)?$/i', $line) || (preg_match('/\bproduct\b/i', $line) && preg_match('/\bsku\b/i', $line))) {
+                $headerIdx = $i;
+                break;
+            }
+        }
+        if ($headerIdx < 0) {
+            return $hint;
+        }
+
+        $lineTotal = sorImpFindTotalPrice($text);
+        if ($lineTotal !== '') {
+            $hint['line_total_price'] = (float) $lineTotal;
+        }
+
+        $mode = '';
+        $lastCategory = '';
+        $sectionStarted = false;
+        for ($i = $headerIdx + 1; $i < count($lines); $i++) {
+            $line = sorImpNorm($lines[$i]);
+            if ($line === '') {
+                continue;
+            }
+
+            if ($hint['package_label'] === '' && preg_match('/^mix\s*&\s*match\b/i', $line)) {
+                $hint['package_label'] = sorImpSanitizeExtractedName($line);
+                continue;
+            }
+
+            if (preg_match('/^choose\s+any\s+(\d{1,4})\s+qty\b/i', $line, $matches)) {
+                $hint['choose_any_qty'] = max($hint['choose_any_qty'], (int) $matches[1]);
+                $mode = 'paid';
+                $lastCategory = '';
+                $sectionStarted = true;
+                continue;
+            }
+
+            if (preg_match('/^free\s+item\b/i', $line)) {
+                $mode = 'free';
+                $lastCategory = '';
+                $sectionStarted = true;
+                continue;
+            }
+
+            if (!$sectionStarted) {
+                continue;
+            }
+
+            if (preg_match('/^(sub\s*total|subtotal|grand\s*total|total\s*amount|payment|remarks?|note|thank you)\b/i', $line)) {
+                break;
+            }
+
+            if (preg_match('/^qty\s*[:ï¼š]?\s*(\d{1,4})\b/i', $line, $matches)) {
+                $qty = (int) $matches[1];
+                if ($qty > 0 && $lastCategory !== '' && ($mode === 'paid' || $mode === 'free')) {
+                    if (!isset($hint[$mode][$lastCategory])) {
+                        $hint[$mode][$lastCategory] = 0;
+                    }
+                    $hint[$mode][$lastCategory] += $qty;
+                    $hint['products'][] = array(
+                        'name' => sorImpUrbanismCategoryLabel($lastCategory),
+                        'qty' => $qty,
+                        'mode' => $mode,
+                    );
+                }
+                $lastCategory = '';
+                continue;
+            }
+
+            if (preg_match('/\bsku\b/i', $line) || sorImpIsCustomerInfoLine($line)) {
+                continue;
+            }
+
+            $category = sorImpUrbanismCategoryFromText($line);
+            if ($category === '' || $category === 'carbzero') {
+                continue;
+            }
+
+            $lastCategory = $category;
+        }
+
+        return $hint;
+    }
+}
+
+if (!function_exists('sorImpResolveUrbanismChooseAnyPackage')) {
+    function sorImpResolveUrbanismChooseAnyPackage($text, $packages)
+    {
+        $hint = sorImpParseUrbanismChooseAnyHint($text);
+        $paidTotal = array_sum(isset($hint['paid']) && is_array($hint['paid']) ? $hint['paid'] : array());
+        $freeTotal = array_sum(isset($hint['free']) && is_array($hint['free']) ? $hint['free'] : array());
+        if ($paidTotal <= 0 || count($hint['products']) === 0) {
+            return array();
+        }
+
+        $bestPkg = null;
+        $bestScore = 0;
+        foreach ($packages as $pkg) {
+            $pkgName = isset($pkg['name']) ? (string) $pkg['name'] : '';
+            if ($pkgName === '' || !preg_match('/\burbanism\b/i', $pkgName)) {
+                continue;
+            }
+            if (!preg_match('/\(\s*my\s*\)|(?:^|[\s-])my(?:$|[\s)])?/i', $pkgName)) {
+                continue;
+            }
+            if (preg_match('/\b3\.0\b|\bpluz\b/i', $pkgName)) {
+                continue;
+            }
+
+            $recipe = sorImpUrbanismBuildPackageRecipe($pkg);
+            $recipePaidTotal = array_sum(isset($recipe['paid']) && is_array($recipe['paid']) ? $recipe['paid'] : array());
+            $recipeFreeTotal = array_sum(isset($recipe['free']) && is_array($recipe['free']) ? $recipe['free'] : array());
+
+            $score = 0;
+            if ($recipePaidTotal === $paidTotal) {
+                $score += 35;
+            } else {
+                $score -= abs($recipePaidTotal - $paidTotal) * 12;
+            }
+
+            if ($recipeFreeTotal === $freeTotal) {
+                $score += 20;
+            } else {
+                $score -= abs($recipeFreeTotal - $freeTotal) * 10;
+            }
+
+            $categories = array_unique(array_merge(
+                array_keys(isset($hint['paid']) ? $hint['paid'] : array()),
+                array_keys(isset($hint['free']) ? $hint['free'] : array()),
+                array_keys(isset($recipe['paid']) ? $recipe['paid'] : array()),
+                array_keys(isset($recipe['free']) ? $recipe['free'] : array())
+            ));
+
+            foreach ($categories as $category) {
+                $expectedPaid = isset($hint['paid'][$category]) ? (int) $hint['paid'][$category] : 0;
+                $expectedFree = isset($hint['free'][$category]) ? (int) $hint['free'][$category] : 0;
+                $packagePaid = isset($recipe['paid'][$category]) ? (int) $recipe['paid'][$category] : 0;
+                $packageFree = isset($recipe['free'][$category]) ? (int) $recipe['free'][$category] : 0;
+
+                if ($expectedPaid > 0 || $packagePaid > 0) {
+                    $score += ($expectedPaid === $packagePaid) ? 30 : -18;
+                }
+                if ($expectedFree > 0 || $packageFree > 0) {
+                    $score += ($expectedFree === $packageFree) ? 24 : -15;
+                }
+            }
+
+            if ((int) $hint['choose_any_qty'] > 0 && ($recipePaidTotal + $recipeFreeTotal) === (int) $hint['choose_any_qty']) {
+                $score += 12;
+            }
+
+            if ($score > $bestScore) {
+                $bestScore = $score;
+                $bestPkg = $pkg;
+            }
+        }
+
+        if (!$bestPkg || $bestScore < 50) {
+            return array();
+        }
+
+        return array(
+            'package' => $bestPkg,
+            'hint' => $hint,
+            'score' => $bestScore,
+        );
+    }
+}
+
+if (!function_exists('sorImpApplyUrbanismChooseAnyPackageHint')) {
+    function sorImpApplyUrbanismChooseAnyPackageHint($lineItems, $matchedPackagePayload)
+    {
+        if (!is_array($lineItems) || empty($matchedPackagePayload) || !isset($matchedPackagePayload['package'])) {
+            return $lineItems;
+        }
+
+        $matchedPackage = $matchedPackagePayload['package'];
+        $hint = isset($matchedPackagePayload['hint']) && is_array($matchedPackagePayload['hint']) ? $matchedPackagePayload['hint'] : array();
+        $matched = false;
+
+        foreach ($lineItems as $idx => $lineItem) {
+            $packageText = isset($lineItem['package_text']) ? (string) $lineItem['package_text'] : '';
+            $hasSectionMarker = !empty($lineItem['has_section_marker']);
+            if (!$hasSectionMarker && !preg_match('/mix\s*&\s*match/i', $packageText)) {
+                continue;
+            }
+
+            $lineItems[$idx]['package_text'] = isset($matchedPackage['name']) ? (string) $matchedPackage['name'] : $packageText;
+            if (!empty($hint['products']) && is_array($hint['products'])) {
+                $lineItems[$idx]['products'] = array_map(function ($productRow) {
+                    return array(
+                        'name' => isset($productRow['name']) ? (string) $productRow['name'] : '',
+                        'qty' => isset($productRow['qty']) ? (int) $productRow['qty'] : 1,
+                    );
+                }, $hint['products']);
+            }
+            if (
+                (empty($lineItems[$idx]['line_total_price']) || (float) $lineItems[$idx]['line_total_price'] <= 0) &&
+                !empty($hint['line_total_price'])
+            ) {
+                $lineItems[$idx]['line_total_price'] = (float) $hint['line_total_price'];
+            }
+            $lineItems[$idx]['has_section_marker'] = true;
+            $matched = true;
+            break;
+        }
+
+        if (!$matched) {
+            $lineItems[] = array(
+                'index' => count($lineItems) + 1,
+                'package_text' => isset($matchedPackage['name']) ? (string) $matchedPackage['name'] : '',
+                'products' => isset($hint['products']) && is_array($hint['products']) ? array_map(function ($productRow) {
+                    return array(
+                        'name' => isset($productRow['name']) ? (string) $productRow['name'] : '',
+                        'qty' => isset($productRow['qty']) ? (int) $productRow['qty'] : 1,
+                    );
+                }, $hint['products']) : array(),
+                'row_qty' => 1,
+                'line_total_price' => !empty($hint['line_total_price']) ? (float) $hint['line_total_price'] : 0.00,
+                'has_section_marker' => true,
+            );
+        }
+
+        return array_values($lineItems);
+    }
+}
+
 if (!function_exists('sorImpBuildPackageIndexes')) {
     function sorImpBuildPackageIndexes($packages)
     {
@@ -1716,8 +2281,17 @@ if (!function_exists('sorImpParsePdfToRows')) {
         if ($currentItem !== null) {
             $lineItems[] = $currentItem;
         }
+        $urbanismChooseAnyPayload = sorImpResolveUrbanismChooseAnyPackage($text, $packages);
+        $usedUrbanismChooseAnyMatcher = !empty($urbanismChooseAnyPayload);
+        if ($usedUrbanismChooseAnyMatcher) {
+            $lineItems = sorImpApplyUrbanismChooseAnyPackageHint($lineItems, $urbanismChooseAnyPayload);
+        }
         $usedMixMatchInvoiceParser = false;
-        if (preg_match('/\bmix\s*&\s*match\b/i', (string) $text) && preg_match('/\bcandy\b/i', (string) $text)) {
+        if (
+            !$usedUrbanismChooseAnyMatcher &&
+            preg_match('/\bmix\s*&\s*match\b/i', (string) $text) &&
+            preg_match('/\bcandy\b/i', (string) $text)
+        ) {
             $mixMatchItems = sorImpParseMixMatchCandyInvoiceItems($text);
             if (count($mixMatchItems) > 0) {
                 $lineItems = $mixMatchItems;
@@ -1725,12 +2299,34 @@ if (!function_exists('sorImpParsePdfToRows')) {
             }
         }
         if (
+            !$usedUrbanismChooseAnyMatcher &&
             !$usedMixMatchInvoiceParser &&
             (count($lineItems) === 0 || preg_match('/\bchoose\s+any\b/i', (string) $text) || preg_match('/\bfree\s+item\b/i', (string) $text))
         ) {
             $chooseAnyItems = sorImpParseChooseAnyInvoiceItems($text);
             if (count($chooseAnyItems) > 0) {
                 $lineItems = $chooseAnyItems;
+            }
+        }
+        $urbanismSupplementalItems = sorImpParseUrbanismSupplementalInvoiceItems($text, $packages);
+        if (count($urbanismSupplementalItems) > 0) {
+            $existingPackageKeys = array();
+            foreach ($lineItems as $existingItem) {
+                $existingKey = sorImpLookup(isset($existingItem['package_text']) ? $existingItem['package_text'] : '');
+                if ($existingKey !== '') {
+                    $existingPackageKeys[$existingKey] = true;
+                }
+            }
+
+            foreach ($urbanismSupplementalItems as $extraItem) {
+                $extraKey = sorImpLookup(isset($extraItem['package_text']) ? $extraItem['package_text'] : '');
+                if ($extraKey !== '' && isset($existingPackageKeys[$extraKey])) {
+                    continue;
+                }
+                $lineItems[] = $extraItem;
+                if ($extraKey !== '') {
+                    $existingPackageKeys[$extraKey] = true;
+                }
             }
         }
         $hasUsableLineItem = false;
@@ -2962,6 +3558,7 @@ if ($existingInvoiceRst) {
                                                                 <input class="form-control" type="text" value="<?= $lineTotalPrice > 0 ? htmlspecialchars(number_format($lineTotalPrice, 2, '.', ''), ENT_QUOTES, 'UTF-8') : '' ?>" readonly disabled style="background:#f3f4f6;">
                                                             </td>
                                                             <td>
+                                                                <button type="button" class="mt-1 action_menu_btn add-preview-package-row" id="action_menu_btn"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
                                                                 <button type="button" class="mt-1 action_menu_btn remove-preview-row" id="action_menu_btn" data-remove-scope="package"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>
                                                             </td>
                                                         </tr>

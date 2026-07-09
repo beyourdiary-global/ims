@@ -30,6 +30,7 @@ $courierIds = array();
 $pkgIds = array();
 $productIds = array();
 $brandIds = array();
+$warehouseIds = array();
 $requestOrderNumbers = array();
 
 if ($result && mysqli_num_rows($result) > 0) {
@@ -49,6 +50,9 @@ if ($result && mysqli_num_rows($result) > 0) {
 
         if (!empty($row['brand_id'])) {
             $brandIds[(int) $row['brand_id']] = true;
+        }
+        if (!empty($row['warehouse_id'])) {
+            $warehouseIds[(int) $row['warehouse_id']] = true;
         }
         if (!empty($row['company_id'])) {
             $companyIds[$row['company_id']] = true;
@@ -130,6 +134,17 @@ if (!empty($courierIds)) {
         while ($cRow = mysqli_fetch_assoc($cRst)) {
             $courierMap[$cRow['id']] = $cRow['name'];
             $courierLinkMap[$cRow['id']] = $cRow['tracking_link'];
+        }
+    }
+}
+
+$warehouseMap = array();
+if (!empty($warehouseIds)) {
+    $idsStr = implode(',', array_keys($warehouseIds));
+    $warehouseRst = mysqli_query($connect, "SELECT id, name FROM " . WHSE . " WHERE id IN ($idsStr)");
+    if ($warehouseRst) {
+        while ($warehouseRow = mysqli_fetch_assoc($warehouseRst)) {
+            $warehouseMap[(int) $warehouseRow['id']] = isset($warehouseRow['name']) ? (string) $warehouseRow['name'] : '';
         }
     }
 }
@@ -307,7 +322,7 @@ function sorAttachmentHref($relativePath, $siteUrl)
                                 <th class="hideColumn">ID</th>
                                 <th>S/N</th>
                                 <th id="action_col">Action</th>
-                                <th>Company</th>
+                                <th>Warehouse</th>
                                 <th>Package/Product</th>
                                 <th>Tracking Status</th>
                                 <th>Tracking Number</th>
@@ -402,7 +417,9 @@ function sorAttachmentHref($relativePath, $siteUrl)
                                 }
 
                                 // Apply Bulk Maps
-                                $companyName = implode(', ', array_values($companyNames));
+                                $warehouseName = !empty($row['warehouse_id']) && isset($warehouseMap[(int) $row['warehouse_id']])
+                                    ? (string) $warehouseMap[(int) $row['warehouse_id']]
+                                    : '';
                                 $courierName = isset($courierMap[$row['courier_id']]) ? $courierMap[$row['courier_id']] : '';
                                 $courierTrackingLink = isset($courierLinkMap[$row['courier_id']]) ? $courierLinkMap[$row['courier_id']] : '';
                                 $stockOrderImageUrl = sorAttachmentHref(isset($row['stock_order_image']) ? $row['stock_order_image'] : '', $SITEURL);
@@ -435,7 +452,7 @@ function sorAttachmentHref($relativePath, $siteUrl)
                                         <i class="fa-solid fa-rotate"></i>
                                     </button>
                                 </td>
-                                <td><?= htmlspecialchars((string) $companyName, ENT_QUOTES, 'UTF-8') ?></td>
+                                <td><?= htmlspecialchars((string) $warehouseName, ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= htmlspecialchars((string) $itemSummary, ENT_QUOTES, 'UTF-8') ?></td>
                                 <td id="tracking-status-<?= (int) $row['id'] ?>" data-full-status="<?= htmlspecialchars($fullStatus, ENT_QUOTES, 'UTF-8') ?>">
                                     <?= sorShortText($fullStatus) ?>
