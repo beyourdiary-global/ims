@@ -782,7 +782,7 @@ if (!function_exists('orderReportRenderPillList')) {
 
         $html = '<div class="customer-tag-table-badge-group">';
         foreach ($values as $value) {
-            $html .= '<span class="customer-tag-table-badge">' . orderReportEscape($value) . '</span>';
+            $html .= '<span class="customer-tag-table-badge" title="' . orderReportEscape($value) . '">' . orderReportEscape($value) . '</span>';
         }
         $html .= '</div>';
 

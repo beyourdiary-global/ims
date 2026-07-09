@@ -10173,6 +10173,20 @@ if (!function_exists('customerLabelRenderShopeeBuyerCell')) {
     }
 }
 
+if (!function_exists('customerLabelResolveHoverText')) {
+    function customerLabelResolveHoverText($name, $remark = '')
+    {
+        $name = trim((string) $name);
+        $remark = trim((string) $remark);
+
+        if ($remark !== '') {
+            return $remark;
+        }
+
+        return $name;
+    }
+}
+
 if (!function_exists('customerLabelRenderBadge')) {
     function customerLabelRenderBadge($labelMeta)
     {
@@ -10182,8 +10196,9 @@ if (!function_exists('customerLabelRenderBadge')) {
         }
 
         $badgeColor = isset($labelMeta['colorCode']) && trim((string) $labelMeta['colorCode']) !== '' ? (string) $labelMeta['colorCode'] : '#6c757d';
+        $hoverText = customerLabelResolveHoverText($labelName, isset($labelMeta['remark']) ? $labelMeta['remark'] : '');
         return '<span class="customer-label-badge text-white" title="' .
-            htmlspecialchars($labelName, ENT_QUOTES, 'UTF-8') .
+            htmlspecialchars($hoverText, ENT_QUOTES, 'UTF-8') .
             '" style="background-color:' .
             htmlspecialchars($badgeColor, ENT_QUOTES, 'UTF-8') .
             ';">' .
