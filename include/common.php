@@ -793,6 +793,10 @@ if (!function_exists('renderNotificationScript')) {
             $type = 'info';
         }
 
+        if (function_exists('auditLogRememberNotificationError')) {
+            auditLogRememberNotificationError($message, $type);
+        }
+
         $messageJson = json_encode((string) $message, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
         $typeJson = json_encode($type, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
         $redirectJson = json_encode((string) $redirectUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
@@ -1296,6 +1300,481 @@ if (!function_exists('normalizeAuditLogValue')) {
     }
 }
 
+if (!function_exists('auditLogGetRuntimeState')) {
+    function &auditLogGetRuntimeState()
+    {
+        if (!isset($GLOBALS['__auditLogRuntime']) || !is_array($GLOBALS['__auditLogRuntime'])) {
+            $GLOBALS['__auditLogRuntime'] = array(
+                'has_submit_action_log' => false,
+                'has_failure_log' => false,
+                'notification_errors' => array(),
+            );
+        }
+
+        return $GLOBALS['__auditLogRuntime'];
+    }
+}
+
+if (!function_exists('auditLogShouldCaptureFailureMessage')) {
+    function auditLogShouldCaptureFailureMessage($message, $type = '')
+    {
+        $message = trim((string) $message);
+        if ($message === '') {
+            return false;
+        }
+
+        $normalizedType = strtolower(trim((string) $type));
+        if (in_array($normalizedType, array('success', 'alert-success'), true)) {
+            return false;
+        }
+
+        if (in_array($normalizedType, array('error', 'danger', 'warning', 'alert-danger', 'alert-warning'), true)) {
+            return true;
+        }
+
+        $resolvedType = function_exists('resolveNotificationType')
+            ? resolveNotificationType($message, $normalizedType !== '' ? $normalizedType : 'info')
+            : $normalizedType;
+
+        if ($resolvedType === 'success') {
+            return false;
+        }
+
+        if (in_array($resolvedType, array('error', 'warning'), true)) {
+            return true;
+        }
+
+        $normalizedMessage = strtolower($message);
+        if (
+            preg_match('/\bnot found\b/i', $normalizedMessage) ||
+            preg_match('/\bno\b.+\b(found|available|record|records|item|items|data|result|results|order|orders|product|products|package|packages)\b/i', $normalizedMessage) ||
+            strpos($normalizedMessage, 'no selected') !== false ||
+            strpos($normalizedMessage, 'already exists') !== false
+        ) {
+            return true;
+        }
+
+        return false;
+    }
+}
+
+if (!function_exists('auditLogRememberNotificationError')) {
+    function auditLogRememberNotificationError($message, $type = '')
+    {
+        if (!auditLogShouldCaptureFailureMessage($message, $type)) {
+            return;
+        }
+
+        $message = trim((string) $message);
+        $runtime = &auditLogGetRuntimeState();
+        if (!in_array($message, $runtime['notification_errors'], true)) {
+            $runtime['notification_errors'][] = $message;
+        }
+    }
+}
+
+if (!function_exists('auditLogCollectConnections')) {
+    function auditLogCollectConnections($connections = array())
+    {
+        $collected = array();
+        $seen = array();
+
+        $appendConnections = function ($item) use (&$appendConnections, &$collected, &$seen) {
+            if (is_array($item)) {
+                foreach ($item as $nestedItem) {
+                    $appendConnections($nestedItem);
+                }
+                return;
+            }
+
+            if (!($item instanceof mysqli)) {
+                return;
+            }
+
+            $hash = spl_object_hash($item);
+            if (isset($seen[$hash])) {
+                return;
+            }
+
+            $seen[$hash] = true;
+            $collected[] = $item;
+        };
+
+        $appendConnections($connections);
+
+        foreach ($GLOBALS as $globalValue) {
+            if ($globalValue instanceof mysqli) {
+                $appendConnections($globalValue);
+            }
+        }
+
+        return $collected;
+    }
+}
+
+if (!function_exists('resolveAuditLogErrorMessage')) {
+    function resolveAuditLogErrorMessage($errorMsg = '', $connections = array())
+    {
+        $errorMsg = trim((string) $errorMsg);
+        if ($errorMsg !== '') {
+            return $errorMsg;
+        }
+
+        foreach (auditLogCollectConnections($connections) as $connection) {
+            $dbError = trim((string) mysqli_error($connection));
+            if ($dbError !== '') {
+                return $dbError;
+            }
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('auditLogRequestHasSubmitIntent')) {
+    function auditLogRequestHasSubmitIntent()
+    {
+        $requestMethod = strtoupper(trim((string) ($_SERVER['REQUEST_METHOD'] ?? '')));
+        if ($requestMethod === 'POST' && !empty($_POST)) {
+            return true;
+        }
+
+        foreach (array('actionBtn', 'action', 'submit') as $requestKey) {
+            if (!empty($_REQUEST[$requestKey])) {
+                return true;
+            }
+        }
+
+        $act = strtoupper(trim((string) ($_REQUEST['act'] ?? '')));
+        return in_array($act, array('A', 'E', 'U', 'D', 'I', 'APPROVAL', 'DECLINED', 'CANCEL', 'RESET'), true);
+    }
+}
+
+if (!function_exists('auditLogResolveRequestAction')) {
+    function auditLogResolveRequestAction($defaultAction = 'check')
+    {
+        $defaultAction = strtolower(trim((string) $defaultAction));
+        if (get_allowed_audit_actions($defaultAction) === null) {
+            $defaultAction = 'check';
+        }
+
+        $rawAction = '';
+        foreach (array('actionBtn', 'action', 'submit') as $requestKey) {
+            if (!empty($_REQUEST[$requestKey])) {
+                $rawAction = trim((string) $_REQUEST[$requestKey]);
+                break;
+            }
+        }
+
+        if ($rawAction !== '') {
+            $normalizedAction = strtolower(preg_replace('/[^a-z0-9]+/', '', $rawAction));
+            $actionMap = array(
+                'add' => 'add',
+                'adddata' => 'add',
+                'createdata' => 'add',
+                'saveadd' => 'add',
+                'edit' => 'edit',
+                'update' => 'edit',
+                'updatedata' => 'edit',
+                'upddata' => 'edit',
+                'saveedit' => 'edit',
+                'delete' => 'delete',
+                'deletedata' => 'delete',
+                'remove' => 'delete',
+                'import' => 'import',
+                'importdata' => 'import',
+                'upload' => 'import',
+                'approval' => 'approval',
+                'approve' => 'approval',
+                'decline' => 'declined',
+                'declined' => 'declined',
+                'cancel' => 'cancel',
+                'search' => 'search',
+                'reset' => 'reset',
+                'check' => 'check',
+            );
+
+            if (isset($actionMap[$normalizedAction])) {
+                return $actionMap[$normalizedAction];
+            }
+        }
+
+        $act = strtoupper(trim((string) ($_REQUEST['act'] ?? '')));
+        switch ($act) {
+            case 'A':
+                return 'add';
+            case 'E':
+            case 'U':
+                return 'edit';
+            case 'D':
+                return 'delete';
+            case 'I':
+                $scriptName = strtolower(trim((string) ($_SERVER['SCRIPT_NAME'] ?? '')));
+                $pageTitle = strtolower(trim((string) ($GLOBALS['pageTitle'] ?? '')));
+                if (
+                    strpos($scriptName, '/import/') !== false ||
+                    substr($scriptName, -10) === '_import.php' ||
+                    strpos($pageTitle, 'import') !== false
+                ) {
+                    return 'import';
+                }
+                return 'add';
+        }
+
+        return $defaultAction;
+    }
+}
+
+if (!function_exists('auditLogIsWriteAction')) {
+    function auditLogIsWriteAction($action)
+    {
+        $action = strtolower(trim((string) $action));
+        return in_array($action, array('add', 'edit', 'delete', 'import', 'approval', 'declined', 'cancel', 'reset', 'check'), true);
+    }
+}
+
+if (!function_exists('auditLogResolvePageName')) {
+    function auditLogResolvePageName()
+    {
+        $pageTitle = trim((string) ($GLOBALS['pageTitle'] ?? ''));
+        if ($pageTitle !== '') {
+            return $pageTitle;
+        }
+
+        $scriptName = trim((string) ($_SERVER['SCRIPT_NAME'] ?? ''));
+        if ($scriptName !== '') {
+            return basename($scriptName);
+        }
+
+        return 'Unknown Page';
+    }
+}
+
+if (!function_exists('auditLogResolveTableName')) {
+    function auditLogResolveTableName()
+    {
+        foreach (array('tblName', 'tableName', 'reg_tblName') as $globalKey) {
+            if (!empty($GLOBALS[$globalKey]) && is_scalar($GLOBALS[$globalKey])) {
+                return trim((string) $GLOBALS[$globalKey]);
+            }
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('auditLogResolveRecordId')) {
+    function auditLogResolveRecordId()
+    {
+        foreach (array('dataId', 'recordId', 'id') as $globalKey) {
+            if (!empty($GLOBALS[$globalKey]) && is_scalar($GLOBALS[$globalKey])) {
+                return trim((string) $GLOBALS[$globalKey]);
+            }
+        }
+
+        foreach (array('id', 'dataId', 'recordId') as $requestKey) {
+            if (!empty($_REQUEST[$requestKey]) && is_scalar($_REQUEST[$requestKey])) {
+                return trim((string) $_REQUEST[$requestKey]);
+            }
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('auditLogResolveWriteConnection')) {
+    function auditLogResolveWriteConnection()
+    {
+        if (isset($GLOBALS['connect']) && $GLOBALS['connect'] instanceof mysqli) {
+            return $GLOBALS['connect'];
+        }
+
+        $connections = auditLogCollectConnections();
+        return empty($connections) ? null : $connections[0];
+    }
+}
+
+if (!function_exists('auditLogCollectUnhandledFailureReasons')) {
+    function auditLogCollectUnhandledFailureReasons()
+    {
+        $reasons = array();
+        $seenReasons = array();
+
+        $appendReason = function ($reason) use (&$reasons, &$seenReasons) {
+            $reason = trim((string) $reason);
+            if ($reason === '') {
+                return;
+            }
+
+            $signature = strtolower($reason);
+            if (isset($seenReasons[$signature])) {
+                return;
+            }
+
+            $seenReasons[$signature] = true;
+            $reasons[] = $reason;
+        };
+
+        $runtime = &auditLogGetRuntimeState();
+        foreach ($runtime['notification_errors'] as $notificationError) {
+            $appendReason($notificationError);
+        }
+
+        foreach ($GLOBALS as $globalKey => $globalValue) {
+            if (!preg_match('/statusmessage$/i', (string) $globalKey) || !is_scalar($globalValue)) {
+                continue;
+            }
+
+            $statusMessage = trim((string) $globalValue);
+            if ($statusMessage === '') {
+                continue;
+            }
+
+            $statusContext = '';
+            $statusPrefix = preg_replace('/message$/i', '', (string) $globalKey);
+            foreach (array($statusPrefix . 'Class', $statusPrefix . 'Type') as $statusKey) {
+                if (!empty($GLOBALS[$statusKey]) && is_scalar($GLOBALS[$statusKey])) {
+                    $statusContext = trim((string) $GLOBALS[$statusKey]);
+                    break;
+                }
+            }
+
+            if (auditLogShouldCaptureFailureMessage($statusMessage, $statusContext)) {
+                $appendReason($statusMessage);
+            }
+        }
+
+        foreach (array('errorMsg', 'err1', 'err2', 'err3', 'err4', 'err5', 'err6') as $globalKey) {
+            if (!empty($GLOBALS[$globalKey]) && is_scalar($GLOBALS[$globalKey])) {
+                $appendReason($GLOBALS[$globalKey]);
+            }
+        }
+
+        foreach ($GLOBALS as $globalKey => $globalValue) {
+            if (!preg_match('/(?:^err\d+$|_err$)/i', (string) $globalKey)) {
+                continue;
+            }
+
+            if (!is_scalar($globalValue)) {
+                continue;
+            }
+
+            $appendReason($globalValue);
+        }
+
+        $appendReason(resolveAuditLogErrorMessage(''));
+
+        $fatalError = error_get_last();
+        if (
+            is_array($fatalError) &&
+            isset($fatalError['type'], $fatalError['message']) &&
+            in_array((int) $fatalError['type'], array(E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR, E_RECOVERABLE_ERROR), true)
+        ) {
+            $appendReason($fatalError['message']);
+        }
+
+        if (count($reasons) > 8) {
+            $remainingCount = count($reasons) - 8;
+            $reasons = array_slice($reasons, 0, 8);
+            $reasons[] = '... and ' . $remainingCount . ' more error(s)';
+        }
+
+        return $reasons;
+    }
+}
+
+if (!function_exists('auditLogCaptureUnhandledSubmitFailure')) {
+    function auditLogCaptureUnhandledSubmitFailure()
+    {
+        if (!auditLogRequestHasSubmitIntent()) {
+            return;
+        }
+
+        if (!defined('USER_ID') || trim((string) USER_ID) === '') {
+            return;
+        }
+
+        $runtime = &auditLogGetRuntimeState();
+        if (!empty($runtime['has_failure_log'])) {
+            return;
+        }
+
+        $reasons = auditLogCollectUnhandledFailureReasons();
+        if (empty($reasons)) {
+            return;
+        }
+
+        $auditConnect = auditLogResolveWriteConnection();
+        if (!($auditConnect instanceof mysqli)) {
+            return;
+        }
+
+        $logAct = auditLogResolveRequestAction('check');
+        if (get_allowed_audit_actions($logAct) === null) {
+            $logAct = 'check';
+        }
+
+        $pageName = auditLogResolvePageName();
+        $tableName = auditLogResolveTableName();
+        $recordId = auditLogResolveRecordId();
+        $actorName = defined('USER_NAME') && trim((string) USER_NAME) !== '' ? trim((string) USER_NAME) : ('User #' . USER_ID);
+        $actionTextMap = array(
+            'add' => 'add the data',
+            'edit' => 'edit the data',
+            'delete' => 'delete the data',
+            'import' => 'import the data',
+            'approval' => 'approve the data',
+            'declined' => 'decline the data',
+            'cancel' => 'cancel the data',
+            'reset' => 'reset the data',
+            'search' => 'search the data',
+            'view' => 'view the data',
+            'check' => 'complete the requested action',
+        );
+        $actionText = $actionTextMap[$logAct] ?? 'complete the requested action';
+
+        $actMsg = $actorName . ' failed to ' . $actionText;
+        if ($recordId !== '') {
+            $safeRecordId = htmlspecialchars($recordId, ENT_QUOTES, 'UTF-8');
+            $actMsg .= ' [ <b> ID = ' . $safeRecordId . ' </b> ]';
+        }
+
+        $actMsg .= ' on <b>' . htmlspecialchars($pageName, ENT_QUOTES, 'UTF-8') . '</b>';
+        if ($tableName !== '') {
+            $actMsg .= ' under <b><i>' . htmlspecialchars($tableName, ENT_QUOTES, 'UTF-8') . ' Table</i></b>';
+        }
+        $actMsg .= '.';
+        $actMsg .= ' ( ' . htmlspecialchars(implode(' | ', $reasons), ENT_QUOTES, 'UTF-8') . ' )';
+
+        audit_log(array(
+            'log_act' => $logAct,
+            'cdate' => date('Y-m-d'),
+            'ctime' => date('H:i:s'),
+            'uid' => USER_ID,
+            'cby' => USER_ID,
+            'act_msg' => $actMsg,
+            'query_table' => $tableName,
+            'page' => $pageName,
+            'connect' => $auditConnect,
+        ));
+    }
+}
+
+if (!function_exists('auditLogRegisterShutdownHandler')) {
+    function auditLogRegisterShutdownHandler()
+    {
+        static $isRegistered = false;
+        if ($isRegistered) {
+            return;
+        }
+
+        register_shutdown_function('auditLogCaptureUnhandledSubmitFailure');
+        $isRegistered = true;
+    }
+}
+
+auditLogRegisterShutdownHandler();
+
 if (!function_exists('auditLogEscape')) {
     function auditLogEscape($connect, $value)
     {
@@ -1382,7 +1861,17 @@ function audit_log($data = array())
     }
 
     $query = "INSERT INTO " . AUDIT_LOG . " (" . $columns . ") VALUES (" . implode(', ', $values) . ")";
-    mysqli_query($connect, $query);
+    $inserted = mysqli_query($connect, $query);
+    if ($inserted) {
+        $runtime = &auditLogGetRuntimeState();
+        if (auditLogIsWriteAction($logAct)) {
+            $runtime['has_submit_action_log'] = true;
+        }
+
+        if (stripos($actMsg, 'fail to') !== false || stripos($actMsg, 'failed to') !== false) {
+            $runtime['has_failure_log'] = true;
+        }
+    }
 }
 
 function formatTime($time)
@@ -1732,6 +2221,7 @@ function sanitizeAuditMessageValue($value)
 function actMsgLog($id, $datafield = array(), $newvalarr = array(), $oldvalarr = array(), $chgvalarr = array(), $tblName, $action, $errorMsg)
 {
 	$action = strtolower($action);
+    $errorMsg = resolveAuditLogErrorMessage($errorMsg);
 
 	$actMsg = USER_NAME . (empty($errorMsg) ? " " : " fail to ") . $action . "  the data [ <b> ID = " . $id . " </b> ]";
 
