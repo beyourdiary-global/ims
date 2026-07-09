@@ -7158,6 +7158,1012 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
     }
 }
 
+if (!function_exists('customizeBotMsgGetContexts')) {
+    function customizeBotMsgGetContexts()
+    {
+        return array(
+            'shopee' => array(
+                'label' => 'Shopee',
+                'parse_mode' => 'plain',
+                'order_table' => SHOPEE_SG_ORDER_REQ,
+            ),
+            'lazada' => array(
+                'label' => 'Lazada',
+                'parse_mode' => 'plain',
+                'order_table' => LAZADA_ORDER_REQ,
+            ),
+            'website' => array(
+                'label' => 'Website',
+                'parse_mode' => 'plain',
+                'order_table' => WEB_ORDER_REQ,
+            ),
+            'facebook' => array(
+                'label' => 'Facebook',
+                'parse_mode' => 'plain',
+                'order_table' => FB_ORDER_REQ,
+            ),
+            'stock_order_request' => array(
+                'label' => 'Stock Order Request',
+                'parse_mode' => 'html',
+                'order_table' => STOCK_ORDER_REQ,
+            ),
+        );
+    }
+}
+
+if (!function_exists('customizeBotMsgNormalizeContext')) {
+    function customizeBotMsgNormalizeContext($context)
+    {
+        $context = strtolower(trim((string) $context));
+        $contexts = customizeBotMsgGetContexts();
+        return isset($contexts[$context]) ? $context : '';
+    }
+}
+
+if (!function_exists('customizeBotMsgGetContextConfig')) {
+    function customizeBotMsgGetContextConfig($context)
+    {
+        $context = customizeBotMsgNormalizeContext($context);
+        $contexts = customizeBotMsgGetContexts();
+        return $context !== '' && isset($contexts[$context]) ? $contexts[$context] : array();
+    }
+}
+
+if (!function_exists('customizeBotMsgGetContextParseMode')) {
+    function customizeBotMsgGetContextParseMode($context)
+    {
+        $config = customizeBotMsgGetContextConfig($context);
+        return isset($config['parse_mode']) ? (string) $config['parse_mode'] : 'plain';
+    }
+}
+
+if (!function_exists('customizeBotMsgCreateLineComponent')) {
+    function customizeBotMsgCreateLineComponent($componentKey, $text, $sortOrder = 0, $removed = false, $options = array())
+    {
+        $options = is_array($options) ? $options : array();
+        $builderText = isset($options['builder_text']) ? (string) $options['builder_text'] : (string) $text;
+        $builderMode = strtolower(trim((string) (isset($options['builder_mode']) ? $options['builder_mode'] : 'editable')));
+        if ($builderMode !== 'readonly') {
+            $builderMode = 'editable';
+        }
+        $textPrefix = isset($options['text_prefix']) ? (string) $options['text_prefix'] : '';
+        $textSuffix = isset($options['text_suffix']) ? (string) $options['text_suffix'] : '';
+        $lockedText = isset($options['locked_text']) ? (string) $options['locked_text'] : '';
+        $useBuilderText = strtoupper(trim((string) (isset($options['use_builder_text']) ? $options['use_builder_text'] : ($builderMode === 'readonly' ? 'N' : 'Y')))) === 'N' ? 'N' : 'Y';
+        $joinWithPrevious = strtoupper(trim((string) (isset($options['join_with_previous']) ? $options['join_with_previous'] : 'N'))) === 'Y' ? 'Y' : 'N';
+
+        return array(
+            'component_key' => (string) $componentKey,
+            'type' => 'line',
+            'text' => (string) $text,
+            'default_text' => (string) $text,
+            'builder_text' => $builderText,
+            'default_builder_text' => $builderText,
+            'builder_mode' => $builderMode,
+            'text_prefix' => $textPrefix,
+            'text_suffix' => $textSuffix,
+            'locked_text' => $lockedText,
+            'use_builder_text' => $useBuilderText,
+            'join_with_previous' => $joinWithPrevious,
+            'lines' => 0,
+            'default_lines' => 0,
+            'sort_order' => (int) $sortOrder,
+            'default_order' => (int) $sortOrder,
+            'removed' => $removed ? 'Y' : 'N',
+        );
+    }
+}
+
+if (!function_exists('customizeBotMsgCreateSpacerComponent')) {
+    function customizeBotMsgCreateSpacerComponent($componentKey, $lines = 1, $sortOrder = 0, $removed = false)
+    {
+        $lines = (int) $lines;
+        if ($lines < 1 || $lines > 3) {
+            $lines = 1;
+        }
+
+        return array(
+            'component_key' => (string) $componentKey,
+            'type' => 'spacer',
+            'text' => '',
+            'default_text' => '',
+            'lines' => $lines,
+            'default_lines' => $lines,
+            'sort_order' => (int) $sortOrder,
+            'default_order' => (int) $sortOrder,
+            'removed' => $removed ? 'Y' : 'N',
+        );
+    }
+}
+
+if (!function_exists('customizeBotMsgInferBuilderText')) {
+    function customizeBotMsgInferBuilderText($fullText, $defaultComponent = array())
+    {
+        $fullText = str_replace("\r\n", "\n", (string) $fullText);
+        $defaultBuilderText = isset($defaultComponent['default_builder_text']) ? (string) $defaultComponent['default_builder_text'] : '';
+        $textPrefix = isset($defaultComponent['text_prefix']) ? (string) $defaultComponent['text_prefix'] : '';
+        $textSuffix = isset($defaultComponent['text_suffix']) ? (string) $defaultComponent['text_suffix'] : '';
+        $builderText = $fullText;
+
+        if ($textPrefix !== '' && substr($builderText, 0, strlen($textPrefix)) === $textPrefix) {
+            $builderText = substr($builderText, strlen($textPrefix));
+        }
+
+        if ($textSuffix !== '' && substr($builderText, -strlen($textSuffix)) === $textSuffix) {
+            $builderText = substr($builderText, 0, strlen($builderText) - strlen($textSuffix));
+        }
+
+        $builderText = preg_replace('/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/', '', $builderText);
+        $builderText = preg_replace('/[ \t]{2,}/', ' ', (string) $builderText);
+        $builderText = trim((string) $builderText);
+
+        if ($builderText === '' && $defaultBuilderText !== '') {
+            return $defaultBuilderText;
+        }
+
+        return $builderText;
+    }
+}
+
+if (!function_exists('customizeBotMsgComposeLineText')) {
+    function customizeBotMsgComposeLineText($component)
+    {
+        if (!is_array($component)) {
+            return '';
+        }
+
+        $useBuilderText = strtoupper(trim((string) (isset($component['use_builder_text']) ? $component['use_builder_text'] : 'Y'))) === 'N' ? 'N' : 'Y';
+        if ($useBuilderText === 'N') {
+            if (array_key_exists('locked_text', $component)) {
+                return (string) $component['locked_text'];
+            }
+
+            return (string) (isset($component['text']) ? $component['text'] : '');
+        }
+
+        return (string) (isset($component['text_prefix']) ? $component['text_prefix'] : '')
+            . (string) (isset($component['builder_text']) ? $component['builder_text'] : (isset($component['text']) ? $component['text'] : ''))
+            . (string) (isset($component['text_suffix']) ? $component['text_suffix'] : '');
+    }
+}
+
+if (!function_exists('customizeBotMsgGetDefaultComponents')) {
+    function customizeBotMsgGetDefaultComponents($context)
+    {
+        $context = customizeBotMsgNormalizeContext($context);
+        if ($context === '') {
+            return array();
+        }
+
+        if ($context === 'stock_order_request') {
+            return array(
+                customizeBotMsgCreateLineComponent('warehouse_value', 'Warehouse [{{warehouse_name}}]', 10, false, array('builder_text' => 'Warehouse [{{warehouse_name}}]', 'builder_mode' => 'readonly', 'locked_text' => 'Warehouse [{{warehouse_name}}]', 'use_builder_text' => 'N')),
+                customizeBotMsgCreateLineComponent('invoice_id_label', 'Invoice ID:', 20),
+                customizeBotMsgCreateLineComponent('invoice_id_value', '<b>{{invoice_no}}</b>', 30, false, array('builder_text' => '{{invoice_no}}', 'builder_mode' => 'readonly', 'locked_text' => '<b>{{invoice_no}}</b>', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+                customizeBotMsgCreateLineComponent('invoice_date_label', 'Invoice Date:', 40),
+                customizeBotMsgCreateLineComponent('invoice_date_value', '<b>{{invoice_date}}</b>', 50, false, array('builder_text' => '{{invoice_date}}', 'builder_mode' => 'readonly', 'locked_text' => '<b>{{invoice_date}}</b>', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+                customizeBotMsgCreateLineComponent('package_label', 'Package:', 60),
+                customizeBotMsgCreateLineComponent('package_value', '{{package_summary}}', 70, false, array('builder_text' => '{{package_summary}}', 'builder_mode' => 'readonly', 'locked_text' => '{{package_summary}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+                customizeBotMsgCreateSpacerComponent('package_spacer', 1, 80),
+                customizeBotMsgCreateLineComponent('product_label', 'Product:', 90),
+                customizeBotMsgCreateLineComponent('product_lines', '{{product_lines_html}}', 100, false, array('builder_text' => '{{product_lines_html}}', 'builder_mode' => 'readonly', 'locked_text' => '{{product_lines_html}}', 'use_builder_text' => 'N')),
+                customizeBotMsgCreateSpacerComponent('product_spacer', 1, 110),
+                customizeBotMsgCreateLineComponent('order_link_label', 'Link:', 120),
+                customizeBotMsgCreateLineComponent('order_link_value', '{{order_link_html}}', 130, false, array('builder_text' => '{{order_link_html}}', 'builder_mode' => 'readonly', 'locked_text' => '{{order_link_html}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+            );
+        }
+
+        $contextConfig = customizeBotMsgGetContextConfig($context);
+        $platformLabel = isset($contextConfig['label']) ? (string) $contextConfig['label'] : ucfirst($context);
+        $customerLabel = $context === 'shopee' ? 'Shopee Buyer Username' : $platformLabel . ' Customer';
+        $orderLabel = $context === 'shopee' ? 'Shopee OID' : $platformLabel . ' Order ID';
+
+        $components = array(
+            customizeBotMsgCreateLineComponent('warehouse_value', '【{{warehouse_name}}】', 10, false, array('builder_text' => '{{warehouse_name}}', 'builder_mode' => 'readonly', 'locked_text' => '【{{warehouse_name}}】', 'use_builder_text' => 'N')),
+            customizeBotMsgCreateLineComponent('customer_label', $customerLabel . ':', 20),
+            customizeBotMsgCreateLineComponent('customer_value', '{{buyer_username}}', 30, false, array('builder_text' => '{{buyer_username}}', 'builder_mode' => 'readonly', 'locked_text' => '{{buyer_username}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+            customizeBotMsgCreateSpacerComponent('customer_spacer', 1, 40),
+            customizeBotMsgCreateLineComponent('package_label', 'Package:', 50),
+            customizeBotMsgCreateLineComponent('package_lines', '{{package_lines_block}}', 60, false, array('builder_text' => '{{package_lines_block}}', 'builder_mode' => 'readonly', 'locked_text' => '{{package_lines_block}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+            customizeBotMsgCreateSpacerComponent('package_spacer', 1, 70),
+            customizeBotMsgCreateLineComponent('product_label', 'Product Details:', 80),
+            customizeBotMsgCreateSpacerComponent('product_intro_spacer', 1, 90),
+            customizeBotMsgCreateLineComponent('product_lines', '{{product_details_block}}', 100, false, array('builder_text' => '{{product_details_block}}', 'builder_mode' => 'readonly', 'locked_text' => '{{product_details_block}}', 'use_builder_text' => 'N')),
+        );
+
+        if ($context === 'shopee') {
+            $components[] = customizeBotMsgCreateSpacerComponent('delivery_section_spacer', 1, 110);
+            $components[] = customizeBotMsgCreateLineComponent('delivery_header', '[Delivery Info]', 120);
+            $components[] = customizeBotMsgCreateSpacerComponent('delivery_header_spacer', 1, 130);
+            $components[] = customizeBotMsgCreateLineComponent('order_label', $orderLabel . ':', 140);
+            $components[] = customizeBotMsgCreateLineComponent('order_value', '{{order_code}}', 150, false, array('builder_text' => '{{order_code}}', 'builder_mode' => 'readonly', 'locked_text' => '{{order_code}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+            $components[] = customizeBotMsgCreateSpacerComponent('order_line_spacer', 1, 160);
+            $components[] = customizeBotMsgCreateLineComponent('customer_name_label', 'Customer Name:', 170);
+            $components[] = customizeBotMsgCreateLineComponent('customer_name_value', '{{customer_name}}', 180, false, array('builder_text' => '{{customer_name}}', 'builder_mode' => 'readonly', 'locked_text' => '{{customer_name}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+            $components[] = customizeBotMsgCreateSpacerComponent('customer_name_spacer', 1, 190);
+            $components[] = customizeBotMsgCreateLineComponent('customer_address_label', 'Customer Address:', 200);
+            $components[] = customizeBotMsgCreateLineComponent('customer_address_value', '{{customer_address}}', 210, false, array('builder_text' => '{{customer_address}}', 'builder_mode' => 'readonly', 'locked_text' => '{{customer_address}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+        } else {
+            $components[] = customizeBotMsgCreateSpacerComponent('order_section_spacer', 1, 110);
+            $components[] = customizeBotMsgCreateLineComponent('order_label', $orderLabel . ':', 120);
+            $components[] = customizeBotMsgCreateLineComponent('order_value', '{{order_code}}', 130, false, array('builder_text' => '{{order_code}}', 'builder_mode' => 'readonly', 'locked_text' => '{{order_code}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+            $components[] = customizeBotMsgCreateSpacerComponent('airbill_spacer', 1, 140);
+            $components[] = customizeBotMsgCreateLineComponent('airbill_label', 'Airbill:', 150);
+            $components[] = customizeBotMsgCreateLineComponent('airbill_value', '{{airbill_no}}', 160, false, array('builder_text' => '{{airbill_no}}', 'builder_mode' => 'readonly', 'locked_text' => '{{airbill_no}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+        }
+
+        $components[] = customizeBotMsgCreateSpacerComponent('stock_out_link_spacer', 1, 220);
+        $components[] = customizeBotMsgCreateLineComponent('stock_out_link_label', 'Warehouse Stock-out Link:', 230);
+        $components[] = customizeBotMsgCreateLineComponent('stock_out_link_value', '{{warehouse_stock_out_link}}', 240, false, array('builder_text' => '{{warehouse_stock_out_link}}', 'builder_mode' => 'readonly', 'locked_text' => '{{warehouse_stock_out_link}}', 'use_builder_text' => 'N'));
+
+        return $components;
+    }
+}
+
+if (!function_exists('customizeBotMsgMigrateLegacyComponents')) {
+    function customizeBotMsgMigrateLegacyComponents($components, $context)
+    {
+        if (!is_array($components)) {
+            return array();
+        }
+
+        $migrated = array();
+        foreach ($components as $component) {
+            if (!is_array($component)) {
+                continue;
+            }
+
+            $componentKey = trim((string) ($component['component_key'] ?? ''));
+            $sortOrder = (int) ($component['sort_order'] ?? 0);
+            $removed = strtoupper(trim((string) ($component['removed'] ?? 'N'))) === 'Y';
+            $builderText = isset($component['builder_text']) ? (string) $component['builder_text'] : customizeBotMsgInferBuilderText(
+                (string) ($component['text'] ?? ''),
+                array(
+                    'default_builder_text' => '',
+                    'text_prefix' => (string) ($component['text_prefix'] ?? ''),
+                    'text_suffix' => (string) ($component['text_suffix'] ?? ''),
+                )
+            );
+
+            if ($context === 'stock_order_request') {
+                if ($componentKey === 'warehouse_header') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('warehouse_value', 'Warehouse [{{warehouse_name}}]', $sortOrder, $removed, array('builder_text' => 'Warehouse [{{warehouse_name}}]', 'builder_mode' => 'readonly', 'locked_text' => 'Warehouse [{{warehouse_name}}]', 'use_builder_text' => 'N'));
+                    continue;
+                }
+                if ($componentKey === 'invoice_id') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('invoice_id_label', $builderText !== '' ? $builderText : 'Invoice ID:', $sortOrder, $removed);
+                    $migrated[] = customizeBotMsgCreateLineComponent('invoice_id_value', '<b>{{invoice_no}}</b>', $sortOrder + 1, $removed, array('builder_text' => '{{invoice_no}}', 'builder_mode' => 'readonly', 'locked_text' => '<b>{{invoice_no}}</b>', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+                    continue;
+                }
+                if ($componentKey === 'invoice_date') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('invoice_date_label', $builderText !== '' ? $builderText : 'Invoice Date:', $sortOrder, $removed);
+                    $migrated[] = customizeBotMsgCreateLineComponent('invoice_date_value', '<b>{{invoice_date}}</b>', $sortOrder + 1, $removed, array('builder_text' => '{{invoice_date}}', 'builder_mode' => 'readonly', 'locked_text' => '<b>{{invoice_date}}</b>', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+                    continue;
+                }
+                if ($componentKey === 'package') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('package_label', $builderText !== '' ? $builderText : 'Package:', $sortOrder, $removed);
+                    $migrated[] = customizeBotMsgCreateLineComponent('package_value', '{{package_summary}}', $sortOrder + 1, $removed, array('builder_text' => '{{package_summary}}', 'builder_mode' => 'readonly', 'locked_text' => '{{package_summary}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+                    continue;
+                }
+                if ($componentKey === 'order_link') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('order_link_label', $builderText !== '' ? $builderText : 'Link:', $sortOrder, $removed);
+                    $migrated[] = customizeBotMsgCreateLineComponent('order_link_value', '{{order_link_html}}', $sortOrder + 1, $removed, array('builder_text' => '{{order_link_html}}', 'builder_mode' => 'readonly', 'locked_text' => '{{order_link_html}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+                    continue;
+                }
+            } else {
+                if ($componentKey === 'warehouse_header') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('warehouse_value', '【{{warehouse_name}}】', $sortOrder, $removed, array('builder_text' => '{{warehouse_name}}', 'builder_mode' => 'readonly', 'locked_text' => '【{{warehouse_name}}】', 'use_builder_text' => 'N'));
+                    continue;
+                }
+                if ($componentKey === 'customer_line') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('customer_label', $builderText !== '' ? $builderText : 'Customer:', $sortOrder, $removed);
+                    $migrated[] = customizeBotMsgCreateLineComponent('customer_value', '{{buyer_username}}', $sortOrder + 1, $removed, array('builder_text' => '{{buyer_username}}', 'builder_mode' => 'readonly', 'locked_text' => '{{buyer_username}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+                    continue;
+                }
+                if ($componentKey === 'order_line') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('order_label', $builderText !== '' ? $builderText : 'Order ID:', $sortOrder, $removed);
+                    $migrated[] = customizeBotMsgCreateLineComponent('order_value', '{{order_code}}', $sortOrder + 1, $removed, array('builder_text' => '{{order_code}}', 'builder_mode' => 'readonly', 'locked_text' => '{{order_code}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+                    continue;
+                }
+                if ($componentKey === 'customer_name_line') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('customer_name_label', $builderText !== '' ? $builderText : 'Customer Name:', $sortOrder, $removed);
+                    $migrated[] = customizeBotMsgCreateLineComponent('customer_name_value', '{{customer_name}}', $sortOrder + 1, $removed, array('builder_text' => '{{customer_name}}', 'builder_mode' => 'readonly', 'locked_text' => '{{customer_name}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+                    continue;
+                }
+                if ($componentKey === 'customer_address_line') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('customer_address_label', $builderText !== '' ? $builderText : 'Customer Address:', $sortOrder, $removed);
+                    $migrated[] = customizeBotMsgCreateLineComponent('customer_address_value', '{{customer_address}}', $sortOrder + 1, $removed, array('builder_text' => '{{customer_address}}', 'builder_mode' => 'readonly', 'locked_text' => '{{customer_address}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+                    continue;
+                }
+                if ($componentKey === 'airbill_line') {
+                    $migrated[] = customizeBotMsgCreateLineComponent('airbill_label', $builderText !== '' ? $builderText : 'Airbill:', $sortOrder, $removed);
+                    $migrated[] = customizeBotMsgCreateLineComponent('airbill_value', '{{airbill_no}}', $sortOrder + 1, $removed, array('builder_text' => '{{airbill_no}}', 'builder_mode' => 'readonly', 'locked_text' => '{{airbill_no}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+                    continue;
+                }
+            }
+
+            $migrated[] = $component;
+        }
+
+        return $migrated;
+    }
+}
+
+if (!function_exists('customizeBotMsgHydrateComponents')) {
+    function customizeBotMsgHydrateComponents($components, $context)
+    {
+        $components = customizeBotMsgRepairLegacyBracketText($components);
+        $components = customizeBotMsgMigrateLegacyComponents($components, $context);
+        $defaults = customizeBotMsgGetDefaultComponents($context);
+        $defaultMap = array();
+        foreach ($defaults as $defaultComponent) {
+            $defaultMap[(string) $defaultComponent['component_key']] = $defaultComponent;
+        }
+
+        $normalized = array();
+        $seenKeys = array();
+
+        if (!is_array($components)) {
+            $components = array();
+        }
+
+        foreach ($components as $index => $component) {
+            if (!is_array($component)) {
+                continue;
+            }
+
+            $componentKey = trim((string) (isset($component['component_key']) ? $component['component_key'] : ''));
+            if ($componentKey === '') {
+                $componentKey = 'component_' . ($index + 1);
+            }
+
+            $defaultComponent = isset($defaultMap[$componentKey]) ? $defaultMap[$componentKey] : null;
+            $type = strtolower(trim((string) (isset($component['type']) ? $component['type'] : ($defaultComponent ? $defaultComponent['type'] : 'line'))));
+            if ($type !== 'spacer') {
+                $type = 'line';
+            }
+
+            $sortOrder = isset($component['sort_order'])
+                ? (int) $component['sort_order']
+                : ($defaultComponent ? (int) $defaultComponent['sort_order'] : (($index + 1) * 10));
+            $removedValue = isset($component['removed']) ? $component['removed'] : 'N';
+            $removed = strtoupper(trim((string) $removedValue)) === 'Y';
+
+            if ($type === 'spacer') {
+                $lines = isset($component['lines']) ? (int) $component['lines'] : ($defaultComponent ? (int) $defaultComponent['lines'] : 1);
+                if ($lines < 1 || $lines > 3) {
+                    $lines = 1;
+                }
+                $normalized[] = array(
+                    'component_key' => $componentKey,
+                    'type' => 'spacer',
+                    'text' => '',
+                    'default_text' => $defaultComponent ? (string) $defaultComponent['default_text'] : '',
+                    'lines' => $lines,
+                    'default_lines' => $defaultComponent ? (int) $defaultComponent['default_lines'] : $lines,
+                    'sort_order' => $sortOrder,
+                    'default_order' => $defaultComponent ? (int) $defaultComponent['default_order'] : $sortOrder,
+                    'removed' => $removed ? 'Y' : 'N',
+                );
+            } else {
+                $text = isset($component['text']) ? (string) $component['text'] : ($defaultComponent ? (string) $defaultComponent['text'] : '');
+                $builderMode = strtolower(trim((string) (isset($component['builder_mode']) ? $component['builder_mode'] : ($defaultComponent ? $defaultComponent['builder_mode'] : 'editable'))));
+                if ($builderMode !== 'readonly') {
+                    $builderMode = 'editable';
+                }
+                $textPrefix = isset($component['text_prefix']) ? (string) $component['text_prefix'] : ($defaultComponent ? (string) $defaultComponent['text_prefix'] : '');
+                $textSuffix = isset($component['text_suffix']) ? (string) $component['text_suffix'] : ($defaultComponent ? (string) $defaultComponent['text_suffix'] : '');
+                $defaultBuilderText = $defaultComponent ? (string) $defaultComponent['default_builder_text'] : $text;
+                $useBuilderText = strtoupper(trim((string) (isset($component['use_builder_text']) ? $component['use_builder_text'] : ($defaultComponent ? $defaultComponent['use_builder_text'] : ($builderMode === 'readonly' ? 'N' : 'Y'))))) === 'N' ? 'N' : 'Y';
+                $joinWithPrevious = strtoupper(trim((string) (isset($component['join_with_previous']) ? $component['join_with_previous'] : ($defaultComponent ? $defaultComponent['join_with_previous'] : 'N')))) === 'Y' ? 'Y' : 'N';
+                $lockedText = isset($component['locked_text']) ? (string) $component['locked_text'] : ($defaultComponent ? (string) $defaultComponent['locked_text'] : ($useBuilderText === 'N' ? $text : ''));
+                if ($builderMode === 'readonly' && $defaultBuilderText !== '') {
+                    $builderText = $defaultBuilderText;
+                } else {
+                    $builderText = isset($component['builder_text'])
+                        ? (string) $component['builder_text']
+                        : ($useBuilderText === 'Y'
+                            ? customizeBotMsgInferBuilderText($text, array(
+                                'default_builder_text' => $defaultBuilderText,
+                                'text_prefix' => $textPrefix,
+                                'text_suffix' => $textSuffix,
+                            ))
+                            : $defaultBuilderText);
+                }
+
+                $normalizedComponent = array(
+                    'component_key' => $componentKey,
+                    'type' => 'line',
+                    'text' => $text,
+                    'default_text' => $defaultComponent ? (string) $defaultComponent['default_text'] : $text,
+                    'builder_text' => $builderText,
+                    'default_builder_text' => $defaultBuilderText,
+                    'builder_mode' => $builderMode,
+                    'text_prefix' => $textPrefix,
+                    'text_suffix' => $textSuffix,
+                    'locked_text' => $lockedText,
+                    'use_builder_text' => $useBuilderText,
+                    'join_with_previous' => $joinWithPrevious,
+                    'lines' => 0,
+                    'default_lines' => 0,
+                    'sort_order' => $sortOrder,
+                    'default_order' => $defaultComponent ? (int) $defaultComponent['default_order'] : $sortOrder,
+                    'removed' => $removed ? 'Y' : 'N',
+                );
+                $normalizedComponent['text'] = customizeBotMsgComposeLineText($normalizedComponent);
+                $normalized[] = array(
+                    'component_key' => $normalizedComponent['component_key'],
+                    'type' => $normalizedComponent['type'],
+                    'text' => $normalizedComponent['text'],
+                    'default_text' => $normalizedComponent['default_text'],
+                    'builder_text' => $normalizedComponent['builder_text'],
+                    'default_builder_text' => $normalizedComponent['default_builder_text'],
+                    'builder_mode' => $normalizedComponent['builder_mode'],
+                    'text_prefix' => $normalizedComponent['text_prefix'],
+                    'text_suffix' => $normalizedComponent['text_suffix'],
+                    'locked_text' => $normalizedComponent['locked_text'],
+                    'use_builder_text' => $normalizedComponent['use_builder_text'],
+                    'join_with_previous' => $normalizedComponent['join_with_previous'],
+                    'lines' => 0,
+                    'default_lines' => 0,
+                    'sort_order' => $normalizedComponent['sort_order'],
+                    'default_order' => $normalizedComponent['default_order'],
+                    'removed' => $normalizedComponent['removed'],
+                );
+            }
+
+            $seenKeys[$componentKey] = true;
+        }
+
+        foreach ($defaults as $defaultComponent) {
+            $componentKey = (string) $defaultComponent['component_key'];
+            if (!isset($seenKeys[$componentKey])) {
+                $missingComponent = $defaultComponent;
+                $missingComponent['removed'] = 'Y';
+                $normalized[] = $missingComponent;
+            }
+        }
+
+        usort($normalized, function ($a, $b) {
+            $orderCompare = ((int) $a['sort_order']) <=> ((int) $b['sort_order']);
+            if ($orderCompare !== 0) {
+                return $orderCompare;
+            }
+
+            return strcmp((string) $a['component_key'], (string) $b['component_key']);
+        });
+
+        return array_values($normalized);
+    }
+}
+
+if (!function_exists('customizeBotMsgRepairLegacyBracketText')) {
+    function customizeBotMsgRepairLegacyBracketText($value)
+    {
+        if (is_array($value)) {
+            foreach ($value as $key => $item) {
+                $value[$key] = customizeBotMsgRepairLegacyBracketText($item);
+            }
+            return $value;
+        }
+
+        if (!is_string($value) || $value === '') {
+            return $value;
+        }
+
+        return str_replace(
+            array('ã€', 'ã€‘'),
+            array('【', '】'),
+            $value
+        );
+    }
+}
+
+if (!function_exists('customizeBotMsgBuildTemplateBodyFromComponents')) {
+    function customizeBotMsgBuildTemplateBodyFromComponents($components)
+    {
+        if (!is_array($components)) {
+            return '';
+        }
+
+        $components = array_values($components);
+        usort($components, function ($a, $b) {
+            $orderCompare = ((int) (isset($a['sort_order']) ? $a['sort_order'] : 0)) <=> ((int) (isset($b['sort_order']) ? $b['sort_order'] : 0));
+            if ($orderCompare !== 0) {
+                return $orderCompare;
+            }
+
+            return strcmp(
+                (string) (isset($a['component_key']) ? $a['component_key'] : ''),
+                (string) (isset($b['component_key']) ? $b['component_key'] : '')
+            );
+        });
+
+        $lines = array();
+
+        foreach ($components as $component) {
+            if (!is_array($component)) {
+                continue;
+            }
+
+            if (strtoupper(trim((string) (isset($component['removed']) ? $component['removed'] : 'N'))) === 'Y') {
+                continue;
+            }
+
+            $type = strtolower(trim((string) (isset($component['type']) ? $component['type'] : 'line')));
+            if ($type === 'spacer') {
+                $blankLines = isset($component['lines']) ? (int) $component['lines'] : 1;
+                if ($blankLines < 1 || $blankLines > 3) {
+                    $blankLines = 1;
+                }
+                for ($blankIndex = 0; $blankIndex < $blankLines; $blankIndex++) {
+                    $lines[] = '';
+                }
+                continue;
+            }
+
+            $text = str_replace("\r\n", "\n", customizeBotMsgComposeLineText($component));
+            $textParts = explode("\n", $text);
+            $joinWithPrevious = strtoupper(trim((string) (isset($component['join_with_previous']) ? $component['join_with_previous'] : 'N'))) === 'Y';
+            if ($joinWithPrevious && !empty($textParts) && !empty($lines)) {
+                $firstPart = array_shift($textParts);
+                $lineIndex = count($lines) - 1;
+                $separator = ($lines[$lineIndex] !== '' && $firstPart !== '') ? ' ' : '';
+                $lines[$lineIndex] .= $separator . $firstPart;
+            }
+            foreach ($textParts as $textPart) {
+                $lines[] = $textPart;
+            }
+        }
+
+        return implode("\n", $lines);
+    }
+}
+
+if (!function_exists('customizeBotMsgGetSampleData')) {
+    function customizeBotMsgGetSampleData($context)
+    {
+        $context = customizeBotMsgNormalizeContext($context);
+        if ($context === '') {
+            return array();
+        }
+
+        $warehouseName = 'HQ Warehouse';
+        $warehouseLink = 'https://crm.beyourdiary.com/warehouse_stock_in_scan.php?t=7da5c5231b434c6edc95ec28f4ea59a3';
+
+        if ($context === 'stock_order_request') {
+            $orderLink = 'https://crm.beyourdiary.com/stock/warehouse_stock_in_scan.php?t=SOR-240708-01';
+            return array(
+                'warehouse_name' => $warehouseName,
+                'invoice_no' => 'SOR-240708-01',
+                'invoice_date' => '2026-07-08',
+                'package_summary' => 'Vv Rosselady 3 box FREE Rosselady 10 box + Gold Zie + Mother\'s Day promo 2% (MY) x1',
+                'product_lines_html' => '1. Vv Roseladys <b>x2 boxes</b><br>2. Urbaniiz Candy Meonx <b>x1 boxes</b>',
+                'order_link' => $orderLink,
+                'order_link_html' => '<a href="' . htmlspecialchars($orderLink, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($orderLink, ENT_QUOTES, 'UTF-8') . '</a>',
+            );
+        }
+
+        $contextConfig = customizeBotMsgGetContextConfig($context);
+        $platformLabel = isset($contextConfig['label']) ? (string) $contextConfig['label'] : ucfirst($context);
+        $orderLabel = $context === 'shopee' ? 'Shopee OID' : $platformLabel . ' Order ID';
+        $customerLabel = $context === 'shopee' ? 'Shopee Buyer Username' : $platformLabel . ' Customer';
+        $orderCode = $context === 'shopee' ? '65477567' : strtoupper(substr($context, 0, 3));
+        if ($context === 'lazada') {
+            $orderCode = 'LZD-240708-7788';
+        } elseif ($context === 'facebook') {
+            $orderCode = 'FB-240708-2255';
+        } elseif ($context === 'website') {
+            $orderCode = 'WEB-240708-1109';
+        }
+
+        $packageLines = array(
+            'Vv Rosselady 3 box FREE Rosselady 10 box + Gold Zie + Mother\'s Day promo 2% (MY) x1',
+        );
+        $productLines = array(
+            '1. Vv Roseladys x2 boxes',
+            '2. Urbaniiz Candy Meonx x1 boxes',
+        );
+        $customerAddress = "Menara Sah Bhd, 1st Floor, No. 15, Lot 8733, Block 16,\nGreen Height Commercial Centre,\nNew Airport Road, Kuching, Kuching,\nSarawak 93258";
+
+        return array(
+            'warehouse_name' => $warehouseName,
+            'platform_label' => $platformLabel,
+            'platform_order_label' => $orderLabel,
+            'platform_customer_label' => $customerLabel,
+            'buyer_username' => $context === 'shopee' ? 'bsg' : 'Glenda Chia OFFICE',
+            'customer_name' => 'Glenda Chia OFFICE',
+            'customer_address' => $customerAddress,
+            'order_code' => $orderCode,
+            'package_lines_block' => implode("\n", $packageLines),
+            'product_details_block' => implode("\n", $productLines),
+            'package_summary' => implode(', ', $packageLines),
+            'airbill_no' => 'MYA240708001',
+            'warehouse_stock_out_link' => $warehouseLink,
+        );
+    }
+}
+
+if (!function_exists('customizeBotMsgRenderTemplate')) {
+    function customizeBotMsgRenderTemplate($templateBody, $data, $parseMode = 'plain')
+    {
+        $templateBody = str_replace("\r\n", "\n", (string) $templateBody);
+        $parseMode = strtolower(trim((string) $parseMode));
+        $data = is_array($data) ? $data : array();
+
+        return preg_replace_callback('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', function ($matches) use ($data, $parseMode) {
+            $key = isset($matches[1]) ? (string) $matches[1] : '';
+            if ($key === '' || !array_key_exists($key, $data)) {
+                return '';
+            }
+
+            $value = $data[$key];
+            if (is_array($value)) {
+                $value = implode(', ', $value);
+            }
+
+            $value = (string) $value;
+
+            if ($parseMode === 'html') {
+                if (substr($key, -5) === '_html') {
+                    return $value;
+                }
+
+                return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+            }
+
+            return $value;
+        }, $templateBody);
+    }
+}
+
+if (!function_exists('customizeBotMsgIsActiveStatus')) {
+    function customizeBotMsgIsActiveStatus($status)
+    {
+        $status = strtoupper(trim((string) $status));
+        return $status === 'A';
+    }
+}
+
+if (!function_exists('customizeBotMsgIsDefaultStatus')) {
+    function customizeBotMsgIsDefaultStatus($status)
+    {
+        return false;
+    }
+}
+
+if (!function_exists('customizeBotMsgIsDefaultRow')) {
+    function customizeBotMsgIsDefaultRow($row)
+    {
+        if (!is_array($row)) {
+            return false;
+        }
+
+        return strtoupper(trim((string) (isset($row['is_default']) ? $row['is_default'] : 'N'))) === 'Y';
+    }
+}
+
+if (!function_exists('customizeBotMsgGetSystemSeedTemplateNames')) {
+    function customizeBotMsgGetSystemSeedTemplateNames()
+    {
+        return array(
+            'Default Stock Order Request Message',
+            'Facebook Default Template',
+            'Website Default Template',
+            'Lazada Default Template',
+            'Shopee Default Template',
+        );
+    }
+}
+
+if (!function_exists('customizeBotMsgIsSystemSeedRow')) {
+    function customizeBotMsgIsSystemSeedRow($row)
+    {
+        if (!is_array($row)) {
+            return false;
+        }
+
+        $templateName = trim((string) (isset($row['template_name']) ? $row['template_name'] : ''));
+        if ($templateName === '') {
+            return false;
+        }
+
+        return in_array($templateName, customizeBotMsgGetSystemSeedTemplateNames(), true);
+    }
+}
+
+if (!function_exists('customizeBotMsgGetDeleteBlockedMessage')) {
+    function customizeBotMsgGetDeleteBlockedMessage($row)
+    {
+        if (customizeBotMsgIsSystemSeedRow($row)) {
+            return 'This record is a system default template and cannot be deleted.';
+        }
+
+        return 'Please change another bot message to Default first, or untick Default? on this record before deleting it.';
+    }
+}
+
+if (!function_exists('customizeBotMsgRepairLegacyDefaultStatuses')) {
+    function customizeBotMsgRepairLegacyDefaultStatuses($connect, $context = '')
+    {
+        $context = customizeBotMsgNormalizeContext($context);
+        if (!($connect instanceof mysqli)) {
+            return false;
+        }
+
+        $sql = "UPDATE `" . CUSTOMIZE_BOT_MSG . "` SET `status` = 'A' WHERE `status` = 'D' AND `is_default` = 'Y'";
+        if ($context !== '') {
+            $sql .= " AND `message_context` = '" . mysqli_real_escape_string($connect, $context) . "'";
+        }
+
+        return (bool) mysqli_query($connect, $sql);
+    }
+}
+
+if (!function_exists('customizeBotMsgRepairLegacyBracketEncoding')) {
+    function customizeBotMsgRepairLegacyBracketEncoding($connect, $context = '')
+    {
+        $context = customizeBotMsgNormalizeContext($context);
+        if (!($connect instanceof mysqli)) {
+            return false;
+        }
+
+        $sql = "UPDATE `" . CUSTOMIZE_BOT_MSG . "`
+            SET
+                `template_body` = REPLACE(REPLACE(`template_body`, 'ã€', '【'), 'ã€‘', '】'),
+                `preview_sample` = REPLACE(REPLACE(`preview_sample`, 'ã€', '【'), 'ã€‘', '】'),
+                `components_json` = REPLACE(REPLACE(`components_json`, 'ã€', '【'), 'ã€‘', '】')
+            WHERE `status` = 'A'
+            AND (
+                `template_body` LIKE '%ã€%' OR `template_body` LIKE '%ã€‘%'
+                OR `preview_sample` LIKE '%ã€%' OR `preview_sample` LIKE '%ã€‘%'
+                OR `components_json` LIKE '%ã€%' OR `components_json` LIKE '%ã€‘%'
+            )";
+
+        if ($context !== '') {
+            $sql .= " AND `message_context` = '" . mysqli_real_escape_string($connect, $context) . "'";
+        }
+
+        return (bool) mysqli_query($connect, $sql);
+    }
+}
+
+if (!function_exists('customizeBotMsgFetchTemplateRowById')) {
+    function customizeBotMsgFetchTemplateRowById($connect, $templateId, $context = '')
+    {
+        $templateId = (int) $templateId;
+        $context = customizeBotMsgNormalizeContext($context);
+        if (!($connect instanceof mysqli) || $templateId <= 0) {
+            return array();
+        }
+
+        customizeBotMsgRepairLegacyDefaultStatuses($connect, $context);
+        customizeBotMsgRepairLegacyBracketEncoding($connect, $context);
+
+        $sql = "SELECT * FROM `" . CUSTOMIZE_BOT_MSG . "` WHERE `id` = ? AND `status` = 'A'";
+        if ($context !== '') {
+            $sql .= " AND `message_context` = ?";
+        }
+        $sql .= " LIMIT 1";
+
+        $stmt = mysqli_prepare($connect, $sql);
+        if (!$stmt) {
+            return array();
+        }
+
+        if ($context !== '') {
+            mysqli_stmt_bind_param($stmt, 'is', $templateId, $context);
+        } else {
+            mysqli_stmt_bind_param($stmt, 'i', $templateId);
+        }
+
+        $row = array();
+        if (mysqli_stmt_execute($stmt)) {
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result instanceof mysqli_result) {
+                $row = mysqli_fetch_assoc($result) ?: array();
+            }
+        }
+        mysqli_stmt_close($stmt);
+
+        if (!empty($row)) {
+            $row['template_body'] = customizeBotMsgRepairLegacyBracketText(isset($row['template_body']) ? $row['template_body'] : '');
+            $row['preview_sample'] = customizeBotMsgRepairLegacyBracketText(isset($row['preview_sample']) ? $row['preview_sample'] : '');
+            $row['components_json'] = customizeBotMsgRepairLegacyBracketText(isset($row['components_json']) ? $row['components_json'] : '');
+            $decodedComponents = json_decode((string) (isset($row['components_json']) ? $row['components_json'] : ''), true);
+            $row['components_array'] = customizeBotMsgHydrateComponents($decodedComponents, isset($row['message_context']) ? $row['message_context'] : $context);
+            if (trim((string) (isset($row['template_body']) ? $row['template_body'] : '')) === '') {
+                $row['template_body'] = customizeBotMsgBuildTemplateBodyFromComponents($row['components_array']);
+            }
+        }
+
+        return is_array($row) ? $row : array();
+    }
+}
+
+if (!function_exists('customizeBotMsgGetTemplateOptions')) {
+    function customizeBotMsgGetTemplateOptions($connect, $context)
+    {
+        $context = customizeBotMsgNormalizeContext($context);
+        if (!($connect instanceof mysqli) || $context === '') {
+            return array();
+        }
+
+        customizeBotMsgRepairLegacyDefaultStatuses($connect, $context);
+
+        $sql = "SELECT `id`, `template_name`, `message_context`, `is_default`, `remark`, `status`
+            FROM `" . CUSTOMIZE_BOT_MSG . "`
+            WHERE `message_context` = ?
+              AND `status` = 'A'
+            ORDER BY `is_default` DESC, `id` DESC";
+
+        $stmt = mysqli_prepare($connect, $sql);
+        if (!$stmt) {
+            return array();
+        }
+
+        mysqli_stmt_bind_param($stmt, 's', $context);
+        $rows = array();
+        if (mysqli_stmt_execute($stmt)) {
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result instanceof mysqli_result) {
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $rows[] = $row;
+                }
+            }
+        }
+        mysqli_stmt_close($stmt);
+
+        return $rows;
+    }
+}
+
+if (!function_exists('customizeBotMsgGetDefaultTemplateId')) {
+    function customizeBotMsgGetDefaultTemplateId($connect, $context)
+    {
+        $context = customizeBotMsgNormalizeContext($context);
+        if (!($connect instanceof mysqli) || $context === '') {
+            return 0;
+        }
+
+        customizeBotMsgRepairLegacyDefaultStatuses($connect, $context);
+
+        $sql = "SELECT `id`
+            FROM `" . CUSTOMIZE_BOT_MSG . "`
+            WHERE `message_context` = ?
+              AND `status` = 'A'
+            ORDER BY `is_default` DESC, `id` ASC
+            LIMIT 1";
+
+        $stmt = mysqli_prepare($connect, $sql);
+        if (!$stmt) {
+            return 0;
+        }
+
+        mysqli_stmt_bind_param($stmt, 's', $context);
+        $templateId = 0;
+        if (mysqli_stmt_execute($stmt)) {
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result instanceof mysqli_result && ($row = mysqli_fetch_assoc($result))) {
+                $templateId = isset($row['id']) ? (int) $row['id'] : 0;
+            }
+        }
+        mysqli_stmt_close($stmt);
+
+        return $templateId;
+    }
+}
+
+if (!function_exists('customizeBotMsgGetOrderTemplateId')) {
+    function customizeBotMsgGetOrderTemplateId($connect, $context, $orderTable, $orderId)
+    {
+        $context = customizeBotMsgNormalizeContext($context);
+        $orderTable = trim((string) $orderTable);
+        $orderId = (int) $orderId;
+        if (!($connect instanceof mysqli) || $context === '' || $orderTable === '' || $orderId <= 0) {
+            return 0;
+        }
+
+        $sql = "SELECT `template_id`
+            FROM `" . CUSTOMIZE_BOT_MSG_ORDER . "`
+            WHERE `message_context` = ?
+              AND `order_table` = ?
+              AND `order_id` = ?
+              AND `status` = 'A'
+            LIMIT 1";
+
+        $stmt = mysqli_prepare($connect, $sql);
+        if (!$stmt) {
+            return 0;
+        }
+
+        mysqli_stmt_bind_param($stmt, 'ssi', $context, $orderTable, $orderId);
+        $templateId = 0;
+        if (mysqli_stmt_execute($stmt)) {
+            $result = mysqli_stmt_get_result($stmt);
+            if ($result instanceof mysqli_result && ($row = mysqli_fetch_assoc($result))) {
+                $templateId = isset($row['template_id']) ? (int) $row['template_id'] : 0;
+            }
+        }
+        mysqli_stmt_close($stmt);
+
+        return $templateId;
+    }
+}
+
+if (!function_exists('customizeBotMsgSaveOrderTemplate')) {
+    function customizeBotMsgSaveOrderTemplate($connect, $context, $orderTable, $orderId, $templateId)
+    {
+        $context = customizeBotMsgNormalizeContext($context);
+        $orderTable = trim((string) $orderTable);
+        $orderId = (int) $orderId;
+        $templateId = (int) $templateId;
+        if (!($connect instanceof mysqli) || $context === '' || $orderTable === '' || $orderId <= 0) {
+            return false;
+        }
+
+        if ($templateId <= 0 || empty(customizeBotMsgFetchTemplateRowById($connect, $templateId, $context))) {
+            $templateId = customizeBotMsgGetDefaultTemplateId($connect, $context);
+        }
+        if ($templateId <= 0) {
+            return false;
+        }
+
+        $actor = defined('USER_ID') && trim((string) USER_ID) !== '' ? trim((string) USER_ID) : null;
+        $sql = "INSERT INTO `" . CUSTOMIZE_BOT_MSG_ORDER . "`
+            (`message_context`, `order_table`, `order_id`, `template_id`, `create_by`, `create_date`, `create_time`, `update_by`, `update_date`, `update_time`, `status`)
+            VALUES (?, ?, ?, ?, ?, CURDATE(), CURTIME(), ?, CURDATE(), CURTIME(), 'A')
+            ON DUPLICATE KEY UPDATE
+                `template_id` = VALUES(`template_id`),
+                `status` = 'A',
+                `update_by` = VALUES(`update_by`),
+                `update_date` = CURDATE(),
+                `update_time` = CURTIME()";
+
+        $stmt = mysqli_prepare($connect, $sql);
+        if (!$stmt) {
+            return false;
+        }
+
+        mysqli_stmt_bind_param($stmt, 'ssiiss', $context, $orderTable, $orderId, $templateId, $actor, $actor);
+        $success = mysqli_stmt_execute($stmt);
+        mysqli_stmt_close($stmt);
+
+        return $success;
+    }
+}
+
+if (!function_exists('customizeBotMsgResolveTemplateForOrder')) {
+    function customizeBotMsgResolveTemplateForOrder($connect, $context, $orderTable, $orderId)
+    {
+        $context = customizeBotMsgNormalizeContext($context);
+        $orderTable = trim((string) $orderTable);
+        $orderId = (int) $orderId;
+        if (!($connect instanceof mysqli) || $context === '') {
+            return array();
+        }
+
+        $templateId = 0;
+        if ($orderTable !== '' && $orderId > 0) {
+            $templateId = customizeBotMsgGetOrderTemplateId($connect, $context, $orderTable, $orderId);
+        }
+
+        if ($templateId > 0) {
+            $templateRow = customizeBotMsgFetchTemplateRowById($connect, $templateId, $context);
+            if (!empty($templateRow)) {
+                return $templateRow;
+            }
+        }
+
+        $defaultTemplateId = customizeBotMsgGetDefaultTemplateId($connect, $context);
+        if ($defaultTemplateId > 0) {
+            return customizeBotMsgFetchTemplateRowById($connect, $defaultTemplateId, $context);
+        }
+
+        return array();
+    }
+}
+
 if (!function_exists('shopeeOmsNormalizePlatformKey')) {
     function shopeeOmsNormalizePlatformKey($platform, $allowAll = false)
     {
@@ -11890,9 +12896,76 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
         $lines[] = 'Warehouse Stock-out Link:';
         $lines[] = $link !== '' ? $link : 'Warehouse Stock-out Already Completed';
 
+        $legacyText = implode("\n", $lines);
+        $messageText = $legacyText;
+
+        $templateContext = customizeBotMsgNormalizeContext($platform);
+        $templateOrderTable = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
+        $templateOrderId = isset($orderRow['id']) ? (int) $orderRow['id'] : 0;
+        $selectedTemplate = customizeBotMsgResolveTemplateForOrder($connect, $templateContext, $templateOrderTable, $templateOrderId);
+
+        if (!empty($selectedTemplate)) {
+            $packageLinesBlock = '-';
+            if (!empty($packageLines)) {
+                $packageDisplayLines = array();
+                foreach ($packageLines as $index => $packageLine) {
+                    if (count($packageLines) > 1) {
+                        $packageDisplayLines[] = ($index + 1) . '. ' . $packageLine;
+                    } else {
+                        $packageDisplayLines[] = $packageLine;
+                    }
+                }
+                $packageLinesBlock = implode("\n", $packageDisplayLines);
+            }
+
+            $productDetailsBlock = '-';
+            if (!empty($productLines)) {
+                $productDisplayLines = array();
+                foreach ($productLines as $index => $productLine) {
+                    if (count($productLines) > 1) {
+                        $alreadyNumbered = preg_match('/^\d+\.\s+/', (string) $productLine) === 1;
+                        $productDisplayLines[] = $alreadyNumbered ? $productLine : (($index + 1) . '. ' . $productLine);
+                    } else {
+                        $productDisplayLines[] = $productLine;
+                    }
+                }
+                $productDetailsBlock = implode("\n", $productDisplayLines);
+            }
+
+            $templateData = array(
+                'warehouse_name' => $warehouseName !== '' ? $warehouseName : 'Warehouse Name',
+                'platform_label' => $platformLabel,
+                'platform_order_label' => $orderFieldLabel,
+                'platform_customer_label' => $customerFieldLabel,
+                'buyer_username' => $customerName !== '' ? $customerName : '-',
+                'customer_name' => $platform === 'shopee'
+                    ? ($deliveryCustomerName !== '' ? $deliveryCustomerName : '-')
+                    : ($customerName !== '' ? $customerName : '-'),
+                'customer_address' => $platform === 'shopee'
+                    ? ($deliveryCustomerAddress !== '' ? $deliveryCustomerAddress : '-')
+                    : ($customerAddress !== '' ? $customerAddress : '-'),
+                'order_code' => $orderCode !== '' ? $orderCode : '-',
+                'package_lines_block' => $packageLinesBlock,
+                'package_summary' => !empty($packageLines) ? implode(', ', $packageLines) : '-',
+                'product_details_block' => $productDetailsBlock,
+                'airbill_no' => $airbillText !== '' ? $airbillText : '-',
+                'warehouse_stock_out_link' => $link !== '' ? $link : 'Warehouse Stock-out Already Completed',
+            );
+
+            $renderedTemplate = trim((string) customizeBotMsgRenderTemplate(
+                isset($selectedTemplate['template_body']) ? $selectedTemplate['template_body'] : '',
+                $templateData,
+                isset($selectedTemplate['parse_mode']) ? $selectedTemplate['parse_mode'] : 'plain'
+            ));
+
+            if ($renderedTemplate !== '') {
+                $messageText = $renderedTemplate;
+            }
+        }
+
         return array(
             'link' => $link,
-            'text' => implode("\n", $lines),
+            'text' => $messageText,
             'buyer_username' => $customerName,
             'customer_name' => $platform === 'shopee' ? $deliveryCustomerName : $customerName,
             'customer_address' => $platform === 'shopee' ? $deliveryCustomerAddress : $customerAddress,
