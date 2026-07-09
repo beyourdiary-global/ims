@@ -140,7 +140,7 @@ function campaignAssignRenderTagRowsAsBadges($tagRows)
     foreach ($tagRows as $tagRow) {
         $tagName = is_array($tagRow) && isset($tagRow['name']) ? trim((string) $tagRow['name']) : trim((string) $tagRow);
         if ($tagName !== '') {
-            $items[] = '<span class="customer-tag-table-badge">' . campaignH($tagName) . '</span>';
+            $items[] = '<span class="customer-tag-table-badge" title="' . campaignH($tagName) . '">' . campaignH($tagName) . '</span>';
         }
     }
 
