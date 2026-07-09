@@ -455,11 +455,12 @@ $menuList = array(
                     array('Facebook Order Report', 'mdi storefront-outline', $SITEURL . '/finance/facebook_order_report.php', '156'),
                     array('Website Order Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/website_order_report.php', '157'),
                     array('Lazada Order Report', 'mdi mdi-note-text-outline', $SITEURL . '/finance/lazada_order_report.php', '158'),
+                    array('Stock Order Request Report', 'mdi mdi-note-text-outline', $SITEURL . '/stock/stock_order_request_report.php', '166'),
                 ),
-                'pin' => array('155', '156', '157', '158'),
+                'pin' => array('155', '156', '157', '158', '166'),
             ),
         ),
-        'pin' => array('123', '69', '92', '93', '100', '155', '156', '157', '158')
+        'pin' => array('123', '69', '92', '93', '100', '155', '156', '157', '158', '166')
     ),
     array(
         'Other',
