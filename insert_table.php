@@ -3855,36 +3855,42 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed verifying Campaign pin groups: " . $conn->error . "</p>";
     }
 
-    $campaignGroupResult = $conn->query("SELECT `id`, `pins` FROM `user_group`");
-    if ($campaignGroupResult) {
-        while ($campaignGroupRow = $campaignGroupResult->fetch_assoc()) {
-            $groupId = isset($campaignGroupRow['id']) ? (int) $campaignGroupRow['id'] : 0;
-            if ($groupId <= 0) {
-                continue;
-            }
+    $campaignDefaultAccessByUserGroup = array(
+        1 => array(
+            153 => array(1, 2, 3, 4),
+            154 => array(1, 2, 3, 4),
+        ),
+        2 => array(
+            153 => array(1, 2, 3, 4),
+            154 => array(1, 2, 3, 4),
+        ),
+    );
 
-            $currentPins = isset($campaignGroupRow['pins']) ? (string) $campaignGroupRow['pins'] : '';
-            if (in_array($groupId, array(1, 2), true)) {
-                $updatedPins = setPinBlockAccess($currentPins, 153, array(1, 2, 3, 4));
-                $updatedPins = setPinBlockAccess($updatedPins, 154, array(1, 2, 3, 4));
-            } else {
-                $updatedPins = removePinBlockById($currentPins, 153);
-                $updatedPins = removePinBlockById($updatedPins, 154);
-            }
-
-            if ($updatedPins !== $currentPins) {
-                $safePins = $conn->real_escape_string($updatedPins);
-                if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
-                    echo "<p style='color:green;'>Verified Campaign pin access for `user_group` id " . (int) $groupId . ".</p>";
-                } else {
-                    echo "<p style='color:red;'>Failed updating Campaign pin access for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
-                }
-            } else {
-                echo "<p style='color:green;'>Verified Campaign pin access already matches `user_group` id " . (int) $groupId . ".</p>";
-            }
+    foreach ($campaignDefaultAccessByUserGroup as $groupId => $pinAccessMap) {
+        $userGroupResult = $conn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>`user_group` id " . (int) $groupId . " not found. Skipped Campaign pin assignment.</p>";
+            continue;
         }
-    } else {
-        echo "<p style='color:red;'>Failed reading `user_group` for Campaign pin assignment: " . $conn->error . "</p>";
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = $currentPins;
+
+        foreach ($pinAccessMap as $pinGroupId => $pinAccessList) {
+            $updatedPins = addAccessToPinBlock($updatedPins, $pinGroupId, $pinAccessList);
+        }
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $conn->real_escape_string($updatedPins);
+            if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Verified Campaign pin access for `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Failed updating Campaign pin access for `user_group` id " . (int) $groupId . ": " . $conn->error . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Verified Campaign pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
+        }
     }
 
     $createLabelSql = "CREATE TABLE IF NOT EXISTS `" . LABEL . "` (
@@ -3992,7 +3998,6 @@ if ($conn->select_db($db_cms)) {
         $updatedPins = addAccessToPinBlock($updatedPins, 137, array(1));
         $updatedPins = addAccessToPinBlock($updatedPins, 138, array(1, 2, 3, 4));
         $updatedPins = removeAccessFromPinBlock($updatedPins, 139, array(26));
-        $updatedPins = removePinBlockById($updatedPins, 139);
 
         if ($groupId === 1 || $groupId === 2) {
             $updatedPins = addAccessToPinBlock($updatedPins, 139, array(1, 2, 3, 4));
