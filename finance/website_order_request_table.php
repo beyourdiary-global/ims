@@ -283,6 +283,7 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                         <tbody>
                             <?php
                             while ($row = $result->fetch_assoc()) {
+                                $row = shopeeOmsApplyReturnedOrderFinancials($row, 'website');
                                 // Default all mapped values to blank
                                 $brand = $series = $pkg = $country = $currency = $pay_method = $pic = $cust_id = '';
 

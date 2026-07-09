@@ -286,6 +286,7 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                         };
                         ?>
                         <?php while ($row = $result->fetch_assoc()) {
+                            $row = shopeeOmsApplyReturnedOrderFinancials($row, 'lazada');
                             $q1 = getData('name', "id='" . $row['lazada_acc'] . "'", '', LAZADA_ACC, $finance_connect);
                             $lazada_acc = $fetchLookupRow($q1);
 

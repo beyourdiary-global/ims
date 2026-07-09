@@ -297,6 +297,7 @@ function fbReqFetchAssoc($result)
                     </thead>
                     <tbody>
                         <?php while ($row = $result->fetch_assoc()) {
+                            $row = shopeeOmsApplyReturnedOrderFinancials($row, 'facebook');
                             $q1 = getData('name', "id='" . $row['sales_pic'] . "'", '', USR_USER, $connect);
                             $pic = fbReqFetchAssoc($q1);
 
