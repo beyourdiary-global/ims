@@ -2363,6 +2363,321 @@ function addAccessToPinBlock($allPins, $targetPinId, $addIds = array(6))
     return implode('+', $rebuilt);
 }
 
+function customizeBotMsgInsertGetContexts()
+{
+    return array(
+        'shopee' => array('label' => 'Shopee', 'parse_mode' => 'plain'),
+        'lazada' => array('label' => 'Lazada', 'parse_mode' => 'plain'),
+        'website' => array('label' => 'Website', 'parse_mode' => 'plain'),
+        'facebook' => array('label' => 'Facebook', 'parse_mode' => 'plain'),
+        'stock_order_request' => array('label' => 'Stock Order Request', 'parse_mode' => 'html'),
+    );
+}
+
+function customizeBotMsgInsertCreateLine($componentKey, $text, $sortOrder = 0, $options = array())
+{
+    $options = is_array($options) ? $options : array();
+    $builderText = isset($options['builder_text']) ? (string) $options['builder_text'] : (string) $text;
+    $builderMode = strtolower(trim((string) ($options['builder_mode'] ?? 'editable')));
+    if ($builderMode !== 'readonly') {
+        $builderMode = 'editable';
+    }
+    $textPrefix = isset($options['text_prefix']) ? (string) $options['text_prefix'] : '';
+    $textSuffix = isset($options['text_suffix']) ? (string) $options['text_suffix'] : '';
+    $lockedText = isset($options['locked_text']) ? (string) $options['locked_text'] : '';
+    $useBuilderText = strtoupper(trim((string) ($options['use_builder_text'] ?? ($builderMode === 'readonly' ? 'N' : 'Y')))) === 'N' ? 'N' : 'Y';
+    $joinWithPrevious = strtoupper(trim((string) ($options['join_with_previous'] ?? 'N'))) === 'Y' ? 'Y' : 'N';
+
+    return array(
+        'component_key' => (string) $componentKey,
+        'type' => 'line',
+        'text' => (string) $text,
+        'default_text' => (string) $text,
+        'builder_text' => $builderText,
+        'default_builder_text' => $builderText,
+        'builder_mode' => $builderMode,
+        'text_prefix' => $textPrefix,
+        'text_suffix' => $textSuffix,
+        'locked_text' => $lockedText,
+        'use_builder_text' => $useBuilderText,
+        'join_with_previous' => $joinWithPrevious,
+        'lines' => 0,
+        'default_lines' => 0,
+        'sort_order' => (int) $sortOrder,
+        'default_order' => (int) $sortOrder,
+        'removed' => 'N',
+    );
+}
+
+function customizeBotMsgInsertInferBuilderText($fullText, $defaultComponent = array())
+{
+    $fullText = str_replace("\r\n", "\n", (string) $fullText);
+    $defaultBuilderText = isset($defaultComponent['default_builder_text']) ? (string) $defaultComponent['default_builder_text'] : '';
+    $textPrefix = isset($defaultComponent['text_prefix']) ? (string) $defaultComponent['text_prefix'] : '';
+    $textSuffix = isset($defaultComponent['text_suffix']) ? (string) $defaultComponent['text_suffix'] : '';
+    $builderText = $fullText;
+
+    if ($textPrefix !== '' && substr($builderText, 0, strlen($textPrefix)) === $textPrefix) {
+        $builderText = substr($builderText, strlen($textPrefix));
+    }
+
+    if ($textSuffix !== '' && substr($builderText, -strlen($textSuffix)) === $textSuffix) {
+        $builderText = substr($builderText, 0, strlen($builderText) - strlen($textSuffix));
+    }
+
+    $builderText = preg_replace('/\{\{\s*[a-zA-Z0-9_]+\s*\}\}/', '', $builderText);
+    $builderText = preg_replace('/[ \t]{2,}/', ' ', (string) $builderText);
+    $builderText = trim((string) $builderText);
+
+    if ($builderText === '' && $defaultBuilderText !== '') {
+        return $defaultBuilderText;
+    }
+
+    return $builderText;
+}
+
+function customizeBotMsgInsertComposeLineText($component)
+{
+    if (!is_array($component)) {
+        return '';
+    }
+
+    $useBuilderText = strtoupper(trim((string) ($component['use_builder_text'] ?? 'Y'))) === 'N' ? 'N' : 'Y';
+    if ($useBuilderText === 'N') {
+        if (array_key_exists('locked_text', $component)) {
+            return (string) $component['locked_text'];
+        }
+
+        return (string) ($component['text'] ?? '');
+    }
+
+    return (string) ($component['text_prefix'] ?? '')
+        . (string) ($component['builder_text'] ?? ($component['text'] ?? ''))
+        . (string) ($component['text_suffix'] ?? '');
+}
+
+function customizeBotMsgInsertCreateSpacer($componentKey, $lines = 1, $sortOrder = 0)
+{
+    $lines = (int) $lines;
+    if ($lines < 1 || $lines > 3) {
+        $lines = 1;
+    }
+
+    return array(
+        'component_key' => (string) $componentKey,
+        'type' => 'spacer',
+        'text' => '',
+        'default_text' => '',
+        'lines' => $lines,
+        'default_lines' => $lines,
+        'sort_order' => (int) $sortOrder,
+        'default_order' => (int) $sortOrder,
+        'removed' => 'N',
+    );
+}
+
+function customizeBotMsgInsertGetDefaultComponents($context)
+{
+    $contexts = customizeBotMsgInsertGetContexts();
+    if (!isset($contexts[$context])) {
+        return array();
+    }
+
+    if ($context === 'stock_order_request') {
+        return array(
+            customizeBotMsgInsertCreateLine('warehouse_value', 'Warehouse [{{warehouse_name}}]', 10, array('builder_text' => 'Warehouse [{{warehouse_name}}]', 'builder_mode' => 'readonly', 'locked_text' => 'Warehouse [{{warehouse_name}}]', 'use_builder_text' => 'N')),
+            customizeBotMsgInsertCreateLine('invoice_id_label', 'Invoice ID:', 20),
+            customizeBotMsgInsertCreateLine('invoice_id_value', '<b>{{invoice_no}}</b>', 30, array('builder_text' => '{{invoice_no}}', 'builder_mode' => 'readonly', 'locked_text' => '<b>{{invoice_no}}</b>', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+            customizeBotMsgInsertCreateLine('invoice_date_label', 'Invoice Date:', 40),
+            customizeBotMsgInsertCreateLine('invoice_date_value', '<b>{{invoice_date}}</b>', 50, array('builder_text' => '{{invoice_date}}', 'builder_mode' => 'readonly', 'locked_text' => '<b>{{invoice_date}}</b>', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+            customizeBotMsgInsertCreateLine('package_label', 'Package:', 60),
+            customizeBotMsgInsertCreateLine('package_value', '{{package_summary}}', 70, array('builder_text' => '{{package_summary}}', 'builder_mode' => 'readonly', 'locked_text' => '{{package_summary}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+            customizeBotMsgInsertCreateSpacer('package_spacer', 1, 80),
+            customizeBotMsgInsertCreateLine('product_label', 'Product:', 90),
+            customizeBotMsgInsertCreateLine('product_lines', '{{product_lines_html}}', 100, array('builder_text' => '{{product_lines_html}}', 'builder_mode' => 'readonly', 'locked_text' => '{{product_lines_html}}', 'use_builder_text' => 'N')),
+            customizeBotMsgInsertCreateSpacer('product_spacer', 1, 110),
+            customizeBotMsgInsertCreateLine('order_link_label', 'Link:', 120),
+            customizeBotMsgInsertCreateLine('order_link_value', '{{order_link_html}}', 130, array('builder_text' => '{{order_link_html}}', 'builder_mode' => 'readonly', 'locked_text' => '{{order_link_html}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+        );
+    }
+
+    $platformLabel = $contexts[$context]['label'];
+    $customerLabel = $context === 'shopee' ? 'Shopee Buyer Username' : $platformLabel . ' Customer';
+    $orderLabel = $context === 'shopee' ? 'Shopee OID' : $platformLabel . ' Order ID';
+
+    $components = array(
+        customizeBotMsgInsertCreateLine('warehouse_value', '【{{warehouse_name}}】', 10, array('builder_text' => '{{warehouse_name}}', 'builder_mode' => 'readonly', 'locked_text' => '【{{warehouse_name}}】', 'use_builder_text' => 'N')),
+        customizeBotMsgInsertCreateLine('customer_label', $customerLabel . ':', 20),
+        customizeBotMsgInsertCreateLine('customer_value', '{{buyer_username}}', 30, array('builder_text' => '{{buyer_username}}', 'builder_mode' => 'readonly', 'locked_text' => '{{buyer_username}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+        customizeBotMsgInsertCreateSpacer('customer_spacer', 1, 40),
+        customizeBotMsgInsertCreateLine('package_label', 'Package:', 50),
+        customizeBotMsgInsertCreateLine('package_lines', '{{package_lines_block}}', 60, array('builder_text' => '{{package_lines_block}}', 'builder_mode' => 'readonly', 'locked_text' => '{{package_lines_block}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
+        customizeBotMsgInsertCreateSpacer('package_spacer', 1, 70),
+        customizeBotMsgInsertCreateLine('product_label', 'Product Details:', 80),
+        customizeBotMsgInsertCreateSpacer('product_intro_spacer', 1, 90),
+        customizeBotMsgInsertCreateLine('product_lines', '{{product_details_block}}', 100, array('builder_text' => '{{product_details_block}}', 'builder_mode' => 'readonly', 'locked_text' => '{{product_details_block}}', 'use_builder_text' => 'N')),
+    );
+
+    if ($context === 'shopee') {
+        $components[] = customizeBotMsgInsertCreateSpacer('delivery_section_spacer', 1, 110);
+        $components[] = customizeBotMsgInsertCreateLine('delivery_header', '[Delivery Info]', 120);
+        $components[] = customizeBotMsgInsertCreateSpacer('delivery_header_spacer', 1, 130);
+        $components[] = customizeBotMsgInsertCreateLine('order_label', $orderLabel . ':', 140);
+        $components[] = customizeBotMsgInsertCreateLine('order_value', '{{order_code}}', 150, array('builder_text' => '{{order_code}}', 'builder_mode' => 'readonly', 'locked_text' => '{{order_code}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+        $components[] = customizeBotMsgInsertCreateSpacer('order_line_spacer', 1, 160);
+        $components[] = customizeBotMsgInsertCreateLine('customer_name_label', 'Customer Name:', 170);
+        $components[] = customizeBotMsgInsertCreateLine('customer_name_value', '{{customer_name}}', 180, array('builder_text' => '{{customer_name}}', 'builder_mode' => 'readonly', 'locked_text' => '{{customer_name}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+        $components[] = customizeBotMsgInsertCreateSpacer('customer_name_spacer', 1, 190);
+        $components[] = customizeBotMsgInsertCreateLine('customer_address_label', 'Customer Address:', 200);
+        $components[] = customizeBotMsgInsertCreateLine('customer_address_value', '{{customer_address}}', 210, array('builder_text' => '{{customer_address}}', 'builder_mode' => 'readonly', 'locked_text' => '{{customer_address}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+    } else {
+        $components[] = customizeBotMsgInsertCreateSpacer('order_section_spacer', 1, 110);
+        $components[] = customizeBotMsgInsertCreateLine('order_label', $orderLabel . ':', 120);
+        $components[] = customizeBotMsgInsertCreateLine('order_value', '{{order_code}}', 130, array('builder_text' => '{{order_code}}', 'builder_mode' => 'readonly', 'locked_text' => '{{order_code}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+        $components[] = customizeBotMsgInsertCreateSpacer('airbill_spacer', 1, 140);
+        $components[] = customizeBotMsgInsertCreateLine('airbill_label', 'Airbill:', 150);
+        $components[] = customizeBotMsgInsertCreateLine('airbill_value', '{{airbill_no}}', 160, array('builder_text' => '{{airbill_no}}', 'builder_mode' => 'readonly', 'locked_text' => '{{airbill_no}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
+    }
+
+    $components[] = customizeBotMsgInsertCreateSpacer('stock_out_link_spacer', 1, 220);
+    $components[] = customizeBotMsgInsertCreateLine('stock_out_link_label', 'Warehouse Stock-out Link:', 230);
+    $components[] = customizeBotMsgInsertCreateLine('stock_out_link_value', '{{warehouse_stock_out_link}}', 240, array('builder_text' => '{{warehouse_stock_out_link}}', 'builder_mode' => 'readonly', 'locked_text' => '{{warehouse_stock_out_link}}', 'use_builder_text' => 'N'));
+
+    return $components;
+}
+
+function customizeBotMsgInsertBuildTemplateBody($components)
+{
+    $lines = array();
+    foreach ((array) $components as $component) {
+        if (!is_array($component)) {
+            continue;
+        }
+        if ((string) ($component['removed'] ?? 'N') === 'Y') {
+            continue;
+        }
+
+        if ((string) ($component['type'] ?? 'line') === 'spacer') {
+            $blankLines = (int) ($component['lines'] ?? 1);
+            if ($blankLines < 1 || $blankLines > 3) {
+                $blankLines = 1;
+            }
+            for ($blankIndex = 0; $blankIndex < $blankLines; $blankIndex++) {
+                $lines[] = '';
+            }
+            continue;
+        }
+
+        $textParts = explode("\n", str_replace("\r\n", "\n", customizeBotMsgInsertComposeLineText($component)));
+        $joinWithPrevious = strtoupper(trim((string) ($component['join_with_previous'] ?? 'N'))) === 'Y';
+        if ($joinWithPrevious && !empty($textParts) && !empty($lines)) {
+            $firstPart = array_shift($textParts);
+            $lineIndex = count($lines) - 1;
+            $separator = ($lines[$lineIndex] !== '' && $firstPart !== '') ? ' ' : '';
+            $lines[$lineIndex] .= $separator . $firstPart;
+        }
+        foreach ($textParts as $textPart) {
+            $lines[] = $textPart;
+        }
+    }
+
+    return implode("\n", $lines);
+}
+
+function customizeBotMsgInsertGetSampleData($context)
+{
+    if ($context === 'stock_order_request') {
+        $orderLink = 'https://crm.beyourdiary.com/stock/warehouse_stock_in_scan.php?t=SOR-240708-01';
+        $safeOrderLink = htmlspecialchars($orderLink, ENT_QUOTES, 'UTF-8');
+
+        return array(
+            'warehouse_name' => 'HQ Warehouse',
+            'invoice_no' => 'SOR-240708-01',
+            'invoice_date' => '2026-07-08',
+            'package_summary' => 'Vv Rosselady 3 box FREE Rosselady 10 box + Gold Zie + Mother\'s Day promo 2% (MY) x1',
+            'product_lines_html' => '1. Vv Roseladys <b>x2 boxes</b><br>2. Urbaniiz Candy Meonx <b>x1 boxes</b>',
+            'order_link' => $orderLink,
+            'order_link_html' => '<a href="' . $safeOrderLink . '">' . $safeOrderLink . '</a>',
+        );
+    }
+
+    $contexts = customizeBotMsgInsertGetContexts();
+    $platformLabel = $contexts[$context]['label'];
+    $orderCode = '65477567';
+    if ($context === 'lazada') {
+        $orderCode = 'LZD-240708-7788';
+    } elseif ($context === 'facebook') {
+        $orderCode = 'FB-240708-2255';
+    } elseif ($context === 'website') {
+        $orderCode = 'WEB-240708-1109';
+    }
+
+    return array(
+        'warehouse_name' => 'HQ Warehouse',
+        'buyer_username' => $context === 'shopee' ? 'bsg' : 'Glenda Chia OFFICE',
+        'customer_name' => 'Glenda Chia OFFICE',
+        'customer_address' => "Menara Sah Bhd, 1st Floor, No. 15, Lot 8733, Block 16,\nGreen Height Commercial Centre,\nNew Airport Road, Kuching, Kuching,\nSarawak 93258",
+        'order_code' => $orderCode,
+        'package_lines_block' => 'Vv Rosselady 3 box FREE Rosselady 10 box + Gold Zie + Mother\'s Day promo 2% (MY) x1',
+        'product_details_block' => "1. Vv Roseladys x2 boxes\n2. Urbaniiz Candy Meonx x1 boxes",
+        'package_summary' => 'Vv Rosselady 3 box FREE Rosselady 10 box + Gold Zie + Mother\'s Day promo 2% (MY) x1',
+        'airbill_no' => 'MYA240708001',
+        'warehouse_stock_out_link' => 'https://crm.beyourdiary.com/warehouse_stock_in_scan.php?t=7da5c5231b434c6edc95ec28f4ea59a3',
+    );
+}
+
+function customizeBotMsgInsertRenderTemplate($templateBody, $data, $parseMode = 'plain')
+{
+    return preg_replace_callback('/\{\{\s*([a-zA-Z0-9_]+)\s*\}\}/', function ($matches) use ($data, $parseMode) {
+        $key = isset($matches[1]) ? (string) $matches[1] : '';
+        $value = array_key_exists($key, $data) ? $data[$key] : '';
+        if (is_array($value)) {
+            $value = implode(', ', $value);
+        }
+        $value = (string) $value;
+
+        if ($parseMode === 'html') {
+            if (substr($key, -5) === '_html') {
+                return $value;
+            }
+
+            return htmlspecialchars($value, ENT_QUOTES, 'UTF-8');
+        }
+
+        return $value;
+    }, str_replace("\r\n", "\n", (string) $templateBody));
+}
+
+function customizeBotMsgInsertGetSeedRows()
+{
+    $seedRows = array();
+    $contexts = customizeBotMsgInsertGetContexts();
+    foreach ($contexts as $context => $contextConfig) {
+        $components = customizeBotMsgInsertGetDefaultComponents($context);
+        $templateBody = customizeBotMsgInsertBuildTemplateBody($components);
+        $previewSample = customizeBotMsgInsertRenderTemplate($templateBody, customizeBotMsgInsertGetSampleData($context), $contextConfig['parse_mode']);
+
+        $templateName = ucfirst(str_replace('_', ' ', $context)) . ' Default Template';
+        $remark = 'Default ' . strtolower($contextConfig['label']) . ' bot message template';
+        if ($context === 'stock_order_request') {
+            $templateName = 'Default Stock Order Request Message';
+            $remark = 'Default stock order request Telegram template';
+        }
+
+        $seedRows[$context] = array(
+            'template_name' => $templateName,
+            'message_context' => $context,
+            'parse_mode' => $contextConfig['parse_mode'],
+            'template_body' => $templateBody,
+            'components_json' => json_encode($components, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+            'preview_sample' => $previewSample,
+            'remark' => $remark,
+        );
+    }
+
+    return $seedRows;
+}
+
 function setPinBlockAccess($allPins, $targetPinId, $accessIds)
 {
     $targetPinId = (string) ((int) $targetPinId);
@@ -2674,6 +2989,115 @@ if ($conn->select_db($db_cms)) {
         }
     } else {
         echo "<p style='color:red;'>Failed checking `" . MESSAGE_SHORTCUTS . "` collation: " . $conn->error . "</p>";
+    }
+
+    $createCustomizeBotMsgTableSql = "CREATE TABLE IF NOT EXISTS `" . CUSTOMIZE_BOT_MSG . "` (
+        `id` INT NOT NULL AUTO_INCREMENT,
+        `template_name` VARCHAR(150) NOT NULL,
+        `message_context` VARCHAR(50) NOT NULL,
+        `parse_mode` VARCHAR(20) NOT NULL DEFAULT 'plain',
+        `template_body` LONGTEXT DEFAULT NULL,
+        `components_json` LONGTEXT DEFAULT NULL,
+        `preview_sample` LONGTEXT DEFAULT NULL,
+        `is_default` CHAR(1) NOT NULL DEFAULT 'N',
+        `remark` VARCHAR(255) DEFAULT NULL,
+        `create_by` VARCHAR(255) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(255) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        PRIMARY KEY (`id`),
+        KEY `idx_customize_bot_msg_context_status` (`message_context`, `status`),
+        KEY `idx_customize_bot_msg_default_context_status` (`is_default`, `message_context`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    if ($conn->query($createCustomizeBotMsgTableSql)) {
+        echo "<p style='color:green;'>Verified table `" . CUSTOMIZE_BOT_MSG . "` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CUSTOMIZE_BOT_MSG . "`: " . $conn->error . "</p>";
+    }
+
+    $createCustomizeBotMsgOrderTableSql = "CREATE TABLE IF NOT EXISTS `" . CUSTOMIZE_BOT_MSG_ORDER . "` (
+        `id` INT NOT NULL AUTO_INCREMENT,
+        `message_context` VARCHAR(50) NOT NULL,
+        `order_table` VARCHAR(100) NOT NULL,
+        `order_id` INT NOT NULL,
+        `template_id` INT NOT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_context_order` (`message_context`, `order_table`, `order_id`),
+        KEY `idx_template_id` (`template_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci";
+
+    if ($conn->query($createCustomizeBotMsgOrderTableSql)) {
+        echo "<p style='color:green;'>Verified table `" . CUSTOMIZE_BOT_MSG_ORDER . "` is ready.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CUSTOMIZE_BOT_MSG_ORDER . "`: " . $conn->error . "</p>";
+    }
+
+    $customizeBotMsgSeedRows = customizeBotMsgInsertGetSeedRows();
+    foreach ($customizeBotMsgSeedRows as $context => $seedRow) {
+        $safeContext = $conn->real_escape_string((string) $context);
+        $conn->query("UPDATE `" . CUSTOMIZE_BOT_MSG . "` SET `status` = 'A' WHERE `status` = 'D' AND `is_default` = 'Y' AND `message_context` = '" . $safeContext . "'");
+        $checkSql = "SELECT `id`, `is_default`, `status`
+            FROM `" . CUSTOMIZE_BOT_MSG . "`
+            WHERE `message_context` = '" . $safeContext . "'
+              AND `status` = 'A'
+            ORDER BY `is_default` DESC, `id` ASC";
+        $checkResult = $conn->query($checkSql);
+
+        if ($checkResult && $checkResult->num_rows > 0) {
+            $defaultTemplateId = 0;
+            while ($existingTemplateRow = $checkResult->fetch_assoc()) {
+                if ($defaultTemplateId <= 0 && isset($existingTemplateRow['id'])) {
+                    $defaultTemplateId = (int) $existingTemplateRow['id'];
+                }
+            }
+
+            if ($defaultTemplateId > 0) {
+                $conn->query("UPDATE `" . CUSTOMIZE_BOT_MSG . "` SET `status` = 'A' WHERE `status` = 'D' AND `is_default` = 'Y' AND `message_context` = '" . $safeContext . "'");
+                $conn->query("UPDATE `" . CUSTOMIZE_BOT_MSG . "` SET `is_default` = 'N' WHERE `message_context` = '" . $safeContext . "' AND `status` = 'A'");
+                $conn->query("UPDATE `" . CUSTOMIZE_BOT_MSG . "` SET `is_default` = 'Y', `status` = 'A' WHERE `id` = " . $defaultTemplateId . " LIMIT 1");
+            }
+
+            echo "<p style='color:green;'>Verified default customize bot message exists for context `" . htmlspecialchars((string) $context, ENT_QUOTES, 'UTF-8') . "`.</p>";
+            continue;
+        }
+
+        $stmt = $conn->prepare(
+            "INSERT INTO `" . CUSTOMIZE_BOT_MSG . "`
+                (`template_name`, `message_context`, `parse_mode`, `template_body`, `components_json`, `preview_sample`, `is_default`, `remark`, `create_by`, `create_date`, `create_time`, `status`)
+             VALUES (?, ?, ?, ?, ?, ?, 'Y', ?, '1', CURDATE(), CURTIME(), 'A')"
+        );
+
+        if (!$stmt) {
+            echo "<p style='color:red;'>Failed preparing seed insert for customize bot message context `" . htmlspecialchars((string) $context, ENT_QUOTES, 'UTF-8') . "`: " . $conn->error . "</p>";
+            continue;
+        }
+
+        $templateName = (string) $seedRow['template_name'];
+        $messageContext = (string) $seedRow['message_context'];
+        $parseMode = (string) $seedRow['parse_mode'];
+        $templateBody = (string) $seedRow['template_body'];
+        $componentsJson = (string) $seedRow['components_json'];
+        $previewSample = (string) $seedRow['preview_sample'];
+        $remark = (string) $seedRow['remark'];
+        $stmt->bind_param('sssssss', $templateName, $messageContext, $parseMode, $templateBody, $componentsJson, $previewSample, $remark);
+
+        if ($stmt->execute()) {
+            echo "<p style='color:green;'>Seeded default customize bot message for context `" . htmlspecialchars((string) $context, ENT_QUOTES, 'UTF-8') . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed seeding customize bot message for context `" . htmlspecialchars((string) $context, ENT_QUOTES, 'UTF-8') . "`: " . $stmt->error . "</p>";
+        }
+        $stmt->close();
     }
 
     if ($conn->query($createTaskProjectSql)) {
@@ -3936,7 +4360,8 @@ if ($conn->select_db($db_cms)) {
         (161, 'Daily Follow Up Report', '1', 'Customer user record log daily activity reporting', '1', CURDATE(), CURTIME(), 'A'),
         (162, 'Member Point', '1', 'Member point customer summary view access', '1', CURDATE(), CURTIME(), 'A'),
         (163, 'Member Redeem Setting', '1,2,3,4', 'Member redeem gift setting management', '1', CURDATE(), CURTIME(), 'A'),
-        (164, 'Member Bonus Management', '1,2,3,4', 'Member bonus tier and special bonus management', '1', CURDATE(), CURTIME(), 'A')
+        (164, 'Member Bonus Management', '1,2,3,4', 'Member bonus tier and special bonus management', '1', CURDATE(), CURTIME(), 'A'),
+        (165, 'Customize Bot Message', '1,2,3,4', 'Customize bot message template management', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
@@ -4070,6 +4495,32 @@ if ($conn->select_db($db_cms)) {
         } else {
             echo "<p style='color:green;'>Verified Message Shortcuts pin access already exists for `user_group` id " . (int) $groupId . ".</p>";
         }
+    }
+
+    $customizeBotMsgGroupResult = $conn->query("SELECT `id`, `pins` FROM `user_group` WHERE `status` = 'A'");
+    if ($customizeBotMsgGroupResult) {
+        while ($customizeBotMsgGroupRow = $customizeBotMsgGroupResult->fetch_assoc()) {
+            $groupId = isset($customizeBotMsgGroupRow['id']) ? (int) $customizeBotMsgGroupRow['id'] : 0;
+            if ($groupId <= 0) {
+                continue;
+            }
+
+            $currentPins = isset($customizeBotMsgGroupRow['pins']) ? (string) $customizeBotMsgGroupRow['pins'] : '';
+            $updatedPins = addAccessToPinBlock($currentPins, 165, array(1, 2, 3, 4));
+
+            if ($updatedPins !== $currentPins) {
+                $safePins = $conn->real_escape_string($updatedPins);
+                if ($conn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . $groupId)) {
+                    echo "<p style='color:green;'>Verified Customize Bot Message pin access for `user_group` id " . $groupId . ".</p>";
+                } else {
+                    echo "<p style='color:red;'>Failed updating Customize Bot Message pin access for `user_group` id " . $groupId . ": " . $conn->error . "</p>";
+                }
+            } else {
+                echo "<p style='color:green;'>Verified Customize Bot Message pin access already exists for `user_group` id " . $groupId . ".</p>";
+            }
+        }
+    } else {
+        echo "<p style='color:red;'>Failed reading active `user_group` rows for Customize Bot Message pin assignment: " . $conn->error . "</p>";
     }
 
     $customerFollowUpGroupResult = $conn->query("SELECT `id`, `pins` FROM `user_group`");
