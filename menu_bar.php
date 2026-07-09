@@ -269,15 +269,16 @@ $menuList = array(
                     array('Customer Level', 'mdi mdi-account-group-outline', $SITEURL . '/customer/cus_level_table.php', '142'),
                     array('Customer Repeat', 'mdi mdi-account-group-outline', $SITEURL . '/customer/cus_repeat_table.php', '143'),
                     array('Message Shortcuts', 'mdi mdi-message-text-outline', $SITEURL . '/settings/message_shortcuts_table.php', '144'),
+                    array('Customize Bot Message', 'mdi mdi-message-text-outline', $SITEURL . '/settings/customize_bot_msg_table.php', '165'),
                     array('Tag', 'mdi mdi-account-group-outline', $SITEURL . '/customer/tagTable.php', '35'),
                     array('Campaign Rule Setting', 'mdi mdi-cog-outline', $SITEURL . '/campaign/campaign_rule_setting_table.php', '154'),
                     array('Member Bonus Management', 'mdi mdi-star-cog-outline', $SITEURL . '/settings/member_bonus_management.php', '164'),
                     array('Member Redeem Setting', 'mdi mdi-gift-outline', $SITEURL . '/settings/member_redeem_setting.php', '163'),
                 ),
-                'pin' => array('29', '142', '143', '144', '35', '154', '164', '163'),
+                'pin' => array('29', '142', '143', '144', '165', '35', '154', '164', '163'),
             ),
         ),
-        'pin' => array('160', '159', '85', '91', '75', '84', '38', '150', '151', '153', '29', '142', '143', '144', '35', '154', '164', '163')
+        'pin' => array('160', '159', '85', '91', '75', '84', '38', '150', '151', '153', '29', '142', '143', '144', '165', '35', '154', '164', '163')
     ),
     array(
         'Order',
