@@ -194,6 +194,30 @@ function sorInfoBuildTelegramMessage($requestRow, $summary, $orderLink, $warehou
         . implode("\n", $safeProductLines) . "\n\n"
         . "Link: <a href=\"" . $safeOrderLink . "\">" . $safeOrderLink . "</a>";
 
+    $requestId = isset($requestRow['id']) ? (int) $requestRow['id'] : 0;
+    $selectedTemplate = customizeBotMsgResolveTemplateForOrder($GLOBALS['connect'], 'stock_order_request', STOCK_ORDER_REQ, $requestId);
+    if (!empty($selectedTemplate)) {
+        $templateData = array(
+            'warehouse_name' => $warehouseName,
+            'invoice_no' => $invoiceNo,
+            'invoice_date' => $invoiceDate,
+            'package_summary' => !empty($packageItems) ? implode(', ', $packageItems) : '-',
+            'product_lines_html' => implode('<br>', $safeProductLines),
+            'order_link' => $orderLink,
+            'order_link_html' => '<a href="' . $safeOrderLink . '">' . $safeOrderLink . '</a>',
+        );
+
+        $renderedTemplate = trim((string) customizeBotMsgRenderTemplate(
+            isset($selectedTemplate['template_body']) ? $selectedTemplate['template_body'] : '',
+            $templateData,
+            isset($selectedTemplate['parse_mode']) ? $selectedTemplate['parse_mode'] : 'html'
+        ));
+
+        if ($renderedTemplate !== '') {
+            return $renderedTemplate;
+        }
+    }
+
     return $message;
 }
 

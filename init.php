@@ -263,6 +263,8 @@ define('CUR_SEGMENTATION', 'customer_segmentation');
 define('CUS_LEVEL', 'customer_level');
 define('CUS_REPEAT', 'customer_repeat');
 define('MESSAGE_SHORTCUTS', 'message_shortcuts');
+define('CUSTOMIZE_BOT_MSG', 'customize_bot_msg');
+define('CUSTOMIZE_BOT_MSG_ORDER', 'customize_bot_msg_order');
 define('RACE', 'race');
 define('L_STS', 'leave_status');
 define('ID_TYPE', 'identity_type');

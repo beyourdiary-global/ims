@@ -119,6 +119,22 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+$lorBotMsgContext = 'lazada';
+$lorBotMsgOrderTable = LAZADA_ORDER_REQ;
+$lorBotMsgTemplateOptions = customizeBotMsgGetTemplateOptions($connect, $lorBotMsgContext);
+$lorBotMsgDefaultTemplateId = customizeBotMsgGetDefaultTemplateId($connect, $lorBotMsgContext);
+$lorBotMsgTemplateNameMap = array();
+foreach ($lorBotMsgTemplateOptions as $lorBotMsgTemplateOption) {
+    $templateOptionId = isset($lorBotMsgTemplateOption['id']) ? (int) $lorBotMsgTemplateOption['id'] : 0;
+    if ($templateOptionId > 0) {
+        $lorBotMsgTemplateNameMap[$templateOptionId] = isset($lorBotMsgTemplateOption['template_name']) ? (string) $lorBotMsgTemplateOption['template_name'] : ('Template #' . $templateOptionId);
+    }
+}
+$lorExistingBotMsgTemplateId = ($dataId && $act !== 'I')
+    ? customizeBotMsgGetOrderTemplateId($connect, $lorBotMsgContext, $lorBotMsgOrderTable, (int) $dataId)
+    : 0;
+$lorOriginalBotMsgTemplateId = $lorExistingBotMsgTemplateId > 0 ? $lorExistingBotMsgTemplateId : $lorBotMsgDefaultTemplateId;
+
 if (!($dataId) && !($act)) {
     renderNotificationScript('Invalid action.', 'error', $redirectPage);
     exit;
@@ -324,6 +340,10 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
     }
     $lor_airbill_no = postSpaceFilter('lor_airbill_no');
     $lor_airbill_attachment = postSpaceFilter('lor_airbill_attachment_value');
+    $lor_bot_msg_template_id = (int) postSpaceFilter('lor_bot_msg_template_id');
+    if ($lor_bot_msg_template_id <= 0 || !isset($lorBotMsgTemplateNameMap[$lor_bot_msg_template_id])) {
+        $lor_bot_msg_template_id = $lorBotMsgDefaultTemplateId;
+    }
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -541,6 +561,7 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
                         $dataId = (int) mysqli_insert_id($connect);
+                        customizeBotMsgSaveOrderTemplate($connect, $lorBotMsgContext, $lorBotMsgOrderTable, $dataId, $lor_bot_msg_template_id);
                         if ($lor_order_status === 'TP' && $dataId > 0) {
                             $freshOrderRow = shopeeOmsLoadOrder($connect, $dataId, 'lazada');
                             $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID, 'lazada');
@@ -721,6 +742,11 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                         array_push($chgvalarr, $lor_airbill_attachment !== '' ? $lor_airbill_attachment : 'Empty Value');
                         array_push($datafield, 'airbill_attachment');
                     }
+                    if ((int) $lorOriginalBotMsgTemplateId !== (int) $lor_bot_msg_template_id) {
+                        array_push($oldvalarr, isset($lorBotMsgTemplateNameMap[$lorOriginalBotMsgTemplateId]) ? $lorBotMsgTemplateNameMap[$lorOriginalBotMsgTemplateId] : 'Empty Value');
+                        array_push($chgvalarr, isset($lorBotMsgTemplateNameMap[$lor_bot_msg_template_id]) ? $lorBotMsgTemplateNameMap[$lor_bot_msg_template_id] : 'Empty Value');
+                        array_push($datafield, 'bot_message_template');
+                    }
 
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
@@ -730,6 +756,9 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
                         $query = "UPDATE " . $tblName . " SET lazada_acc = '$lor_lazada_acc', curr_unit = '$lor_curr_unit', lzd_country = '$lor_lzd_country', cust_id = '$lor_cust_id', cust_name = '$lor_cust_name', cust_email = '$lor_cust_email', cust_phone = '$lor_cust_phone', country = '$lor_country', oder_number = '$lor_oder_number', sales_pic = '$lor_sales_pic', ship_rec_name = '$lor_ship_rec_name', ship_rec_address = '$lor_ship_rec_address', ship_rec_contact = '$lor_ship_rec_contact', brand = '$lor_brand', series = '$lor_series', pkg = '$lor_pkg', item_price_credit = '$lor_item_price_credit', commision = '$commision', other_discount = '$lor_other_discount', pay_fee = '$lor_pay_fee', final_income = '$lor_final_income', pay_meth = '$lor_pay_meth', remark ='$lor_remark', order_status = '$lor_order_status', stock_out_warehouse_id = " . ($lor_stock_out_warehouse_id > 0 ? $lor_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$lor_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($connect, $lor_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
+                        if ($returnData) {
+                            customizeBotMsgSaveOrderTemplate($connect, $lorBotMsgContext, $lorBotMsgOrderTable, (int) $dataId, $lor_bot_msg_template_id);
+                        }
 
                     } else {
                         $act = 'NC';
@@ -1486,6 +1515,25 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                             <span class="mt-n1"><?php echo $stock_out_warehouse_err; ?></span>
                                         </div>
                                     <?php } ?>
+                                </div>
+                                <div class="col-md-4 mb-3">
+                                    <label class="form-label form_lbl" for="lor_bot_msg_template_id">Bot Message Template</label>
+                                    <?php
+                                    $currentLorBotMsgTemplateId = post('actionBtn')
+                                        ? (int) postSpaceFilter('lor_bot_msg_template_id')
+                                        : ($lorOriginalBotMsgTemplateId > 0 ? (int) $lorOriginalBotMsgTemplateId : (int) $lorBotMsgDefaultTemplateId);
+                                    if ($currentLorBotMsgTemplateId <= 0) {
+                                        $currentLorBotMsgTemplateId = (int) $lorBotMsgDefaultTemplateId;
+                                    }
+                                    ?>
+                                    <select class="form-select" id="lor_bot_msg_template_id" name="lor_bot_msg_template_id" <?= $act == '' ? 'disabled' : '' ?>>
+                                        <?php foreach ($lorBotMsgTemplateOptions as $lorBotMsgTemplateOption) { ?>
+                                            <?php $templateOptionId = isset($lorBotMsgTemplateOption['id']) ? (int) $lorBotMsgTemplateOption['id'] : 0; ?>
+                                            <option value="<?= $templateOptionId ?>" <?= $currentLorBotMsgTemplateId === $templateOptionId ? 'selected' : '' ?>>
+                                                <?= htmlspecialchars((string) $lorBotMsgTemplateOption['template_name'] . ($lorBotMsgTemplateOption['is_default'] === 'Y' ? ' (Default)' : ''), ENT_QUOTES, 'UTF-8') ?>
+                                            </option>
+                                        <?php } ?>
+                                    </select>
                                 </div>
 
                                 <div class="col-md-2 mb-3 shopee-airbill-toggle-col">
