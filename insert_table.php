@@ -182,7 +182,8 @@ function insertTableEnsureOrderReportPins($cmsConn)
         (155, 'Shopee Report', '1', 'Shopee order report view access', '1', CURDATE(), CURTIME(), 'A'),
         (156, 'Facebook Report', '1', 'Facebook order report view access', '1', CURDATE(), CURTIME(), 'A'),
         (157, 'Website Report', '1', 'Website order report view access', '1', CURDATE(), CURTIME(), 'A'),
-        (158, 'Lazada Report', '1', 'Lazada order report view access', '1', CURDATE(), CURTIME(), 'A')
+        (158, 'Lazada Report', '1', 'Lazada order report view access', '1', CURDATE(), CURTIME(), 'A'),
+        (166, 'Stock Order Request Report', '1', 'Stock order request report view access', '1', CURDATE(), CURTIME(), 'A')
         ON DUPLICATE KEY UPDATE
             `name` = VALUES(`name`),
             `pins` = VALUES(`pins`),
@@ -190,9 +191,9 @@ function insertTableEnsureOrderReportPins($cmsConn)
             `status` = 'A'";
 
     if ($cmsConn->query($pinGroupSql)) {
-        echo "<p style='color:green;'><strong>Order Report pin setup:</strong> Verified pin groups 155-158 for Shopee Report, Facebook Report, Website Report, and Lazada Report.</p>";
+        echo "<p style='color:green;'><strong>Order Report pin setup:</strong> Verified pin groups 155-158 and 166 for Shopee Report, Facebook Report, Website Report, Lazada Report, and Stock Order Request Report.</p>";
     } else {
-        echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed creating pin groups 155-158: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+        echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed creating pin groups 155-158 and 166: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
     }
 
     foreach (array(1, 2) as $groupId) {
@@ -205,14 +206,14 @@ function insertTableEnsureOrderReportPins($cmsConn)
         $userGroupRow = $userGroupResult->fetch_assoc();
         $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
         $updatedPins = $currentPins;
-        foreach (array(155, 156, 157, 158) as $pinGroupId) {
+        foreach (array(155, 156, 157, 158, 166) as $pinGroupId) {
             $updatedPins = addAccessToPinBlock($updatedPins, $pinGroupId, array(1));
         }
 
         if ($updatedPins !== $currentPins) {
             $safePins = $cmsConn->real_escape_string($updatedPins);
             if ($cmsConn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
-                echo "<p style='color:green;'>Order Report pin setup granted View access for pin groups 155-158 to `user_group` id " . (int) $groupId . ".</p>";
+                echo "<p style='color:green;'>Order Report pin setup granted View access for pin groups 155-158 and 166 to `user_group` id " . (int) $groupId . ".</p>";
             } else {
                 echo "<p style='color:red;'>Order Report pin setup failed updating `user_group` id " . (int) $groupId . ": " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
             }

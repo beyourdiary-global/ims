@@ -63,12 +63,17 @@
     });
   }
 
-  function getBreakdownColumns(selectedKey) {
-    if (
-      selectedKey === "package" ||
-      selectedKey === "brand" ||
-      selectedKey === "warehouse"
-    ) {
+  function getPackageMetricDimensions(config) {
+    var dimensions = (config && config.package_metric_dimensions) || [
+      "package",
+      "brand",
+      "warehouse",
+    ];
+    return Array.isArray(dimensions) ? dimensions : ["package", "brand", "warehouse"];
+  }
+
+  function getBreakdownColumns(selectedKey, config) {
+    if (getPackageMetricDimensions(config).indexOf(selectedKey) !== -1) {
       return [
         { key: "group", label: "Group", formatter: null },
         { key: "order_count", label: "Total Orders", formatter: null },
@@ -467,16 +472,19 @@
   }
 
   function applyOrderReportFilterOptions(optionSets) {
-    var filterKeys = [
-      "package",
-      "brand",
-      "warehouse",
-      "payment",
-      "customer_label",
-      "segmentation",
-      "level",
-      "repeat",
-    ];
+    var config = window.orderReportPageConfig || {};
+    var filterKeys = Array.isArray(config.filter_keys) && config.filter_keys.length
+      ? config.filter_keys
+      : [
+          "package",
+          "brand",
+          "warehouse",
+          "payment",
+          "customer_label",
+          "segmentation",
+          "level",
+          "repeat",
+        ];
 
     filterKeys.forEach(function (filterKey) {
       var container = document.getElementById("order_report_" + filterKey);
@@ -682,7 +690,9 @@
     var breakdownHeadRow = document.getElementById("orderReportBreakdownHeadRow");
     var breakdownEmpty = document.getElementById("orderReportBreakdownEmpty");
     var rankingData = (config && config.ranking) || {};
-    var rankingKey = "package";
+    var rankingKey =
+      (config && config.default_ranking_dimension) || "package";
+    var salesLabel = (config && config.sales_label) || "Final Amount";
 
     pageState.trendChart = destroyChart(pageState.trendChart);
     pageState.rankingChart = destroyChart(pageState.rankingChart);
@@ -725,7 +735,7 @@
           labels: labels,
           datasets: [
             {
-              label: "Final Amount",
+              label: salesLabel,
               data: sales,
               yAxisID: "yAmount",
               backgroundColor: "rgba(37, 99, 235, 0.78)",
@@ -755,7 +765,7 @@
               position: "left",
               title: {
                 display: true,
-                text: "Final Amount",
+                text: salesLabel,
               },
             },
             yOrders: {
@@ -894,7 +904,7 @@
       }
 
       var rows = (config.breakdowns && config.breakdowns[selectedKey]) || [];
-      var columns = getBreakdownColumns(selectedKey);
+      var columns = getBreakdownColumns(selectedKey, config);
       tbody.innerHTML = "";
 
       if (breakdownHeadRow) {
