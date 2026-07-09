@@ -307,6 +307,7 @@ if ($dataId) { //edit/remove/view
     if ($result != false && $result->num_rows > 0) {
         $dataExisted = 1;
         $row = $result->fetch_assoc();
+        $row = shopeeOmsApplyReturnedOrderFinancials($row, 'shopee');
         $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo('shopee', (int) $dataId);
         if ((!isset($sor_customer_name) || trim((string) $sor_customer_name) === '') && isset($rememberedDeliveryInfo['customer_name'])) {
             $sor_customer_name = trim((string) $rememberedDeliveryInfo['customer_name']);
@@ -891,6 +892,20 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     $sor_order_status = shopeeOmsNormalizeStatusCode(postSpaceFilter('sor_order_status'));
     if ($sor_order_status === '') {
         $sor_order_status = isset($row['order_status']) ? shopeeOmsNormalizeStatusCode($row['order_status']) : 'P';
+    }
+    $sorFinancialStatusForSave = $pendingStatusUpdate !== '' ? $pendingStatusUpdate : $sor_order_status;
+    if ($sorFinancialStatusForSave === '' && isset($row['order_status'])) {
+        $sorFinancialStatusForSave = shopeeOmsNormalizeStatusCode($row['order_status']);
+    }
+    if (shopeeOmsIsReturnedStatus($sorFinancialStatusForSave)) {
+        $sor_price = '0.00';
+        $sor_voucher = '0.00';
+        $sor_shipping = '0.00';
+        $sor_serv = '0.00';
+        $sor_trans = '0.00';
+        $sor_ams = '0.00';
+        $sor_fees = '0.00';
+        $sor_final = '0.00';
     }
     $sorCurrentEffectiveWarehouseId = isset($row) ? shopeeOmsResolveStockOutWarehouseId($connect, $row, $sorDefaultWarehouseId) : $sorDefaultWarehouseId;
     $sor_stock_out_warehouse_id = shopeeOmsNormalizeWarehouseId(postSpaceFilter('sor_stock_out_warehouse_id'));

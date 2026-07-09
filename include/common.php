@@ -7034,6 +7034,7 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'table' => SHOPEE_SG_ORDER_REQ,
                 'db' => 'finance',
                 'db_name' => dbFinance,
+                'financial_fields' => array('price', 'voucher', 'act_shipping_fee', 'service_fee', 'trans_fee', 'ams_fee', 'fees', 'final_amt'),
                 'order_code_field' => 'orderID',
                 'customer_name_field' => 'buyer',
                 'customer_label_mode' => 'shopee_buyer',
@@ -7056,6 +7057,7 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'table' => LAZADA_ORDER_REQ,
                 'db' => 'cms',
                 'db_name' => dbname,
+                'financial_fields' => array('item_price_credit', 'commision', 'other_discount', 'pay_fee', 'final_income'),
                 'order_code_field' => 'oder_number',
                 'customer_name_field' => 'cust_name',
                 'address_field' => 'ship_rec_address',
@@ -7077,6 +7079,7 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'table' => FB_ORDER_REQ,
                 'db' => 'finance',
                 'db_name' => dbFinance,
+                'financial_fields' => array('price'),
                 'order_code_field' => '',
                 'customer_name_field' => 'name',
                 'address_field' => 'ship_rec_add',
@@ -7098,6 +7101,7 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'table' => WEB_ORDER_REQ,
                 'db' => 'finance',
                 'db_name' => dbFinance,
+                'financial_fields' => array('price', 'shipping', 'discount', 'total'),
                 'order_code_field' => 'order_id',
                 'customer_name_field' => 'cust_name',
                 'address_field' => 'shipping_address',
@@ -7136,6 +7140,86 @@ if (!function_exists('shopeeOmsGetOrderSourceConfig')) {
         $platform = shopeeOmsNormalizePlatformKey($platform);
         $configs = shopeeOmsGetOrderSourceConfigs();
         return $platform !== '' && isset($configs[$platform]) ? $configs[$platform] : array();
+    }
+}
+
+if (!function_exists('shopeeOmsIsReturnedStatus')) {
+    function shopeeOmsIsReturnedStatus($status)
+    {
+        $status = shopeeOmsNormalizeStatusCode($status);
+        return in_array($status, array('R', 'CR'), true);
+    }
+}
+
+if (!function_exists('shopeeOmsGetOrderFinancialFields')) {
+    function shopeeOmsGetOrderFinancialFields($source = null)
+    {
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source, 'shopee');
+        $fields = isset($sourceConfig['financial_fields']) && is_array($sourceConfig['financial_fields'])
+            ? $sourceConfig['financial_fields']
+            : array();
+
+        if (!empty($fields)) {
+            return $fields;
+        }
+
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+        if ($platform === 'lazada') {
+            return array('item_price_credit', 'commision', 'other_discount', 'pay_fee', 'final_income');
+        }
+        if ($platform === 'facebook') {
+            return array('price');
+        }
+        if ($platform === 'website') {
+            return array('price', 'shipping', 'discount', 'total');
+        }
+
+        return array('price', 'voucher', 'act_shipping_fee', 'service_fee', 'trans_fee', 'ams_fee', 'fees', 'final_amt');
+    }
+}
+
+if (!function_exists('shopeeOmsBuildReturnedOrderFinancialValues')) {
+    function shopeeOmsBuildReturnedOrderFinancialValues($source = null, $format = 'string')
+    {
+        $values = array();
+        $zeroValue = $format === 'number' ? 0.0 : '0.00';
+
+        foreach (shopeeOmsGetOrderFinancialFields($source) as $fieldName) {
+            $fieldName = trim((string) $fieldName);
+            if ($fieldName === '') {
+                continue;
+            }
+            $values[$fieldName] = $zeroValue;
+        }
+
+        return $values;
+    }
+}
+
+if (!function_exists('shopeeOmsApplyReturnedOrderFinancials')) {
+    function shopeeOmsApplyReturnedOrderFinancials($orderRow, $source = null, $format = 'string')
+    {
+        if (!is_array($orderRow) || empty($orderRow)) {
+            return is_array($orderRow) ? $orderRow : array();
+        }
+
+        if (!shopeeOmsIsReturnedStatus(isset($orderRow['order_status']) ? $orderRow['order_status'] : '')) {
+            return $orderRow;
+        }
+
+        if ($source === null || $source === '') {
+            if (isset($orderRow['__oms_platform']) && trim((string) $orderRow['__oms_platform']) !== '') {
+                $source = (string) $orderRow['__oms_platform'];
+            } else if (isset($orderRow['__oms_source_config']) && is_array($orderRow['__oms_source_config'])) {
+                $source = $orderRow['__oms_source_config'];
+            }
+        }
+
+        foreach (shopeeOmsBuildReturnedOrderFinancialValues($source, $format) as $fieldName => $fieldValue) {
+            $orderRow[$fieldName] = $fieldValue;
+        }
+
+        return $orderRow;
     }
 }
 
@@ -9826,7 +9910,8 @@ if (!function_exists('shopeeOmsLoadOrder')) {
         $sql = "SELECT * FROM `" . $tblName . "` WHERE id = " . $orderId . " LIMIT 1";
         $result = mysqli_query($connect, $sql);
         if ($result && mysqli_num_rows($result) > 0) {
-            return shopeeOmsAttachOrderSourceMeta((array) mysqli_fetch_assoc($result), isset($sourceConfig['platform']) ? $sourceConfig['platform'] : 'shopee', $sourceConfig);
+            $orderRow = shopeeOmsAttachOrderSourceMeta((array) mysqli_fetch_assoc($result), isset($sourceConfig['platform']) ? $sourceConfig['platform'] : 'shopee', $sourceConfig);
+            return shopeeOmsApplyReturnedOrderFinancials($orderRow, $sourceConfig);
         }
 
         return array();
@@ -9867,7 +9952,8 @@ if (!function_exists('shopeeOmsLoadOrderByCode')) {
         }
         $result = mysqli_query($connect, $sql);
         if ($result && mysqli_num_rows($result) > 0) {
-            return shopeeOmsAttachOrderSourceMeta((array) mysqli_fetch_assoc($result), isset($sourceConfig['platform']) ? $sourceConfig['platform'] : 'shopee', $sourceConfig);
+            $orderRow = shopeeOmsAttachOrderSourceMeta((array) mysqli_fetch_assoc($result), isset($sourceConfig['platform']) ? $sourceConfig['platform'] : 'shopee', $sourceConfig);
+            return shopeeOmsApplyReturnedOrderFinancials($orderRow, $sourceConfig);
         }
 
         return array();
@@ -12986,6 +13072,10 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             if (empty($warehouseStockValidation['success'])) {
                 return $warehouseStockValidation;
             }
+        }
+
+        if (shopeeOmsIsReturnedStatus($targetStatus)) {
+            $fieldUpdates = array_merge($fieldUpdates, shopeeOmsBuildReturnedOrderFinancialValues($sourceConfig, 'string'));
         }
 
         $safeActorUserId = mysqli_real_escape_string($orderConnect, $actorUserId);

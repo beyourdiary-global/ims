@@ -593,6 +593,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
 
                     <tbody>
                         <?php while ($row = $result->fetch_assoc()) {
+                            $row = shopeeOmsApplyReturnedOrderFinancials($row, 'shopee');
                             $q1 = getData('*', "id='" . $row['shopee_acc'] . "'", '', SHOPEE_ACC, $finance_connect);
                             $acc = $q1 ? $q1->fetch_assoc() : [];
                             $q7 = getData('*', "id='" . $row['currency'] . "'", '', CUR_UNIT, $connect);
@@ -806,7 +807,7 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 <td scope="row"><?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                <?php  
                                 if (in_array(15, $accessActionKey)) { 
-                                    $clear_profit = ($final_amt - (float)($pkg['cost'] ?? 0));
+                                    $clear_profit = shopeeOmsIsReturnedStatus($statusCode) ? 0.0 : ($final_amt - (float)($pkg['cost'] ?? 0));
                                     echo "<td scope=\"row\">" . ($agentCostProfit = ($clear_profit *0.4)). "</td>";
                                      $total_final_agentCostProfit += $agentCostProfit;
                                     echo "<td scope=\"row\">" . ($companyCostProfit = ($clear_profit *0.6)) . "</td>";

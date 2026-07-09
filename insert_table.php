@@ -1740,6 +1740,134 @@ function migrationRepairCustomerFollowUpAlertActionUrls($conn, $dbName, $systemA
     $updateStmt->close();
 }
 
+function migrationZeroReturnedOrderFinancialValues($conn, $settingsDbName, $settingsTable, $actorUserId)
+{
+    $settingKey = 'oms_return_status_zero_amounts_v1';
+
+    if (!migrationTableExists($conn, $settingsDbName, $settingsTable)) {
+        echo "<p style='color:orange;'>Skipped returned-order financial reset because the run-once settings table is unavailable.</p>";
+        return;
+    }
+
+    $existingMarker = migrationGetSettingValue($conn, $settingsDbName, $settingsTable, $settingKey);
+    if ($existingMarker !== null && trim((string) $existingMarker) !== '') {
+        echo "<p style='color:green;'>Verified returned-order financial reset already ran (`" . htmlspecialchars($settingKey, ENT_QUOTES, 'UTF-8') . "`).</p>";
+        return;
+    }
+
+    $orderConfigs = array(
+        array(
+            'label' => 'Shopee',
+            'db' => dbFinance,
+            'table' => SHOPEE_SG_ORDER_REQ,
+            'fields' => array('price', 'voucher', 'act_shipping_fee', 'service_fee', 'trans_fee', 'ams_fee', 'fees', 'final_amt'),
+        ),
+        array(
+            'label' => 'Lazada',
+            'db' => dbname,
+            'table' => LAZADA_ORDER_REQ,
+            'fields' => array('item_price_credit', 'commision', 'other_discount', 'pay_fee', 'final_income'),
+        ),
+        array(
+            'label' => 'Facebook',
+            'db' => dbFinance,
+            'table' => FB_ORDER_REQ,
+            'fields' => array('price'),
+        ),
+        array(
+            'label' => 'Website',
+            'db' => dbFinance,
+            'table' => WEB_ORDER_REQ,
+            'fields' => array('price', 'shipping', 'discount', 'total'),
+        ),
+    );
+
+    $summaries = array();
+    $totalReturnedRows = 0;
+    $totalUpdatedRows = 0;
+    $startedTransaction = false;
+
+    try {
+        $conn->begin_transaction();
+        $startedTransaction = true;
+
+        foreach ($orderConfigs as $config) {
+            $dbName = isset($config['db']) ? (string) $config['db'] : '';
+            $tableName = isset($config['table']) ? (string) $config['table'] : '';
+            $label = isset($config['label']) ? (string) $config['label'] : $tableName;
+            if ($dbName === '' || $tableName === '' || !migrationTableExists($conn, $dbName, $tableName)) {
+                $summaries[] = $label . ': skipped (table missing)';
+                continue;
+            }
+
+            if (!columnExists($conn, $dbName, $tableName, 'order_status')) {
+                $summaries[] = $label . ': skipped (order_status missing)';
+                continue;
+            }
+
+            $availableFields = array();
+            foreach ((array) $config['fields'] as $fieldName) {
+                $fieldName = trim((string) $fieldName);
+                if ($fieldName !== '' && columnExists($conn, $dbName, $tableName, $fieldName)) {
+                    $availableFields[] = $fieldName;
+                }
+            }
+
+            if (empty($availableFields)) {
+                $summaries[] = $label . ': skipped (no financial fields)';
+                continue;
+            }
+
+            $safeDbName = str_replace('`', '``', $dbName);
+            $safeTableName = str_replace('`', '``', $tableName);
+            $countSql = "SELECT COUNT(*) AS total_count
+                FROM `" . $safeDbName . "`.`" . $safeTableName . "`
+                WHERE UPPER(TRIM(COALESCE(`order_status`, ''))) IN ('R', 'CR')";
+            $countResult = $conn->query($countSql);
+            if (!$countResult) {
+                throw new Exception('Failed counting returned rows for `' . $tableName . '`: ' . $conn->error);
+            }
+
+            $countRow = $countResult->fetch_assoc();
+            $returnedRows = isset($countRow['total_count']) ? (int) $countRow['total_count'] : 0;
+            $totalReturnedRows += $returnedRows;
+
+            $assignments = array();
+            foreach ($availableFields as $fieldName) {
+                $assignments[] = "`" . str_replace('`', '``', $fieldName) . "` = '0.00'";
+            }
+
+            $updateSql = "UPDATE `" . $safeDbName . "`.`" . $safeTableName . "`
+                SET " . implode(', ', $assignments) . "
+                WHERE UPPER(TRIM(COALESCE(`order_status`, ''))) IN ('R', 'CR')";
+            if (!$conn->query($updateSql)) {
+                throw new Exception('Failed resetting returned-order financial values for `' . $tableName . '`: ' . $conn->error);
+            }
+
+            $updatedRows = max(0, (int) $conn->affected_rows);
+            $totalUpdatedRows += $updatedRows;
+            $summaries[] = $label . ': returned=' . $returnedRows . ', updated=' . $updatedRows;
+        }
+
+        $markerValue = 'returned=' . $totalReturnedRows . ';updated=' . $totalUpdatedRows;
+        if (!empty($summaries)) {
+            $markerValue .= ';details=' . implode(' | ', $summaries);
+        }
+        $markerRemark = 'One-time reset of financial values to 0.00 for OMS orders already in Return or Closed-Returned status.';
+        if (!migrationUpsertSetting($conn, $settingsDbName, $settingsTable, $settingKey, $markerValue, $markerRemark, $actorUserId)) {
+            throw new Exception('Failed writing run-once marker `' . $settingKey . '`: ' . $conn->error);
+        }
+
+        $conn->commit();
+        echo "<p style='color:green;'>Returned-order financial reset completed. " . htmlspecialchars(implode(' | ', $summaries), ENT_QUOTES, 'UTF-8') . ".</p>";
+    } catch (Exception $exception) {
+        if ($startedTransaction) {
+            $conn->rollback();
+        }
+        echo "<p style='color:red;'>Returned-order financial reset failed: " . htmlspecialchars($exception->getMessage(), ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+}
+
 $customerFollowUpTable = defined('CUSTOMER_FOLLOW_UP') ? CUSTOMER_FOLLOW_UP : 'customer_follow_up';
 $customerFollowUpRoundTable = defined('CUSTOMER_FOLLOW_UP_ROUND') ? CUSTOMER_FOLLOW_UP_ROUND : 'customer_follow_up_round';
 $customerFollowUpActionLogTable = defined('CUSTOMER_FOLLOW_UP_ACTION_LOG') ? CUSTOMER_FOLLOW_UP_ACTION_LOG : 'customer_follow_up_action_log';
@@ -4064,6 +4192,12 @@ if ($conn->select_db($db_cms)) {
         $db_cms,
         $systemAlertMessageTable,
         $customerFollowUpNotificationTable,
+        ORDER_FLOW_SETTING,
+        isset($_SESSION['userid']) ? (string) $_SESSION['userid'] : 'SYSTEM'
+    );
+    migrationZeroReturnedOrderFinancialValues(
+        $conn,
+        $db_cms,
         ORDER_FLOW_SETTING,
         isset($_SESSION['userid']) ? (string) $_SESSION['userid'] : 'SYSTEM'
     );
