@@ -95,6 +95,22 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+$worBotMsgContext = 'website';
+$worBotMsgOrderTable = WEB_ORDER_REQ;
+$worBotMsgTemplateOptions = customizeBotMsgGetTemplateOptions($connect, $worBotMsgContext);
+$worBotMsgDefaultTemplateId = customizeBotMsgGetDefaultTemplateId($connect, $worBotMsgContext);
+$worBotMsgTemplateNameMap = array();
+foreach ($worBotMsgTemplateOptions as $worBotMsgTemplateOption) {
+    $templateOptionId = isset($worBotMsgTemplateOption['id']) ? (int) $worBotMsgTemplateOption['id'] : 0;
+    if ($templateOptionId > 0) {
+        $worBotMsgTemplateNameMap[$templateOptionId] = isset($worBotMsgTemplateOption['template_name']) ? (string) $worBotMsgTemplateOption['template_name'] : ('Template #' . $templateOptionId);
+    }
+}
+$worExistingBotMsgTemplateId = ($dataId && $act !== 'I')
+    ? customizeBotMsgGetOrderTemplateId($connect, $worBotMsgContext, $worBotMsgOrderTable, (int) $dataId)
+    : 0;
+$worOriginalBotMsgTemplateId = $worExistingBotMsgTemplateId > 0 ? $worExistingBotMsgTemplateId : $worBotMsgDefaultTemplateId;
+
 if ($pendingStatusUpdate !== '' && !$worShouldSaveBeforeStatusUpdate) {
     $worTransitionResult = $worHandleStatusTransition($pendingStatusUpdate);
     if (is_array($worTransitionResult) && empty($worTransitionResult['success'])) {
@@ -235,6 +251,10 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
     }
     $wor_airbill_no = postSpaceFilter('wor_airbill_no');
     $wor_airbill_attachment = postSpaceFilter('wor_airbill_attachment_value');
+    $wor_bot_msg_template_id = (int) postSpaceFilter('wor_bot_msg_template_id');
+    if ($wor_bot_msg_template_id <= 0 || !isset($worBotMsgTemplateNameMap[$wor_bot_msg_template_id])) {
+        $wor_bot_msg_template_id = $worBotMsgDefaultTemplateId;
+    }
 
     $wor_pkg_text = postSpaceFilter('wor_pkg');
     $wor_country_text = postSpaceFilter('wor_country');
@@ -541,6 +561,7 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
                     $returnData = mysqli_query($finance_connect, $query);
                     if (!$returnData) { throw new Exception(mysqli_error($finance_connect)); }
                     $dataId = $finance_connect->insert_id;
+                    customizeBotMsgSaveOrderTemplate($connect, $worBotMsgContext, $worBotMsgOrderTable, (int) $dataId, $wor_bot_msg_template_id);
                     if ($wor_order_status === 'TP' && $dataId > 0) {
                         $freshOrderRow = shopeeOmsLoadOrder($finance_connect, $dataId, 'website');
                         $tokenResult = shopeeOmsCreateWarehouseToken($connect, $finance_connect, $freshOrderRow, USER_ID, 'website');
@@ -711,6 +732,11 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
                         array_push($chgvalarr, $wor_airbill_attachment !== '' ? $wor_airbill_attachment : 'Empty Value');
                         array_push($datafield, 'airbill_attachment');
                     }
+                    if ((int) $worOriginalBotMsgTemplateId !== (int) $wor_bot_msg_template_id) {
+                        array_push($oldvalarr, isset($worBotMsgTemplateNameMap[$worOriginalBotMsgTemplateId]) ? $worBotMsgTemplateNameMap[$worOriginalBotMsgTemplateId] : 'Empty Value');
+                        array_push($chgvalarr, isset($worBotMsgTemplateNameMap[$wor_bot_msg_template_id]) ? $worBotMsgTemplateNameMap[$wor_bot_msg_template_id] : 'Empty Value');
+                        array_push($datafield, 'bot_message_template');
+                    }
 
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
@@ -720,6 +746,9 @@ if (post('actionBtn') || $worShouldSaveBeforeStatusUpdate) {
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
                         $query = "UPDATE " . $tblName . " SET order_id = '$wor_order_id', brand = '$wor_brand', series = '$wor_series', pkg = '$wor_pkg', country = '$wor_country', currency = '$wor_currency', price = '$wor_price', shipping = '$wor_shipping', discount = '$wor_discount', total = '$wor_total', pay_method = '$wor_pay', pic = '$wor_pic', cust_id = '$wor_cust_id', cust_name = '$wor_cust_name', cust_email = '$wor_cust_email', cust_birthday = '$wor_cust_birthday', shipping_name = '$wor_shipping_name', shipping_address = '$wor_shipping_address', shipping_contact = '$wor_shipping_contact', remark ='$wor_remark', order_status = '$wor_order_status', stock_out_warehouse_id = " . ($wor_stock_out_warehouse_id > 0 ? $wor_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$wor_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($finance_connect, $wor_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
+                        if ($returnData) {
+                            customizeBotMsgSaveOrderTemplate($connect, $worBotMsgContext, $worBotMsgOrderTable, (int) $dataId, $wor_bot_msg_template_id);
+                        }
 
                     } else {
                         $act = 'NC';
@@ -1338,6 +1367,25 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                         <span class="mt-n1"><?php echo $stock_out_warehouse_err; ?></span>
                     </div>
                 <?php } ?>
+            </div>
+            <div class="col-md-4 mb-3">
+                <label class="form-label form_lbl" for="wor_bot_msg_template_id">Bot Message Template</label>
+                <?php
+                $currentWorBotMsgTemplateId = post('actionBtn')
+                    ? (int) postSpaceFilter('wor_bot_msg_template_id')
+                    : ($worOriginalBotMsgTemplateId > 0 ? (int) $worOriginalBotMsgTemplateId : (int) $worBotMsgDefaultTemplateId);
+                if ($currentWorBotMsgTemplateId <= 0) {
+                    $currentWorBotMsgTemplateId = (int) $worBotMsgDefaultTemplateId;
+                }
+                ?>
+                <select class="form-select" id="wor_bot_msg_template_id" name="wor_bot_msg_template_id" <?= $act == '' ? 'disabled' : '' ?>>
+                    <?php foreach ($worBotMsgTemplateOptions as $worBotMsgTemplateOption) { ?>
+                        <?php $templateOptionId = isset($worBotMsgTemplateOption['id']) ? (int) $worBotMsgTemplateOption['id'] : 0; ?>
+                        <option value="<?= $templateOptionId ?>" <?= $currentWorBotMsgTemplateId === $templateOptionId ? 'selected' : '' ?>>
+                            <?= htmlspecialchars((string) $worBotMsgTemplateOption['template_name'] . ($worBotMsgTemplateOption['is_default'] === 'Y' ? ' (Default)' : ''), ENT_QUOTES, 'UTF-8') ?>
+                        </option>
+                    <?php } ?>
+                </select>
             </div>
 
             <div class="col-md-2 mb-3 shopee-airbill-toggle-col">

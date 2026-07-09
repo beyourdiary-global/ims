@@ -504,6 +504,22 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+$forBotMsgContext = 'facebook';
+$forBotMsgOrderTable = FB_ORDER_REQ;
+$forBotMsgTemplateOptions = customizeBotMsgGetTemplateOptions($connect, $forBotMsgContext);
+$forBotMsgDefaultTemplateId = customizeBotMsgGetDefaultTemplateId($connect, $forBotMsgContext);
+$forBotMsgTemplateNameMap = array();
+foreach ($forBotMsgTemplateOptions as $forBotMsgTemplateOption) {
+    $templateOptionId = isset($forBotMsgTemplateOption['id']) ? (int) $forBotMsgTemplateOption['id'] : 0;
+    if ($templateOptionId > 0) {
+        $forBotMsgTemplateNameMap[$templateOptionId] = isset($forBotMsgTemplateOption['template_name']) ? (string) $forBotMsgTemplateOption['template_name'] : ('Template #' . $templateOptionId);
+    }
+}
+$forExistingBotMsgTemplateId = ($dataId && $act !== 'I')
+    ? customizeBotMsgGetOrderTemplateId($connect, $forBotMsgContext, $forBotMsgOrderTable, (int) $dataId)
+    : 0;
+$forOriginalBotMsgTemplateId = $forExistingBotMsgTemplateId > 0 ? $forExistingBotMsgTemplateId : $forBotMsgDefaultTemplateId;
+
 $memberPointAjaxRequested = ((string) input('member_point_ajax') === '1') || ((string) post('member_point_ajax') === '1');
 if ($memberPointAjaxRequested) {
     $ajaxPlatform = memberPointNormalizePlatform(postSpaceFilter('member_point_platform'));
@@ -619,6 +635,10 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
     }
     $for_airbill_no = postSpaceFilter('for_airbill_no');
     $for_airbill_attachment = postSpaceFilter('for_airbill_attachment_value');
+    $for_bot_msg_template_id = (int) postSpaceFilter('for_bot_msg_template_id');
+    if ($for_bot_msg_template_id <= 0 || !isset($forBotMsgTemplateNameMap[$for_bot_msg_template_id])) {
+        $for_bot_msg_template_id = $forBotMsgDefaultTemplateId;
+    }
     $for_order_status_sql = mysqli_real_escape_string($finance_connect, $for_order_status);
     $for_airbill_no_sql = mysqli_real_escape_string($finance_connect, $for_airbill_no);
 
@@ -1108,6 +1128,7 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                     }
 
                     $dataId = (int) mysqli_insert_id($finance_connect);
+                    customizeBotMsgSaveOrderTemplate($connect, $forBotMsgContext, $forBotMsgOrderTable, $dataId, $for_bot_msg_template_id);
                     $shouldAttemptRedeemOnAdd = $dataId > 0 && !$memberPointLocked && (
                         ($memberPointUseType === 'gift' && $memberPointRedeemId > 0) ||
                         ($memberPointUseType === 'cashback' && $memberPointCashbackPoints > 0)
@@ -1370,6 +1391,11 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                         array_push($chgvalarr, $for_airbill_attachment !== '' ? $for_airbill_attachment : 'Empty Value');
                         array_push($datafield, 'airbill_attachment');
                     }
+                    if ((int) $forOriginalBotMsgTemplateId !== (int) $for_bot_msg_template_id) {
+                        array_push($oldvalarr, isset($forBotMsgTemplateNameMap[$forOriginalBotMsgTemplateId]) ? $forBotMsgTemplateNameMap[$forOriginalBotMsgTemplateId] : 'Empty Value');
+                        array_push($chgvalarr, isset($forBotMsgTemplateNameMap[$for_bot_msg_template_id]) ? $forBotMsgTemplateNameMap[$for_bot_msg_template_id] : 'Empty Value');
+                        array_push($datafield, 'bot_message_template');
+                    }
 
                     $memberPointAuditOldLink = fbOrderReqBuildLinkedMemberLabel(
                         isset($row['member_point_platform']) ? $row['member_point_platform'] : '',
@@ -1429,6 +1455,7 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                         if (!$returnData) {
                             throw new Exception(mysqli_error($finance_connect));
                         }
+                        customizeBotMsgSaveOrderTemplate($connect, $forBotMsgContext, $forBotMsgOrderTable, (int) $dataId, $for_bot_msg_template_id);
 
                         if ($shouldAttemptRedeemOnEdit) {
                             $memberPointRedeemResult = memberPointCreateRedeemTransaction($connect, $finance_connect, array(
@@ -2554,6 +2581,25 @@ foreach ($memberPointRenderRewards as $memberPointRewardRow) {
                                         <span class="mt-n1"><?php echo $stock_out_warehouse_err; ?></span>
                                     </div>
                                 <?php } ?>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" for="for_bot_msg_template_id">Bot Message Template</label>
+                                <?php
+                                $currentForBotMsgTemplateId = post('actionBtn')
+                                    ? (int) postSpaceFilter('for_bot_msg_template_id')
+                                    : ($forOriginalBotMsgTemplateId > 0 ? (int) $forOriginalBotMsgTemplateId : (int) $forBotMsgDefaultTemplateId);
+                                if ($currentForBotMsgTemplateId <= 0) {
+                                    $currentForBotMsgTemplateId = (int) $forBotMsgDefaultTemplateId;
+                                }
+                                ?>
+                                <select class="form-select" id="for_bot_msg_template_id" name="for_bot_msg_template_id" <?= $act == '' ? 'disabled' : '' ?>>
+                                    <?php foreach ($forBotMsgTemplateOptions as $forBotMsgTemplateOption) { ?>
+                                        <?php $templateOptionId = isset($forBotMsgTemplateOption['id']) ? (int) $forBotMsgTemplateOption['id'] : 0; ?>
+                                        <option value="<?= $templateOptionId ?>" <?= $currentForBotMsgTemplateId === $templateOptionId ? 'selected' : '' ?>>
+                                            <?= htmlspecialchars((string) $forBotMsgTemplateOption['template_name'] . ($forBotMsgTemplateOption['is_default'] === 'Y' ? ' (Default)' : ''), ENT_QUOTES, 'UTF-8') ?>
+                                        </option>
+                                    <?php } ?>
+                                </select>
                             </div>
 
                             <div class="col-md-2 mb-3 shopee-airbill-toggle-col">
