@@ -574,7 +574,7 @@ if (!function_exists('customerTagRenderBadgeItems')) {
                 continue;
             }
 
-            $items[] = '<span class="' . htmlspecialchars((string) $badgeClass, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($tagName, ENT_QUOTES, 'UTF-8') . '</span>';
+            $items[] = '<span class="' . htmlspecialchars((string) $badgeClass, ENT_QUOTES, 'UTF-8') . '" title="' . htmlspecialchars(customerTagResolveHoverText($tagRow), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($tagName, ENT_QUOTES, 'UTF-8') . '</span>';
         }
 
         return $items;
@@ -1125,11 +1125,29 @@ if (!function_exists('customerTagBuildSelectOptions')) {
                 continue;
             }
 
+            $tagRemark = isset($tagOption['remark']) ? trim((string) $tagOption['remark']) : '';
+            $hoverText = function_exists('customerLabelResolveHoverText')
+                ? customerLabelResolveHoverText($tagOption['name'], $tagRemark)
+                : ($tagRemark !== '' ? $tagRemark : (string) $tagOption['name']);
             $selected = $selectedTagId === $tagId ? ' selected' : '';
-            $optionHtml .= '<option value="' . $tagId . '"' . $selected . '>' . htmlspecialchars((string) $tagOption['name'], ENT_QUOTES, 'UTF-8') . '</option>';
+            $optionHtml .= '<option value="' . $tagId . '" title="' . htmlspecialchars($hoverText, ENT_QUOTES, 'UTF-8') . '"' . $selected . '>' . htmlspecialchars((string) $tagOption['name'], ENT_QUOTES, 'UTF-8') . '</option>';
         }
 
         return $optionHtml;
+    }
+}
+
+if (!function_exists('customerTagResolveHoverText')) {
+    function customerTagResolveHoverText($tagRow)
+    {
+        $tagName = isset($tagRow['name']) ? trim((string) $tagRow['name']) : trim((string) $tagRow);
+        $tagRemark = is_array($tagRow) && isset($tagRow['remark']) ? trim((string) $tagRow['remark']) : '';
+
+        if (function_exists('customerLabelResolveHoverText')) {
+            return customerLabelResolveHoverText($tagName, $tagRemark);
+        }
+
+        return $tagRemark !== '' ? $tagRemark : $tagName;
     }
 }
 
@@ -1158,9 +1176,10 @@ if (!function_exists('customerTagRenderManagerBody')) {
             }
 
             $isAssigned = in_array($tagId, $assignedTagIds, true);
-            $assignOptionParts[] = '<label class="form-check customer-tag-checkbox-item' . ($isAssigned ? ' customer-tag-checkbox-item-disabled' : '') . '" data-tag-label="' . htmlspecialchars(function_exists('mb_strtolower') ? mb_strtolower($tagName, 'UTF-8') : strtolower($tagName), ENT_QUOTES, 'UTF-8') . '">' .
+            $hoverText = customerTagResolveHoverText($tagOption);
+            $assignOptionParts[] = '<label class="form-check customer-tag-checkbox-item' . ($isAssigned ? ' customer-tag-checkbox-item-disabled' : '') . '" data-tag-label="' . htmlspecialchars(function_exists('mb_strtolower') ? mb_strtolower($tagName, 'UTF-8') : strtolower($tagName), ENT_QUOTES, 'UTF-8') . '" title="' . htmlspecialchars($hoverText, ENT_QUOTES, 'UTF-8') . '">' .
                 '<input class="form-check-input" type="checkbox" name="customerTagSelectedIds[]" value="' . $tagId . '"' . ($isAssigned ? ' disabled' : '') . '>' .
-                '<span class="form-check-label">' . htmlspecialchars($tagName, ENT_QUOTES, 'UTF-8') . '</span>' .
+                '<span class="form-check-label" title="' . htmlspecialchars($hoverText, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($tagName, ENT_QUOTES, 'UTF-8') . '</span>' .
                 '</label>';
         }
 
