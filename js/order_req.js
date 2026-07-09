@@ -40,6 +40,97 @@
         element.val(value);
     }
 
+    function getCurrentDateString() {
+        var now = new Date();
+        var year = now.getFullYear();
+        var month = String(now.getMonth() + 1).padStart(2, '0');
+        var day = String(now.getDate()).padStart(2, '0');
+
+        return year + '-' + month + '-' + day;
+    }
+
+    function getCurrentMonthString() {
+        return getCurrentDateString().slice(0, 7);
+    }
+
+    function getCurrentYearString() {
+        return getCurrentDateString().slice(0, 4);
+    }
+
+    function getFirstMatchingValue(values, matcher) {
+        for (var index = 0; index < values.length; index += 1) {
+            var value = values[index];
+
+            if (matcher.test(value || '')) {
+                return value;
+            }
+        }
+
+        return '';
+    }
+
+    function normalizeTimeRange(timeRange, timeInterval) {
+        var rawValue = (timeRange || '').trim();
+        var rangeParts = rawValue.indexOf('to') !== -1 ? rawValue.split('to') : [rawValue, rawValue];
+        var leftValue = (rangeParts[0] || '').trim();
+        var rightValue = (rangeParts[1] || '').trim();
+        var currentDate = getCurrentDateString();
+        var currentMonth = getCurrentMonthString();
+        var currentYear = getCurrentYearString();
+
+        if (timeInterval === 'daily') {
+            return getFirstMatchingValue([leftValue, rightValue, currentDate], /^\d{4}-\d{2}-\d{2}$/);
+        }
+
+        if (timeInterval === 'weekly') {
+            var startDate = getFirstMatchingValue([leftValue, rightValue, currentDate], /^\d{4}-\d{2}-\d{2}$/);
+            var endDate = getFirstMatchingValue([rightValue, leftValue, startDate], /^\d{4}-\d{2}-\d{2}$/);
+
+            return startDate + 'to' + endDate;
+        }
+
+        if (timeInterval === 'monthly') {
+            var startMonth = getFirstMatchingValue([leftValue.slice(0, 7), rightValue.slice(0, 7), currentMonth], /^\d{4}-\d{2}$/);
+            var endMonth = getFirstMatchingValue([rightValue.slice(0, 7), leftValue.slice(0, 7), startMonth], /^\d{4}-\d{2}$/);
+
+            return startMonth + 'to' + endMonth;
+        }
+
+        if (timeInterval === 'yearly') {
+            var startYear = getFirstMatchingValue([leftValue.slice(0, 4), rightValue.slice(0, 4), currentYear], /^\d{4}$/);
+            var endYear = getFirstMatchingValue([rightValue.slice(0, 4), leftValue.slice(0, 4), startYear], /^\d{4}$/);
+
+            return startYear + 'to' + endYear;
+        }
+
+        return '';
+    }
+
+    function populateDateInputs(timeRange, timeInterval) {
+        var normalizedRange = normalizeTimeRange(timeRange, timeInterval);
+
+        if (timeInterval === 'weekly') {
+            var weeklyRange = normalizedRange.split('to');
+            setValue('#datepicker2 input[name="start"]', weeklyRange[0] || '');
+            setValue('#datepicker2 input[name="end"]', weeklyRange[1] || '');
+        } else if (timeInterval === 'monthly') {
+            var monthlyRange = normalizedRange.split('to');
+            setValue('#datepicker3 input[name="start"]', monthlyRange[0] || '');
+            setValue('#datepicker3 input[name="end"]', monthlyRange[1] || '');
+        } else if (timeInterval === 'yearly') {
+            var yearlyRange = normalizedRange.split('to');
+            setValue('#datepicker4 input[name="start"]', yearlyRange[0] || '');
+            setValue('#datepicker4 input[name="end"]', yearlyRange[1] || '');
+        } else {
+            setValue('#datepicker input', normalizedRange);
+        }
+
+        setValue('#timeRangeParam', normalizedRange);
+        setValue('#timeIntervalParam', timeInterval);
+
+        return normalizedRange;
+    }
+
     function buildDateRange(timeInterval) {
         var time = getValue('#datepicker input');
         var startDate = getValue('#datepicker2 input[name="start"]');
@@ -221,7 +312,7 @@
         var timeRangeParam = getQueryParam('timeRange');
         var ids = getQueryParam('ids');
         var key = getQueryParam('key');
-        var currentDate = new Date().toISOString().slice(0, 10);
+        var currentDate = getCurrentDateString();
 
         $('#resetButton').off('click.orderReq').on('click.orderReq', function () {
             $('#datepicker input, #datepicker2 input[name="start"], #datepicker2 input[name="end"], #datepicker3 input[name="start"], #datepicker3 input[name="end"], #datepicker4 input[name="start"], #datepicker4 input[name="end"]').val('');
@@ -253,26 +344,7 @@
             return;
         }
 
-        if (timeRangeParam) {
-            if (timeParam === 'weekly') {
-                var weeklyRange = timeRangeParam.split('to');
-                setValue('#datepicker2 input[name="start"]', weeklyRange[0] || '');
-                setValue('#datepicker2 input[name="end"]', weeklyRange[1] || '');
-            } else if (timeParam === 'monthly') {
-                var monthlyRange = timeRangeParam.split('to');
-                setValue('#datepicker3 input[name="start"]', monthlyRange[0] || '');
-                setValue('#datepicker3 input[name="end"]', monthlyRange[1] || '');
-            } else if (timeParam === 'yearly') {
-                var yearlyRange = timeRangeParam.split('to');
-                setValue('#datepicker4 input[name="start"]', yearlyRange[0] || '');
-                setValue('#datepicker4 input[name="end"]', yearlyRange[1] || '');
-            } else if (timeParam === 'daily') {
-                setValue('#datepicker input', timeRangeParam);
-            }
-
-            setValue('#timeRangeParam', timeRangeParam);
-            setValue('#timeIntervalParam', timeParam);
-        }
+        timeRangeParam = populateDateInputs(timeRangeParam || currentDate, timeParam);
 
         handleTimeIntervalChange();
         initDatepickers();
@@ -292,7 +364,7 @@
             var group = getValue('#group');
             var group2 = getValue('#group2');
             var timeInterval = getValue('#timeInterval');
-            var timeRange = timeRangeParam || buildDateRange(timeInterval);
+            var timeRange = buildDateRange(timeInterval);
 
             updateWindowSearch(group, group2, timeRange, timeInterval, ids, key);
         });
@@ -301,11 +373,20 @@
             var group = getValue('#group') || groupParam;
             var group2 = getValue('#group2');
             var timeInterval = getValue('#timeInterval');
-            var timeRange = timeRangeParam || buildDateRange(timeInterval);
+            var timeRange = buildDateRange(timeInterval);
 
             updateWindowSearch(group, group2, timeRange, timeInterval, ids, key);
         });
 
-        $('#timeInterval').off('change.orderReq').on('change.orderReq', handleTimeIntervalChange);
+        $('#timeInterval').off('change.orderReq').on('change.orderReq', function () {
+            var group = getValue('#group') || groupParam;
+            var group2 = getValue('#group2');
+            var timeInterval = getValue('#timeInterval');
+            var fallbackTimeRange = buildDateRange(timeParam) || timeRangeParam || getValue('#datepicker input') || currentDate;
+
+            timeRangeParam = populateDateInputs(fallbackTimeRange, timeInterval);
+            handleTimeIntervalChange();
+            updateWindowSearch(group, group2, timeRangeParam, timeInterval, ids, key);
+        });
     });
 })(window.jQuery);
