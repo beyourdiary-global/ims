@@ -754,6 +754,22 @@ if ($conn->select_db($db_fin)) {
 }
 // addColumnIfMissing($conn, $db_fin, 'shopee_customer_info', 'contact_no', "ALTER TABLE `shopee_customer_info` ADD COLUMN `contact_no` VARCHAR(30) DEFAULT NULL AFTER `series`");
 // addColumnIfMissing($conn, $db_fin, 'shopee_ads_topup_transaction', 'attachment', "ALTER TABLE `shopee_ads_topup_transaction` ADD COLUMN `attachment` VARCHAR(255) DEFAULT NULL AFTER `pay_meth`");
+addColumnIfMissing($conn, $db_fin, MERCHANT, 'control_account', "ALTER TABLE `" . MERCHANT . "` ADD COLUMN `control_account` VARCHAR(9) DEFAULT NULL AFTER `business_no`");
+addColumnIfMissing($conn, $db_fin, MERCHANT, 'code', "ALTER TABLE `" . MERCHANT . "` ADD COLUMN `code` VARCHAR(9) DEFAULT NULL AFTER `control_account`");
+if (columnExists($conn, $db_fin, MERCHANT, 'control_account')) {
+    if ($conn->query("ALTER TABLE `" . MERCHANT . "` MODIFY COLUMN `control_account` VARCHAR(9) DEFAULT NULL")) {
+        echo "<p style='color:green;'>Verified `" . MERCHANT . "`.`control_account` supports format 123-ABC01.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed updating `" . MERCHANT . "`.`control_account`: " . $conn->error . "</p>";
+    }
+}
+if (columnExists($conn, $db_fin, MERCHANT, 'code')) {
+    if ($conn->query("ALTER TABLE `" . MERCHANT . "` MODIFY COLUMN `code` VARCHAR(9) DEFAULT NULL")) {
+        echo "<p style='color:green;'>Verified `" . MERCHANT . "`.`code` supports format 123-ABC01.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed updating `" . MERCHANT . "`.`code`: " . $conn->error . "</p>";
+    }
+}
 
 addColumnIfMissing($conn, $db_fin, 'stock_in_order', 'stock_type', "ALTER TABLE `stock_in_order` ADD COLUMN `stock_type` VARCHAR(20) NOT NULL DEFAULT 'Stock In' AFTER `attachment`");
 
