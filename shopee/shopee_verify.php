@@ -331,8 +331,8 @@ if (!empty($accGroup)) { $groupByFields[] = "shopee_acc"; }
 $groupBySql = !empty($groupByFields) ? "GROUP BY " . implode(", ", $groupByFields) : "";
 $whereSql = implode(" AND ", $whereConditions);
 
-$redirectPage = $SITEURL . '/shopee/shopee_order_req.php?return_url=' . rawurlencode($currentQueueUrl);
-$addRequestUrl = $redirectPage . '&act=' . $act_1;
+$redirectPage = $SITEURL . '/shopee/shopee_order_req.php';
+$addRequestUrl = $redirectPage . '?act=' . $act_1;
 $deleteRedirectPage = $currentQueueUrl;
 $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_connect);
 $shopeeBuyerMetaMap = array();

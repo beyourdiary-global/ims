@@ -2757,18 +2757,36 @@ function keepDataTableControlsVisible(elementID) {
   });
 }
 
-function centerAlignment(elementID) {
+function centerAlignment(elementID, options) {
+  options = options || {};
+  let disableAbsoluteCentering = options.disableAbsoluteCentering === true;
+
   $(window).on("load resize", () => {
     let form = $("#" + elementID);
 
-    if (window.matchMedia("(max-height: 1250px)").matches) {
+    if (
+      disableAbsoluteCentering ||
+      window.matchMedia("(max-height: 1250px)").matches
+    ) {
       if (form.hasClass("centered")) form.removeClass("centered");
 
-      form.css("overflow", "auto");
+      form.css({
+        position: "static",
+        top: "auto",
+        left: "auto",
+        transform: "none",
+        overflow: disableAbsoluteCentering ? "visible" : "auto",
+      });
     } else {
       form.addClass("centered");
 
-      form.css("overflow", "visible");
+      form.css({
+        position: "",
+        top: "",
+        left: "",
+        transform: "",
+        overflow: "visible",
+      });
     }
   });
 }
