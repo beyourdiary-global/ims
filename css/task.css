@@ -4455,6 +4455,11 @@ body.task-board-page .task-board-scroll {
   position: relative;
 }
 
+.task-editor-upload-host.task-editor-drop-active .tox-edit-area {
+  outline: 2px dashed #1e4f8f;
+  outline-offset: -2px;
+}
+
 .task-editor-upload-overlay {
   position: absolute;
   inset: 0;

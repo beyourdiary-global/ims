@@ -703,6 +703,163 @@
     });
   }
 
+  function hasFileTransferData(evt) {
+    var dataTransfer = evt && evt.dataTransfer ? evt.dataTransfer : null;
+    if (!dataTransfer) {
+      return false;
+    }
+
+    if (dataTransfer.files && dataTransfer.files.length > 0) {
+      return true;
+    }
+
+    var items = dataTransfer.items || [];
+    for (var itemIndex = 0; itemIndex < items.length; itemIndex++) {
+      if (items[itemIndex] && items[itemIndex].kind === "file") {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
+  function uploadDroppedEditorFiles(editor, files) {
+    if (!editor || !files || !files.length) {
+      return;
+    }
+
+    var editorContext = editor._taskEditorContext || {};
+    var bookmark =
+      editor.selection && typeof editor.selection.getBookmark === "function"
+        ? editor.selection.getBookmark(2, true)
+        : null;
+    var bookmarkRestored = false;
+    var uploadQueue = Promise.resolve();
+
+    Array.prototype.forEach.call(files, function (file) {
+      if (!file || !file.name) {
+        return;
+      }
+
+      uploadQueue = uploadQueue.then(function () {
+        if (
+          !bookmarkRestored &&
+          bookmark &&
+          editor.selection &&
+          typeof editor.selection.moveToBookmark === "function"
+        ) {
+          editor.focus();
+          editor.selection.moveToBookmark(bookmark);
+          bookmarkRestored = true;
+        }
+
+        return uploadCommentAttachmentWithState(
+          editor,
+          file,
+          editorContext,
+          "Uploading " + String(file.name) + "...",
+        )
+          .then(function (attachment) {
+            insertAttachmentIntoEditor(editor, attachment);
+            editor.focus();
+          })
+          .catch(function () {
+            // postAction already displays the server error notification.
+          });
+      });
+    });
+
+    return uploadQueue;
+  }
+
+  function bindEditorFileDrop(editor) {
+    if (!editor || typeof editor.getBody !== "function") {
+      return;
+    }
+
+    var body = editor.getBody();
+    if (!body || !body.addEventListener || body._taskFileDropBound) {
+      return;
+    }
+
+    body._taskFileDropBound = true;
+    var host = getEditorUploadHost(editor);
+
+    function setDropActive(isActive) {
+      if (host) {
+        host.classList.toggle("task-editor-drop-active", !!isActive);
+      }
+    }
+
+    function stopFileDropEvent(evt) {
+      if (!hasFileTransferData(evt)) {
+        return false;
+      }
+
+      evt.preventDefault();
+      evt.stopPropagation();
+      return true;
+    }
+
+    body.addEventListener(
+      "dragenter",
+      function (evt) {
+        if (stopFileDropEvent(evt)) {
+          setDropActive(true);
+        }
+      },
+      true,
+    );
+
+    body.addEventListener(
+      "dragover",
+      function (evt) {
+        if (stopFileDropEvent(evt)) {
+          if (evt.dataTransfer) {
+            evt.dataTransfer.dropEffect = "copy";
+          }
+          setDropActive(true);
+        }
+      },
+      true,
+    );
+
+    body.addEventListener(
+      "dragleave",
+      function (evt) {
+        if (!hasFileTransferData(evt)) {
+          return;
+        }
+
+        var relatedTarget = evt.relatedTarget;
+        if (relatedTarget && body.contains(relatedTarget)) {
+          return;
+        }
+
+        evt.preventDefault();
+        evt.stopPropagation();
+        setDropActive(false);
+      },
+      true,
+    );
+
+    body.addEventListener(
+      "drop",
+      function (evt) {
+        if (!stopFileDropEvent(evt)) {
+          return;
+        }
+
+        setDropActive(false);
+        var files = evt.dataTransfer && evt.dataTransfer.files
+          ? evt.dataTransfer.files
+          : [];
+        uploadDroppedEditorFiles(editor, files);
+      },
+      true,
+    );
+  }
+
   function insertAttachmentIntoEditor(editor, attachment) {
     if (!editor || !attachment || !attachment.fileUrl) {
       return;
@@ -1876,6 +2033,8 @@
           if (!body || !body.addEventListener) {
             return;
           }
+
+          bindEditorFileDrop(editor);
 
           body.addEventListener(
             "mousedown",
