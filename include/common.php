@@ -784,6 +784,43 @@ if (!function_exists('commonResolveBackUrl')) {
     }
 }
 
+if (!function_exists('commonBuildFilteredQueueUrl')) {
+    function commonBuildFilteredQueueUrl($fallbackPath, $filterKeys = array())
+    {
+        global $SITEURL;
+
+        $fallbackPath = trim((string) $fallbackPath);
+        if ($fallbackPath === '') {
+            $fallbackPath = '/';
+        }
+
+        if (empty($filterKeys)) {
+            $filterKeys = array('month', 'status', 'brand', 'pkg', 'acc', 'month_gb', 'status_gb', 'brand_gb', 'pkg_gb', 'acc_gb');
+        }
+
+        $queueFilterParams = array();
+        foreach ((array) $filterKeys as $queueFilterKey) {
+            $queueFilterKey = trim((string) $queueFilterKey);
+            if ($queueFilterKey !== '' && isset($_GET[$queueFilterKey]) && !is_array($_GET[$queueFilterKey])) {
+                $queueFilterParams[$queueFilterKey] = (string) $_GET[$queueFilterKey];
+            }
+        }
+
+        $siteBaseUrl = rtrim((string) (defined('SITEURL') ? SITEURL : $SITEURL), '/');
+        $queueRequestPath = (string) parse_url((string) ($_SERVER['REQUEST_URI'] ?? ''), PHP_URL_PATH);
+        $siteBasePath = rtrim((string) parse_url($siteBaseUrl, PHP_URL_PATH), '/');
+        if ($siteBasePath !== '' && strpos($queueRequestPath, $siteBasePath . '/') === 0) {
+            $queueRequestPath = substr($queueRequestPath, strlen($siteBasePath));
+        }
+        if ($queueRequestPath === '') {
+            $queueRequestPath = $fallbackPath;
+        }
+
+        $queueQueryString = http_build_query($queueFilterParams, '', '&', PHP_QUERY_RFC3986);
+        return $siteBaseUrl . $queueRequestPath . ($queueQueryString !== '' ? '?' . $queueQueryString : '');
+    }
+}
+
 if (!function_exists('renderNotificationScript')) {
     function renderNotificationScript($message, $type = 'info', $redirectUrl = '', $delayMs = 1200, $useReplace = false, $reload = false)
     {

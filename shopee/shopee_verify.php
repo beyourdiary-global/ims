@@ -102,6 +102,9 @@ $statusGroup = input('status_gb');
 $brandGroup = numberInput('brand_gb');
 $pkgGroup = numberInput('pkg_gb');
 $accGroup = numberInput('acc_gb');
+$statusFilterCode = shopeeOmsNormalizeStatusCode($statusFilter);
+$statusGroupCode = shopeeOmsNormalizeStatusCode($statusGroup);
+$currentQueueUrl = commonBuildFilteredQueueUrl('/shopee/shopee_verify.php');
 if (
     ($_SERVER['REQUEST_METHOD'] ?? '') === 'GET'
     && $bulkSyncShippedOrders === '1'
@@ -161,12 +164,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && (int) post('verify_id') > 0) {
     $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_verify.php', 1200, true);
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $currentQueueUrl, 1200, true);
         exit;
     }
     
     if (!$canVerifyAction) {
-        renderNotificationScript('Security Error: You do not have permission to verify orders.', 'error', 'shopee_verify.php', 1200, true);
+        renderNotificationScript('Security Error: You do not have permission to verify orders.', 'error', $currentQueueUrl, 1200, true);
         exit;
     }
 
@@ -186,7 +189,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && (int) post('verify_id') > 0
     $oldStatusCode = shopeeOmsNormalizeStatusCode($oldStatus);
 
     if (!in_array($oldStatusCode, array('OC', 'WAFC'), true)) {
-        renderNotificationScript('Only OC or WAFC orders can be verified.', 'warning', 'shopee_verify.php', 1200, true);
+        renderNotificationScript('Only OC or WAFC orders can be verified.', 'warning', $currentQueueUrl, 1200, true);
         exit;
     }
 
@@ -223,7 +226,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && (int) post('verify_id') > 0
     }
 
     $verifyMessage = (string) (isset($verifyResult['message']) ? $verifyResult['message'] : 'Unable to verify order.');
-    renderNotificationScript($verifyMessage, resolveNotificationType($verifyMessage, 'info'), 'shopee_verify.php', 1200, true);
+    renderNotificationScript($verifyMessage, resolveNotificationType($verifyMessage, 'info'), $currentQueueUrl, 1200, true);
     exit;
 }
 
@@ -236,14 +239,14 @@ if ($completeId > 0) {
         'remark' => 'Completed from verify order list.',
     ));
     $completeMessage = (string) (isset($completeResult['message']) ? $completeResult['message'] : 'Unable to complete order.');
-    renderNotificationScript($completeMessage, resolveNotificationType($completeMessage, 'info'), 'shopee_verify.php', 1200, true);
+    renderNotificationScript($completeMessage, resolveNotificationType($completeMessage, 'info'), $currentQueueUrl, 1200, true);
     exit;
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && (int) post('move_to_pack_id') > 0) {
     $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_verify.php', 1200, true);
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $currentQueueUrl, 1200, true);
         exit;
     }
 
@@ -263,12 +266,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && (int) post('move_to_pack_id
         'platform' => 'shopee',
     ));
     $moveToPackMessage = (string) (isset($moveToPackResult['message']) ? $moveToPackResult['message'] : 'Unable to move order to To Pack.');
-    renderNotificationScript($moveToPackMessage, resolveNotificationType($moveToPackMessage, 'info'), 'shopee_verify.php', 1200, true);
+    renderNotificationScript($moveToPackMessage, resolveNotificationType($moveToPackMessage, 'info'), $currentQueueUrl, 1200, true);
     exit;
 }
 
 shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
-    'redirect_url' => 'shopee_verify.php',
+    'redirect_url' => $currentQueueUrl,
     'source_page' => $pageTitle,
     'platform' => 'shopee',
     'actor_user_id' => USER_ID,
@@ -280,7 +283,7 @@ shopeeOmsHandleMoveToWafcWithReceivedDatePost($connect, $finance_connect, array(
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && (int) post('return_id') > 0) {
     $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
-        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', 'shopee_verify.php', 1200, true);
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $currentQueueUrl, 1200, true);
         exit;
     }
 
@@ -293,7 +296,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && (int) post('return_id') > 0
         'action' => 'mark_return',
     ));
     $returnMessage = (string) (isset($returnResult['message']) ? $returnResult['message'] : 'Unable to mark order as Return.');
-    renderNotificationScript($returnMessage, resolveNotificationType($returnMessage, 'info'), 'shopee_verify.php', 1200, true);
+    renderNotificationScript($returnMessage, resolveNotificationType($returnMessage, 'info'), $currentQueueUrl, 1200, true);
     exit;
 }
 
@@ -306,8 +309,8 @@ if ($verifyStatusCondition !== '') {
 }
 
 if (!empty($monthFilter)) { $whereConditions[] = "DATE_FORMAT(date, '%Y-%m') = '" . mysqli_real_escape_string($finance_connect, $monthFilter) . "'"; }
-if (!empty($statusFilter)) {
-    $statusCondition = shopeeOmsBuildOrderStatusFilterCondition($finance_connect, 'order_status', $statusFilter);
+if (!empty($statusFilterCode)) {
+    $statusCondition = shopeeOmsBuildOrderStatusFilterCondition($finance_connect, 'order_status', $statusFilterCode);
     if ($statusCondition !== '') {
         $whereConditions[] = $statusCondition;
     }
@@ -328,15 +331,8 @@ if (!empty($accGroup)) { $groupByFields[] = "shopee_acc"; }
 $groupBySql = !empty($groupByFields) ? "GROUP BY " . implode(", ", $groupByFields) : "";
 $whereSql = implode(" AND ", $whereConditions);
 
-$siteBaseUrl = rtrim((string) $SITEURL, '/');
-$requestUri = isset($_SERVER['REQUEST_URI']) ? trim((string) $_SERVER['REQUEST_URI']) : '';
-$basePath = rtrim((string) parse_url($siteBaseUrl, PHP_URL_PATH), '/');
-if ($basePath !== '' && strpos($requestUri, $basePath . '/') === 0) {
-    $requestUri = substr($requestUri, strlen($basePath));
-}
-$currentQueueUrl = $siteBaseUrl . ($requestUri !== '' ? $requestUri : '/shopee/shopee_verify.php');
-$redirectPage = $SITEURL . '/shopee/shopee_order_req.php';
-$addRequestUrl = $redirectPage . '?act=' . $act_1;
+$redirectPage = $SITEURL . '/shopee/shopee_order_req.php?return_url=' . rawurlencode($currentQueueUrl);
+$addRequestUrl = $redirectPage . '&act=' . $act_1;
 $deleteRedirectPage = $currentQueueUrl;
 $result = getData('*', $whereSql, $groupBySql, SHOPEE_SG_ORDER_REQ, $finance_connect);
 $shopeeBuyerMetaMap = array();
@@ -424,13 +420,18 @@ if ($result instanceof mysqli_result) {
                     <select id="statusFilter" name="status" class="form-select" onchange="applyFilterOrGroup('status', this)">
                         <option value="">All Statuses</option>
                         <?php
-                        $statusSql = "SELECT DISTINCT order_status FROM " . SHOPEE_SG_ORDER_REQ;
+                        $statusSql = "SELECT DISTINCT order_status FROM " . SHOPEE_SG_ORDER_REQ . " ORDER BY order_status ASC";
                         $statusResult = mysqli_query($finance_connect, $statusSql);
+                        $statusOptions = array();
                         while ($statusRow = mysqli_fetch_assoc($statusResult)) {
-                            $status = $statusRow['order_status'];
-                            $label = getOrderStatusLabel($status);
-                            $selected = ($statusFilter == $status) ? "selected" : "";
-                            echo "<option value='$status' $selected>$label</option>";
+                            $statusCode = shopeeOmsNormalizeStatusCode(isset($statusRow['order_status']) ? $statusRow['order_status'] : '');
+                            if ($statusCode !== '' && !isset($statusOptions[$statusCode])) {
+                                $statusOptions[$statusCode] = getOrderStatusLabel($statusCode);
+                            }
+                        }
+                        foreach ($statusOptions as $statusCode => $label) {
+                            $selected = ($statusFilterCode === $statusCode) ? "selected" : "";
+                            echo "<option value='" . htmlspecialchars((string) $statusCode, ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $label, ENT_QUOTES, 'UTF-8') . "</option>";
                         }
                         ?>
                     </select>
@@ -504,12 +505,9 @@ if ($result instanceof mysqli_result) {
                     <select id="statusGroupBy" name="status_gb" class="form-select" onchange="applyFilterOrGroup('status_gb', this)">
                         <option value="">All Statuses</option>
                         <?php
-                        mysqli_data_seek($statusResult, 0); 
-                        while ($statusRow = mysqli_fetch_assoc($statusResult)) {
-                            $status = $statusRow['order_status'];
-                            $label = getOrderStatusLabel($status);
-                            $selected = ($statusGroup == $status) ? "selected" : "";
-                            echo "<option value='$status' $selected>$label</option>";
+                        foreach ($statusOptions as $statusCode => $label) {
+                            $selected = ($statusGroupCode === $statusCode) ? "selected" : "";
+                            echo "<option value='" . htmlspecialchars((string) $statusCode, ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $label, ENT_QUOTES, 'UTF-8') . "</option>";
                         }
                         ?>
                     </select>
@@ -772,7 +770,7 @@ if ($result instanceof mysqli_result) {
                                 >Verified</button>
                                 <?php } ?>
                                 <?php if ($statusCode === 'V' && $canCompleteThisOrder) { ?>
-                                 <a href="?complete_id=<?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
+                                 <a href="<?= htmlspecialchars($currentQueueUrl . (strpos($currentQueueUrl, '?') === false ? '?' : '&') . 'complete_id=' . (int) $row['id'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-sm btn-dark btn-verified" onclick="return confirm('Mark this order as complete?')">Complete</a>
                                 <?php } ?>
                                 <?php if ($statusCode === 'PR') { ?>
                                 <button

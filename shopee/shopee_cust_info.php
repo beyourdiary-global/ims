@@ -885,6 +885,8 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         //Initial Page And Action Value
         const page = "<?= $pageTitle ?>";
         const action = "<?php echo isset($act) ? $act : ''; ?>";
+        const currentRecordId = <?= isset($dataId) && (int) $dataId > 0 ? (int) $dataId : 0 ?>;
+        const pageStateAction = currentRecordId > 0 ? ((action || 'View') + ':' + currentRecordId) : action;
 
         function setShopeeCustomerFormAutofocus(currentAction) {
             if (currentAction !== 'I' && currentAction !== 'E') {
@@ -909,7 +911,7 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             window.scrollTo(0, 0);
         }
 
-        if (typeof checkCurrentPage === 'function') checkCurrentPage(page, action);
+        if (typeof checkCurrentPage === 'function') checkCurrentPage(page, pageStateAction);
         if (typeof centerAlignment === 'function') centerAlignment("SCRformContainer");
         setShopeeCustomerFormAutofocus(action);
         if (typeof setButtonColor === 'function') setButtonColor();
