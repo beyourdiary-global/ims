@@ -2835,6 +2835,7 @@ if ($conn->select_db($db_cms)) {
         `column_id` INT NOT NULL,
         `title` VARCHAR(255) NOT NULL,
         `description` TEXT DEFAULT NULL,
+        `description_color_html` MEDIUMTEXT DEFAULT NULL,
         `project_key_id` INT DEFAULT NULL,
         `work_type_id` INT DEFAULT NULL,
         `assignee_user_id` INT DEFAULT NULL,
@@ -3209,6 +3210,7 @@ if ($conn->select_db($db_cms)) {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `item_id` INT NOT NULL,
         `comment_html` MEDIUMTEXT DEFAULT NULL,
+        `comment_color_html` MEDIUMTEXT DEFAULT NULL,
         `comment_text` TEXT DEFAULT NULL,
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
@@ -3232,6 +3234,7 @@ if ($conn->select_db($db_cms)) {
         `item_id` INT NOT NULL,
         `comment_id` INT NOT NULL,
         `reply_html` MEDIUMTEXT DEFAULT NULL,
+        `reply_color_html` MEDIUMTEXT DEFAULT NULL,
         `reply_text` TEXT DEFAULT NULL,
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
@@ -3340,7 +3343,10 @@ if ($conn->select_db($db_cms)) {
     migrationEnsureIndex($conn, $db_cms, TASK_PROJECT_KEY, 'idx_task_project_key_project', "ALTER TABLE `" . TASK_PROJECT_KEY . "` ADD INDEX `idx_task_project_key_project` (`project_id`, `status`)", "Verified `" . TASK_PROJECT_KEY . "` project index.");
 
     migrationEnsureColumn($conn, $db_cms, TASK_ITEM, 'project_id', "ALTER TABLE `" . TASK_ITEM . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_ITEM . "` includes `project_id`.");
+    migrationEnsureColumn($conn, $db_cms, TASK_ITEM, 'description_color_html', "ALTER TABLE `" . TASK_ITEM . "` ADD COLUMN `description_color_html` MEDIUMTEXT DEFAULT NULL AFTER `description`", "Verified `" . TASK_ITEM . "` includes `description_color_html`.");
     migrationEnsureColumn($conn, $db_cms, TASK_ITEM, 'remaining_estimate_seconds', "ALTER TABLE `" . TASK_ITEM . "` ADD COLUMN `remaining_estimate_seconds` INT DEFAULT NULL AFTER `original_estimate`", "Verified `" . TASK_ITEM . "` includes `remaining_estimate_seconds`.");
+    migrationEnsureColumn($conn, $db_cms, TASK_ITEM_COMMENT, 'comment_color_html', "ALTER TABLE `" . TASK_ITEM_COMMENT . "` ADD COLUMN `comment_color_html` MEDIUMTEXT DEFAULT NULL AFTER `comment_html`", "Verified `" . TASK_ITEM_COMMENT . "` includes `comment_color_html`.");
+    migrationEnsureColumn($conn, $db_cms, TASK_ITEM_COMMENT_REPLY, 'reply_color_html', "ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` ADD COLUMN `reply_color_html` MEDIUMTEXT DEFAULT NULL AFTER `reply_html`", "Verified `" . TASK_ITEM_COMMENT_REPLY . "` includes `reply_color_html`.");
     migrationEnsureIndex($conn, $db_cms, TASK_ITEM, 'idx_task_item_project', "ALTER TABLE `" . TASK_ITEM . "` ADD INDEX `idx_task_item_project` (`project_id`, `column_id`, `sort_order`)", "Verified `" . TASK_ITEM . "` project index.");
 
     migrationEnsureColumn($conn, $db_cms, TASK_SHEETS, 'project_id', "ALTER TABLE `" . TASK_SHEETS . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_SHEETS . "` includes `project_id`.");

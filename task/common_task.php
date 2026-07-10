@@ -327,8 +327,23 @@ if (!function_exists('taskSanitizeCommentHtml')) {
 
         $value = preg_replace('/\son[a-z]+\s*=\s*"[^"]*"/i', '', $value);
         $value = preg_replace("/\son[a-z]+\s*=\s*'[^']*'/i", '', $value);
-        $value = preg_replace('/\sstyle\s*=\s*"[^"]*"/i', '', $value);
-        $value = preg_replace("/\sstyle\s*=\s*'[^']*'/i", '', $value);
+        $value = preg_replace_callback(
+            '/\sstyle\s*=\s*("|\')([^"\']*)\1/i',
+            function ($matches) {
+                $styleValue = isset($matches[2]) ? (string) $matches[2] : '';
+                $declarations = preg_split('/\s*;\s*/', $styleValue);
+                foreach ($declarations as $declaration) {
+                    if (!preg_match('/^\s*color\s*:\s*(#[0-9a-f]{3,8}|(?:rgb|hsl)a?\([^)]{1,100}\)|[a-z]{1,30})\s*$/i', $declaration, $colorMatch)) {
+                        continue;
+                    }
+
+                    return ' style="color:' . trim((string) $colorMatch[1]) . '"';
+                }
+
+                return '';
+            },
+            $value
+        );
         $value = preg_replace('/href\s*=\s*"\s*javascript:[^"]*"/i', 'href="#"', $value);
         $value = preg_replace("/href\s*=\s*'\s*javascript:[^']*'/i", "href='#'", $value);
         $value = preg_replace('/src\s*=\s*"\s*javascript:[^"]*"/i', 'src=""', $value);
@@ -794,7 +809,7 @@ if (!function_exists('taskGetItemCommentRepliesMap')) {
 
         $idSql = implode(',', $commentIds);
         $limit = max(100, min(5000, count($commentIds) * 80));
-        $sql = "SELECT id,item_id,comment_id,reply_html,reply_text,create_by,create_date,create_time,update_date,update_time
+        $sql = "SELECT id,item_id,comment_id,reply_html,reply_color_html,reply_text,create_by,create_date,create_time,update_date,update_time
             FROM " . TASK_ITEM_COMMENT_REPLY . "
             WHERE item_id='" . $itemId . "' AND status='A' AND comment_id IN (" . $idSql . ")
             ORDER BY id ASC
@@ -838,7 +853,9 @@ if (!function_exists('taskGetItemCommentRepliesMap')) {
                 'id' => isset($row['id']) ? (int) $row['id'] : 0,
                 'item_id' => isset($row['item_id']) ? (int) $row['item_id'] : 0,
                 'comment_id' => $commentId,
-                'reply_html' => isset($row['reply_html']) ? (string) $row['reply_html'] : '',
+                'reply_html' => isset($row['reply_color_html']) && trim((string) $row['reply_color_html']) !== ''
+                    ? (string) $row['reply_color_html']
+                    : (isset($row['reply_html']) ? (string) $row['reply_html'] : ''),
                 'reply_text' => isset($row['reply_text']) ? (string) $row['reply_text'] : '',
                 'actor_name' => isset($actorMap[$createById]) ? (string) $actorMap[$createById] : 'User',
                 'create_by' => isset($row['create_by']) ? (string) $row['create_by'] : '',
@@ -869,7 +886,7 @@ if (!function_exists('taskGetItemComments')) {
         $commentRows = array();
         $commentIds = array();
         $actorIds = array();
-        $sql = "SELECT id,item_id,comment_html,comment_text,create_by,create_date,create_time,update_date,update_time,status AS row_status
+        $sql = "SELECT id,item_id,comment_html,comment_color_html,comment_text,create_by,create_date,create_time,update_date,update_time,status AS row_status
             FROM " . TASK_ITEM_COMMENT . "
             WHERE item_id='" . $itemId . "' AND status IN ('A','D')
             ORDER BY id DESC
@@ -905,7 +922,9 @@ if (!function_exists('taskGetItemComments')) {
             $rows[] = array(
                 'id' => $commentId,
                 'item_id' => isset($row['item_id']) ? (int) $row['item_id'] : 0,
-                'comment_html' => isset($row['comment_html']) ? (string) $row['comment_html'] : '',
+                'comment_html' => isset($row['comment_color_html']) && trim((string) $row['comment_color_html']) !== ''
+                    ? (string) $row['comment_color_html']
+                    : (isset($row['comment_html']) ? (string) $row['comment_html'] : ''),
                 'comment_text' => isset($row['comment_text']) ? (string) $row['comment_text'] : '',
                 'is_deleted' => (isset($row['row_status']) && (string) $row['row_status'] === 'D') ? 1 : 0,
                 'actor_name' => isset($actorMap[$createById]) ? (string) $actorMap[$createById] : 'User',
@@ -974,6 +993,7 @@ if (!function_exists('taskCreateItemComment')) {
 
         $safeItemId = (int) $itemId;
         $safeCommentHtml = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
+        $safeCommentColorHtml = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
         $safeCommentText = taskEsc($connect, mb_strcut($plainText, 0, 65535, 'UTF-8'));
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
@@ -982,9 +1002,9 @@ if (!function_exists('taskCreateItemComment')) {
         $okInsert = mysqli_query(
             $connect,
             "INSERT INTO " . TASK_ITEM_COMMENT . "
-             (item_id,comment_html,comment_text,create_by,create_date,create_time,status)
+             (item_id,comment_html,comment_color_html,comment_text,create_by,create_date,create_time,status)
              VALUES
-             ('" . $safeItemId . "','" . $safeCommentHtml . "','" . $safeCommentText . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')"
+             ('" . $safeItemId . "','" . $safeCommentHtml . "','" . $safeCommentColorHtml . "','" . $safeCommentText . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')"
         );
 
         if (!$okInsert) {
@@ -1052,6 +1072,7 @@ if (!function_exists('taskCreateItemCommentReply')) {
         }
 
         $safeHtmlSql = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
+        $safeColorHtmlSql = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
         $safeTextSql = taskEsc($connect, mb_strcut($plainText, 0, 65535, 'UTF-8'));
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
@@ -1060,9 +1081,9 @@ if (!function_exists('taskCreateItemCommentReply')) {
         $okInsert = mysqli_query(
             $connect,
             "INSERT INTO " . TASK_ITEM_COMMENT_REPLY . "
-             (item_id,comment_id,reply_html,reply_text,create_by,create_date,create_time,status)
+             (item_id,comment_id,reply_html,reply_color_html,reply_text,create_by,create_date,create_time,status)
              VALUES
-             ('" . $itemId . "','" . $commentId . "','" . $safeHtmlSql . "','" . $safeTextSql . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')"
+             ('" . $itemId . "','" . $commentId . "','" . $safeHtmlSql . "','" . $safeColorHtmlSql . "','" . $safeTextSql . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')"
         );
 
         if (!$okInsert) {
@@ -1201,6 +1222,7 @@ if (!function_exists('taskUpdateItemComment')) {
         }
 
         $safeCommentHtml = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
+        $safeCommentColorHtml = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
         $safeCommentText = taskEsc($connect, mb_strcut($plainText, 0, 65535, 'UTF-8'));
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
@@ -1209,7 +1231,7 @@ if (!function_exists('taskUpdateItemComment')) {
         $okUpdate = mysqli_query(
             $connect,
             "UPDATE " . TASK_ITEM_COMMENT . "
-             SET comment_html='" . $safeCommentHtml . "', comment_text='" . $safeCommentText . "',
+             SET comment_html='" . $safeCommentHtml . "', comment_color_html='" . $safeCommentColorHtml . "', comment_text='" . $safeCommentText . "',
                  update_by='" . $safeUser . "', update_date='" . $safeDate . "', update_time='" . $safeTime . "'
              WHERE id='" . $commentId . "' AND item_id='" . $itemId . "' AND status='A'"
         );
@@ -1280,6 +1302,7 @@ if (!function_exists('taskUpdateItemCommentReply')) {
         }
 
         $safeReplyHtml = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
+        $safeReplyColorHtml = taskEsc($connect, mb_strcut($safeHtml, 0, 65535, 'UTF-8'));
         $safeReplyText = taskEsc($connect, mb_strcut($plainText, 0, 65535, 'UTF-8'));
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
@@ -1288,7 +1311,7 @@ if (!function_exists('taskUpdateItemCommentReply')) {
         $okUpdate = mysqli_query(
             $connect,
             "UPDATE " . TASK_ITEM_COMMENT_REPLY . "
-             SET reply_html='" . $safeReplyHtml . "', reply_text='" . $safeReplyText . "',
+             SET reply_html='" . $safeReplyHtml . "', reply_color_html='" . $safeReplyColorHtml . "', reply_text='" . $safeReplyText . "',
                  update_by='" . $safeUser . "', update_date='" . $safeDate . "', update_time='" . $safeTime . "'
              WHERE id='" . $replyId . "' AND item_id='" . $itemId . "' AND status='A'"
         );
@@ -5881,7 +5904,7 @@ if (!function_exists('taskGetItemDetail')) {
             return array('ok' => 0, 'message' => 'Invalid work item request.');
         }
 
-        $sql = "SELECT id,project_id,column_id,title,description,work_type_id,project_key_id,assignee_user_id,reporter_user_id,
+        $sql = "SELECT id,project_id,column_id,title,description,description_color_html,work_type_id,project_key_id,assignee_user_id,reporter_user_id,
                priority,original_estimate,remaining_estimate_seconds,task_status,parent_item_id,time_tracking,
                due_date,start_date,amendement_date,amendement_time,second_amendement_date,second_amendement_time,
                create_date,create_time,update_date,update_time
@@ -5890,7 +5913,7 @@ if (!function_exists('taskGetItemDetail')) {
 
         $result = mysqli_query($connect, $sql);
         if ($result === false) {
-                     $sql = "SELECT id,project_id,column_id,title,'' AS description,work_type_id,0 AS project_key_id,assignee_user_id,0 AS reporter_user_id,
+                     $sql = "SELECT id,project_id,column_id,title,'' AS description,'' AS description_color_html,work_type_id,0 AS project_key_id,assignee_user_id,0 AS reporter_user_id,
                          'Medium' AS priority,'' AS original_estimate,NULL AS remaining_estimate_seconds,'' AS task_status,0 AS parent_item_id,'' AS time_tracking,
                          due_date,due_date AS start_date,NULL AS amendement_date,NULL AS amendement_time,NULL AS second_amendement_date,NULL AS second_amendement_time,
                          '' AS create_date,'' AS create_time,'' AS update_date,'' AS update_time
@@ -5957,7 +5980,9 @@ if (!function_exists('taskGetItemDetail')) {
             'id' => $itemId,
             'column_id' => isset($row['column_id']) ? (int) $row['column_id'] : 0,
             'title' => isset($row['title']) ? (string) $row['title'] : '',
-            'description' => isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : '',
+            'description' => isset($row['description_color_html']) && trim((string) $row['description_color_html']) !== ''
+                ? (string) $row['description_color_html']
+                : (isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : ''),
             'assignee_user_id' => $assigneeUserId,
             'assignee_name' => isset($userMap[$assigneeUserId]) ? (string) $userMap[$assigneeUserId] : '',
             'reporter_user_id' => $reporterUserId,
@@ -6851,7 +6876,7 @@ if (!function_exists('taskGetItemsGroupedByColumn')) {
         $defaultProjectKeyId = isset($projectKeySetting['id']) ? (int) $projectKeySetting['id'] : 0;
         $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
 
-    $sql = "SELECT id,column_id,title,description,work_type_id,assignee_user_id,reporter_user_id,
+    $sql = "SELECT id,column_id,title,description,description_color_html,work_type_id,assignee_user_id,reporter_user_id,
                 project_id,
                 priority,start_date,due_date,task_status,create_date,update_date,
                 original_estimate,amendement_date,amendement_time,second_amendement_date,second_amendement_time,
@@ -6913,7 +6938,9 @@ if (!function_exists('taskGetItemsGroupedByColumn')) {
                     'id' => (int) $row['id'],
                     'column_id' => $columnId,
                     'title' => (string) $row['title'],
-                    'description' => isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : '',
+                    'description' => isset($row['description_color_html']) && trim((string) $row['description_color_html']) !== ''
+                        ? (string) $row['description_color_html']
+                        : (isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : ''),
                     'sort_order' => isset($row['sort_order']) ? (int) $row['sort_order'] : 0,
                     'project_key_id' => $resolvedProjectKeyId,
                     'project_key' => $resolvedProjectKey,
@@ -8408,7 +8435,7 @@ if (!function_exists('taskUpdateItemCore')) {
             return array('ok' => 0, 'message' => 'Invalid work item update request.');
         }
 
-        $itemRst = mysqli_query($connect, "SELECT id,title,description FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND status='A' LIMIT 1");
+        $itemRst = mysqli_query($connect, "SELECT id,title,description,description_color_html FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND status='A' LIMIT 1");
 
         if (!$itemRst || $itemRst->num_rows === 0) {
             return array('ok' => 0, 'message' => 'Work item not found.');
@@ -8423,6 +8450,7 @@ if (!function_exists('taskUpdateItemCore')) {
 
         $safeTitle = taskEsc($connect, substr($title, 0, 255));
         $safeDescription = taskEsc($connect, substr($description, 0, 65535));
+        $safeDescriptionColorHtml = taskEsc($connect, substr($description, 0, 65535));
         $safeUser = taskEsc($connect, $currentUserId);
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
@@ -8431,6 +8459,7 @@ if (!function_exists('taskUpdateItemCore')) {
                         $updateSql = "UPDATE " . TASK_ITEM . " SET
                                                         title='" . $safeTitle . "',
                                                         description='" . $safeDescription . "',
+                                                        description_color_html='" . $safeDescriptionColorHtml . "',
                                                         update_by='" . $safeUser . "',
                                                         update_date='" . $safeDate . "',
                                                         update_time='" . $safeTime . "'
@@ -9445,7 +9474,7 @@ if (!function_exists('taskGetAllItemsFlat')) {
         $defaultProjectKeyId = isset($projectKeySetting['id']) ? (int) $projectKeySetting['id'] : 0;
         $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
 
-        $sql = "SELECT id,column_id,title,description,work_type_id,assignee_user_id,reporter_user_id,
+        $sql = "SELECT id,column_id,title,description,description_color_html,work_type_id,assignee_user_id,reporter_user_id,
             project_id,
             priority,start_date,due_date,task_status,create_date,update_date,
             original_estimate,time_tracking,
@@ -9511,7 +9540,9 @@ if (!function_exists('taskGetAllItemsFlat')) {
                     'id' => (int) $row['id'],
                     'column_id' => (int) $row['column_id'],
                     'title' => (string) $row['title'],
-                    'description' => isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : '',
+                    'description' => isset($row['description_color_html']) && trim((string) $row['description_color_html']) !== ''
+                        ? (string) $row['description_color_html']
+                        : (isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : ''),
                     'sort_order' => isset($row['sort_order']) ? (int) $row['sort_order'] : 0,
                     'project_key_id' => $resolvedProjectKeyId,
                     'project_key' => $resolvedProjectKey,
