@@ -1906,9 +1906,18 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   border: 0;
   background: transparent;
   color: #0d6efd;
-  font: inherit;
+  font-family: inherit;
+  font-size: inherit;
+  font-weight: inherit;
   line-height: inherit;
   text-decoration: underline;
+}
+
+.customer-tag-title-badge-group .customer-label-toggle-btn,
+.customer-label-page-header-badges .customer-label-toggle-btn {
+  font-size: 16px;
+  font-weight: 400;
+  line-height: 1.25;
 }
 
 .customer-label-toggle-btn:hover,
