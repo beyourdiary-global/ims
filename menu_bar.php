@@ -399,8 +399,9 @@ $menuList = array(
         'y',
         'expand' => array(
             array('Merchant', 'mdi storefront-outline', $SITEURL . '/finance/merchant_table.php', '36'),
+            array('Supplier Invoice', 'mdi mdi-file-document-outline', $SITEURL . '/finance/supplier_invoice_table.php', '167'),
         ),
-        'pin' => array('36')
+        'pin' => array('36', '167')
     ),
     array(
         'Accounting',

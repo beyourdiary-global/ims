@@ -27,6 +27,33 @@ $("#mrcht_pic").on("input", function () {
 $("#mrcht_pic_contact").on("input", function () {
   $(".contact-err").remove();
 });
+
+function formatMerchantValue(value) {
+  const cleaned = (value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const prefix = cleaned.replace(/\D/g, "").slice(0, 3);
+  const suffix = cleaned.slice(prefix.length).replace(/[^A-Z0-9]/g, "").slice(0, 5);
+
+  if (prefix === "") {
+    return suffix;
+  }
+
+  if (suffix === "") {
+    return prefix;
+  }
+
+  return `${prefix}-${suffix}`;
+}
+
+$("#mrcht_control_account").on("input", function () {
+  $(this).val(formatMerchantValue($(this).val()));
+  $(".control-account-err").remove();
+});
+
+$("#mrcht_code").on("input", function () {
+  $(this).val(formatMerchantValue($(this).val()));
+  $(".code-err").remove();
+});
+
 $(".submitBtn").on("click", function (event) {
   $(".error-message").remove();
   //event.preventDefault();
@@ -34,6 +61,13 @@ $(".submitBtn").on("click", function (event) {
   let email_chk = 0;
   let pic_chk = 0;
   let contact_chk = 0;
+  let control_account_chk = 1;
+  let code_chk = 1;
+  const controlAccount = formatMerchantValue($("#mrcht_control_account").val());
+  const code = formatMerchantValue($("#mrcht_code").val());
+
+  $("#mrcht_control_account").val(controlAccount);
+  $("#mrcht_code").val(code);
 
   if (
     $("#currentDataName").val() === "" ||
@@ -96,7 +130,28 @@ $(".submitBtn").on("click", function (event) {
     $(".contact-err").remove();
   }
 
-  if (name_chk == 1 && email_chk == 1 && pic_chk == 1 && contact_chk == 1)
+  if (controlAccount !== "" && !/^\d{3}-[A-Z0-9]{5}$/.test(controlAccount)) {
+      control_account_chk = 0;
+      $("#mrcht_control_account").after(
+        '<span class="error-message control-account-err">Control A/C format must be like 123-ABC01.</span>',
+      );
+  }
+
+  if (code !== "" && !/^\d{3}-[A-Z0-9]{5}$/.test(code)) {
+      code_chk = 0;
+      $("#mrcht_code").after(
+        '<span class="error-message code-err">Code format must be like 123-ABC01.</span>',
+      );
+  }
+
+  if (
+    name_chk == 1 &&
+    email_chk == 1 &&
+    pic_chk == 1 &&
+    contact_chk == 1 &&
+    control_account_chk == 1 &&
+    code_chk == 1
+  )
     $(this).closest("form").submit();
   else return false;
 });

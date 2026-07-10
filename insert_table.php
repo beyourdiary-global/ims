@@ -408,10 +408,107 @@ function insertTableEnsurePackageParentSkuColumns($cmsConn, $dbCms)
     }
 }
 
+function insertTableEnsureSupplierInvoiceSetup($conn, $cmsConn, $dbFin)
+{
+    $supplierInvoiceTable = defined('SUPPLIER_INVOICE') ? SUPPLIER_INVOICE : 'supplier_invoice';
+    $supplierInvoiceQrTable = defined('SUPPLIER_INVOICE_QR') ? SUPPLIER_INVOICE_QR : 'supplier_invoice_qr';
+
+    $createInvoiceSql = "CREATE TABLE IF NOT EXISTS `" . $dbFin . "`.`" . $supplierInvoiceTable . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `doc_no` VARCHAR(100) NOT NULL,
+        `doc_date` DATE NOT NULL,
+        `description` TEXT DEFAULT NULL,
+        `control_account` VARCHAR(9) DEFAULT NULL,
+        `code` VARCHAR(9) DEFAULT NULL,
+        `amount` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        `odr` VARCHAR(255) DEFAULT NULL,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_supplier_invoice_doc_no` (`doc_no`),
+        KEY `idx_supplier_invoice_doc_date` (`doc_date`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createInvoiceSql)) {
+        echo "<p style='color:green;'>Verified table `" . htmlspecialchars($supplierInvoiceTable, ENT_QUOTES, 'UTF-8') . "`.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating table `" . htmlspecialchars($supplierInvoiceTable, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($conn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+
+    $createQrSql = "CREATE TABLE IF NOT EXISTS `" . $dbFin . "`.`" . $supplierInvoiceQrTable . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `supplier_invoice_id` INT NOT NULL,
+        `qr_url` TEXT NOT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_supplier_invoice_qr_invoice_id` (`supplier_invoice_id`),
+        KEY `idx_supplier_invoice_qr_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createQrSql)) {
+        echo "<p style='color:green;'>Verified table `" . htmlspecialchars($supplierInvoiceQrTable, ENT_QUOTES, 'UTF-8') . "`.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating table `" . htmlspecialchars($supplierInvoiceQrTable, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($conn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+
+    if (!($cmsConn instanceof mysqli)) {
+        return;
+    }
+
+    $pinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (167, 'Supplier Invoice', '1,2,3,4,5,6', 'Supplier invoice access', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+
+    if ($cmsConn->query($pinGroupSql)) {
+        echo "<p style='color:green;'>Verified pin group 167 for Supplier Invoice.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating pin group 167: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+
+    foreach (array(1, 2) as $groupId) {
+        $userGroupResult = $cmsConn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>Supplier Invoice pin setup skipped `user_group` id " . (int) $groupId . " because the group was not found.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = addAccessToPinBlock($currentPins, 167, array(1, 2, 3, 4, 5, 6));
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $cmsConn->real_escape_string($updatedPins);
+            if ($cmsConn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Supplier Invoice pin setup granted access to `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Supplier Invoice pin setup failed updating `user_group` id " . (int) $groupId . ": " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Supplier Invoice pin setup verified for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
+}
+
 $cmsConn = new mysqli($dbhost, $dbUser, $dbpwd, $db_cms, $dbport);
 if ($cmsConn->connect_error) {
+    insertTableEnsureSupplierInvoiceSetup($conn, null, $db_fin);
     echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed connecting to CMS database `" . htmlspecialchars($db_cms, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($cmsConn->connect_error, ENT_QUOTES, 'UTF-8') . "</p>";
 } else {
+    insertTableEnsureSupplierInvoiceSetup($conn, $cmsConn, $db_fin);
     insertTableEnsurePackageParentSkuColumns($cmsConn, $db_cms);
     insertTableEnsureOrderReportPins($cmsConn);
     insertTableEnsureLuckyDrawPins($cmsConn);
