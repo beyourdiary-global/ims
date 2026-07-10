@@ -4327,7 +4327,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
         var action = "<?php echo isset($act) ? $act : ' '; ?>";
 
         checkCurrentPage(page, action);
-        centerAlignment("formContainer");
+        centerAlignment("formContainer", { disableAbsoluteCentering: true });
         setButtonColor();
         preloader(300, action);
 
