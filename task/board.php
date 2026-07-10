@@ -119,11 +119,32 @@ if (
             finfo_close($finfo);
         }
 
-        if (!in_array((string) $mime, $taskAttachmentAllowedMimes, true)) {
+        // Some servers report a valid OOXML workbook as application/octet-stream.
+        // Validate the package structure before accepting that generic MIME type.
+        $isValidXlsxPackage = false;
+        if ($ext === 'xlsx' && (string) $mime === 'application/octet-stream' && class_exists('ZipArchive')) {
+            $zip = new ZipArchive();
+            if ($zip->open($file['tmp_name']) === true) {
+                $hasContentTypes = false;
+                $hasWorkbook = false;
+                for ($zipIndex = 0; $zipIndex < $zip->numFiles; $zipIndex++) {
+                    $zipEntryName = strtolower((string) $zip->getNameIndex($zipIndex));
+                    if ($zipEntryName === '[content_types].xml') {
+                        $hasContentTypes = true;
+                    } elseif ($zipEntryName === 'xl/workbook.xml') {
+                        $hasWorkbook = true;
+                    }
+                }
+                $isValidXlsxPackage = $hasContentTypes && $hasWorkbook;
+                $zip->close();
+            }
+        }
+
+        if (!in_array((string) $mime, $taskAttachmentAllowedMimes, true) && !$isValidXlsxPackage) {
             taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
         }
 
-        if ((string) $mime === 'application/octet-stream' && !$isVideoFile) {
+        if ((string) $mime === 'application/octet-stream' && !$isVideoFile && !$isValidXlsxPackage) {
             taskJsonResponse(array('ok' => 0, 'message' => 'Invalid file format detected by server.'));
         }
 
