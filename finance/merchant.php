@@ -8,6 +8,26 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = MERCHANT;
 
+function normalizeMerchantFormattedValue($value)
+{
+    $value = strtoupper(trim((string) $value));
+    $value = preg_replace('/[^A-Z0-9]+/', '', $value);
+
+    $prefix = substr(preg_replace('/\D+/', '', $value), 0, 3);
+    $suffixSource = substr($value, strlen($prefix));
+    $suffix = substr(preg_replace('/[^A-Z0-9]+/', '', $suffixSource), 0, 5);
+
+    if ($prefix === '') {
+        return $suffix;
+    }
+
+    if ($suffix === '') {
+        return $prefix;
+    }
+
+    return $prefix . '-' . $suffix;
+}
+
 //Current Page Action And Data ID
 $dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
@@ -80,6 +100,8 @@ if (post('actionBtn')) {
 
             $currentDataName = postSpaceFilter('currentDataName');
             $mrcht_business_no = postSpaceFilter("mrcht_business_no");
+            $mrcht_control_account = normalizeMerchantFormattedValue(postSpaceFilter('mrcht_control_account'));
+            $mrcht_code = normalizeMerchantFormattedValue(postSpaceFilter('mrcht_code'));
             $mrcht_email = postSpaceFilter("mrcht_email");
             $mrcht_contact = postSpaceFilter('mrcht_contact');
             $mrcht_address = postSpaceFilter('mrcht_address');
@@ -101,6 +123,16 @@ if (post('actionBtn')) {
 
             if ($mrcht_pic_contact && !preg_match('/^[0-9]+$/', $mrcht_pic_contact)) {
                 $pic_contact_err = "Person In Charge Contact must contain numbers only. Please remove any dashes or special characters.";
+                $error = 1;
+            }
+
+            if ($mrcht_control_account !== '' && !preg_match('/^\d{3}-[A-Z0-9]{5}$/', $mrcht_control_account)) {
+                $control_account_err = "Control A/C format must be like 123-ABC01.";
+                $error = 1;
+            }
+
+            if ($mrcht_code !== '' && !preg_match('/^\d{3}-[A-Z0-9]{5}$/', $mrcht_code)) {
+                $code_err = "Code format must be like 123-ABC01.";
                 $error = 1;
             }
 
@@ -139,6 +171,16 @@ if (post('actionBtn')) {
                         array_push($datafield, 'business_no');
                     }
 
+                    if ($mrcht_control_account) {
+                        array_push($newvalarr, $mrcht_control_account);
+                        array_push($datafield, 'control_account');
+                    }
+
+                    if ($mrcht_code) {
+                        array_push($newvalarr, $mrcht_code);
+                        array_push($datafield, 'code');
+                    }
+
                     if ($mrcht_email) {
                         array_push($newvalarr, $mrcht_email);
                         array_push($datafield, 'email');
@@ -169,7 +211,7 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,business_no,contact,email,address,person_in_charges,person_in_charges_contact,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$mrcht_business_no','$mrcht_contact','$mrcht_email','$mrcht_address','$mrcht_pic','$mrcht_pic_contact','$dataRemark','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,business_no,control_account,code,contact,email,address,person_in_charges,person_in_charges_contact,remark,create_by,create_date,create_time) VALUES ('$currentDataName','$mrcht_business_no','$mrcht_control_account','$mrcht_code','$mrcht_contact','$mrcht_email','$mrcht_address','$mrcht_pic','$mrcht_pic_contact','$dataRemark','" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
                     $dataId = $finance_connect->insert_id;
                 } catch (Exception $e) {
@@ -188,6 +230,18 @@ if (post('actionBtn')) {
                         array_push($oldvalarr, $row['business_no']);
                         array_push($chgvalarr, $mrcht_business_no);
                         array_push($datafield, 'business_no');
+                    }
+
+                    if (($row['control_account'] ?? '') != $mrcht_control_account) {
+                        array_push($oldvalarr, ($row['control_account'] ?? '') === '' ? 'Empty Value' : $row['control_account']);
+                        array_push($chgvalarr, $mrcht_control_account === '' ? 'Empty Value' : $mrcht_control_account);
+                        array_push($datafield, 'control_account');
+                    }
+
+                    if (($row['code'] ?? '') != $mrcht_code) {
+                        array_push($oldvalarr, ($row['code'] ?? '') === '' ? 'Empty Value' : $row['code']);
+                        array_push($chgvalarr, $mrcht_code === '' ? 'Empty Value' : $mrcht_code);
+                        array_push($datafield, 'code');
                     }
 
                     if ($row['contact'] != $mrcht_contact) {
@@ -229,7 +283,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName',business_no = '$mrcht_business_no',email = '$mrcht_email', contact = '$mrcht_contact', address ='$mrcht_address', person_in_charges ='$mrcht_pic', person_in_charges_contact ='$mrcht_pic_contact', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName . " SET name ='$currentDataName',business_no = '$mrcht_business_no',control_account = '$mrcht_control_account',code = '$mrcht_code',email = '$mrcht_email', contact = '$mrcht_contact', address ='$mrcht_address', person_in_charges ='$mrcht_pic', person_in_charges_contact ='$mrcht_pic_contact', remark ='$dataRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($finance_connect, $query);
                     } else {
                         $act = 'NC';
@@ -283,6 +337,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
     echo '<script>confirmationDialog("","","' . $pageTitle . '","","' . $redirectPage . '","' . $act . '");</script>';
 }
 
+$currentMerchantControlAccount = isset($mrcht_control_account)
+    ? $mrcht_control_account
+    : (isset($row['control_account']) ? (string) $row['control_account'] : '');
+$currentMerchantCode = isset($mrcht_code)
+    ? $mrcht_code
+    : (isset($row['code']) ? (string) $row['code'] : '');
 ?>
 
 <!DOCTYPE html>
@@ -334,6 +394,29 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                                                                                                                 } else {
                                                                                                                                     echo '';
                                                                                                                                 } ?>" <?php if ($act == '') echo 'readonly' ?>>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group mb-3">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label form_lbl" for="mrcht_control_account">Control A/C</label>
+                                <input class="form-control" type="text" name="mrcht_control_account" id="mrcht_control_account" maxlength="9" value="<?php echo htmlspecialchars($currentMerchantControlAccount, ENT_QUOTES, 'UTF-8'); ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off">
+                                <?php if (isset($control_account_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $control_account_err; ?></span>
+                                    </div>
+                                <?php } ?>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label form_lbl" for="mrcht_code">Code</label>
+                                <input class="form-control" type="text" name="mrcht_code" id="mrcht_code" maxlength="9" value="<?php echo htmlspecialchars($currentMerchantCode, ENT_QUOTES, 'UTF-8'); ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off">
+                                <?php if (isset($code_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $code_err; ?></span>
+                                    </div>
+                                <?php } ?>
                             </div>
                         </div>
                     </div>
