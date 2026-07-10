@@ -61,6 +61,8 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                                 <th scope="col" id="action_col">Action</th>
                                 <th scope="col">Merchant Name</th>
                                 <th scope="col">Merchant Business No</th>
+                                <th scope="col">Control A/C</th>
+                                <th scope="col">Code</th>
                                 <th scope="col">Merchant Contact</th>
                                 <th scope="col">Merchant Email</th>
                                 <th scope="col">Merchant Address</th>
@@ -84,6 +86,8 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                                         </td>
                                         <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['business_no'])) echo htmlspecialchars((string) $row['business_no'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['control_account'])) echo htmlspecialchars((string) $row['control_account'], ENT_QUOTES, 'UTF-8') ?></td>
+                                        <td scope="row"><?php if (isset($row['code'])) echo htmlspecialchars((string) $row['code'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['contact'])) echo htmlspecialchars((string) $row['contact'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['email'])) echo htmlspecialchars((string) $row['email'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?php if (isset($row['address'])) echo htmlspecialchars((string) $row['address'], ENT_QUOTES, 'UTF-8') ?></td>
@@ -104,6 +108,8 @@ $result = getData('*', '', '', $tblName, $finance_connect);
                                 <th scope="col" id="action_col">Action</th>
                                 <th scope="col">Merchant Name</th>
                                 <th scope="col">Merchant Business No</th>
+                                <th scope="col">Control A/C</th>
+                                <th scope="col">Code</th>
                                 <th scope="col">Merchant Contact</th>
                                 <th scope="col">Merchant Email</th>
                                 <th scope="col">Merchant Address</th>

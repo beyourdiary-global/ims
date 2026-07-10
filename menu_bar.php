@@ -393,6 +393,16 @@ $menuList = array(
         'pin' => array('51', '61', '89', '87')
     ),
     array(
+        'Supplier',
+        'mdi mdi-truck-delivery-outline',
+        'javascript:void(0)',
+        'y',
+        'expand' => array(
+            array('Merchant', 'mdi storefront-outline', $SITEURL . '/finance/merchant_table.php', '36'),
+        ),
+        'pin' => array('36')
+    ),
+    array(
         'Accounting',
         'mdi mdi-finance',
         'javascript:void(0)',
@@ -468,12 +478,11 @@ $menuList = array(
         'javascript:void(0)',
         'y',
         'expand' => array(
-            array('Merchant', 'mdi storefront-outline', $SITEURL . '/finance/merchant_table.php', '36'),
             array('Agent', 'mdi mdi-information-outline', $SITEURL . '/finance/agent_table.php', '62'),
             array('Goal Target', 'mdi mdi-bullseye-arrow', $SITEURL . '/settings/goalTarget_table.php', '121'),
 
         ),
-        'pin' => array('36', '62', '121')
+        'pin' => array('62', '121')
     ),
     array(
         'Setting',
