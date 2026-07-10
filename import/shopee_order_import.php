@@ -1976,56 +1976,6 @@ function extractPdfTextTokensFromDecodedStream($decoded)
     return $lines;
 }
 
-function extractTextFromPdfViaCommand($filePath)
-{
-    // 1. Config Gate: Allow disabling via environment/config constant
-    if (defined('DISABLE_PDFTOTEXT_EXEC') && DISABLE_PDFTOTEXT_EXEC) {
-        return '';
-    }
-
-    $filePath = trim((string) $filePath);
-    if ($filePath === '' || !is_file($filePath)) {
-        return '';
-    }
-
-    if (!function_exists('shell_exec')) {
-        return '';
-    }
-
-    $disabled = (string) ini_get('disable_functions');
-    if ($disabled !== '') {
-        $disabledFunctions = array_map('trim', explode(',', strtolower($disabled)));
-        if (in_array('shell_exec', $disabledFunctions, true)) {
-            return '';
-        }
-    }
-
-    $escapedFile = escapeshellarg($filePath);
-    
-    // 2. Resource Limit: Prevent hangs by wrapping the command with a 15-second timeout (Unix/Linux environments)
-    $timeoutPrefix = '';
-    if (strtoupper(substr(PHP_OS, 0, 3)) !== 'WIN') {
-        $timeoutPrefix = 'timeout 15 ';
-    }
-
-    $commands = [
-        $timeoutPrefix . 'pdftotext -enc UTF-8 -layout ' . $escapedFile . ' - 2>/dev/null',
-        $timeoutPrefix . 'pdftotext -enc UTF-8 ' . $escapedFile . ' - 2>/dev/null',
-    ];
-
-    foreach ($commands as $command) {
-        $output = @shell_exec($command);
-        $output = is_string($output) ? trim($output) : '';
-        if ($output !== '') {
-            return $output;
-        }
-    }
-
-    return '';
-}
-
-
-
 function extractPdfFieldByLabels($text, $labels)
 {
     $lines = getPdfTextLines($text);

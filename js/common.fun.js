@@ -3275,6 +3275,7 @@ function searchInput(param, siteURL) {
   let type = param["searchType"];
   let dbTable = param["dbTable"];
   let addSelection = param["addSelection"] ? String(param["addSelection"]) : "";
+  let onSelect = typeof param["onSelect"] === "function" ? param["onSelect"] : null;
 
   if (!elementID || !hiddenElementID) {
     return;
@@ -3309,13 +3310,12 @@ function searchInput(param, siteURL) {
             let value = row["val"];
             let selectText = row["select_text"];
 
-            let resultItem = $("<li></li>")
-              .attr("value", String(value == null ? "" : value))
-              .text(String(desc == null ? "" : desc));
-            if (selectText != undefined) {
-              resultItem.attr("data-select-text", String(selectText));
-            }
-            resultList.append(resultItem);
+            resultList.append(
+              $("<li></li>")
+                .attr("value", String(value == null ? "" : value))
+                .text(String(desc == null ? "" : desc))
+                .data("searchRow", row),
+            );
           } else {
             let id = row["id"];
             let name = row[type];
@@ -3323,7 +3323,8 @@ function searchInput(param, siteURL) {
             resultList.append(
               $("<li></li>")
                 .attr("value", String(id == null ? "" : id))
-                .text(String(name == null ? "" : name)),
+                .text(String(name == null ? "" : name))
+                .data("searchRow", row),
             );
           }
         }
@@ -3341,6 +3342,9 @@ function searchInput(param, siteURL) {
           .off("click.searchInput")
           .on("click.searchInput", function () {
             setText(this, "#" + elementID, "#" + hiddenElementID);
+            if (onSelect && $(this).attr("value") !== "emptyValue") {
+              onSelect($(this).data("searchRow") || {});
+            }
             $("#" + elementID).change();
             $("#searchResult_" + elementID).empty();
             $("#searchResult_" + elementID).remove();
