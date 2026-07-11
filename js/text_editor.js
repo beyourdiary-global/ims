@@ -1920,7 +1920,7 @@
         });
       },
       content_style:
-        "body { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #24364d; } ul.task-editor-checklist { list-style: none; margin-left: 0; padding-left: 0; } ul.task-editor-checklist li { list-style: none; display: flex; align-items: flex-start; gap: 0.4rem; } ul.task-editor-checklist li input.task-editor-checkbox { margin-top: 0.28rem; flex: 0 0 auto; cursor: pointer; pointer-events: auto; }",
+        "body { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #24364d; } p { margin: 0; padding-bottom: 1em; } p + p { padding-top: 0.25em; } h1, h2, h3, h4 { line-height: 1.35; margin: 0; padding-top: 1.25em; padding-bottom: 0.75em; } body > h1:first-child, body > h2:first-child, body > h3:first-child, body > h4:first-child { padding-top: 0; } ul.task-editor-checklist { list-style: none; margin-left: 0; padding-left: 0; } ul.task-editor-checklist li { list-style: none; display: flex; align-items: flex-start; gap: 0.4rem; } ul.task-editor-checklist li input.task-editor-checkbox { margin-top: 0.28rem; flex: 0 0 auto; cursor: pointer; pointer-events: auto; }",
       setup: function (editor) {
         activeEditor = editor;
         editor._taskEditorContext = {

@@ -530,7 +530,7 @@
         valid_elements:
           "p,br,strong/b,em/i,u,ul,ol,li,blockquote,span,div,h1,h2,h3,h4",
         content_style:
-          "body { font-family: Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; }",
+          "body { font-family: Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; } p { margin: 0; padding-bottom: 1em; } p + p { padding-top: 0.25em; } h1, h2, h3, h4 { line-height: 1.35; margin: 0; padding-top: 1.25em; padding-bottom: 0.75em; } body > h1:first-child, body > h2:first-child, body > h3:first-child, body > h4:first-child { padding-top: 0; }",
         setup: function (editor) {
           editor.on("init", function () {
             var editorContainer = editor.getContainer();
