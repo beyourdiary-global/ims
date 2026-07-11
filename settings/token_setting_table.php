@@ -12,9 +12,14 @@ if (function_exists('isStatusFieldAvailable') && !isStatusFieldAvailable($tblNam
 
 $redirectPage = $SITEURL . '/settings/token_setting.php';
 $deleteRedirectPage = $SITEURL . '/settings/token_setting_table.php';
-$warehouseUsageByTokenSettingId = function_exists('shopeeOmsBuildWarehouseUsageByTokenSettingId')
-    ? shopeeOmsBuildWarehouseUsageByTokenSettingId($connect)
+$warehouseUsageDetailsByTokenSettingId = function_exists('shopeeOmsBuildWarehouseUsageDetailsByTokenSettingId')
+    ? shopeeOmsBuildWarehouseUsageDetailsByTokenSettingId($connect)
     : array();
+$warehouseEditPage = $SITEURL . '/stock/warehouse.php';
+$warehousePinAccess = function_exists('checkPin')
+    ? checkPin($connect, 'Warehouse')
+    : array();
+$canEditWarehouse = isActionAllowed('Edit', $warehousePinAccess);
 
 $result = false;
 $hasRows = false;
@@ -89,7 +94,37 @@ if (!$result) {
                                         <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], '', $pageTitle, $redirectPage, $deleteRedirectPage); ?>
                                     </td>
                                     <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
-                                    <td scope="row"><?= htmlspecialchars(isset($warehouseUsageByTokenSettingId[(int) $row['id']]) ? implode(', ', $warehouseUsageByTokenSettingId[(int) $row['id']]) : '-', ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td scope="row">
+                                        <?php
+                                        $tokenSettingId = (int) $row['id'];
+                                        $warehouseLinks = array();
+                                        $warehouseDetails = isset($warehouseUsageDetailsByTokenSettingId[$tokenSettingId]) && is_array($warehouseUsageDetailsByTokenSettingId[$tokenSettingId])
+                                            ? $warehouseUsageDetailsByTokenSettingId[$tokenSettingId]
+                                            : array();
+                                        foreach ($warehouseDetails as $warehouseDetail) {
+                                            $warehouseId = isset($warehouseDetail['id']) ? (int) $warehouseDetail['id'] : 0;
+                                            $warehouseName = isset($warehouseDetail['name']) ? trim((string) $warehouseDetail['name']) : '';
+                                            if ($warehouseId <= 0 || $warehouseName === '') {
+                                                continue;
+                                            }
+
+                                            $warehouseLabel = htmlspecialchars($warehouseName, ENT_QUOTES, 'UTF-8');
+                                            if ($canEditWarehouse) {
+                                                $warehouseUrl = $warehouseEditPage . '?' . http_build_query(array(
+                                                    'id' => $warehouseId,
+                                                    'act' => isset($act_2) ? $act_2 : '',
+                                                ));
+                                                $warehouseLinks[] = '<a class="text-primary" href="' . htmlspecialchars($warehouseUrl, ENT_QUOTES, 'UTF-8') . '">' . $warehouseLabel . '</a>';
+                                            } else {
+                                                $warehouseLinks[] = $warehouseLabel;
+                                            }
+                                        }
+
+                                        echo !empty($warehouseLinks)
+                                            ? implode(', ', $warehouseLinks)
+                                            : '-';
+                                        ?>
+                                    </td>
                                 </tr>
                             <?php }
                             } ?>
