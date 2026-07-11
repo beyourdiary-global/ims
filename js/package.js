@@ -63,7 +63,11 @@ function renderPackageAutocompleteResults(elementID, hiddenElementID, resultRows
     var row = rows[i] || {};
     var desc = String(row.desc == null ? "" : row.desc);
     var value = String(row.val == null ? "" : row.val);
-    resultList.append($("<li></li>").attr("value", value).text(desc));
+    var resultItem = $("<li></li>").attr("value", value).text(desc);
+    if (row.select_text != null) {
+      resultItem.attr("data-select-text", String(row.select_text));
+    }
+    resultList.append(resultItem);
   }
 
   resultList

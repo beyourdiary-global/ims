@@ -52,6 +52,14 @@ packageOptions = packageOptions.map(function (pkg) {
       });
   }
   return Object.assign({}, pkg, {
+    item_code: String((pkg && pkg.item_code) || "").trim(),
+    display_name:
+      String((pkg && pkg.item_code) || "").trim() !== ""
+        ? String((pkg && pkg.name) || "") +
+          " (Item Code: " +
+          String((pkg && pkg.item_code) || "").trim() +
+          ")"
+        : String((pkg && pkg.name) || ""),
     product_ids: productIds,
     product_rows: productRows,
   });
@@ -315,7 +323,9 @@ function renderAutocompleteList(input, options, onSelect) {
 
   var filtered = (options || [])
     .filter(function (opt) {
-      return normalizeText(opt.name).indexOf(keyword) !== -1;
+      return normalizeText(
+        String(opt.name || "") + " " + String(opt.item_code || ""),
+      ).indexOf(keyword) !== -1;
     })
     .slice(0, 20);
 
@@ -332,7 +342,7 @@ function renderAutocompleteList(input, options, onSelect) {
   filtered.forEach(function (opt) {
     var li = document.createElement("li");
     li.setAttribute("value", String(opt.id));
-    li.textContent = opt.name;
+    li.textContent = opt.display_name || opt.name;
     li.addEventListener("mousedown", function (e) {
       e.preventDefault();
       input.value = opt.name;

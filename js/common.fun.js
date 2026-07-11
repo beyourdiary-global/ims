@@ -3307,12 +3307,15 @@ function searchInput(param, siteURL) {
           if (row["desc"] != undefined) {
             let desc = row["desc"];
             let value = row["val"];
+            let selectText = row["select_text"];
 
-            resultList.append(
-              $("<li></li>")
-                .attr("value", String(value == null ? "" : value))
-                .text(String(desc == null ? "" : desc)),
-            );
+            let resultItem = $("<li></li>")
+              .attr("value", String(value == null ? "" : value))
+              .text(String(desc == null ? "" : desc));
+            if (selectText != undefined) {
+              resultItem.attr("data-select-text", String(selectText));
+            }
+            resultList.append(resultItem);
           } else {
             let id = row["id"];
             let name = row[type];
@@ -3493,7 +3496,10 @@ function retrieveJSONData(search, type, tblname) {
 }
 
 function setText(element, val, val2) {
-  let text = $(element).text();
+  let text = $(element).attr("data-select-text");
+  if (text == undefined) {
+    text = $(element).text();
+  }
   let value = $(element).attr("value");
 
   if (value != "emptyValue") {

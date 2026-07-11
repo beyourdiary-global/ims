@@ -100,9 +100,14 @@ switch ($action) {
             while ($row = mysqli_fetch_assoc($result)) {
                 $itemCode = trim((string) (isset($row['item_code']) ? $row['item_code'] : ''));
                 $name = trim((string) (isset($row['name']) ? $row['name'] : ''));
+                $displayName = $name !== '' ? $name : $itemCode;
+                if ($itemCode !== '') {
+                    $displayName .= ' (Item Code: ' . $itemCode . ')';
+                }
                 $rows[] = array(
-                    'desc' => $itemCode !== '' ? $itemCode : $name,
+                    'desc' => $displayName,
                     'val' => isset($row['id']) ? (string) ((int) $row['id']) : '',
+                    'select_text' => $name !== '' ? $name : $itemCode,
                 );
             }
         }
