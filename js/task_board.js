@@ -3093,6 +3093,7 @@ function openItemDetailModal($card) {
   };
 
   $("#taskItemDetailTitleInput").val(title);
+  resizeItemDetailTitleInput();
   $("#taskItemDetailDescriptionInput").val(description);
   setItemDetailTitleEditMode(false);
   setDescriptionPanelCollapsed(false);
@@ -7139,3 +7140,21 @@ safeRefreshBoardUi();
 bindTaskBoardTouchSwipeScroll();
 window.setTimeout(safeRefreshBoardUi, 120);
 window.setTimeout(safeRefreshBoardUi, 420);
+
+function resizeItemDetailTitleInput() {
+  var titleInput = document.getElementById("taskItemDetailTitleInput");
+  if (!titleInput) {
+    return;
+  }
+
+  titleInput.style.height = "auto";
+  titleInput.style.height = titleInput.scrollHeight + "px";
+}
+
+$(document).on("input", "#taskItemDetailTitleInput", function () {
+  resizeItemDetailTitleInput();
+});
+
+$(window).on("resize", function () {
+  resizeItemDetailTitleInput();
+});

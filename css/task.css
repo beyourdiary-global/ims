@@ -2609,6 +2609,19 @@ body.task-board-page .task-board-scroll {
   overscroll-behavior: contain;
 }
 
+/* Keep long task titles readable in the detail modal on every viewport. */
+.task-item-detail-title-row .task-item-detail-title-input {
+  min-width: 0;
+  width: 100%;
+  min-height: calc(2 * 1.2em + 0.6rem);
+  resize: none;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  white-space: pre-wrap;
+  overflow-y: auto;
+  field-sizing: content;
+}
+
 .task-composer-controls .dropdown-menu.task-composer-dropdown-fixed {
   position: fixed !important;
   inset: auto auto auto auto !important;
