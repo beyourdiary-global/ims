@@ -546,7 +546,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
 
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php echo ($act) ? '<button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="' . $actionBtnValue . '">' . $pageActionTitle . '</button>' : ''; ?>
-                        <button class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="back">Back</button>
+                        <button type="button" class="btn btn-rounded btn-primary mx-2 mb-2" name="actionBtn" id="actionBtn" value="back">Back</button>
                     </div>
                 </form>
             </div>
@@ -562,6 +562,13 @@ if (isset($_SESSION['tempValConfirmBox'])) {
         centerAlignment("formContainer");
         setButtonColor();
         preloader(300, action);
+
+        const warehouseBackBtn = document.querySelector("button[name='actionBtn'][value='back']");
+        if (warehouseBackBtn) {
+            warehouseBackBtn.addEventListener("click", function () {
+                window.history.back();
+            });
+        }
     </script>
 
 </body>

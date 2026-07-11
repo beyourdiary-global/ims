@@ -10981,8 +10981,8 @@ if (!function_exists('shopeeOmsLoadTokenSettingNameMap')) {
     }
 }
 
-if (!function_exists('shopeeOmsBuildWarehouseUsageByTokenSettingId')) {
-    function shopeeOmsBuildWarehouseUsageByTokenSettingId($connect)
+if (!function_exists('shopeeOmsBuildWarehouseUsageDetailsByTokenSettingId')) {
+    function shopeeOmsBuildWarehouseUsageDetailsByTokenSettingId($connect)
     {
         $usageMap = array();
         if (!($connect instanceof mysqli) || !commonWarehouseTelegramTokenColumnExists($connect)) {
@@ -11007,17 +11007,51 @@ if (!function_exists('shopeeOmsBuildWarehouseUsageByTokenSettingId')) {
                     $usageMap[$tokenId] = array();
                 }
 
+                $warehouseId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($warehouseId <= 0) {
+                    continue;
+                }
+
                 $warehouseName = isset($row['name']) && trim((string) $row['name']) !== ''
                     ? (string) $row['name']
-                    : ('Warehouse #' . (int) $row['id']);
-                $usageMap[$tokenId][] = $warehouseName;
+                    : ('Warehouse #' . $warehouseId);
+                $usageMap[$tokenId][] = array(
+                    'id' => $warehouseId,
+                    'name' => $warehouseName,
+                );
             }
         }
 
-        foreach ($usageMap as $tokenId => $warehouseNames) {
-            $usageMap[$tokenId] = array_values(array_unique($warehouseNames));
+        foreach ($usageMap as $tokenId => $warehouseDetails) {
+            $uniqueDetails = array();
+            $seenWarehouseIds = array();
+            foreach ($warehouseDetails as $warehouseDetail) {
+                $warehouseId = isset($warehouseDetail['id']) ? (int) $warehouseDetail['id'] : 0;
+                if ($warehouseId <= 0 || isset($seenWarehouseIds[$warehouseId])) {
+                    continue;
+                }
+                $seenWarehouseIds[$warehouseId] = true;
+                $uniqueDetails[] = $warehouseDetail;
+            }
+            $usageMap[$tokenId] = $uniqueDetails;
         }
 
+        return $usageMap;
+    }
+}
+
+if (!function_exists('shopeeOmsBuildWarehouseUsageByTokenSettingId')) {
+    function shopeeOmsBuildWarehouseUsageByTokenSettingId($connect)
+    {
+        $usageMap = array();
+        $usageDetailsMap = shopeeOmsBuildWarehouseUsageDetailsByTokenSettingId($connect);
+        foreach ($usageDetailsMap as $tokenId => $warehouseDetails) {
+            $warehouseNames = array();
+            foreach ($warehouseDetails as $warehouseDetail) {
+                $warehouseNames[] = isset($warehouseDetail['name']) ? (string) $warehouseDetail['name'] : '';
+            }
+            $usageMap[$tokenId] = array_values(array_filter(array_unique($warehouseNames), 'strlen'));
+        }
         return $usageMap;
     }
 }
