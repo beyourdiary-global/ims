@@ -135,7 +135,7 @@ if ($companySqlRst) {
     }
 }
 
-$packageRst = mysqli_query($connect, "SELECT id,name,item_description,price,product,brand FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
+$packageRst = mysqli_query($connect, "SELECT id,name,item_code,item_description,price,product,brand FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
 if ($packageRst) {
     while ($packageRow = $packageRst->fetch_assoc()) {
         $pkgId = (int) $packageRow['id'];
@@ -160,6 +160,7 @@ if ($packageRst) {
         $packages[] = array(
             'id' => $pkgId,
             'name' => $pkgName,
+            'item_code' => isset($packageRow['item_code']) ? (string) $packageRow['item_code'] : '',
             'item_description' => $pkgDesc,
             'price' => $pkgPrice,
             'product_ids' => $pkgProductIds,

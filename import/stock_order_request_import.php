@@ -8,13 +8,31 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/header/phpqrcode/qrlib.php';
 
 if (!function_exists('sorImpBuildPackageProductRows')) {
-    function sorImpBuildPackageProductRows($productIdsRaw, $productNameMap)
+    function sorImpBuildPackageProductRows($productIdsRaw, $productNameMap, $itemCode = '')
     {
         $counts = array();
         $order = array();
 
         if (!is_array($productIdsRaw)) {
             $productIdsRaw = array();
+        }
+
+        // This Shopee package has no product IDs saved on its package record.
+        // Its recipe is two Carb Zero units and one free Full Moonz box.
+        if (count($productIdsRaw) === 0 && strcasecmp(trim((string) $itemCode), 'MY-SP-2CZ-1M') === 0) {
+            $requiredProducts = array(
+                'urbanismcarbzero' => 2,
+                'urbanismfullmoonz' => 1,
+            );
+            foreach ($productNameMap as $productId => $productName) {
+                $productKey = strtolower(preg_replace('/[^a-z0-9]+/i', '', (string) $productName));
+                if (!isset($requiredProducts[$productKey])) {
+                    continue;
+                }
+                for ($i = 0; $i < (int) $requiredProducts[$productKey]; $i++) {
+                    $productIdsRaw[] = (int) $productId;
+                }
+            }
         }
 
         foreach ($productIdsRaw as $rawProductId) {
@@ -171,7 +189,7 @@ if ($prodRst) {
 }
 
 $packages = array();
-$pkgRst = mysqli_query($connect, "SELECT id, name, item_description, product, brand, price FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
+$pkgRst = mysqli_query($connect, "SELECT id, name, item_code, item_description, product, brand, price FROM " . PKG . " WHERE status='A' ORDER BY name ASC");
 if ($pkgRst) {
     while ($p = mysqli_fetch_assoc($pkgRst)) {
         $productIds = array();
@@ -185,11 +203,16 @@ if ($pkgRst) {
             }
         }
         $productIdsRaw = array_values($productIds);
-        $productRows = sorImpBuildPackageProductRows($productIdsRaw, $productNameMap);
+        $productRows = sorImpBuildPackageProductRows(
+            $productIdsRaw,
+            $productNameMap,
+            isset($p['item_code']) ? (string) $p['item_code'] : ''
+        );
 
         $packages[] = array(
             'id' => (int) $p['id'],
             'name' => (string) $p['name'],
+            'item_code' => isset($p['item_code']) ? (string) $p['item_code'] : '',
             'item_description' => (string) $p['item_description'],
             'product_ids' => array_values(array_map(function ($row) {
                 return isset($row['product_id']) ? (int) $row['product_id'] : 0;
@@ -763,13 +786,19 @@ if (!function_exists('sorImpFindInvoiceDate')) {
     function sorImpFindInvoiceDate($text)
     {
         $lines = sorImpGetPdfTextLines((string) $text);
-        foreach ($lines as $line) {
+        foreach ($lines as $lineIndex => $line) {
             if (!preg_match('/(?:(?:invoice|voice|invoices?)\s*date|\bdate\b)/i', (string) $line)) continue;
-            if (preg_match('/([0-9OIl]{4}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}|[0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{4})/iu', (string) $line, $m)) {
+            // Text operators in PDFs can split a label and its value into
+            // separate lines, for example: "Date" then "July 11, 2026".
+            $dateContext = (string) $line;
+            for ($offset = 1; $offset <= 2 && isset($lines[$lineIndex + $offset]); $offset++) {
+                $dateContext .= ' ' . (string) $lines[$lineIndex + $offset];
+            }
+            if (preg_match('/([0-9OIl]{4}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}|[0-9OIl]{1,2}[\/.\-][0-9OIl]{1,2}[\/.\-][0-9OIl]{4})/iu', $dateContext, $m)) {
                 $v = sorImpDateToYmd((string) $m[1]);
                 if ($v !== '') return $v;
             }
-            if (preg_match('/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+\d{4}\b/iu', (string) $line, $m)) {
+            if (preg_match('/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+\d{4}\b/iu', $dateContext, $m)) {
                 $v = sorImpDateToYmd((string) $m[0]);
                 if ($v !== '') return $v;
             }
@@ -807,6 +836,12 @@ if (!function_exists('sorImpFindInvoiceDate')) {
         }
         if (preg_match('/(\d{4}[\/.\-]\d{1,2}[\/.\-]\d{1,2})/', $clean, $m)) {
             $v = sorImpDateToYmd($m[1]);
+            if ($v !== '') return $v;
+        }
+        // OCR preserves the date value even when the PDF columns place the
+        // Date label elsewhere in the extracted text.
+        if (preg_match('/\b(?:jan(?:uary)?|feb(?:ruary)?|mar(?:ch)?|apr(?:il)?|may|jun(?:e)?|jul(?:y)?|aug(?:ust)?|sep(?:t(?:ember)?)?|oct(?:ober)?|nov(?:ember)?|dec(?:ember)?)\s+\d{1,2},?\s+\d{4}\b/iu', (string) $text, $m)) {
+            $v = sorImpDateToYmd((string) $m[0]);
             if ($v !== '') return $v;
         }
 
@@ -1204,6 +1239,17 @@ if (!function_exists('sorImpResolveUrbanismShorthandPackage')) {
         $text = trim((string) $text);
         if ($text === '' || !preg_match('/\b(?:moonz|sunz|starz|carb\s*zero|carbzero|urbanism)\b/i', $text)) {
             return null;
+        }
+
+        // UMS invoices label this Shopee package only as "CARBZERO 2". The
+        // package name is duplicated for other channels, so use its stable item code
+        // instead of accepting whichever duplicate happens to be listed first.
+        if (preg_match('/\bcarb\s*zero\s*2\b/i', $text)) {
+            foreach ($packages as $pkg) {
+                if (strcasecmp(trim((string) (isset($pkg['item_code']) ? $pkg['item_code'] : '')), 'MY-SP-2CZ-1M') === 0) {
+                    return $pkg;
+                }
+            }
         }
 
         $lineRecipe = sorImpUrbanismBuildPackageRecipe(array(
@@ -1776,6 +1822,14 @@ if (!function_exists('sorImpResolvePackageFromText')) {
             }
         }
 
+        // Marketplace invoices often shorten an Urbanism package to the paid
+        // item only (for example, "CARBZERO 2"). Resolve it by its recipe so
+        // the matching package also retains its linked free item(s).
+        $urbanismMatch = sorImpResolveUrbanismShorthandPackage($line, $packages);
+        if ($urbanismMatch) {
+            return $urbanismMatch;
+        }
+
         return null;
     }
 }
@@ -2214,6 +2268,9 @@ if (!function_exists('sorImpParsePdfToRows')) {
         }
         foreach ($productLines as $line) {
             if (sorImpIsCustomerInfoLine($line)) continue;
+            // These invoice-summary labels may be OCR'd with a row number,
+            // but they are never products.
+            if (preg_match('/^\s*(?:\d{1,3}\s+)?(?:payment(?:\s+methods?)?|topup(?:\s+credit)?|order\s+summary|subtotal|tax|shipping\s+cost|remarks?)\b/i', (string) $line)) continue;
             $rowHeader = sorImpParseNumberedInvoiceRow($line);
             if ($rowHeader !== null) {
                 if ($currentItem !== null) {
@@ -2344,7 +2401,7 @@ if (!function_exists('sorImpParsePdfToRows')) {
                 $lineItems = $fallbackItems;
             }
         }
-        if (preg_match('/package\s*name/iu', (string) $text) || preg_match('/product/products?\s*name/iu', (string) $text)) {
+        if (preg_match('/package\s*name/iu', (string) $text) || preg_match('/products?\s*name/iu', (string) $text)) {
             $labelItems = sorImpParseLabelBasedInvoiceItems($text);
             if (count($labelItems) > 0) {
                 $lineItems = $labelItems;
@@ -2411,7 +2468,15 @@ if (!function_exists('sorImpParsePdfToRows')) {
             // but the package contains multiple products.
             if ($pkgHit && $pkgId > 0 && isset($packageMap[$pkgId])) {
                 $linkedRawIds = isset($packageMap[$pkgId]['product_ids_raw']) ? $packageMap[$pkgId]['product_ids_raw'] : (isset($packageMap[$pkgId]['product_ids']) ? $packageMap[$pkgId]['product_ids'] : array());
-                if (count($linkedRawIds) > 1 && count($item['products']) <= 1) {
+                $hasLinkedExtractedProduct = false;
+                foreach ($item['products'] as $extractedProduct) {
+                    $extractedProductId = sorImpResolveProductFromText(isset($extractedProduct['name']) ? $extractedProduct['name'] : '', $productKeyToId);
+                    if ($extractedProductId > 0 && in_array($extractedProductId, $linkedRawIds, true)) {
+                        $hasLinkedExtractedProduct = true;
+                        break;
+                    }
+                }
+                if (count($linkedRawIds) > 1 && (count($item['products']) <= 1 || !$hasLinkedExtractedProduct)) {
                     $item['products'] = array();
                     $hasSectionMarker = true;
                 }

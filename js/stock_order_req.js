@@ -333,7 +333,9 @@
 
     var filtered = (options || [])
       .filter(function (opt) {
-        return normalizeText(opt.name).indexOf(keyword) !== -1;
+        return normalizeText(
+          String(opt.name || "") + " " + String(opt.item_code || ""),
+        ).indexOf(keyword) !== -1;
       })
       .slice(0, 20);
 
@@ -352,7 +354,7 @@
     filtered.forEach(function (opt) {
       var li = document.createElement("li");
       li.setAttribute("value", String(opt.id));
-      li.textContent = opt.name;
+      li.textContent = opt.display_name || opt.name;
       li.addEventListener("mousedown", function (e) {
         e.preventDefault();
         input.value = opt.name;
@@ -446,6 +448,14 @@
     return {
       id: parseInt(p.id, 10),
       name: String(p.name || ""),
+      item_code: String(p.item_code || "").trim(),
+      display_name:
+        String(p.item_code || "").trim() !== ""
+          ? String(p.name || "") +
+            " (Item Code: " +
+            String(p.item_code || "").trim() +
+            ")"
+          : String(p.name || ""),
       item_description: String(p.item_description || ""),
       price: String(p.price || "0"),
       product_ids: prodIds,

@@ -29,8 +29,16 @@ if($searchText != '')
         foreach($cArr as $x)
         {
             $bool = stripos($x[$searchType], $searchText);
+            if ($bool === false && $tblname === PKG && isset($x['item_code'])) {
+                $bool = stripos((string) $x['item_code'], $searchText);
+            }
             if($bool !== false)
             {
+                if ($tblname === PKG && isset($x['item_code']) && trim((string) $x['item_code']) !== '') {
+                    $x['desc'] = (string) $x['name'] . ' (Item Code: ' . trim((string) $x['item_code']) . ')';
+                    $x['val'] = isset($x['id']) ? (string) $x['id'] : '';
+                    $x['select_text'] = isset($x['name']) ? (string) $x['name'] : '';
+                }
                 array_push($rstArr,$x);
             }
         }
