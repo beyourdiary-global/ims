@@ -2675,6 +2675,7 @@ function applyItemDetailToModal(
   var title = String(info.title || "").trim();
   var description = String(info.description || "").trim();
   $("#taskItemDetailTitleInput").val(title);
+  resizeItemDetailTitleInput();
   $("#taskItemDetailDescriptionInput").val(description);
   itemDetailModalState.initialTitle = title;
   itemDetailModalState.initialDescription = description;
