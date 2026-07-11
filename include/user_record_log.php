@@ -1919,6 +1919,74 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     margin-bottom: 0;
                 }
 
+                .user-record-log-module .url-log-content > p,
+                .user-record-log-module .url-log-content > ul,
+                .user-record-log-module .url-log-content > ol,
+                .user-record-log-module .url-log-content > blockquote,
+                .user-record-log-module .url-log-content > h1,
+                .user-record-log-module .url-log-content > h2,
+                .user-record-log-module .url-log-content > h3,
+                .user-record-log-module .url-log-content > h4 {
+                    margin-top: 0;
+                    margin-bottom: 1rem;
+                }
+
+                .user-record-log-module .url-log-content > * + * {
+                    margin-top: 0.9rem;
+                }
+
+                .user-record-log-module .url-log-content > h1,
+                .user-record-log-module .url-log-content > h2,
+                .user-record-log-module .url-log-content > h3,
+                .user-record-log-module .url-log-content > h4 {
+                    line-height: 1.35;
+                    margin-top: 1.5rem !important;
+                    margin-bottom: 1rem !important;
+                }
+
+                .user-record-log-module .url-log-content > h1:first-child,
+                .user-record-log-module .url-log-content > h2:first-child,
+                .user-record-log-module .url-log-content > h3:first-child,
+                .user-record-log-module .url-log-content > h4:first-child {
+                    margin-top: 0 !important;
+                }
+
+                .user-record-log-module .url-log-content > :last-child {
+                    margin-bottom: 0 !important;
+                }
+
+                .user-record-log-module .url-log-content > p:has(> br:only-child) {
+                    min-height: 1.25rem;
+                }
+
+                .user-record-log-module .url-log-content p {
+                    margin: 0 !important;
+                    padding-top: 0;
+                    padding-bottom: 1rem;
+                }
+
+                .user-record-log-module .url-log-content p + p {
+                    margin-top: 0 !important;
+                    padding-top: 0.25rem;
+                }
+
+                .user-record-log-module .url-log-content h1,
+                .user-record-log-module .url-log-content h2,
+                .user-record-log-module .url-log-content h3,
+                .user-record-log-module .url-log-content h4 {
+                    line-height: 1.35;
+                    margin: 0 !important;
+                    padding-top: 1.25rem;
+                    padding-bottom: 0.75rem;
+                }
+
+                .user-record-log-module .url-log-content > h1:first-child,
+                .user-record-log-module .url-log-content > h2:first-child,
+                .user-record-log-module .url-log-content > h3:first-child,
+                .user-record-log-module .url-log-content > h4:first-child {
+                    padding-top: 0;
+                }
+
                 .user-record-log-module .url-log-content ul,
                 .user-record-log-module .url-log-content ol {
                     padding-left: 1.4rem;
