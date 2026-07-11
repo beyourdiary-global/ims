@@ -532,6 +532,19 @@
         content_style:
           "body { font-family: Helvetica, Arial, sans-serif; font-size: 14px; line-height: 1.6; }",
         setup: function (editor) {
+          editor.on("init", function () {
+            var editorContainer = editor.getContainer();
+            if (!editorContainer || editorContainer.querySelector(".url-editor-resize-handle")) {
+              return;
+            }
+
+            var resizeHandle = document.createElement("span");
+            resizeHandle.className = "url-editor-resize-handle";
+            resizeHandle.setAttribute("aria-hidden", "true");
+            resizeHandle.textContent = "↘";
+            editorContainer.appendChild(resizeHandle);
+          });
+
           editor.on("init change keyup undo redo setcontent", function () {
             editor.save();
           });

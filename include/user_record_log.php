@@ -2212,8 +2212,45 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     object-fit: contain;
                 }
 
-                .user-record-log-module .tox-tinymce {
-                    border-radius: 8px;
+                .user-record-log-module .tox.tox-tinymce {
+                    position: relative;
+                    border: 0;
+                    border-radius: 10px;
+                    box-shadow: inset 0 0 0 1px rgba(9, 30, 66, 0.12);
+                    overflow: hidden;
+                    resize: vertical;
+                    min-height: 280px;
+                    max-height: none;
+                }
+
+                .user-record-log-module .url-editor-resize-handle {
+                    position: absolute;
+                    right: 5px;
+                    bottom: 5px;
+                    z-index: 10;
+                    width: 30px;
+                    height: 26px;
+                    display: flex;
+                    align-items: center;
+                    justify-content: center;
+                    border: 2px solid #006ce7;
+                    border-radius: 6px;
+                    background: #e4efff;
+                    color: #006ce7;
+                    box-shadow: 0 1px 4px rgba(9, 30, 66, 0.24);
+                    font-size: 20px;
+                    font-weight: 700;
+                    line-height: 1;
+                    pointer-events: none;
+                }
+
+                .user-record-log-module .tox.tox-tinymce.tox-edit-focus {
+                    border: 2px solid #006ce7 !important;
+                    box-shadow: none !important;
+                }
+
+                .user-record-log-module .tox.tox-tinymce.tox-edit-focus .tox-edit-area::before {
+                    opacity: 0 !important;
                 }
 
                 body.url-modal-open {
