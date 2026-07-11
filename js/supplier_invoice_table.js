@@ -17,19 +17,25 @@ $(document).ready(function () {
     event.preventDefault();
     const checkboxValues = [];
 
-    $("#supplier_invoice_table")
-      .DataTable()
-      .rows({ search: "applied", page: "current" })
-      .nodes()
-      .to$()
-      .each(function () {
-        const checkbox = $(this).find(".export:checked");
-        if (checkbox.length > 0) {
-          checkbox.each(function () {
-            checkboxValues.push($(this).val());
-          });
-        }
+      if ($.fn.DataTable && $.fn.DataTable.isDataTable("#supplier_invoice_table")) {
+      $("#supplier_invoice_table")
+        .DataTable()
+        .rows({ search: "applied", page: "current" })
+        .nodes()
+        .to$()
+        .each(function () {
+          const checkbox = $(this).find(".export:checked");
+          if (checkbox.length > 0) {
+            checkbox.each(function () {
+              checkboxValues.push($(this).val());
+            });
+          }
+        });
+    } else {
+      $(".export:checked").each(function () {
+        checkboxValues.push($(this).val());
       });
+    }
 
     if (checkboxValues.length > 0) {
       auditExport(checkboxValues, "supplier_invoice");

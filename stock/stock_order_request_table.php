@@ -4,6 +4,7 @@ $currentPagePin = 126;
 
 $listPageSkipPinAccess = true;
 include_once '../include/list_page_header.php';
+include_once ROOT . '/include/supplier_invoice_matching.php';
 
 $pinAccess = checkPinByGroupId($connect, $currentPagePin);
 if (!is_array($pinAccess)) {
@@ -12,6 +13,8 @@ if (!is_array($pinAccess)) {
 
 $redirectPage = $SITEURL . '/stock/stock_order_request.php';
 $deleteRedirectPage = $SITEURL . '/stock/stock_order_request_table.php';
+
+supplierInvoiceRefreshEInvoicingStatuses($finance_connect);
 
 // 1. Refactored Main Query using a SUBQUERY (No JOINs)
 $sql = "SELECT r.*,
@@ -327,6 +330,7 @@ function sorAttachmentHref($relativePath, $siteUrl)
                                 <th>Tracking Status</th>
                                 <th>Tracking Number</th>
                                 <th>Invoice</th>
+                                <th>E-Invoicing Status</th>
                                 <th>Invoices Date</th>
                                 <th>Total Price</th>
                             </tr>
@@ -480,6 +484,7 @@ function sorAttachmentHref($relativePath, $siteUrl)
                                     <?php } ?>
                                 </td>
                                 <td style="white-space: pre-line;"><?= htmlspecialchars((string) $row['invoice_no'], ENT_QUOTES, 'UTF-8') ?></td>
+                                <td class="text-center"><input class="e-invoicing-status-checkbox" type="checkbox" <?= !empty($row['e_invoicing_status']) ? 'checked' : '' ?> disabled aria-label="E-Invoicing Status"></td>
                                 <td><?= htmlspecialchars((string) $row['invoice_date'], ENT_QUOTES, 'UTF-8') ?></td>
                                 <td><?= number_format((float) (isset($row['total_price']) ? $row['total_price'] : 0), 2) ?></td>
                             </tr>

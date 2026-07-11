@@ -37,111 +37,6 @@ if (!function_exists('supplierInvoiceExportExcelSerial')) {
     }
 }
 
-if (!function_exists('supplierInvoiceExportUpdateCell')) {
-    function supplierInvoiceExportUpdateCell($dom, $row, $column, $value, $numeric = false)
-    {
-        $mainNamespace = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
-        $cell = null;
-        foreach ($row->getElementsByTagNameNS($mainNamespace, 'c') as $candidate) {
-            $columnName = preg_replace('/\d+/', '', $candidate->getAttribute('r'));
-            if ($columnName === $column) {
-                $cell = $candidate;
-                break;
-            }
-        }
-        if (!$cell) {
-            return;
-        }
-
-        while ($cell->firstChild) {
-            $cell->removeChild($cell->firstChild);
-        }
-        $cell->removeAttribute('t');
-
-        if ($numeric && $value !== '') {
-            $cell->setAttribute('t', 'n');
-            $valueNode = $dom->createElementNS($mainNamespace, 'v');
-            $valueNode->appendChild($dom->createTextNode((string) $value));
-            $cell->appendChild($valueNode);
-            return;
-        }
-
-        if ($value === '') {
-            return;
-        }
-
-        $cell->setAttribute('t', 'inlineStr');
-        $inlineNode = $dom->createElementNS($mainNamespace, 'is');
-        $textNode = $dom->createElementNS($mainNamespace, 't');
-        if (preg_match('/^\s|\s$/', (string) $value)) {
-            $textNode->setAttributeNS('http://www.w3.org/XML/1998/namespace', 'xml:space', 'preserve');
-        }
-        $textNode->appendChild($dom->createTextNode((string) $value));
-        $inlineNode->appendChild($textNode);
-        $cell->appendChild($inlineNode);
-    }
-}
-
-if (!function_exists('supplierInvoiceExportUpdateRowReferences')) {
-    function supplierInvoiceExportUpdateRowReferences($row, $rowNumber)
-    {
-        $mainNamespace = 'http://schemas.openxmlformats.org/spreadsheetml/2006/main';
-        $row->setAttribute('r', (string) $rowNumber);
-        foreach ($row->getElementsByTagNameNS($mainNamespace, 'c') as $cell) {
-            $columnName = preg_replace('/\d+/', '', $cell->getAttribute('r'));
-            $cell->setAttribute('r', $columnName . $rowNumber);
-        }
-    }
-}
-
-if (!function_exists('supplierInvoiceExportUpdateXmlCell')) {
-    function supplierInvoiceExportUpdateXmlCell($rowXml, $column, $value, $numeric = false, $rowNumber = null)
-    {
-        $escapedValue = htmlspecialchars((string) $value, ENT_XML1 | ENT_QUOTES, 'UTF-8');
-        if ($rowNumber === null) {
-            return $rowXml;
-        }
-
-        $cellReference = 'r="' . $column . $rowNumber . '"';
-        $parts = explode('<c ', $rowXml);
-        foreach ($parts as $index => $part) {
-            if ($index === 0 || strpos($part, $cellReference) === false) {
-                continue;
-            }
-
-            $tagEnd = strpos($part, '>');
-            if ($tagEnd === false) {
-                continue;
-            }
-            $attributes = substr($part, 0, $tagEnd);
-            $closingTag = strpos($part, '</c>');
-            $selfClosingTag = strpos($part, '/>');
-            if ($closingTag !== false && ($selfClosingTag === false || $closingTag < $selfClosingTag)) {
-                $afterCell = substr($part, $closingTag + 4);
-            } elseif ($selfClosingTag !== false) {
-                $afterCell = substr($part, $selfClosingTag + 2);
-            } else {
-                continue;
-            }
-
-            $attributes = preg_replace('/\s+t="[^"]*"/', '', $attributes);
-            if ($value === '') {
-                $replacement = '<c ' . $attributes . ' />';
-            } elseif ($numeric) {
-                $replacement = '<c ' . $attributes . ' t="n"><v>' . $escapedValue . '</v></c>';
-            } else {
-                $spaceAttribute = preg_match('/^\s|\s$/', (string) $value) ? ' xml:space="preserve"' : '';
-                $replacement = '<c ' . $attributes . ' t="inlineStr"><is><t' . $spaceAttribute . '>' . $escapedValue . '</t></is></c>';
-            }
-
-            $parts[$index] = $replacement . $afterCell;
-            return implode('<c ', $parts);
-        }
-
-        return $rowXml;
-    }
-}
-
 if (!function_exists('supplierInvoiceExportReplaceTemplateCell')) {
     function supplierInvoiceExportReplaceTemplateCell($rowXml, $rowNumber, $column, $value, $numeric = false)
     {
@@ -151,6 +46,7 @@ if (!function_exists('supplierInvoiceExportReplaceTemplateCell')) {
             'D' => '<c r="D{row}" s="14" t="n"><v>45659</v></c>',
             'E' => '<c r="E{row}" s="13" t="s"><v>32</v></c>',
             'M' => '<c r="M{row}" s="13" t="s"><v>34</v></c>',
+            'N' => '<c r="N{row}" s="13" />',
             'S' => '<c r="S{row}" s="30" t="n"><v>100</v></c>',
         );
 
@@ -225,7 +121,7 @@ if (!function_exists('supplierInvoiceExportBuildWorkbook')) {
             $row = supplierInvoiceExportReplaceTemplateCell($row, $rowNumber, 'A', $invoice['doc_no'] ?? '', false);
             $row = supplierInvoiceExportReplaceTemplateCell($row, $rowNumber, 'C', $invoice['code'] ?? '', false);
             $row = supplierInvoiceExportReplaceTemplateCell($row, $rowNumber, 'D', supplierInvoiceExportExcelSerial($invoice['doc_date'] ?? ''), true);
-            $row = supplierInvoiceExportReplaceTemplateCell($row, $rowNumber, 'E', $invoice['description'] ?? '', false);
+            $row = supplierInvoiceExportReplaceTemplateCell($row, $rowNumber, 'N', $invoice['description'] ?? '', false);
             $row = supplierInvoiceExportReplaceTemplateCell($row, $rowNumber, 'M', $invoice['control_account'] ?? '', false);
             $row = supplierInvoiceExportReplaceTemplateCell($row, $rowNumber, 'S', number_format((float) ($invoice['amount'] ?? 0), 2, '.', ''), true);
             $generatedRows .= $row;
@@ -274,7 +170,7 @@ if (!empty($exportIds)) {
         }
     }
 
-    $templatePath = ROOT . '/Import Supplier Invoice.xlsx';
+    $templatePath = ROOT . '/excel_template/Import Supplier Invoice.xlsx';
     $outputPath = tempnam(sys_get_temp_dir(), 'supplier_invoice_export_');
     $outputPath .= '.xlsx';
     $buildSucceeded = !empty($exportRows) && is_readable($templatePath) && supplierInvoiceExportBuildWorkbook($templatePath, $exportRows, $outputPath);

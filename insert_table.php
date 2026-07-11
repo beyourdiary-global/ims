@@ -872,6 +872,7 @@ addColumnIfMissing($conn, $db_fin, 'stock_in_order', 'stock_type', "ALTER TABLE 
 
 if ($conn->select_db($db_fin)) {
     addColumnIfMissing($conn, $db_fin, 'stock_order_request', 'stock_order_image', "ALTER TABLE `stock_order_request` ADD COLUMN `stock_order_image` VARCHAR(255) DEFAULT NULL AFTER `attachment`");
+    addColumnIfMissing($conn, $db_fin, 'stock_order_request', 'e_invoicing_status', "ALTER TABLE `stock_order_request` ADD COLUMN `e_invoicing_status` BOOLEAN NOT NULL DEFAULT FALSE AFTER `qr_image`");
 } else {
     echo "<p style='color:red;'>Unable to select Finance database `" . $db_fin . "` for `stock_order_request.stock_order_image`.</p>";
 }
