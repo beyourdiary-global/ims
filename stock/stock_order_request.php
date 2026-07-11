@@ -4,6 +4,8 @@ $pageTitle = "Stock Order Request";
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+include_once ROOT . '/include/supplier_invoice_matching.php';
+supplierInvoiceRefreshEInvoicingStatuses($finance_connect);
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/header/phpqrcode/qrlib.php';
 
@@ -390,6 +392,22 @@ foreach ($itemRows as $existingItemRow) {
         );
     }
 }
+
+$sorBotMsgContext = 'stock_order_request';
+$sorBotMsgOrderTable = STOCK_ORDER_REQ;
+$sorBotMsgTemplateOptions = customizeBotMsgGetTemplateOptions($connect, $sorBotMsgContext);
+$sorBotMsgDefaultTemplateId = customizeBotMsgGetDefaultTemplateId($connect, $sorBotMsgContext);
+$sorBotMsgTemplateNameMap = array();
+foreach ($sorBotMsgTemplateOptions as $sorBotMsgTemplateOption) {
+    $templateOptionId = isset($sorBotMsgTemplateOption['id']) ? (int) $sorBotMsgTemplateOption['id'] : 0;
+    if ($templateOptionId > 0) {
+        $sorBotMsgTemplateNameMap[$templateOptionId] = isset($sorBotMsgTemplateOption['template_name']) ? (string) $sorBotMsgTemplateOption['template_name'] : ('Template #' . $templateOptionId);
+    }
+}
+$sorExistingBotMsgTemplateId = ($dataId && $act !== 'I')
+    ? customizeBotMsgGetOrderTemplateId($connect, $sorBotMsgContext, $sorBotMsgOrderTable, (int) $dataId)
+    : 0;
+$sorOriginalBotMsgTemplateId = $sorExistingBotMsgTemplateId > 0 ? $sorExistingBotMsgTemplateId : $sorBotMsgDefaultTemplateId;
 
 if (post('actionBtn')) {
     $action = post('actionBtn');
@@ -931,6 +949,7 @@ if (post('actionBtn')) {
                 }
 
                 if (isset($returnData) && $returnData) {
+                    supplierInvoiceRefreshEInvoicingStatuses($finance_connect);
                     if ($action === 'addRecord') {
                         foreach ($items as $item) {
                             $safeProdId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
@@ -1119,22 +1138,6 @@ if (post('actionBtn')) {
         }
     }
 }
-
-$sorBotMsgContext = 'stock_order_request';
-$sorBotMsgOrderTable = STOCK_ORDER_REQ;
-$sorBotMsgTemplateOptions = customizeBotMsgGetTemplateOptions($connect, $sorBotMsgContext);
-$sorBotMsgDefaultTemplateId = customizeBotMsgGetDefaultTemplateId($connect, $sorBotMsgContext);
-$sorBotMsgTemplateNameMap = array();
-foreach ($sorBotMsgTemplateOptions as $sorBotMsgTemplateOption) {
-    $templateOptionId = isset($sorBotMsgTemplateOption['id']) ? (int) $sorBotMsgTemplateOption['id'] : 0;
-    if ($templateOptionId > 0) {
-        $sorBotMsgTemplateNameMap[$templateOptionId] = isset($sorBotMsgTemplateOption['template_name']) ? (string) $sorBotMsgTemplateOption['template_name'] : ('Template #' . $templateOptionId);
-    }
-}
-$sorExistingBotMsgTemplateId = ($dataId && $act !== 'I')
-    ? customizeBotMsgGetOrderTemplateId($connect, $sorBotMsgContext, $sorBotMsgOrderTable, (int) $dataId)
-    : 0;
-$sorOriginalBotMsgTemplateId = $sorExistingBotMsgTemplateId > 0 ? $sorExistingBotMsgTemplateId : $sorBotMsgDefaultTemplateId;
 
 function sorEcho($value)
 {
@@ -1853,6 +1856,17 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                                     <a href="<?= sorAttachmentUrl(sorNormalizeAttachmentRelativePath($row['stock_order_image']), $SITEURL) ?>" target="_blank">View Current Stock Order Image</a>
                                 </div>
                             <?php } ?>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label form_lbl" for="sor_e_invoicing_status">E-Invoicing Status</label>
+                            <div class="form-check">
+                                <input class="form-check-input e-invoicing-status-checkbox" type="checkbox" id="sor_e_invoicing_status" <?= !empty($row['e_invoicing_status']) ? 'checked' : '' ?> disabled>
+                                <label class="form-check-label" for="sor_e_invoicing_status">Matched with Supplier Invoice</label>
+                            </div>
+                            <small class="text-muted">Automatically checked when the ODR matches a Supplier Invoice.</small>
                         </div>
                     </div>
 

@@ -9,6 +9,8 @@ $parentPageTitle = 'Supplier Invoice';
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 include_once ROOT . '/include/import_pdf_common.php';
+include_once ROOT . '/include/supplier_invoice_qr_verify_common.php';
+include_once ROOT . '/include/supplier_invoice_matching.php';
 
 $resolvedParentPageTitle = getPinGroupNameById($connect, $currentPagePin);
 if ($resolvedParentPageTitle !== '') {
@@ -64,6 +66,28 @@ function supplierInvoiceImportFormatPackageRemark($packageName)
 {
     $packageName = supplierInvoiceImportNormalizeText($packageName);
     return trim((string) preg_replace('/\s*\((?:MY|SG|WEB)\)\s*$/i', '', $packageName));
+}
+
+function supplierInvoiceImportBuildConvertedDescription($description, $packageName)
+{
+    $description = supplierInvoiceImportNormalizeText($description);
+    $packageName = supplierInvoiceImportFormatPackageRemark($packageName);
+    if ($description === '' || $packageName === '') {
+        return $description;
+    }
+
+    $packageSuffixPattern = '/\s*\(' . preg_quote($packageName, '/') . '\)\s*$/iu';
+    if (preg_match($packageSuffixPattern, $description)) {
+        return $description;
+    }
+
+    return rtrim($description) . ' (' . $packageName . ')';
+}
+
+function supplierInvoiceImportBuildSourceRemark($pdfFileName)
+{
+    $pdfFileName = trim((string) basename($pdfFileName));
+    return $pdfFileName === '' ? '' : 'Imported from pdf ' . $pdfFileName;
 }
 
 function supplierInvoiceImportExtractPackageSignals($description)
@@ -234,7 +258,7 @@ function supplierInvoiceImportExtractInvoiceData($text, $packages)
     if ($data['description'] !== '') {
         $matchedPackage = supplierInvoiceImportMatchPackage($data['description'], $packages, $currency);
         if (!empty($matchedPackage)) {
-            $data['remark'] = $matchedPackage['remark'];
+            $data['description'] = supplierInvoiceImportBuildConvertedDescription($data['description'], $matchedPackage['name']);
             $data['package_name'] = $matchedPackage['name'];
             $data['package_id'] = (string) $matchedPackage['id'];
         }
@@ -338,6 +362,8 @@ if ($action === 'parseSupplierInvoice') {
                     $importErrors[] = 'Unable to extract text from the uploaded Supplier Invoice PDF.';
                 } else {
                     $previewData = supplierInvoiceImportExtractInvoiceData($rawPdfText, $packages);
+                    $previewData['pdf_name'] = basename($uploadedFileName);
+                    $previewData['remark'] = supplierInvoiceImportBuildSourceRemark($uploadedFileName);
                     if ($previewData['doc_no'] === '') {
                         $importErrors[] = 'Invoice No could not be detected from the PDF.';
                     } elseif (supplierInvoiceImportDocNoExists($previewData['doc_no'], $finance_connect)) {
@@ -355,7 +381,7 @@ if ($action === 'parseSupplierInvoice') {
                     if ($previewData['amount'] === '') {
                         $importErrors[] = 'Invoice Amount could not be detected from the PDF.';
                     }
-                    if ($previewData['remark'] === '') {
+                    if ($previewData['package_name'] === '') {
                         $importErrors[] = 'The PDF description could not be matched to an active Package in the system database.';
                     }
                 }
@@ -377,6 +403,7 @@ if ($action === 'insertSupplierInvoice') {
     $odr = supplierInvoiceImportValue($postedData, 'odr');
     $amount = supplierInvoiceImportValue($postedData, 'amount');
     $qrUrl = supplierInvoiceImportValue($postedData, 'qr_url');
+    $pdfName = supplierInvoiceImportValue($postedData, 'pdf_name');
     $merchantName = supplierInvoiceImportValue($postedData, 'merchant_name');
     $controlAccount = supplierInvoiceImportNormalizeMerchantValue(supplierInvoiceImportValue($postedData, 'control_account'));
     $code = supplierInvoiceImportNormalizeMerchantValue(supplierInvoiceImportValue($postedData, 'code'));
@@ -389,6 +416,7 @@ if ($action === 'insertSupplierInvoice') {
         'odr' => $odr,
         'amount' => $amount,
         'qr_url' => $qrUrl,
+        'pdf_name' => $pdfName,
         'merchant_name' => $merchantName,
         'control_account' => $controlAccount,
         'code' => $code,
@@ -398,6 +426,8 @@ if ($action === 'insertSupplierInvoice') {
 
     if ($docNo === '' || $docDate === '' || $description === '' || $remark === '' || $odr === '' || $amount === '') {
         $importErrors[] = 'DocNo, DocDate, Description, Remark, ODR, and Amount are required.';
+    } elseif ($packageName === '') {
+        $importErrors[] = 'The PDF description could not be matched to an active Package in the system database.';
     } elseif (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $docDate) || !checkdate((int) substr($docDate, 5, 2), (int) substr($docDate, 8, 2), (int) substr($docDate, 0, 4))) {
         $importErrors[] = 'DocDate is invalid.';
     } elseif (!is_numeric(str_replace(',', '', $amount))) {
@@ -410,6 +440,14 @@ if ($action === 'insertSupplierInvoice') {
         $importErrors[] = 'The scanned QR value must be a valid http or https URL.';
     } elseif (supplierInvoiceImportDocNoExists($docNo, $finance_connect)) {
         $importErrors[] = 'This DocNo already exists in Supplier Invoice records.';
+    } elseif ($qrUrl !== '') {
+        $qrVerification = supplierInvoiceQrVerifyFetchDetails($qrUrl);
+        if ($qrVerification['success']) {
+            $qrTotalPayable = (float) $qrVerification['data']['total_payable_numeric'];
+            if (abs($qrTotalPayable - (float) $amount) > 0.009) {
+                $importErrors[] = 'QR Total Payable Amount (' . $qrVerification['data']['total_payable_amount'] . ') does not match Total Amount (' . $amount . ').';
+            }
+        }
     }
 
     if (empty($importErrors)) {
@@ -446,6 +484,7 @@ if ($action === 'insertSupplierInvoice') {
 
         if (empty($importErrors)) {
             mysqli_commit($finance_connect);
+            supplierInvoiceRefreshEInvoicingStatuses($finance_connect);
             audit_log(array(
                 'log_act' => 'Import',
                 'cdate' => $cdate,
@@ -521,7 +560,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
                     <div class="card mb-4 shadow-sm border-0 supplier-invoice-import-preview">
                         <div class="card-body">
                             <h5 class="card-title mb-3">Step 2: Preview Supplier Invoice</h5>
-                            <p class="text-muted">The Description is preserved from the PDF. Remark is converted from the matching active Package record.</p>
+                            <p class="text-muted">The Description includes the matched active Package name from the PDF. Remark records the source PDF filename.</p>
                             <form method="post" autocomplete="off">
                                 <div class="row g-3">
                                     <div class="col-md-4">
@@ -535,6 +574,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
                                     <div class="col-md-4">
                                         <label class="form-label fw-bold" for="supplier_import_amount">Amount</label>
                                         <input class="form-control" type="number" step="0.01" id="supplier_import_amount" name="data[amount]" value="<?= htmlspecialchars($previewData['amount'], ENT_QUOTES, 'UTF-8') ?>" required>
+                                        <span id="supplier_import_qr_amount_mismatch" class="error-message d-none" aria-live="polite"></span>
                                     </div>
                                     <div class="col-12">
                                         <label class="form-label fw-bold" for="supplier_import_merchant_name">Merchant Name</label>
@@ -569,6 +609,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
                                     </div>
                                     <div class="col-12">
                                         <label class="form-label fw-bold" for="supplier_import_remark">Remark</label>
+                                        <input type="hidden" name="data[pdf_name]" value="<?= htmlspecialchars($previewData['pdf_name'] ?? '', ENT_QUOTES, 'UTF-8') ?>">
                                         <textarea class="form-control" id="supplier_import_remark" name="data[remark]" required><?= htmlspecialchars($previewData['remark'], ENT_QUOTES, 'UTF-8') ?></textarea>
                                     </div>
                                     <div class="col-12">
@@ -578,6 +619,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
                                         <small class="text-muted">Select an image containing the QR code. Its URL will be saved separately from the invoice.</small>
                                         <div id="supplier_import_qr_scan_status" class="mt-2 text-muted" aria-live="polite"></div>
                                         <div id="supplier_import_qr_url_preview" class="mt-2"></div>
+                                        <div id="supplier_import_qr_verification_status" class="mt-2 text-muted" aria-live="polite"></div>
+                                        <div id="supplier_import_qr_invoice_details"></div>
                                     </div>
                                 </div>
                                 <div class="import-preview-actions mt-4 d-flex gap-2 flex-wrap">
@@ -610,6 +653,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
     </div>
 
     <script src="<?= $SITEURL ?>/header/js/jsQR.js"></script>
+    <script src="<?= $SITEURL ?>/js/supplier_invoice_qr_verification.js"></script>
     <script>
         document.title = <?= json_encode($pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
         checkCurrentPage(<?= json_encode($pageTitle) ?>, '');
@@ -627,8 +671,21 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
             const qrUrlInput = document.getElementById('supplier_import_qr_url');
             const qrScanStatus = document.getElementById('supplier_import_qr_scan_status');
             const qrUrlPreview = document.getElementById('supplier_import_qr_url_preview');
+            const amountInput = document.getElementById('supplier_import_amount');
+            const qrVerificationStatus = document.getElementById('supplier_import_qr_verification_status');
+            const qrInvoiceDetails = document.getElementById('supplier_import_qr_invoice_details');
+            const qrAmountMismatch = document.getElementById('supplier_import_qr_amount_mismatch');
             let scannedQrFile = null;
             let qrScanPromise = null;
+            let bypassQrVerificationOnce = false;
+            const qrVerifier = window.createSupplierInvoiceQrVerifier({
+                endpoint: <?= json_encode($SITEURL . '/finance/supplier_invoice_qr_verify.php') ?>,
+                qrUrlInput: qrUrlInput,
+                amountInput: amountInput,
+                detailContainer: qrInvoiceDetails,
+                statusElement: qrVerificationStatus,
+                amountErrorElement: qrAmountMismatch
+            });
 
             function formatMerchantValue(value) {
                 const cleaned = (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -817,6 +874,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
                     qrUrlInput.value = url;
                     scannedQrFile = file;
                     showScannedQrUrl(url);
+                    qrVerifier.verify(url);
                     setQrScanStatus('QR code scanned successfully. The URL will be saved with the invoice.', 'mt-2 text-success');
                     return true;
                 }).catch(function (error) {
@@ -841,17 +899,24 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && USER_ID) {
 
             if (form) {
                 form.addEventListener('submit', async function (event) {
-                    if (!qrInput || !qrInput.files || !qrInput.files.length || !qrUrlInput) return;
-                    const file = qrInput.files[0];
-                    if (file === scannedQrFile && qrUrlInput.value) return;
-                    event.preventDefault();
-                    const scanSucceeded = await (qrScanPromise || scanSelectedQrImage(file));
-                    if (scanSucceeded) {
-                        if (typeof form.requestSubmit === 'function') form.requestSubmit(event.submitter);
-                        else form.submit();
+                    if (bypassQrVerificationOnce) {
+                        bypassQrVerificationOnce = false;
+                        return;
                     }
+                    if (!qrUrlInput) return;
+                    event.preventDefault();
+                    const file = qrInput && qrInput.files && qrInput.files.length ? qrInput.files[0] : null;
+                    const scanSucceeded = !file || (file === scannedQrFile && qrUrlInput.value) ? true : await (qrScanPromise || scanSelectedQrImage(file));
+                    if (!scanSucceeded) return;
+                    const canSubmit = await qrVerifier.ensureReadyForSubmit();
+                    if (!canSubmit) return;
+                    bypassQrVerificationOnce = true;
+                    if (typeof form.requestSubmit === 'function') form.requestSubmit(event.submitter);
+                    else form.submit();
                 });
             }
+
+            if (qrUrlInput && qrUrlInput.value) qrVerifier.verify(qrUrlInput.value);
         })();
     </script>
 </body>

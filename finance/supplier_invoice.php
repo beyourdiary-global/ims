@@ -4,6 +4,8 @@ $pageTitle = "Supplier Invoice";
 
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
+include_once ROOT . '/include/supplier_invoice_qr_verify_common.php';
+include_once ROOT . '/include/supplier_invoice_matching.php';
 $resolvedPageTitle = getPinGroupNameById($connect, $currentPagePin);
 if ($resolvedPageTitle !== '') {
     $pageTitle = $resolvedPageTitle;
@@ -130,6 +132,15 @@ if (post('actionBtn')) {
         } elseif ($supplierQrUrl !== '' && (!filter_var($supplierQrUrl, FILTER_VALIDATE_URL) || !preg_match('/^https?:\/\//i', $supplierQrUrl))) {
             $qrUrlErr = 'The scanned QR value must be a valid http or https URL.';
             $error = 1;
+        } elseif ($supplierQrUrl !== '') {
+            $qrVerification = supplierInvoiceQrVerifyFetchDetails($supplierQrUrl);
+            if ($qrVerification['success']) {
+                $qrTotalPayable = (float) $qrVerification['data']['total_payable_numeric'];
+                if (abs($qrTotalPayable - (float) $supplierAmount) > 0.009) {
+                    $amountErr = 'QR Total Payable Amount (' . $qrVerification['data']['total_payable_amount'] . ') does not match Total Amount (' . $supplierAmount . ').';
+                    $error = 1;
+                }
+            }
         }
 
         if (!isset($error)) {
@@ -218,6 +229,7 @@ if (post('actionBtn')) {
                     }
                 }
                 mysqli_commit($finance_connect);
+                supplierInvoiceRefreshEInvoicingStatuses($finance_connect);
                 $_SESSION['tempValConfirmBox'] = true;
             } else {
                 mysqli_rollback($finance_connect);
@@ -341,6 +353,7 @@ $formRemark = isset($supplierRemark) ? $supplierRemark : (string) ($row['remark'
                                 <label class="form-label form_lbl" for="supplier_amount">Amount<span class="required-dot">*</span></label>
                                 <input class="form-control" type="number" name="supplier_amount" id="supplier_amount" min="0" step="0.01" value="<?= htmlspecialchars($formAmount, ENT_QUOTES, 'UTF-8') ?>" <?= $act === '' ? 'readonly' : '' ?> required>
                                 <?php if (isset($amountErr)) : ?><span class="error-message"><?= htmlspecialchars($amountErr, ENT_QUOTES, 'UTF-8') ?></span><?php endif; ?>
+                                <span id="supplier_qr_amount_mismatch" class="error-message d-none" aria-live="polite"></span>
                             </div>
                             <div class="col-md-6">
                                 <label class="form-label form_lbl" for="supplier_odr">ODR</label>
@@ -355,6 +368,8 @@ $formRemark = isset($supplierRemark) ? $supplierRemark : (string) ($row['remark'
                         <small class="text-muted">Select an image containing the QR code. Its URL will be saved separately from the invoice.</small>
                         <div id="supplier_qr_scan_status" class="mt-2 text-muted" aria-live="polite"></div>
                         <div id="supplier_qr_url_preview" class="mt-2"></div>
+                        <div id="supplier_qr_verification_status" class="mt-2 text-muted" aria-live="polite"></div>
+                        <div id="supplier_qr_invoice_details"></div>
                         <?php if ($formQrUrl !== '') : ?>
                             <div class="mt-2">Current QR URL: <a href="<?= htmlspecialchars($formQrUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank" rel="noopener noreferrer"><?= htmlspecialchars($formQrUrl, ENT_QUOTES, 'UTF-8') ?></a></div>
                         <?php endif; ?>
@@ -378,6 +393,7 @@ $formRemark = isset($supplierRemark) ? $supplierRemark : (string) ($row['remark'
     </div>
 
     <script src="<?= $SITEURL ?>/header/js/jsQR.js"></script>
+    <script src="<?= $SITEURL ?>/js/supplier_invoice_qr_verification.js"></script>
     <script>
         (function () {
             const form = document.getElementById('form');
@@ -385,12 +401,25 @@ $formRemark = isset($supplierRemark) ? $supplierRemark : (string) ($row['remark'
             const qrUrlInput = document.getElementById('supplier_qr_url');
             const qrScanStatus = document.getElementById('supplier_qr_scan_status');
             const qrUrlPreview = document.getElementById('supplier_qr_url_preview');
+            const amountInput = document.getElementById('supplier_amount');
+            const qrVerificationStatus = document.getElementById('supplier_qr_verification_status');
+            const qrInvoiceDetails = document.getElementById('supplier_qr_invoice_details');
+            const qrAmountMismatch = document.getElementById('supplier_qr_amount_mismatch');
             const merchantNameInput = document.getElementById('supplier_merchant_name');
             const merchantHiddenInput = document.getElementById('supplier_merchant_hidden');
             const controlAccountInput = document.getElementById('supplier_control_account');
             const codeInput = document.getElementById('supplier_code');
             let scannedQrFile = null;
             let qrScanPromise = null;
+            let bypassQrVerificationOnce = false;
+            const qrVerifier = window.createSupplierInvoiceQrVerifier({
+                endpoint: <?= json_encode($SITEURL . '/finance/supplier_invoice_qr_verify.php') ?>,
+                qrUrlInput: qrUrlInput,
+                amountInput: amountInput,
+                detailContainer: qrInvoiceDetails,
+                statusElement: qrVerificationStatus,
+                amountErrorElement: qrAmountMismatch
+            });
 
             function formatMerchantValue(value) {
                 const cleaned = (value || '').toUpperCase().replace(/[^A-Z0-9]/g, '');
@@ -633,6 +662,7 @@ $formRemark = isset($supplierRemark) ? $supplierRemark : (string) ($row['remark'
                     qrUrlInput.value = decodedUrl;
                     scannedQrFile = file;
                     showScannedQrUrl(decodedUrl);
+                    qrVerifier.verify(decodedUrl);
                     setQrScanStatus('QR code scanned successfully. The URL will be saved when the invoice is submitted.', 'mt-2 text-success');
                     return true;
                 }).catch(function (error) {
@@ -667,22 +697,29 @@ $formRemark = isset($supplierRemark) ? $supplierRemark : (string) ($row['remark'
                 if (controlAccountInput) controlAccountInput.value = formatMerchantValue(controlAccountInput.value);
                 if (codeInput) codeInput.value = formatMerchantValue(codeInput.value);
 
-                if (!qrInput || !qrInput.files || !qrInput.files.length || (event.submitter && event.submitter.value === 'back')) return;
-
-                const selectedFile = qrInput.files[0];
-                if (selectedFile === scannedQrFile && qrUrlInput.value) return;
+                if (event.submitter && event.submitter.value === 'back') return;
+                if (bypassQrVerificationOnce) {
+                    bypassQrVerificationOnce = false;
+                    return;
+                }
 
                 event.preventDefault();
-                const scanResult = qrScanPromise || scanSelectedQrImage(selectedFile);
+                const selectedFile = qrInput && qrInput.files && qrInput.files.length ? qrInput.files[0] : null;
+                const scanResult = !selectedFile || (selectedFile === scannedQrFile && qrUrlInput.value) ? Promise.resolve(true) : (qrScanPromise || scanSelectedQrImage(selectedFile));
                 const scanSucceeded = await scanResult;
-                if (scanSucceeded) {
-                    if (typeof form.requestSubmit === 'function') {
-                        form.requestSubmit(event.submitter);
-                    } else {
-                        form.submit();
-                    }
+                if (!scanSucceeded) return;
+
+                const canSubmit = await qrVerifier.ensureReadyForSubmit();
+                if (!canSubmit) return;
+                bypassQrVerificationOnce = true;
+                if (typeof form.requestSubmit === 'function') {
+                    form.requestSubmit(event.submitter);
+                } else {
+                    form.submit();
                 }
             });
+
+            if (qrUrlInput && qrUrlInput.value) qrVerifier.verify(qrUrlInput.value);
         })();
 
         const page = <?= json_encode($pageTitle) ?>;
