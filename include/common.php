@@ -16538,9 +16538,10 @@ if (!function_exists('sorResolveTrackingMySlug')) {
         $courierName = strtolower(trim((string) $courierName));
         $trackingNo = strtoupper(trim((string) $trackingNo));
 
-        // SPX Malaysia airbill format, example: MY064857959876.
+        // SPX Malaysia airbill format, including the optional service suffix,
+        // for example: MY064857959876 or MY269485464782F.
         // Check this before courier name because CMS courier may be selected as J&T.
-        if (preg_match('/^MY\d{10,14}$/', $trackingNo)) {
+        if (preg_match('/^MY\d{10,14}[A-Z]?$/', $trackingNo)) {
             return 'shopee';
         }
 
@@ -17134,7 +17135,7 @@ if (!function_exists('sorRefreshTrackingStatus')) {
 
         // SPX Malaysia tracking numbers can be scanned/imported while the CMS courier is still wrong.
         // Try tracking.my first for this pattern.
-        if (preg_match('/^MY\d{10,14}$/i', $trackingNo)) {
+        if (preg_match('/^MY\d{10,14}[A-Z]?$/i', $trackingNo)) {
             $statusText = sorFetchTrackingMyWebSocket($courierNameForSlug, $trackingNo);
         }
 

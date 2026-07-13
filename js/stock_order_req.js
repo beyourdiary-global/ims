@@ -61,13 +61,15 @@
 
     const upperText = text.toUpperCase();
 
-    const directMatch = upperText.match(/\bMY\d{10,14}\b/g);
+    // Keep the suffix when it is present; otherwise the compact fallback
+    // would accept only the numeric prefix.
+    const directMatch = upperText.match(/\bMY\d{10,14}[A-Z]?\b/g);
     if (directMatch && directMatch.length > 0) {
       return String(directMatch[0] || "").toUpperCase();
     }
 
     const compactText = upperText.replace(/[^A-Z0-9]+/g, "");
-    const compactMatch = compactText.match(/MY\d{10,14}/g);
+    const compactMatch = compactText.match(/MY\d{10,14}[A-Z]?/g);
     if (compactMatch && compactMatch.length > 0) {
       return String(compactMatch[0] || "").toUpperCase();
     }
@@ -78,7 +80,7 @@
       .replace(/MYI(?=\d{9,13})/g, "MY1")
       .replace(/MYL(?=\d{9,13})/g, "MY1");
 
-    const fixedMatch = fixedText.match(/MY\d{10,14}/g);
+    const fixedMatch = fixedText.match(/MY\d{10,14}[A-Z]?/g);
     if (fixedMatch && fixedMatch.length > 0) {
       return String(fixedMatch[0] || "").toUpperCase();
     }
