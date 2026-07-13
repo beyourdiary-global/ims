@@ -3310,12 +3310,14 @@ function searchInput(param, siteURL) {
             let value = row["val"];
             let selectText = row["select_text"];
 
-            resultList.append(
-              $("<li></li>")
-                .attr("value", String(value == null ? "" : value))
-                .text(String(desc == null ? "" : desc))
-                .data("searchRow", row),
-            );
+            let resultItem = $("<li></li>")
+              .attr("value", String(value == null ? "" : value))
+              .text(String(desc == null ? "" : desc))
+              .data("searchRow", row);
+            if (selectText != undefined) {
+              resultItem.attr("data-select-text", String(selectText));
+            }
+            resultList.append(resultItem);
           } else {
             let id = row["id"];
             let name = row[type];
