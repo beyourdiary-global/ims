@@ -15,6 +15,117 @@ function findCardByItemId(itemId) {
   return $app.find('.task-item-card[data-item-id="' + id + '"]').first();
 }
 
+function findCardByWorkItemKey(workItemKey) {
+  var key = String(workItemKey || "").trim().toLowerCase();
+  if (!key) {
+    return $();
+  }
+
+  var $match = $();
+  $app.find(".task-item-card").each(function () {
+    if (
+      String($(this).attr("data-work-item-key") || "").trim().toLowerCase() ===
+      key
+    ) {
+      $match = $(this);
+      return false;
+    }
+  });
+
+  return $match;
+}
+
+function isTaskItemHashUrlEnabled() {
+  return !!(
+    window.taskBoardConfig &&
+    window.taskBoardConfig.enableTaskItemHashUrl === true
+  );
+}
+
+function getSelectedIssueFromUrl() {
+  if (!isTaskItemHashUrlEnabled()) {
+    return "";
+  }
+
+  try {
+    return String(
+      new URL(window.location.href).searchParams.get("selectedIssue") || "",
+    ).trim();
+  } catch (error) {
+    return "";
+  }
+}
+
+function replaceTaskItemUrl(itemId) {
+  var id = Number(itemId || 0);
+  if (
+    !isTaskItemHashUrlEnabled() ||
+    id <= 0 ||
+    !window.history ||
+    typeof window.history.replaceState !== "function"
+  ) {
+    return;
+  }
+
+  try {
+    var url = new URL(window.location.href);
+    url.searchParams.delete("selectedIssue");
+    url.hash = "task-item-" + String(id);
+    window.history.replaceState(
+      window.history.state,
+      "",
+      url.pathname + url.search + url.hash,
+    );
+  } catch (error) {
+    // Keep modal behavior working if URL state is unavailable in an older browser.
+  }
+}
+
+function clearTaskItemUrl() {
+  if (
+    !isTaskItemHashUrlEnabled() ||
+    !window.history ||
+    typeof window.history.replaceState !== "function"
+  ) {
+    return;
+  }
+
+  try {
+    var url = new URL(window.location.href);
+    var taskItemHash = /^#task-item-\d+(?:-(?:comment|reply)-\d+)?$/i.test(
+      url.hash,
+    );
+    if (!url.searchParams.has("selectedIssue") && !taskItemHash) {
+      return;
+    }
+    url.searchParams.delete("selectedIssue");
+    if (taskItemHash) {
+      url.hash = "";
+    }
+    window.history.replaceState(
+      window.history.state,
+      "",
+      url.pathname + url.search + url.hash,
+    );
+  } catch (error) {
+    // Keep modal behavior working if URL state is unavailable in an older browser.
+  }
+}
+
+function openWorkItemFromSelectedIssue() {
+  var selectedIssue = getSelectedIssueFromUrl();
+  if (!selectedIssue) {
+    return;
+  }
+
+  var $card = findCardByWorkItemKey(selectedIssue);
+  if (!$card.length) {
+    return;
+  }
+
+  openItemDetailModal($card);
+}
+
 function getTaskItemActionModalInstance() {
   var modalEl = document.getElementById("taskItemActionModal");
   if (!modalEl || typeof bootstrap === "undefined" || !bootstrap.Modal) {
@@ -3078,6 +3189,7 @@ function openItemDetailModal($card) {
   itemDetailModalState.workItemKey = String(
     $card.attr("data-work-item-key") || buildWorkItemKey(itemId),
   );
+  replaceTaskItemUrl(itemId);
   itemDetailModalState.parentWorkItemKey = "";
   itemDetailModalState.parentWorkTypeName = "Task";
   itemDetailModalState.parentWorkTypeIcon = "";
@@ -3226,7 +3338,15 @@ function openItemDetailModal($card) {
 
 function buildWorkItemPermalink(itemId) {
   var baseUrl = String(window.location.href || "").split("#")[0];
-  return baseUrl + "#task-item-" + String(Number(itemId || 0));
+  var id = Number(itemId || 0);
+  try {
+    var url = new URL(baseUrl);
+    url.searchParams.delete("selectedIssue");
+    url.hash = "task-item-" + String(id);
+    return url.href;
+  } catch (error) {
+    return baseUrl + "#task-item-" + String(id);
+  }
 }
 
 function copyTextToClipboard(text, successMessage) {
@@ -4623,6 +4743,7 @@ function openWorkItemFromPermalinkHash() {
 
 window.setTimeout(function () {
   openWorkItemFromPermalinkHash();
+  openWorkItemFromSelectedIssue();
 }, 150);
 
 $(window).on("hashchange", function () {
@@ -5966,6 +6087,7 @@ $(document).on("change", "#taskItemAttachmentInput", function () {
 });
 
 $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
+  clearTaskItemUrl();
   persistWorklogTimerState();
   stopWorklogTicker();
   var worklogModal = getItemWorklogModalInstance();
