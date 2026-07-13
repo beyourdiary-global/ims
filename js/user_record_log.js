@@ -524,6 +524,7 @@
           "undo redo | blocks | bold italic underline | bullist numlist | emoticons | removeformat",
         browser_spellcheck: true,
         contextmenu: false,
+        newline_behavior: "linebreak",
         block_formats:
           "Paragraph=p; Heading 1=h1; Heading 2=h2; Heading 3=h3; Heading 4=h4",
         forced_root_block: "p",

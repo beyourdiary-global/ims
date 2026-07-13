@@ -3006,6 +3006,7 @@ function resetItemDetailTitleEdit() {
   $("#taskItemDetailTitleInput").val(
     String(itemDetailModalState.initialTitle || ""),
   );
+  resizeItemDetailTitleInput();
   setItemDetailTitleEditMode(false);
 }
 
@@ -7156,5 +7157,9 @@ $(document).on("input", "#taskItemDetailTitleInput", function () {
 });
 
 $(window).on("resize", function () {
+  resizeItemDetailTitleInput();
+});
+
+$(document).on("shown.bs.modal", "#taskItemDetailModal", function () {
   resizeItemDetailTitleInput();
 });
