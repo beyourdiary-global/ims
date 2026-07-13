@@ -7561,7 +7561,7 @@ if (!function_exists('shopeeOmsGetOrderSourceConfigs')) {
                 'table' => SHOPEE_SG_ORDER_REQ,
                 'db' => 'finance',
                 'db_name' => dbFinance,
-                'financial_fields' => array('price', 'voucher', 'act_shipping_fee', 'service_fee', 'trans_fee', 'ams_fee', 'fees', 'final_amt'),
+                'financial_fields' => array('price', 'voucher', 'act_shipping_fee', 'service_fee', 'trans_fee', 'ams_fee', 'saver_program_fee', 'fees', 'final_amt'),
                 'order_code_field' => 'orderID',
                 'customer_name_field' => 'buyer',
                 'customer_label_mode' => 'shopee_buyer',
@@ -8707,7 +8707,7 @@ if (!function_exists('shopeeOmsGetOrderFinancialFields')) {
             return array('price', 'shipping', 'discount', 'total');
         }
 
-        return array('price', 'voucher', 'act_shipping_fee', 'service_fee', 'trans_fee', 'ams_fee', 'fees', 'final_amt');
+        return array('price', 'voucher', 'act_shipping_fee', 'service_fee', 'trans_fee', 'ams_fee', 'saver_program_fee', 'fees', 'final_amt');
     }
 }
 

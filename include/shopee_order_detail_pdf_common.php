@@ -449,6 +449,7 @@ if (!function_exists('shopeeOrderDetailPdfGetMoneyBoundaryLabels')) {
             'Service Fee',
             'Transaction Fee',
             'Commission Fee',
+            'Saver Programme Fee',
             'Fees & Charges',
             'Order Income',
             'Estimated Order Income',
@@ -731,6 +732,7 @@ if (!function_exists('shopeeOrderDetailPdfExtractMonetaryValues')) {
             'Transaction Fee Incl GST',
             'Transaction Fee Incl Gst',
         );
+        $saverProgramFeeLabels = array('Saver Programme Fee');
 
         $productPrice = shopeeOrderDetailPdfExtractAmountByStrictLabels($text, array('Product Price', 'Merchandise Subtotal', 'Deal Price'), $boundaries, 260, false);
         if ($productPrice === '') {
@@ -766,6 +768,14 @@ if (!function_exists('shopeeOrderDetailPdfExtractMonetaryValues')) {
             $commissionFee = shopeeOrderDetailPdfExtractAmountByLooseLabels($text, array('Commission Fee'));
         }
 
+        $saverProgramFee = shopeeOrderDetailPdfExtractAmountByStrictLabels($text, $saverProgramFeeLabels, $boundaries, 220, true);
+        if ($saverProgramFee === '') {
+            $saverProgramFee = shopeeOrderDetailPdfExtractAmountByLineLabels($text, $saverProgramFeeLabels, 2);
+        }
+        if ($saverProgramFee === '') {
+            $saverProgramFee = shopeeOrderDetailPdfExtractAmountByLooseLabels($text, $saverProgramFeeLabels);
+        }
+
         return array(
             'product_price' => $productPrice,
             'voucher' => shopeeOrderDetailPdfExtractVoucherAmount($text),
@@ -773,6 +783,7 @@ if (!function_exists('shopeeOrderDetailPdfExtractMonetaryValues')) {
             'service_fee' => $serviceFee,
             'trans_fee' => $transactionFee,
             'ams_fee' => $commissionFee,
+            'saver_program_fee' => $saverProgramFee,
             'fees' => shopeeOrderDetailPdfParseAmountByLabels($text, array('Fees & Charges', 'Fees and Charges')),
         );
     }
@@ -1084,7 +1095,7 @@ if (!function_exists('shopeeOrderDetailPdfParse')) {
         if ($parsed['fees'] === '') {
             $feeTotal = 0;
             $feeFound = false;
-            foreach (array('service_fee', 'trans_fee', 'ams_fee') as $feeField) {
+            foreach (array('service_fee', 'trans_fee', 'ams_fee', 'saver_program_fee') as $feeField) {
                 if ($parsed[$feeField] !== '') {
                     $feeTotal += (float) $parsed[$feeField];
                     $feeFound = true;
@@ -1122,6 +1133,7 @@ if (!function_exists('shopeeOrderDetailPdfGetFieldMeta')) {
             'service_fee' => array('label' => 'Service Fee', 'input_type' => 'number'),
             'trans_fee' => array('label' => 'Transaction Fee', 'input_type' => 'number'),
             'ams_fee' => array('label' => 'AMS Fee', 'input_type' => 'number'),
+            'saver_program_fee' => array('label' => 'Saver Programme Fee', 'input_type' => 'number'),
             'fees' => array('label' => 'Fees & Charges', 'input_type' => 'number'),
             'final_amt' => array('label' => 'Final Amount', 'input_type' => 'number'),
         );
