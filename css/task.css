@@ -2613,13 +2613,14 @@ body.task-board-page .task-board-scroll {
 .task-item-detail-title-row .task-item-detail-title-input {
   min-width: 0;
   width: 100%;
+  height: auto;
   min-height: calc(2 * 1.2em + 0.6rem);
-  resize: none;
+  max-height: none;
+  resize: none !important;
   overflow-wrap: anywhere;
   word-break: break-word;
   white-space: pre-wrap;
-  overflow-y: auto;
-  field-sizing: content;
+  overflow: hidden;
 }
 
 .task-composer-controls .dropdown-menu.task-composer-dropdown-fixed {
@@ -3314,6 +3315,11 @@ body.task-board-page .task-board-scroll {
   letter-spacing: -0.03em;
   padding: 0.3rem 0.4rem;
   border-radius: 8px;
+  height: auto;
+  min-height: calc(2 * 1.2em + 0.6rem);
+  max-height: none;
+  resize: none !important;
+  overflow: hidden;
 }
 
 .task-item-detail-title-row.is-editing .task-item-detail-title-input {

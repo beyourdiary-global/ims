@@ -2282,9 +2282,10 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
 
                 .user-record-log-module .tox.tox-tinymce {
                     position: relative;
-                    border: 0;
+                    border: 2px solid #006ce7 !important;
                     border-radius: 10px;
-                    box-shadow: inset 0 0 0 1px rgba(9, 30, 66, 0.12);
+                    box-shadow: none !important;
+                    box-sizing: border-box;
                     overflow: hidden;
                     resize: vertical;
                     min-height: 280px;

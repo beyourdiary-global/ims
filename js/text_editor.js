@@ -1874,6 +1874,7 @@
       relative_urls: false,
       paste_data_images: true,
       automatic_uploads: true,
+      newline_behavior: "linebreak",
       style_formats: [
         { title: "Bold", format: "bold" },
         { title: "Italic", format: "italic" },
