@@ -12,6 +12,9 @@ if (!function_exists('customerTagNormalizePlatform')) {
     {
         $platform = strtolower(trim((string) $platform));
         $configs = function_exists('customerLabelGetPlatformConfigs') ? customerLabelGetPlatformConfigs() : array();
+        if ($platform === 'customer_info') {
+            return $platform;
+        }
         return ($platform !== '' && isset($configs[$platform])) ? $platform : '';
     }
 }
@@ -152,6 +155,156 @@ if (!function_exists('customerTagGetCustomerTagMap')) {
         }
 
         return $tagMap;
+    }
+}
+
+if (!function_exists('customerTagGetAssignmentActivityMap')) {
+    function customerTagGetAssignmentActivityMap($connect, $platform, $customerIds)
+    {
+        $platform = customerTagNormalizePlatform($platform);
+        if ($platform === '' || !customerTagTableExists($connect)) {
+            return array();
+        }
+
+        $customerIds = array_values(array_unique(array_filter(array_map('intval', (array) $customerIds))));
+        if (empty($customerIds)) {
+            return array();
+        }
+
+        $safePlatform = mysqli_real_escape_string($connect, $platform);
+        $sql = "SELECT a.customer_id, a.tag_id, t.name, a.status,
+                       a.create_by, a.create_date, a.create_time,
+                       a.update_by, a.update_date, a.update_time
+                FROM `" . customerTagGetAssignmentTable() . "` a
+                LEFT JOIN `" . TAG . "` t ON t.id = a.tag_id
+                WHERE a.platform = '" . $safePlatform . "'
+                  AND a.customer_id IN (" . implode(',', $customerIds) . ")
+                ORDER BY a.customer_id ASC, COALESCE(a.update_date, a.create_date) DESC,
+                         COALESCE(a.update_time, a.create_time) DESC, a.tag_id ASC";
+
+        $rows = array();
+        $userIds = array();
+        $result = mysqli_query($connect, $sql);
+        if (!($result instanceof mysqli_result)) {
+            return $rows;
+        }
+
+        while ($row = $result->fetch_assoc()) {
+            $customerId = isset($row['customer_id']) ? (int) $row['customer_id'] : 0;
+            $tagName = isset($row['name']) ? trim((string) $row['name']) : '';
+            if ($customerId <= 0 || $tagName === '') {
+                continue;
+            }
+
+            $status = isset($row['status']) ? (string) $row['status'] : '';
+            $isUpdated = trim((string) (isset($row['update_date']) ? $row['update_date'] : '')) !== '';
+            $actorId = $isUpdated ? trim((string) (isset($row['update_by']) ? $row['update_by'] : '')) : trim((string) (isset($row['create_by']) ? $row['create_by'] : ''));
+            $eventDate = $isUpdated ? trim((string) (isset($row['update_date']) ? $row['update_date'] : '')) : trim((string) (isset($row['create_date']) ? $row['create_date'] : ''));
+            $eventTime = $isUpdated ? trim((string) (isset($row['update_time']) ? $row['update_time'] : '')) : trim((string) (isset($row['create_time']) ? $row['create_time'] : ''));
+            $eventTimestamp = trim($eventDate . ' ' . $eventTime);
+            $action = $status === 'A' ? 'added' : 'removed';
+
+            if ($actorId !== '' && ctype_digit($actorId)) {
+                $userIds[(int) $actorId] = (int) $actorId;
+            }
+
+            if (!isset($rows[$customerId])) {
+                $rows[$customerId] = array();
+            }
+
+            $rows[$customerId][] = array(
+                'tag_name' => $tagName,
+                'action' => $action,
+                'actor_id' => $actorId,
+                'actor_name' => $actorId,
+                'timestamp' => $eventTimestamp,
+            );
+        }
+        $result->free();
+
+        if (!empty($userIds)) {
+            $userResult = getData('id, name, username', 'id IN (' . implode(',', array_values($userIds)) . ')', '', USR_USER, $connect);
+            if ($userResult instanceof mysqli_result) {
+                $userNameMap = array();
+                while ($userRow = $userResult->fetch_assoc()) {
+                    $userId = isset($userRow['id']) ? (int) $userRow['id'] : 0;
+                    if ($userId <= 0) {
+                        continue;
+                    }
+
+                    $userName = trim((string) (isset($userRow['name']) ? $userRow['name'] : ''));
+                    if ($userName === '') {
+                        $userName = trim((string) (isset($userRow['username']) ? $userRow['username'] : ''));
+                    }
+                    $userNameMap[(string) $userId] = $userName !== '' ? $userName : (string) $userId;
+                }
+                $userResult->free();
+
+                foreach ($rows as $customerId => $activityRows) {
+                    foreach ($activityRows as $activityIndex => $activityRow) {
+                        $actorKey = (string) (isset($activityRow['actor_id']) ? $activityRow['actor_id'] : '');
+                        if ($actorKey !== '' && isset($userNameMap[$actorKey])) {
+                            $rows[$customerId][$activityIndex]['actor_name'] = $userNameMap[$actorKey];
+                        }
+                    }
+                }
+            }
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('customerTagRenderAssignmentActivity')) {
+    function customerTagRenderAssignmentActivity($activityRows)
+    {
+        $items = array();
+        foreach ((array) $activityRows as $activityRow) {
+            $tagName = trim((string) (isset($activityRow['tag_name']) ? $activityRow['tag_name'] : ''));
+            $action = trim((string) (isset($activityRow['action']) ? $activityRow['action'] : ''));
+            $actorName = trim((string) (isset($activityRow['actor_name']) ? $activityRow['actor_name'] : ''));
+            $timestamp = trim((string) (isset($activityRow['timestamp']) ? $activityRow['timestamp'] : ''));
+            if ($tagName === '' || !in_array($action, array('added', 'removed'), true)) {
+                continue;
+            }
+
+            if ($actorName === '') {
+                $actorName = 'Unknown';
+            }
+            if ($timestamp === '') {
+                $timestamp = '-';
+            }
+
+            $items[] = array(
+                'tag_name' => $tagName,
+                'action' => $action,
+                'actor_name' => $actorName,
+                'timestamp' => $timestamp,
+            );
+        }
+
+        if (empty($items)) {
+            return '';
+        }
+
+        $visibleLimit = 5;
+        $htmlItems = array();
+        foreach ($items as $itemIndex => $item) {
+            $extraClass = $itemIndex >= $visibleLimit ? ' customer-tag-assignment-activity-extra' : '';
+            $actionLabel = $item['action'];
+            $htmlItems[] = '<div class="customer-tag-assignment-activity customer-tag-assignment-activity-' . htmlspecialchars($item['action'], ENT_QUOTES, 'UTF-8') . $extraClass . '">' .
+                '<span class="customer-tag-assignment-activity-line">Tag ' . htmlspecialchars($item['tag_name'], ENT_QUOTES, 'UTF-8') . ' ' . htmlspecialchars($actionLabel, ENT_QUOTES, 'UTF-8') . '</span>' .
+                '<span class="customer-tag-assignment-activity-line">by ' . htmlspecialchars($item['actor_name'], ENT_QUOTES, 'UTF-8') . ' at</span>' .
+                '<span class="customer-tag-assignment-activity-line">' . htmlspecialchars($item['timestamp'], ENT_QUOTES, 'UTF-8') . '</span>' .
+                '</div>';
+        }
+
+        $hiddenCount = max(0, count($items) - $visibleLimit);
+        if ($hiddenCount > 0) {
+            $htmlItems[] = '<button type="button" class="customer-label-toggle-btn customer-tag-assignment-view-more" data-expanded="0" data-hidden-count="' . $hiddenCount . '">Show More (' . $hiddenCount . ')</button>';
+        }
+
+        return '<div class="customer-tag-assignment-activity-list">' . implode('', $htmlItems) . '</div>';
     }
 }
 
@@ -1036,6 +1189,13 @@ if (!function_exists('customerTagHandlePost')) {
                     USER_NAME . ' removed customer tag [<b>' . htmlspecialchars((string) $tagName, ENT_QUOTES, 'UTF-8') . '</b>] from <b>' . htmlspecialchars($customerLabel, ENT_QUOTES, 'UTF-8') . '</b>.',
                     $removeResult['query'],
                     customerTagGetAssignmentTable()
+                );
+                customerTagWriteUserRecordLog(
+                    $connect,
+                    $platform,
+                    $customerId,
+                    'Customer Tag Removed',
+                    htmlspecialchars((string) (defined('USER_NAME') ? USER_NAME : 'User'), ENT_QUOTES, 'UTF-8') . ' removed tag ' . htmlspecialchars((string) $tagName, ENT_QUOTES, 'UTF-8') . ' from customer ' . htmlspecialchars(trim((string) $customerDisplayName), ENT_QUOTES, 'UTF-8')
                 );
                 break;
         }

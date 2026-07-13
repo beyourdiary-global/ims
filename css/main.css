@@ -2015,6 +2015,44 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   overflow-wrap: anywhere;
 }
 
+.customer-tag-assignment-activity-column {
+  width: 280px !important;
+  min-width: 280px;
+  max-width: 280px;
+  vertical-align: top;
+  white-space: normal;
+}
+
+.customer-tag-assignment-activity-list {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: .35rem;
+  width: 100%;
+}
+
+.customer-tag-assignment-activity {
+  display: block;
+  width: 100%;
+  color: #667085;
+  font-size: 13px;
+  line-height: 1.3;
+  white-space: normal;
+}
+
+.customer-tag-assignment-activity-line {
+  display: block;
+  white-space: nowrap;
+}
+
+.customer-tag-assignment-activity-extra {
+  display: none;
+}
+
+.customer-tag-assignment-activity-removed {
+  color: #b54708;
+}
+
 .customer-label-summary-wrap {
   display: flex;
   align-items: center;

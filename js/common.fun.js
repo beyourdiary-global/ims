@@ -2011,6 +2011,19 @@ function initCustomerRecordTableFilters(config) {
     return null;
   }
 
+  $(document)
+    .off("click.customerTagActivity", ".customer-tag-assignment-view-more")
+    .on("click.customerTagActivity", ".customer-tag-assignment-view-more", function () {
+      let button = $(this);
+      let activityList = button.closest(".customer-tag-assignment-activity-list");
+      let isExpanded = button.attr("data-expanded") === "1";
+      let hiddenCount = button.attr("data-hidden-count") || "0";
+
+      activityList.find(".customer-tag-assignment-activity-extra").toggle(!isExpanded);
+      button.attr("data-expanded", isExpanded ? "0" : "1");
+      button.text(isExpanded ? "Show More (" + hiddenCount + ")" : "Show Less");
+    });
+
   let tableElement = document.getElementById(config.tableId);
   if (!tableElement || !$.fn.DataTable.isDataTable(tableElement)) {
     return null;
@@ -2064,6 +2077,28 @@ function initCustomerRecordTableFilters(config) {
     readCustomerRecordFilterStorage(storageKey),
   );
   let pendingFilters = cloneCustomerRecordFilterState(fields, activeFilters);
+  let urlFilterParams = config.urlFilterParams && typeof config.urlFilterParams === "object"
+    ? config.urlFilterParams
+    : {};
+  let currentUrlParams = new URLSearchParams(window.location.search);
+
+  fields.forEach(function (field) {
+    let urlParamName = urlFilterParams[field.key];
+    if (!urlParamName || !currentUrlParams.has(urlParamName)) {
+      return;
+    }
+
+    let urlValues = currentUrlParams.getAll(urlParamName);
+    if (!urlValues.length) {
+      return;
+    }
+
+    let urlFilterValue = field.multiple
+      ? normalizeCustomerRecordFilterValuesList(urlValues)
+      : String(urlValues[0] == null ? "" : urlValues[0]).trim();
+    activeFilters[field.key] = urlFilterValue;
+    pendingFilters[field.key] = urlFilterValue;
+  });
   let tableSearchFn = tableElement.__customerRecordFilterSearch || null;
 
   if (!tableSearchFn) {
