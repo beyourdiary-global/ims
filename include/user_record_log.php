@@ -1137,6 +1137,7 @@ if (!function_exists('urlBuildListHtml')) {
             $updatedAt = isset($row['updated_at']) ? $row['updated_at'] : '';
             $createdBy = urlGetUserName($connect, isset($row['created_by']) ? $row['created_by'] : '');
             $updatedBy = urlGetUserName($connect, isset($row['updated_by']) ? $row['updated_by'] : '');
+            $isSystemRecord = strcasecmp(trim((string) $createdBy), 'SYSTEM') === 0;
             $canEdit = urlWithin3Days($createdAt);
             $editBtn = '';
 
@@ -1180,9 +1181,17 @@ if (!function_exists('urlBuildListHtml')) {
             $copyText = urlBuildUserRecordLogCopyText($displayNo, $auditMetaText, $summary, $content, $attachmentList, $uploadWebDir, $followUpCopyFields);
 
             $rowClass = ($count % 2 === 1) ? ' url-row-odd' : ' url-row-even';
+            if ($isSystemRecord) {
+                $rowClass .= ' url-system-record';
+            }
             $html .= '<div class="card mb-3 url-log-row' . $rowClass . '">';
             $html .= '  <div class="card-header">';
-            $html .= '    <div><strong>#' . $displayNo . '</strong> <span class="ms-2 text-muted small">' . $auditMeta . '</span></div>';
+            $html .= '    <div class="d-flex justify-content-between align-items-center gap-2">';
+            $html .= '      <div><strong>#' . $displayNo . '</strong> <span class="ms-2 text-muted small">' . $auditMeta . '</span></div>';
+            if ($isSystemRecord) {
+                $html .= '      <i class="fa-solid fa-file-waveform fa-xl url-system-record-icon" title="System record" aria-label="System record"></i>';
+            }
+            $html .= '    </div>';
             $html .= '    <div class="d-flex align-items-center gap-2 mt-2">';
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-secondary url-copy-btn" title="Copy User Log">Copy</button>';
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-info text-white url-toggle-btn" data-target="url-body-' . $recordId . '">Collapse/Expand</button>';
@@ -1947,6 +1956,18 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                 .user-record-log-module .url-log-row.url-row-even .card-header,
                 .user-record-log-module .url-log-row.url-row-even .card-body {
                     background-color: #F7F3E1;
+                }
+
+                .user-record-log-module .url-log-row.url-system-record .card-header {
+                    background-color: #ffe6e6;
+                    position: relative;
+                }
+
+                .user-record-log-module .url-system-record-icon {
+                    position: absolute;
+                    top: 50%;
+                    right: 1rem;
+                    transform: translateY(-50%);
                 }
 
                 .user-record-log-module .url-content-row {
