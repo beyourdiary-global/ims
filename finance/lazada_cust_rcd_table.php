@@ -18,6 +18,13 @@ $customerLabelData = customerLabelPrepareCustomerRows($connect, 'lazada', $table
 $tableRows = isset($customerLabelData['rows']) ? $customerLabelData['rows'] : array();
 $customerLabelMap = isset($customerLabelData['label_map']) ? $customerLabelData['label_map'] : array();
 $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag_map'] : array();
+$customerIds = array();
+foreach ($tableRows as $tableRow) {
+    if (isset($tableRow['id'])) {
+        $customerIds[] = (int) $tableRow['id'];
+    }
+}
+$customerTagActivityMap = customerTagGetAssignmentActivityMap($connect, 'lazada', $customerIds);
 ?>
 
 <!DOCTYPE html>
@@ -41,6 +48,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
             panelStorageKey: 'lazada_customer_record_filter_panel_open',
             deferApply: true,
             selectFieldsMultiple: true,
+            urlFilterParams: { customer_tag: 'tag' },
             scopePaths: ['finance/lazada_cust_rcd_table.php', 'finance/lazada_cust_rcd.php'],
             filters: [
                 { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
@@ -93,6 +101,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Customer ID</th>
                             <th scope="col">Customer Name</th>
+                            <th scope="col">Tag Last Update</th>
                             <th scope="col">Customer Label</th>
                             <th scope="col">Customer Email</th>
                             <th scope="col">Customer Phone</th>
@@ -110,6 +119,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                         <?php foreach ($tableRows as $row) {
                             $customerLabelMeta = isset($customerLabelMap[(int) $row['id']]) ? $customerLabelMap[(int) $row['id']] : array();
                             $customerTagRows = isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array();
+                            $customerTagActivityRows = isset($customerTagActivityMap[(int) $row['id']]) ? $customerTagActivityMap[(int) $row['id']] : array();
                             $pic = null;
                             $country = null;
                             $brand = null;
@@ -187,9 +197,8 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                                     <?= htmlspecialchars((string) $row['lcr_id'], ENT_QUOTES, 'UTF-8') ?>
                                 </td>
 
-                                <td scope="row" class="customer-name-label-cell">
-                                    <?= customerLabelRenderNameCell(isset($row['name']) ? $row['name'] : '', $customerLabelMeta) ?>
-                                </td>
+                                <td scope="row" class="customer-name-label-cell"><?= customerLabelRenderNameCell(isset($row['name']) ? $row['name'] : '', $customerLabelMeta) ?></td>
+                                <td scope="row" class="customer-tag-assignment-activity-column"><?= customerTagRenderAssignmentActivity($customerTagActivityRows) ?></td>
 
                                 <td scope="row"><?= customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows) ?></td>
 
@@ -233,6 +242,7 @@ $customerTagMap = isset($customerLabelData['tag_map']) ? $customerLabelData['tag
                             <th scope="col" id="action_col">Action</th>
                             <th scope="col">Customer ID</th>
                             <th scope="col">Customer Name</th>
+                            <th scope="col">Tag Last Update</th>
                             <th scope="col">Customer Label</th>
                             <th scope="col">Customer Email</th>
                             <th scope="col">Customer Phone</th>

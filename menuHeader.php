@@ -658,6 +658,14 @@
     }
 </script>
 
+<?php if (!defined('IMS_GLOBAL_SCROLL_TOP_BTN_RENDERED')) {
+    define('IMS_GLOBAL_SCROLL_TOP_BTN_RENDERED', true);
+?>
+    <button type="button" id="globalScrollTopBtn" aria-label="Back to Top" data-tooltip="Back to Top" title="Back to Top" hidden>
+        <i class="fas fa-chevron-up" aria-hidden="true"></i>
+    </button>
+<?php } ?>
+
 <div class="modal fade" id="allNotificationModal" tabindex="-1" aria-labelledby="allNotificationModalLabel" aria-hidden="true">
     <div class="modal-dialog modal-xl modal-dialog-scrollable">
         <div class="modal-content">

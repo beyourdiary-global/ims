@@ -2011,6 +2011,19 @@ function initCustomerRecordTableFilters(config) {
     return null;
   }
 
+  $(document)
+    .off("click.customerTagActivity", ".customer-tag-assignment-view-more")
+    .on("click.customerTagActivity", ".customer-tag-assignment-view-more", function () {
+      let button = $(this);
+      let activityList = button.closest(".customer-tag-assignment-activity-list");
+      let isExpanded = button.attr("data-expanded") === "1";
+      let hiddenCount = button.attr("data-hidden-count") || "0";
+
+      activityList.find(".customer-tag-assignment-activity-extra").toggle(!isExpanded);
+      button.attr("data-expanded", isExpanded ? "0" : "1");
+      button.text(isExpanded ? "Show More (" + hiddenCount + ")" : "Show Less");
+    });
+
   let tableElement = document.getElementById(config.tableId);
   if (!tableElement || !$.fn.DataTable.isDataTable(tableElement)) {
     return null;
@@ -2064,6 +2077,28 @@ function initCustomerRecordTableFilters(config) {
     readCustomerRecordFilterStorage(storageKey),
   );
   let pendingFilters = cloneCustomerRecordFilterState(fields, activeFilters);
+  let urlFilterParams = config.urlFilterParams && typeof config.urlFilterParams === "object"
+    ? config.urlFilterParams
+    : {};
+  let currentUrlParams = new URLSearchParams(window.location.search);
+
+  fields.forEach(function (field) {
+    let urlParamName = urlFilterParams[field.key];
+    if (!urlParamName || !currentUrlParams.has(urlParamName)) {
+      return;
+    }
+
+    let urlValues = currentUrlParams.getAll(urlParamName);
+    if (!urlValues.length) {
+      return;
+    }
+
+    let urlFilterValue = field.multiple
+      ? normalizeCustomerRecordFilterValuesList(urlValues)
+      : String(urlValues[0] == null ? "" : urlValues[0]).trim();
+    activeFilters[field.key] = urlFilterValue;
+    pendingFilters[field.key] = urlFilterValue;
+  });
   let tableSearchFn = tableElement.__customerRecordFilterSearch || null;
 
   if (!tableSearchFn) {
@@ -3275,6 +3310,7 @@ function searchInput(param, siteURL) {
   let type = param["searchType"];
   let dbTable = param["dbTable"];
   let addSelection = param["addSelection"] ? String(param["addSelection"]) : "";
+  let onSelect = typeof param["onSelect"] === "function" ? param["onSelect"] : null;
 
   if (!elementID || !hiddenElementID) {
     return;
@@ -3311,7 +3347,8 @@ function searchInput(param, siteURL) {
 
             let resultItem = $("<li></li>")
               .attr("value", String(value == null ? "" : value))
-              .text(String(desc == null ? "" : desc));
+              .text(String(desc == null ? "" : desc))
+              .data("searchRow", row);
             if (selectText != undefined) {
               resultItem.attr("data-select-text", String(selectText));
             }
@@ -3323,7 +3360,8 @@ function searchInput(param, siteURL) {
             resultList.append(
               $("<li></li>")
                 .attr("value", String(id == null ? "" : id))
-                .text(String(name == null ? "" : name)),
+                .text(String(name == null ? "" : name))
+                .data("searchRow", row),
             );
           }
         }
@@ -3341,6 +3379,9 @@ function searchInput(param, siteURL) {
           .off("click.searchInput")
           .on("click.searchInput", function () {
             setText(this, "#" + elementID, "#" + hiddenElementID);
+            if (onSelect && $(this).attr("value") !== "emptyValue") {
+              onSelect($(this).data("searchRow") || {});
+            }
             $("#" + elementID).change();
             $("#searchResult_" + elementID).empty();
             $("#searchResult_" + elementID).remove();
@@ -4812,7 +4853,161 @@ function commonBuildMobileStickyFormActions() {
   commonDestroyMobileStickyFormActionsOverlay();
 }
 
+let commonGlobalScrollTopButtonState = null;
+
+function commonGetGlobalScrollTopDocumentHeight() {
+  let body = document.body;
+  let docElement = document.documentElement;
+  return Math.max(
+    body ? body.scrollHeight : 0,
+    body ? body.offsetHeight : 0,
+    docElement ? docElement.scrollHeight : 0,
+    docElement ? docElement.offsetHeight : 0,
+    docElement ? docElement.clientHeight : 0,
+  );
+}
+
+function commonShouldShowGlobalScrollTopButton() {
+  let viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  if (viewportHeight <= 0) {
+    return false;
+  }
+
+  let documentHeight = commonGetGlobalScrollTopDocumentHeight();
+  if (documentHeight < viewportHeight * 2) {
+    return false;
+  }
+
+  return (window.scrollY || window.pageYOffset || 0) > viewportHeight;
+}
+
+function commonEnsureGlobalScrollTopButton() {
+  let buttons = document.querySelectorAll("#globalScrollTopBtn");
+  let button = buttons.length > 0 ? buttons[0] : null;
+
+  for (let i = 1; i < buttons.length; i++) {
+    if (buttons[i] && buttons[i].parentNode) {
+      buttons[i].parentNode.removeChild(buttons[i]);
+    }
+  }
+
+  if (!button) {
+    button = document.createElement("button");
+    button.type = "button";
+    button.id = "globalScrollTopBtn";
+    button.setAttribute("aria-label", "Back to Top");
+    button.setAttribute("data-tooltip", "Back to Top");
+    button.setAttribute("title", "Back to Top");
+    button.hidden = true;
+    button.innerHTML = '<i class="fas fa-chevron-up" aria-hidden="true"></i>';
+
+    if (document.body) {
+      document.body.appendChild(button);
+    }
+  }
+
+  if (!button) {
+    return null;
+  }
+
+  if (!button.getAttribute("aria-label")) {
+    button.setAttribute("aria-label", "Back to Top");
+  }
+
+  button.setAttribute("data-tooltip", "Back to Top");
+  button.setAttribute("title", "Back to Top");
+
+  if (button.dataset.globalScrollTopBound !== "1") {
+    button.addEventListener("click", function () {
+      window.scrollTo({
+        top: 0,
+        behavior: "smooth",
+      });
+    });
+    button.dataset.globalScrollTopBound = "1";
+  }
+
+  return button;
+}
+
+function commonUpdateGlobalScrollTopButton() {
+  let button = commonEnsureGlobalScrollTopButton();
+  if (!button) {
+    return;
+  }
+
+  let shouldShowButton = commonShouldShowGlobalScrollTopButton();
+  button.hidden = !shouldShowButton;
+  button.classList.toggle("is-visible", shouldShowButton);
+  button.setAttribute("aria-hidden", shouldShowButton ? "false" : "true");
+}
+
+function commonQueueGlobalScrollTopButtonUpdate() {
+  let button = commonEnsureGlobalScrollTopButton();
+  if (!button) {
+    return;
+  }
+
+  if (!commonGlobalScrollTopButtonState) {
+    commonUpdateGlobalScrollTopButton();
+    return;
+  }
+
+  if (commonGlobalScrollTopButtonState.rafHandle) {
+    window.cancelAnimationFrame(commonGlobalScrollTopButtonState.rafHandle);
+  }
+
+  commonGlobalScrollTopButtonState.rafHandle = window.requestAnimationFrame(function () {
+    commonGlobalScrollTopButtonState.rafHandle = 0;
+    commonUpdateGlobalScrollTopButton();
+  });
+}
+
+function commonInitGlobalScrollTopButton() {
+  let button = commonEnsureGlobalScrollTopButton();
+  if (!button) {
+    return;
+  }
+
+  if (!commonGlobalScrollTopButtonState) {
+    let state = {
+      rafHandle: 0,
+      resizeObserver: null,
+    };
+
+    window.addEventListener(
+      "scroll",
+      function () {
+        commonQueueGlobalScrollTopButtonUpdate();
+      },
+      { passive: true },
+    );
+    window.addEventListener("resize", commonQueueGlobalScrollTopButtonUpdate);
+    window.addEventListener("orientationchange", commonQueueGlobalScrollTopButtonUpdate);
+    window.addEventListener("load", commonQueueGlobalScrollTopButtonUpdate);
+
+    if ("ResizeObserver" in window) {
+      state.resizeObserver = new ResizeObserver(function () {
+        commonQueueGlobalScrollTopButtonUpdate();
+      });
+
+      if (document.documentElement) {
+        state.resizeObserver.observe(document.documentElement);
+      }
+
+      if (document.body) {
+        state.resizeObserver.observe(document.body);
+      }
+    }
+
+    commonGlobalScrollTopButtonState = state;
+  }
+
+  commonQueueGlobalScrollTopButtonUpdate();
+}
+
 function commonInitMobileActionEnhancements() {
+  commonInitGlobalScrollTopButton();
   commonApplyVisibleActionLabels();
   commonApplyButtonTitles();
   commonBuildMobileFloatingAddButton();

@@ -4,6 +4,8 @@ $pageTitle = "Stock Order Request";
 
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
+include_once ROOT . '/include/supplier_invoice_matching.php';
+supplierInvoiceRefreshEInvoicingStatuses($finance_connect);
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 include_once ROOT . '/header/phpqrcode/qrlib.php';
 
@@ -392,6 +394,22 @@ foreach ($itemRows as $existingItemRow) {
     }
 }
 
+$sorBotMsgContext = 'stock_order_request';
+$sorBotMsgOrderTable = STOCK_ORDER_REQ;
+$sorBotMsgTemplateOptions = customizeBotMsgGetTemplateOptions($connect, $sorBotMsgContext);
+$sorBotMsgDefaultTemplateId = customizeBotMsgGetDefaultTemplateId($connect, $sorBotMsgContext);
+$sorBotMsgTemplateNameMap = array();
+foreach ($sorBotMsgTemplateOptions as $sorBotMsgTemplateOption) {
+    $templateOptionId = isset($sorBotMsgTemplateOption['id']) ? (int) $sorBotMsgTemplateOption['id'] : 0;
+    if ($templateOptionId > 0) {
+        $sorBotMsgTemplateNameMap[$templateOptionId] = isset($sorBotMsgTemplateOption['template_name']) ? (string) $sorBotMsgTemplateOption['template_name'] : ('Template #' . $templateOptionId);
+    }
+}
+$sorExistingBotMsgTemplateId = ($dataId && $act !== 'I')
+    ? customizeBotMsgGetOrderTemplateId($connect, $sorBotMsgContext, $sorBotMsgOrderTable, (int) $dataId)
+    : 0;
+$sorOriginalBotMsgTemplateId = $sorExistingBotMsgTemplateId > 0 ? $sorExistingBotMsgTemplateId : $sorBotMsgDefaultTemplateId;
+
 if (post('actionBtn')) {
     $action = post('actionBtn');
 
@@ -411,6 +429,10 @@ if (post('actionBtn')) {
         $sor_tracking_no = postSpaceFilter('sor_tracking_no');
         $sor_total_price = postSpaceFilter('sor_total_price');
         $sor_remark = postSpaceFilter('sor_remark');
+        $sor_bot_msg_template_id = (int) postSpaceFilter('sor_bot_msg_template_id');
+        if ($sor_bot_msg_template_id <= 0 || !isset($sorBotMsgTemplateNameMap[$sor_bot_msg_template_id])) {
+            $sor_bot_msg_template_id = $sorBotMsgDefaultTemplateId;
+        }
 
         $prodIdArr = postSpaceFilter('sor_item_prod_id') ?: array();
         $itemIdArr = postSpaceFilter('sor_item_id') ?: array();
@@ -857,6 +879,9 @@ if (post('actionBtn')) {
                                                                 ('$safeWarehouse', '" . $requestCompanyId . "', '" . $requestBrandId . "', '$safeInvoiceNo', '$safeInvoiceDate', '$safeRequestDate', " . $courierSqlValue . ", '$safeTrackingNo', '$safeTotalPrice', '$safeAttachment', '$safeStockOrderImage', '$safeRemark', '" . USER_ID . "', CURDATE(), CURTIME())";
                     $returnData = mysqli_query($finance_connect, $query);
                     $dataId = $finance_connect->insert_id;
+                    if ($returnData && (int) $dataId > 0) {
+                        customizeBotMsgSaveOrderTemplate($connect, $sorBotMsgContext, $sorBotMsgOrderTable, (int) $dataId, $sor_bot_msg_template_id);
+                    }
                 } else {
                     $query = "UPDATE " . STOCK_ORDER_REQ . "
                               SET warehouse_id = '$safeWarehouse',
@@ -889,6 +914,10 @@ if (post('actionBtn')) {
                         'attachment' => array(isset($auditOldRow['attachment']) ? $auditOldRow['attachment'] : '', $sor_attachment),
                         'stock_order_image' => array(isset($auditOldRow['stock_order_image']) ? $auditOldRow['stock_order_image'] : '', $sor_stock_order_image),
                         'remark' => array(isset($auditOldRow['remark']) ? $auditOldRow['remark'] : '', $sor_remark),
+                        'bot_message_template' => array(
+                            isset($sorBotMsgTemplateNameMap[$sorOriginalBotMsgTemplateId]) ? $sorBotMsgTemplateNameMap[$sorOriginalBotMsgTemplateId] : '',
+                            isset($sorBotMsgTemplateNameMap[$sor_bot_msg_template_id]) ? $sorBotMsgTemplateNameMap[$sor_bot_msg_template_id] : ''
+                        ),
                         'item_snapshot' => array($auditOldItemSnapshot, sorBuildAuditItemSnapshot($items, $packageNameMap, $productNameMap)),
                     );
 
@@ -906,6 +935,9 @@ if (post('actionBtn')) {
 
                     if (!empty($auditDataField) && !empty($auditOldValArr) && !empty($auditChgValArr)) {
                         $returnData = mysqli_query($finance_connect, $query);
+                        if ($returnData) {
+                            customizeBotMsgSaveOrderTemplate($connect, $sorBotMsgContext, $sorBotMsgOrderTable, (int) $dataId, $sor_bot_msg_template_id);
+                        }
                     } else {
                         // No change: keep user on edit page, show no-change modal, do not regenerate QR.
                         $act = 'E';
@@ -918,6 +950,7 @@ if (post('actionBtn')) {
                 }
 
                 if (isset($returnData) && $returnData) {
+                    supplierInvoiceRefreshEInvoicingStatuses($finance_connect);
                     if ($action === 'addRecord') {
                         foreach ($items as $item) {
                             $safeProdId = isset($item['product_id']) ? (int) $item['product_id'] : 0;
@@ -1569,6 +1602,25 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                             <label class="form-label form_lbl" for="sor_tracking_no">Tracking Number</label>
                             <input class="form-control" type="text" id="sor_tracking_no" name="sor_tracking_no" value="<?= sorEcho(post('actionBtn') ? post('sor_tracking_no') : (($act === 'I') ? '' : (isset($row['tracking_no']) ? $row['tracking_no'] : ''))) ?>" <?= ($act == '') ? 'readonly' : '' ?> autocomplete="off">
                         </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label form_lbl" for="sor_bot_msg_template_id">Bot Message Template</label>
+                            <?php
+                            $currentSorBotMsgTemplateId = post('actionBtn')
+                                ? (int) postSpaceFilter('sor_bot_msg_template_id')
+                                : ($sorOriginalBotMsgTemplateId > 0 ? (int) $sorOriginalBotMsgTemplateId : (int) $sorBotMsgDefaultTemplateId);
+                            if ($currentSorBotMsgTemplateId <= 0) {
+                                $currentSorBotMsgTemplateId = (int) $sorBotMsgDefaultTemplateId;
+                            }
+                            ?>
+                            <select class="form-select" id="sor_bot_msg_template_id" name="sor_bot_msg_template_id" <?= ($act == '') ? 'disabled' : '' ?>>
+                                <?php foreach ($sorBotMsgTemplateOptions as $sorBotMsgTemplateOption) { ?>
+                                    <?php $templateOptionId = isset($sorBotMsgTemplateOption['id']) ? (int) $sorBotMsgTemplateOption['id'] : 0; ?>
+                                    <option value="<?= $templateOptionId ?>" <?= $currentSorBotMsgTemplateId === $templateOptionId ? 'selected' : '' ?>>
+                                        <?= sorEcho((string) $sorBotMsgTemplateOption['template_name'] . (customizeBotMsgIsDefaultRow($sorBotMsgTemplateOption) ? ' (Default)' : '')) ?>
+                                    </option>
+                                <?php } ?>
+                            </select>
+                        </div>
                     </div>
 
                     <div class="sor-item-panel">
@@ -1805,6 +1857,17 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                                     <a href="<?= sorAttachmentUrl(sorNormalizeAttachmentRelativePath($row['stock_order_image']), $SITEURL) ?>" target="_blank">View Current Stock Order Image</a>
                                 </div>
                             <?php } ?>
+                        </div>
+                    </div>
+
+                    <div class="row">
+                        <div class="col-md-12 mb-3">
+                            <label class="form-label form_lbl" for="sor_e_invoicing_status">E-Invoicing Status</label>
+                            <div class="form-check">
+                                <input class="form-check-input e-invoicing-status-checkbox" type="checkbox" id="sor_e_invoicing_status" <?= !empty($row['e_invoicing_status']) ? 'checked' : '' ?> disabled>
+                                <label class="form-check-label" for="sor_e_invoicing_status">Matched with Supplier Invoice</label>
+                            </div>
+                            <small class="text-muted">Automatically checked when the ODR matches a Supplier Invoice.</small>
                         </div>
                     </div>
 

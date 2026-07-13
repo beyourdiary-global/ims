@@ -154,6 +154,7 @@ if ($result instanceof mysqli_result) {
                                 <th scope="col">Service Fee (incl. GST)</th>
                                 <th scope="col">Transaction Fee (incl. GST)</th>
                                 <th scope="col">AMS Commission Fee</th>
+                                <th scope="col">Saver Programme Fee</th>
                                 <th scope="col">Fees & Charges</th>
                                 <th scope="col">Final Amount</th>
                                 <th scope="col">Remark</th>
@@ -241,6 +242,9 @@ if ($result instanceof mysqli_result) {
                                         <?= htmlspecialchars((string) ($row['ams_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
+                                        <?= htmlspecialchars((string) ($row['saver_program_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                    </td>
+                                    <td scope="row">
                                         <?= htmlspecialchars((string) ($row['fees'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
                                     </td>
                                     <td scope="row">
@@ -273,6 +277,7 @@ if ($result instanceof mysqli_result) {
                                 <th scope="col">Service Fee (incl. GST)</th>
                                 <th scope="col">Transaction Fee (incl. GST)</th>
                                 <th scope="col">AMS Commission Fee</th>
+                                <th scope="col">Saver Programme Fee</th>
                                 <th scope="col">Fees & Charges</th>
                                 <th scope="col">Final Amount</th>
                                 <th scope="col">Remark</th>

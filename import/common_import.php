@@ -45,6 +45,7 @@ $facebookAdsImportTitle = getImportCardTitleByPinGroupId($connect, 50, 'Facebook
 $shopeeOrderImportTitle = $shopeeOrderParentTitle . ' Import';
 $lazadaOrderImportTitle = getImportCardTitleByPinGroupId($connect, 93, 'Lazada Order Request');
 $packageImportTitle = getImportCardTitleByPinGroupId($connect, 21, 'Package');
+$supplierInvoiceImportTitle = getImportCardTitleByPinGroupId($connect, 167, 'Supplier Invoice');
 $stockInImportTitle = getImportCardTitleByPinGroupId($connect, 125, 'Stock In');
 $productImportTitle = getImportCardTitleByPinGroupId($connect, 20, 'Product');
 $stockOrderImportTitle = getImportCardTitleByPinGroupId($connect, 126, 'Stock Order Request');
@@ -52,6 +53,7 @@ $jtBackupImportTitle = getImportCardTitleByPinGroupId($connect, 88, 'J&T Transac
 $companyImportTitle = getImportCardTitleByPinGroupId($connect, 127, 'Company');
 $purchaseOrderImportTitle = getImportCardTitleByPinGroupId($connect, 135, 'Purchase Order');
 $packagePinAccess = checkPinByGroupId($connect, 21);
+$supplierInvoicePinAccess = checkPinByGroupId($connect, 167);
 $stockInPinAccess = checkPinByGroupId($connect, 125);
 $productPinAccess = checkPinByGroupId($connect, 20);
 $stockOrderReqPinAccess = checkPinByGroupId($connect, 126);
@@ -63,6 +65,7 @@ $canShopeeAdsImport = is_array($shopeeAdsPinAccess) && isActionAllowed('Import',
 $canFacebookAdsImport = is_array($facebookAdsPinAccess) && isActionAllowed('Import', $facebookAdsPinAccess);
 $canLazadaOrderImport = is_array($lazadaOrderPinAccess) && isActionAllowed('Import', $lazadaOrderPinAccess);
 $canPackageImport = is_array($packagePinAccess) && isActionAllowed('Import', $packagePinAccess);
+$canSupplierInvoiceImport = is_array($supplierInvoicePinAccess) && isActionAllowed('Import', $supplierInvoicePinAccess);
 $canStockInImport = is_array($stockInPinAccess) && isActionAllowed('Import', $stockInPinAccess);
 $canProductImport = is_array($productPinAccess) && isActionAllowed('Import', $productPinAccess);
 $canStockOrderReqImport = is_array($stockOrderReqPinAccess) && isActionAllowed('Import', $stockOrderReqPinAccess);
@@ -111,6 +114,14 @@ $shortcutCards = array(
         'importUrl' => $SITEURL . '/import/package_import.php',
         'backUrl' => $SITEURL . '/product/package_table.php',
         'backText' => 'Back To Package Page'
+    ),
+    array(
+        'title' => $supplierInvoiceImportTitle,
+        'desc' => 'Import Supplier Invoice PDF data and match its description to an active package.',
+        'canImport' => $canSupplierInvoiceImport,
+        'importUrl' => $SITEURL . '/import/supplier_invoice_import.php',
+        'backUrl' => $SITEURL . '/finance/supplier_invoice_table.php',
+        'backText' => 'Back To Supplier Invoice Page'
     ),
     array(
         'title' => $stockInImportTitle,

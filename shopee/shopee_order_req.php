@@ -99,6 +99,21 @@ $sorConfirmReceiveWithFollowUp = postSpaceFilter('confirmReceiveFollowUpBtn') ==
 $sorShouldSaveBeforeStatusUpdate = $pendingStatusUpdate !== '' && $act === 'E' && !$sorSkipSaveBeforeStatusUpdate && !$sorSaveBeforeStatusOnly;
 $sorTriggerStatusTransitionAfterSave = false;
 $sorFollowUpShortcutOptions = customerFollowUpGetMessageShortcutOptions($connect);
+$sorBotMsgContext = 'shopee';
+$sorBotMsgOrderTable = SHOPEE_SG_ORDER_REQ;
+$sorBotMsgTemplateOptions = customizeBotMsgGetTemplateOptions($connect, $sorBotMsgContext);
+$sorBotMsgDefaultTemplateId = customizeBotMsgGetDefaultTemplateId($connect, $sorBotMsgContext);
+$sorBotMsgTemplateNameMap = array();
+foreach ($sorBotMsgTemplateOptions as $sorBotMsgTemplateOption) {
+    $templateOptionId = isset($sorBotMsgTemplateOption['id']) ? (int) $sorBotMsgTemplateOption['id'] : 0;
+    if ($templateOptionId > 0) {
+        $sorBotMsgTemplateNameMap[$templateOptionId] = isset($sorBotMsgTemplateOption['template_name']) ? (string) $sorBotMsgTemplateOption['template_name'] : ('Template #' . $templateOptionId);
+    }
+}
+$sorExistingBotMsgTemplateId = ($dataId && $act !== 'I')
+    ? customizeBotMsgGetOrderTemplateId($connect, $sorBotMsgContext, $sorBotMsgOrderTable, (int) $dataId)
+    : 0;
+$sorOriginalBotMsgTemplateId = $sorExistingBotMsgTemplateId > 0 ? $sorExistingBotMsgTemplateId : $sorBotMsgDefaultTemplateId;
 $sorBuildLocalTelegramFailureMessage = function ($notifyResult) use ($sorIsLiveSite) {
     if ($sorIsLiveSite || !is_array($notifyResult) || !empty($notifyResult['sent'])) {
         return '';
@@ -865,6 +880,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     $sor_serv = postSpaceFilter('sor_serv');
     $sor_trans = postSpaceFilter('sor_trans');
     $sor_ams = postSpaceFilter('sor_ams');
+    $sor_saver_program_fee = postSpaceFilter('sor_saver_program_fee');
     $postedSorFees = postSpaceFilter('sor_fees');
     $postedSorFinal = postSpaceFilter('sor_final');
     $sor_price = $normalizeAmount($sor_price);
@@ -873,9 +889,11 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     $sor_serv = $normalizeAmount($sor_serv);
     $sor_trans = $normalizeAmount($sor_trans);
     $sor_ams = $normalizeAmount($sor_ams);
+    $sor_saver_program_fee = $normalizeAmount($sor_saver_program_fee);
     $computedSorFees = (float) ($sor_serv === '' ? 0 : $sor_serv)
         + (float) ($sor_trans === '' ? 0 : $sor_trans)
-        + (float) ($sor_ams === '' ? 0 : $sor_ams);
+        + (float) ($sor_ams === '' ? 0 : $sor_ams)
+        + (float) ($sor_saver_program_fee === '' ? 0 : $sor_saver_program_fee);
     $normalizedPostedSorFees = $normalizeAmount($postedSorFees);
     $sor_fees = $normalizedPostedSorFees === ''
         ? number_format($computedSorFees, 2, '.', '')
@@ -904,6 +922,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
         $sor_serv = '0.00';
         $sor_trans = '0.00';
         $sor_ams = '0.00';
+        $sor_saver_program_fee = '0.00';
         $sor_fees = '0.00';
         $sor_final = '0.00';
     }
@@ -925,6 +944,10 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     $sor_airbill = postSpaceFilter('sor_airbill');
     $sor_customer_name = postSpaceFilter('sor_customer_name');
     $sor_customer_address = postSpaceFilter('sor_customer_address');
+    $sor_bot_msg_template_id = (int) postSpaceFilter('sor_bot_msg_template_id');
+    if ($sor_bot_msg_template_id <= 0 || !isset($sorBotMsgTemplateNameMap[$sor_bot_msg_template_id])) {
+        $sor_bot_msg_template_id = $sorBotMsgDefaultTemplateId;
+    }
     if ((int) $dataId > 0 && ($sor_customer_name !== '' || $sor_customer_address !== '')) {
         shopeeOmsRememberWarehouseDeliveryInfo('shopee', (int) $dataId, array(
             'customer_name' => $sor_customer_name,
@@ -1255,6 +1278,11 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         array_push($datafield, 'AMS fee');
                     }
 
+                    if ($sor_saver_program_fee) {
+                        array_push($newvalarr, $sor_saver_program_fee);
+                        array_push($datafield, 'Saver Programme Fee');
+                    }
+
                     if ($sor_fees) {
                         array_push($newvalarr, $sor_fees);
                         array_push($datafield, 'fees and charges');
@@ -1303,6 +1331,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     $safeSorServ = mysqli_real_escape_string($finance_connect, $sor_serv);
                     $safeSorTrans = mysqli_real_escape_string($finance_connect, $sor_trans);
                     $safeSorAms = mysqli_real_escape_string($finance_connect, $sor_ams);
+                    $safeSorSaverProgramFee = mysqli_real_escape_string($finance_connect, $sor_saver_program_fee);
                     $safeSorFees = mysqli_real_escape_string($finance_connect, $sor_fees);
                     $safeSorFinal = mysqli_real_escape_string($finance_connect, $sor_final);
                     $safeSorRemark = mysqli_real_escape_string($finance_connect, $sor_remark);
@@ -1315,7 +1344,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                     $customerNameColumnSql = $sorCustomerNameColumnExists ? 'customer_name,' : '';
                     $customerNameValueSql = $sorCustomerNameColumnExists ? ("'$safeCustomerName',") : '';
 
-                    $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,package_qty_json,brand,buyer,buyer_pay_meth,pic," . $customerNameColumnSql . "customer_address,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,fees,final_amt,airbill_no,airbill_attachment,stock_out_warehouse_id,remark,order_status,latest_transition_at,create_by,create_date,create_time) VALUES ('$safeSorAcc','$safeSorCurr','$safeSorOrder','$safeSorDate','$safeSorTime','$safeSorPkg','$safePackageQtySnapshotJson','$safeSorBrand','$safeSorUser','$safeSorPay','$safeSorPic'," . $customerNameValueSql . "'$safeCustomerAddress','$safeSorPrice','$safeSorVoucher','$safeSorShipping','$safeSorServ','$safeSorTrans','$safeSorAms','$safeSorFees','$safeSorFinal','$safeAirbill','$safeAirbillAttachment'," . $safeStockOutWarehouseId . ",'$safeSorRemark','$safeSorStatus',NOW(),'" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . " (shopee_acc,currency,orderID,date,time,package,package_qty_json,brand,buyer,buyer_pay_meth,pic," . $customerNameColumnSql . "customer_address,price,voucher,act_shipping_fee,service_fee,trans_fee,ams_fee,saver_program_fee,fees,final_amt,airbill_no,airbill_attachment,stock_out_warehouse_id,remark,order_status,latest_transition_at,create_by,create_date,create_time) VALUES ('$safeSorAcc','$safeSorCurr','$safeSorOrder','$safeSorDate','$safeSorTime','$safeSorPkg','$safePackageQtySnapshotJson','$safeSorBrand','$safeSorUser','$safeSorPay','$safeSorPic'," . $customerNameValueSql . "'$safeCustomerAddress','$safeSorPrice','$safeSorVoucher','$safeSorShipping','$safeSorServ','$safeSorTrans','$safeSorAms','$safeSorSaverProgramFee','$safeSorFees','$safeSorFinal','$safeAirbill','$safeAirbillAttachment'," . $safeStockOutWarehouseId . ",'$safeSorRemark','$safeSorStatus',NOW(),'" . USER_ID . "',curdate(),curtime())";
                     $returnData = mysqli_query($finance_connect, $query);
                     if (!$returnData) {
                         throw new Exception('Database Error: ' . mysqli_error($finance_connect));
@@ -1323,6 +1352,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
 
                     if ($returnData) {
                         $dataId = (int) mysqli_insert_id($finance_connect);
+                        customizeBotMsgSaveOrderTemplate($connect, $sorBotMsgContext, $sorBotMsgOrderTable, $dataId, $sor_bot_msg_template_id);
                         shopeeOmsRememberWarehouseDeliveryInfo('shopee', $dataId, array(
                             'customer_name' => $sor_customer_name,
                             'customer_address' => $sor_customer_address,
@@ -1483,6 +1513,12 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         array_push($datafield, 'ams_fee');
                     }
 
+                    if ((string) ($row['saver_program_fee'] ?? '') != (string) $sor_saver_program_fee) {
+                        array_push($oldvalarr, isset($row['saver_program_fee']) ? $row['saver_program_fee'] : '0.00');
+                        array_push($chgvalarr, $sor_saver_program_fee);
+                        array_push($datafield, 'Saver Programme Fee');
+                    }
+
                     if ($row['fees'] != $sor_fees) {
                         array_push($oldvalarr, $row['fees']);
                         array_push($chgvalarr, $sor_fees);
@@ -1530,6 +1566,11 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         array_push($chgvalarr, trim((string) $sor_customer_address) !== '' ? $sor_customer_address : 'Empty Value');
                         array_push($datafield, 'customer_address');
                     }
+                    if ((int) $sorOriginalBotMsgTemplateId !== (int) $sor_bot_msg_template_id) {
+                        array_push($oldvalarr, isset($sorBotMsgTemplateNameMap[$sorOriginalBotMsgTemplateId]) ? $sorBotMsgTemplateNameMap[$sorOriginalBotMsgTemplateId] : 'Empty Value');
+                        array_push($chgvalarr, isset($sorBotMsgTemplateNameMap[$sor_bot_msg_template_id]) ? $sorBotMsgTemplateNameMap[$sor_bot_msg_template_id] : 'Empty Value');
+                        array_push($datafield, 'bot_message_template');
+                    }
                     if ($sorStockOutWarehouseEditable) {
                         if ($existingStoredStockOutWarehouseId > 0) {
                             $updatedStoredStockOutWarehouseId = $sor_stock_out_warehouse_id;
@@ -1575,6 +1616,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
                         $query .= "service_fee = '$sor_serv', ";
                         $query .= "trans_fee = '$sor_trans', ";
                         $query .= "ams_fee = '$sor_ams', ";
+                        $query .= "saver_program_fee = '$sor_saver_program_fee', ";
                         $query .= "fees = '$sor_fees', ";
                         $query .= "final_amt = '$sor_final', ";
                         $query .= "airbill_no = '" . mysqli_real_escape_string($finance_connect, $sor_airbill) . "', ";
@@ -1588,6 +1630,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
 
                         $returnData = mysqli_query($finance_connect, $query);
                         if ($returnData) {
+                            customizeBotMsgSaveOrderTemplate($connect, $sorBotMsgContext, $sorBotMsgOrderTable, (int) $dataId, $sor_bot_msg_template_id);
                             $newValuesForHistory = array(
                                 'orderID' => $sor_order,
                                 'customer_address' => $sor_customer_address,
@@ -2424,6 +2467,25 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                 </div>
                             <?php } ?>
                         </div>
+                        <div class="col-md-4 mb-3">
+                            <label class="form-label form_lbl" for="sor_bot_msg_template_id">Bot Message Template</label>
+                            <?php
+                            $currentSorBotMsgTemplateId = post('actionBtn')
+                                ? (int) postSpaceFilter('sor_bot_msg_template_id')
+                                : ($sorOriginalBotMsgTemplateId > 0 ? (int) $sorOriginalBotMsgTemplateId : (int) $sorBotMsgDefaultTemplateId);
+                            if ($currentSorBotMsgTemplateId <= 0) {
+                                $currentSorBotMsgTemplateId = (int) $sorBotMsgDefaultTemplateId;
+                            }
+                            ?>
+                            <select class="form-select" id="sor_bot_msg_template_id" name="sor_bot_msg_template_id" <?= $act == '' ? 'disabled' : '' ?>>
+                                <?php foreach ($sorBotMsgTemplateOptions as $sorBotMsgTemplateOption) { ?>
+                                    <?php $templateOptionId = isset($sorBotMsgTemplateOption['id']) ? (int) $sorBotMsgTemplateOption['id'] : 0; ?>
+                                    <option value="<?= $templateOptionId ?>" <?= $currentSorBotMsgTemplateId === $templateOptionId ? 'selected' : '' ?>>
+                                        <?= htmlspecialchars((string) $sorBotMsgTemplateOption['template_name'] . (customizeBotMsgIsDefaultRow($sorBotMsgTemplateOption) ? ' (Default)' : ''), ENT_QUOTES, 'UTF-8') ?>
+                                    </option>
+                                <?php } ?>
+                            </select>
+                        </div>
                         <div class="col-md-2 mb-3 shopee-airbill-toggle-col">
                             <?php
                             $hasSavedAirbillData = false;
@@ -2816,7 +2878,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 </div>
                 <div class="form-group">
                     <div class="row">
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label form_lbl" id="sor_serv_lbl" for="sor_serv">Service Fee
                                 (incl. GST)</label>
                             <input class="form-control" type="number" step="0.01" name="sor_serv" id="sor_serv" value="<?php
@@ -2837,7 +2899,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                 </div>
                             <?php } ?>
                         </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label form_lbl" id="sor_trans_lbl" for="sor_trans">Transaction Fee
                                 (incl. GST)</label>
                             <input class="form-control" type="number" step="0.01" name="sor_trans" id="sor_trans" value="<?php
@@ -2858,7 +2920,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                 </div>
                             <?php } ?>
                         </div>
-                        <div class="col-md-4 mb-3">
+                        <div class="col-md-3 mb-3">
                             <label class="form-label form_lbl" id="sor_ams_lbl" for="sor_ams">AMS Commission
                                 Fee</label>
                             <input class="form-control" type="number" step="0.01" name="sor_ams" id="sor_ams" value="<?php
@@ -2878,6 +2940,20 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                     </span>
                                 </div>
                             <?php } ?>
+                        </div>
+
+                        <div class="col-md-3 mb-3">
+                            <label class="form-label form_lbl" id="sor_saver_program_fee_lbl" for="sor_saver_program_fee">Saver Programme Fee</label>
+                            <input class="form-control" type="number" step="0.01" name="sor_saver_program_fee" id="sor_saver_program_fee" value="<?php
+                            if (isset($dataExisted) && isset($row['saver_program_fee']) && !isset($sor_saver_program_fee)) {
+                                echo $row['saver_program_fee'];
+                            } else if (isset($sor_saver_program_fee)) {
+                                echo $sor_saver_program_fee;
+                            } else {
+                                echo '0';
+                            }
+                            ?>" <?php if ($act == '')
+                                echo 'disabled' ?>>
                         </div>
 
                     </div>

@@ -132,9 +132,16 @@ if ($countResult instanceof mysqli_result) {
                                     $assignedCustomerCount = isset($assignedCustomerCountData['total']) ? (int) $assignedCustomerCountData['total'] : 0;
                                     $platformBreakdownParts = array();
                                     foreach ($platformDisplayMap as $platformKey => $platformLabel) {
-                                        $platformBreakdownParts[] = $platformLabel . ': ' . (int) $assignedCustomerCountData['platforms'][$platformKey];
+                                        $platformUrl = customerLabelGetPlatformRecordUrl($platformKey);
+                                        if ($platformUrl !== '') {
+                                            $platformUrl .= (strpos($platformUrl, '?') === false ? '?' : '&') . 'tag=' . rawurlencode((string) $row['name']);
+                                            $platformLabelHtml = '<a href="' . htmlspecialchars($platformUrl, ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($platformLabel, ENT_QUOTES, 'UTF-8') . '</a>';
+                                        } else {
+                                            $platformLabelHtml = htmlspecialchars($platformLabel, ENT_QUOTES, 'UTF-8');
+                                        }
+                                        $platformBreakdownParts[] = $platformLabelHtml . ': ' . (int) $assignedCustomerCountData['platforms'][$platformKey];
                                     }
-                                    $platformBreakdownText = implode(' | ', $platformBreakdownParts);
+                                    $platformBreakdownHtml = implode(' | ', $platformBreakdownParts);
                                     ?>
                                     <tr>
                                         <th class="hideColumn" scope="row"><?= (int) $row['id'] ?></th>
@@ -147,7 +154,7 @@ if ($countResult instanceof mysqli_result) {
                                         <td scope="row"><?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row">
                                             <?= (int) $assignedCustomerCount ?><br>
-                                            <?= htmlspecialchars($platformBreakdownText, ENT_QUOTES, 'UTF-8') ?>
+                                            <?= $platformBreakdownHtml ?>
                                         </td>
                                         <td scope="row"><?php if (isset($row['remark']))
                                             echo htmlspecialchars((string) $row['remark'], ENT_QUOTES, 'UTF-8') ?></td>

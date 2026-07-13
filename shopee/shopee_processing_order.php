@@ -588,8 +588,8 @@ if ($result instanceof mysqli_result) {
                 ?>
                 <?php
                 $total_price = 0; $total_voucher = 0; $total_shipping = 0;
-                $total_trans_fee = 0; $total_ams_fee = 0; $total_fees = 0;
-                $total_final_amt = 0; $total_final_service_fee = 0;
+                $total_trans_fee = 0; $total_ams_fee = 0; $total_saver_program_fee = 0; $total_fees = 0;
+                $total_final_amt = 0; $total_final_service_fee = 0; $total_final_saver_program_fee = 0;
                 $total_final_agentCostProfit = 0; $total_final_companyCostProfit = 0;
                 ?>
                 <table class="table table-striped" id="shopee_order_req_table">
@@ -616,6 +616,7 @@ if ($result instanceof mysqli_result) {
                             <th scope="col">Service Fee (incl. GST)</th>
                             <th scope="col">Transaction Fee (incl. GST)</th>
                             <th scope="col">AMS Commission Fee</th>
+                            <th scope="col">Saver Programme Fee</th>
                             <th scope="col">Fees & Charges</th>
                             <th scope="col">Final Amount</th>
                             <th scope="col">Remark</th>
@@ -697,6 +698,7 @@ if ($result instanceof mysqli_result) {
                             $trans_fee = (float) ($row['trans_fee'] ?? 0);
                             $service_fee = (float) ($row['service_fee'] ?? 0);
                             $ams_fee = (float) ($row['ams_fee'] ?? 0);
+                            $saver_program_fee = (float) ($row['saver_program_fee'] ?? 0);
                             $fees = (float) ($row['fees'] ?? 0);
                             $final_amt = (float) ($row['final_amt'] ?? 0);
                             
@@ -707,6 +709,7 @@ if ($result instanceof mysqli_result) {
                                         $final_amt = $final_amt * $rate;
                                         $final_fees =$fees * $rate;
                                         $final_ams_fee = $ams_fee *$rate;
+                                        $final_saver_program_fee = $saver_program_fee * $rate;
                                         $final_trans_fee = $trans_fee * $rate;
                                         $final_shipping = $shipping * $rate;
                                         $final_voucher = $voucher * $rate;
@@ -715,13 +718,13 @@ if ($result instanceof mysqli_result) {
                                     }
                                 }
                             } else {
-                                $final_fees =$fees; $final_ams_fee = $ams_fee; $final_trans_fee = $trans_fee;
+                                $final_fees =$fees; $final_ams_fee = $ams_fee; $final_saver_program_fee = $saver_program_fee; $final_trans_fee = $trans_fee;
                                 $final_shipping = $shipping; $final_voucher = $voucher; $final_price = $price;
                                 $final_service_fee = $service_fee;
                             }
                             $total_price += $final_price; $total_voucher += $final_voucher; $total_shipping += $final_shipping;
-                            $total_trans_fee += $final_trans_fee; $total_ams_fee += $final_ams_fee; $total_fees += $final_fees;
-                            $total_final_amt += $final_amt; $total_final_service_fee += $final_service_fee;
+                            $total_trans_fee += $final_trans_fee; $total_ams_fee += $final_ams_fee; $total_saver_program_fee += $final_saver_program_fee; $total_fees += $final_fees;
+                            $total_final_amt += $final_amt; $total_final_service_fee += $final_service_fee; $total_final_saver_program_fee += $final_saver_program_fee;
                             ?>
                             <tr>
                                 <th class="hideColumn" scope="row"><?= htmlspecialchars((string) $row['id'], ENT_QUOTES, 'UTF-8') ?></th>
@@ -807,6 +810,7 @@ if ($result instanceof mysqli_result) {
                                 <td scope="row"><?= htmlspecialchars((string) ($row['service_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) ($row['trans_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) ($row['ams_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                <td scope="row"><?= htmlspecialchars((string) ($row['saver_program_fee'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) ($row['fees'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) ($row['final_amt'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 <td scope="row"><?= htmlspecialchars((string) ($row['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
@@ -845,6 +849,7 @@ if ($result instanceof mysqli_result) {
                             <th scope="col">Service Fee (incl. GST)<br><?php echo "(RM)".$total_final_service_fee;?></th>
                             <th scope="col">Transaction Fee (incl. GST)<br><?php echo "(RM)".$total_trans_fee;?></th>
                             <th scope="col">AMS Commission Fee<br><?php echo "(RM)".$total_ams_fee;?></th>
+                            <th scope="col">Saver Programme Fee<br><?php echo "(RM)".$total_final_saver_program_fee;?></th>
                             <th scope="col">Fees & Charges<br><?php echo "(RM)".$total_fees;?></th>
                             <th scope="col">Final Amount<br><?php echo "(RM)".$total_final_amt; ?></th>
                             <th scope="col">Remark</th>

@@ -408,6 +408,38 @@ if (!function_exists('urlDecodeUserRecordLogAttachmentList')) {
     }
 }
 
+if (!function_exists('urlDecodeUserRecordLogAttachmentSequence')) {
+    function urlDecodeUserRecordLogAttachmentSequence($attachmentValue, $attachmentSequenceValue = '')
+    {
+        $attachments = urlDecodeUserRecordLogAttachmentList($attachmentValue);
+        $sequence = urlDecodeUserRecordLogAttachmentList('', $attachmentSequenceValue);
+        if (empty($sequence)) {
+            return $attachments;
+        }
+
+        $ordered = array();
+        $remainingAttachments = array();
+        foreach ($attachments as $attachment) {
+            $remainingAttachments[$attachment] = true;
+        }
+
+        foreach ($sequence as $attachment) {
+            if (isset($remainingAttachments[$attachment])) {
+                $ordered[] = $attachment;
+                unset($remainingAttachments[$attachment]);
+            }
+        }
+
+        foreach ($attachments as $attachment) {
+            if (isset($remainingAttachments[$attachment])) {
+                $ordered[] = $attachment;
+            }
+        }
+
+        return $ordered;
+    }
+}
+
 if (!function_exists('urlEncodeUserRecordLogAttachmentList')) {
     function urlEncodeUserRecordLogAttachmentList($attachments)
     {
@@ -475,7 +507,7 @@ if (!function_exists('urlBuildUserRecordLogAttachmentPreviewGrid')) {
         }
 
         $items = array();
-        foreach ($attachments as $attachment) {
+        foreach ($attachments as $attachmentIndex => $attachment) {
             $href = urlBuildUserRecordLogAttachmentUrl($attachment, $uploadWebDir);
             if ($href === '') {
                 continue;
@@ -487,7 +519,8 @@ if (!function_exists('urlBuildUserRecordLogAttachmentPreviewGrid')) {
             $safeLabel = htmlspecialchars((string) $fileLabel, ENT_QUOTES, 'UTF-8');
 
             if (urlIsImageUserRecordLogAttachment($attachment)) {
-                $items[] = '<button type="button" class="url-attachment-thumb url-view-attachment-btn" data-url="' . $safeHref . '" data-file="' . $safeFile . '" aria-label="Preview attachment ' . $safeLabel . '">'
+                $items[] = '<button type="button" class="url-attachment-thumb url-view-attachment-btn" data-url="' . $safeHref . '" data-file="' . $safeFile . '" data-index="' . (int) $attachmentIndex . '" aria-label="Preview attachment ' . $safeLabel . '">'
+                    . '<span class="url-attachment-sequence">' . ((int) $attachmentIndex + 1) . '</span>'
                     . '<img src="' . $safeHref . '" alt="' . $safeLabel . '">'
                     . '</button>';
                 continue;
@@ -498,7 +531,8 @@ if (!function_exists('urlBuildUserRecordLogAttachmentPreviewGrid')) {
                 $ext = 'FILE';
             }
 
-            $items[] = '<button type="button" class="url-attachment-thumb url-attachment-thumb-file url-view-attachment-btn" data-url="' . $safeHref . '" data-file="' . $safeFile . '" aria-label="Preview attachment ' . $safeLabel . '">'
+            $items[] = '<button type="button" class="url-attachment-thumb url-attachment-thumb-file url-view-attachment-btn" data-url="' . $safeHref . '" data-file="' . $safeFile . '" data-index="' . (int) $attachmentIndex . '" aria-label="Preview attachment ' . $safeLabel . '">'
+                . '<span class="url-attachment-sequence">' . ((int) $attachmentIndex + 1) . '</span>'
                 . '<span class="url-attachment-file-ext">' . htmlspecialchars($ext, ENT_QUOTES, 'UTF-8') . '</span>'
                 . '<span class="url-attachment-file-name">' . $safeLabel . '</span>'
                 . '</button>';
@@ -1092,7 +1126,8 @@ if (!function_exists('urlBuildListHtml')) {
             $recordId = isset($row['id']) ? (int) $row['id'] : 0;
             $content = isset($row['content']) ? $row['content'] : '';
             $attachment = isset($row['attachment']) ? $row['attachment'] : '';
-            $attachmentList = urlDecodeUserRecordLogAttachmentList($attachment);
+            $attachmentSequence = isset($row['attachment_sequence']) ? $row['attachment_sequence'] : '';
+            $attachmentList = urlDecodeUserRecordLogAttachmentSequence($attachment, $attachmentSequence);
             $summary = isset($row['summary']) ? trim((string) $row['summary']) : '';
             $messageShortcutId = isset($row['message_shortcut_id']) ? (int) $row['message_shortcut_id'] : 0;
             $nextFollowUpDate = isset($row['next_follow_up_date']) ? trim((string) $row['next_follow_up_date']) : '';
@@ -1102,6 +1137,7 @@ if (!function_exists('urlBuildListHtml')) {
             $updatedAt = isset($row['updated_at']) ? $row['updated_at'] : '';
             $createdBy = urlGetUserName($connect, isset($row['created_by']) ? $row['created_by'] : '');
             $updatedBy = urlGetUserName($connect, isset($row['updated_by']) ? $row['updated_by'] : '');
+            $isSystemRecord = strcasecmp(trim((string) $createdBy), 'SYSTEM') === 0;
             $canEdit = urlWithin3Days($createdAt);
             $editBtn = '';
 
@@ -1145,9 +1181,17 @@ if (!function_exists('urlBuildListHtml')) {
             $copyText = urlBuildUserRecordLogCopyText($displayNo, $auditMetaText, $summary, $content, $attachmentList, $uploadWebDir, $followUpCopyFields);
 
             $rowClass = ($count % 2 === 1) ? ' url-row-odd' : ' url-row-even';
+            if ($isSystemRecord) {
+                $rowClass .= ' url-system-record';
+            }
             $html .= '<div class="card mb-3 url-log-row' . $rowClass . '">';
             $html .= '  <div class="card-header">';
-            $html .= '    <div><strong>#' . $displayNo . '</strong> <span class="ms-2 text-muted small">' . $auditMeta . '</span></div>';
+            $html .= '    <div class="d-flex justify-content-between align-items-center gap-2">';
+            $html .= '      <div><strong>#' . $displayNo . '</strong> <span class="ms-2 text-muted small">' . $auditMeta . '</span></div>';
+            if ($isSystemRecord) {
+                $html .= '      <i class="fa-solid fa-file-waveform fa-xl url-system-record-icon" title="System record" aria-label="System record"></i>';
+            }
+            $html .= '    </div>';
             $html .= '    <div class="d-flex align-items-center gap-2 mt-2">';
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-secondary url-copy-btn" title="Copy User Log">Copy</button>';
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-info text-white url-toggle-btn" data-target="url-body-' . $recordId . '">Collapse/Expand</button>';
@@ -1438,6 +1482,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         $hasNextFollowUpDateColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'next_follow_up_date');
         $hasFollowUpTimesColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_times');
         $hasFollowUpDayColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_day');
+        $hasAttachmentSequenceColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'attachment_sequence');
         $followUpColumnsReady = $hasNextFollowUpDateColumn && $hasFollowUpTimesColumn && $hasFollowUpDayColumn;
         $hasFollowUpFieldInput = ($nextFollowUpDate !== '' || $followUpTimes !== '' || $followUpDay !== '');
         if ($hasFollowUpFieldInput && !$followUpColumnsReady) {
@@ -1604,10 +1649,14 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             }
 
             $attachmentValue = urlEncodeUserRecordLogAttachmentColumnValue($attachmentNames);
+            $attachmentSequenceValue = urlEncodeUserRecordLogAttachmentList($attachmentNames);
             $updateParts = array(
                 "content='" . urlEsc($dbConnect, $content) . "'",
                 "attachment='" . urlEsc($dbConnect, $attachmentValue) . "'",
             );
+            if ($hasAttachmentSequenceColumn) {
+                $updateParts[] = "attachment_sequence='" . urlEsc($dbConnect, $attachmentSequenceValue) . "'";
+            }
             if ($hasSummaryColumn) {
                 $updateParts[] = "summary=" . ($summary !== '' ? ("'" . urlEsc($dbConnect, $summary) . "'") : 'NULL');
             }
@@ -1637,6 +1686,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             $editNew = array();
             $oldContent = isset($currentRow['content']) ? (string) $currentRow['content'] : '';
             $oldAttachment = isset($currentRow['attachment']) ? (string) $currentRow['attachment'] : '';
+            $oldAttachmentSequence = isset($currentRow['attachment_sequence']) ? (string) $currentRow['attachment_sequence'] : '';
             if ($oldContent !== $content) {
                 $editFields[] = 'content';
                 $editOld[] = $oldContent;
@@ -1646,6 +1696,11 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 $editFields[] = 'attachment';
                 $editOld[] = $oldAttachment;
                 $editNew[] = $attachmentValue;
+            }
+            if ($hasAttachmentSequenceColumn && $oldAttachmentSequence !== $attachmentSequenceValue) {
+                $editFields[] = 'attachment_sequence';
+                $editOld[] = $oldAttachmentSequence;
+                $editNew[] = $attachmentSequenceValue;
             }
             if ($hasSummaryColumn) {
                 $oldSummary = isset($currentRow['summary']) ? trim((string) $currentRow['summary']) : '';
@@ -1731,6 +1786,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
 
         $attachmentNames = urlNormalizeUserRecordLogAttachmentList($uploadedAttachments);
         $attachmentValue = urlEncodeUserRecordLogAttachmentColumnValue($attachmentNames);
+        $attachmentSequenceValue = urlEncodeUserRecordLogAttachmentList($attachmentNames);
         $insertColumns = array(
             $customerColumn,
             'content',
@@ -1744,6 +1800,10 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         if ($hasSummaryColumn) {
             $insertColumns[] = 'summary';
             $insertValues[] = $summary !== '' ? ("'" . urlEsc($dbConnect, $summary) . "'") : 'NULL';
+        }
+        if ($hasAttachmentSequenceColumn) {
+            $insertColumns[] = 'attachment_sequence';
+            $insertValues[] = "'" . urlEsc($dbConnect, $attachmentSequenceValue) . "'";
         }
         if ($hasMessageShortcutIdColumn) {
             $insertColumns[] = 'message_shortcut_id';
@@ -1781,6 +1841,10 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         $newId = (int) $dbConnect->insert_id;
         $addFields = array('content', 'attachment');
         $addNew = array($content, $attachmentValue);
+        if ($hasAttachmentSequenceColumn) {
+            $addFields[] = 'attachment_sequence';
+            $addNew[] = $attachmentSequenceValue;
+        }
         if ($hasSummaryColumn) {
             $addFields[] = 'summary';
             $addNew[] = $summary;
@@ -1892,6 +1956,18 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                 .user-record-log-module .url-log-row.url-row-even .card-header,
                 .user-record-log-module .url-log-row.url-row-even .card-body {
                     background-color: #F7F3E1;
+                }
+
+                .user-record-log-module .url-log-row.url-system-record .card-header {
+                    background-color: #ffe6e6;
+                    position: relative;
+                }
+
+                .user-record-log-module .url-system-record-icon {
+                    position: absolute;
+                    top: 50%;
+                    right: 1rem;
+                    transform: translateY(-50%);
                 }
 
                 .user-record-log-module .url-content-row {
@@ -2018,6 +2094,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                 }
 
                 .user-record-log-module .url-attachment-thumb {
+                    position: relative;
                     display: flex;
                     align-items: center;
                     justify-content: center;
@@ -2044,6 +2121,22 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     max-height: 132px;
                     object-fit: cover;
                     display: block;
+                }
+
+                .user-record-log-module .url-attachment-sequence {
+                    position: absolute;
+                    top: 5px;
+                    left: 5px;
+                    z-index: 2;
+                    min-width: 22px;
+                    height: 22px;
+                    padding: 0 6px;
+                    border-radius: 999px;
+                    background: rgba(20, 39, 75, 0.88);
+                    color: #fff;
+                    font-size: 0.72rem;
+                    font-weight: 700;
+                    line-height: 22px;
                 }
 
                 .user-record-log-module .url-attachment-thumb-file {
@@ -2151,8 +2244,8 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
 
                 .user-record-log-module .si-attachment-input-row {
                     display: flex;
-                    align-items: center;
-                    gap: 8px;
+                    align-items: flex-start;
+                    gap: 6px;
                 }
 
                 .user-record-log-module .si-attachment-input-row .user-record-log-attachment-input {
@@ -2182,6 +2275,27 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     padding: 0;
                     line-height: 1;
                     cursor: pointer;
+                }
+
+                .user-record-log-module .url-attachment-sequence-controls {
+                    display: flex;
+                    gap: 4px;
+                    flex: 0 0 auto;
+                }
+
+                .user-record-log-module .url-attachment-sequence-btn {
+                    min-width: 30px;
+                    padding: 0.25rem 0.45rem;
+                }
+
+                .user-record-log-module .url-attachment-sequence-label {
+                    display: inline-flex;
+                    align-items: center;
+                    justify-content: center;
+                    min-width: 24px;
+                    font-size: 0.8rem;
+                    font-weight: 700;
+                    color: #2756c4;
                 }
 
                 .user-record-log-module .url-edit-preview-item {
@@ -2244,11 +2358,12 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
 
                 .user-record-log-module .url-attachment-modal-dialog {
                     position: relative;
-                    width: min(1200px, 96vw);
-                    height: min(88vh, 900px);
+                    width: min(1600px, 98vw);
+                    height: min(94vh, 1100px);
                     background: #ffffff;
                     border-radius: 8px;
-                    padding: 18px;
+                    padding: 24px;
+                    overflow: hidden;
                 }
 
                 .user-record-log-module .url-attachment-modal-close {
@@ -2267,17 +2382,42 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     width: 100%;
                     height: 100%;
                     display: flex;
-                    align-items: center;
-                    justify-content: center;
-                    padding-top: 12px;
+                    min-height: 0;
+                    flex-direction: column;
+                    padding-top: 16px;
                 }
 
-                .user-record-log-module .url-attachment-preview-content img,
-                .user-record-log-module .url-attachment-preview-content iframe {
+                .user-record-log-module .url-attachment-preview-media {
+                    display: flex;
+                    flex: 1 1 auto;
+                    align-items: center;
+                    justify-content: center;
+                    width: 100%;
+                    min-height: 0;
+                    overflow: hidden;
+                }
+
+                .user-record-log-module .url-attachment-preview-media img {
+                    max-width: 100%;
+                    max-height: 100%;
+                    object-fit: contain;
+                }
+
+                .user-record-log-module .url-attachment-preview-media iframe {
                     width: 100%;
                     height: 100%;
                     border: 0;
-                    object-fit: contain;
+                }
+
+                .user-record-log-module .url-attachment-modal-navigation {
+                    display: flex;
+                    flex: 0 0 auto;
+                    align-items: center;
+                    justify-content: center;
+                    gap: 8px;
+                    width: 100%;
+                    min-height: 48px;
+                    margin-top: 12px;
                 }
 
                 .user-record-log-module .tox.tox-tinymce {
@@ -2414,13 +2554,17 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                             <div class="si-attach-wrap">
                                 <div class="row g-3 align-items-start">
                                     <div class="col-12 col-md-6">
-                                        <div id="url_attachment_inputs">
-                                            <div class="mb-2 si-attachment-input-row">
-                                                <input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" id="url_attachment" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf">
-                                                <button class="mt-1 add-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
+                                            <div id="url_attachment_inputs">
+                                                <div class="mb-2 si-attachment-input-row">
+                                                    <input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" id="url_attachment" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf">
+                                                    <div class="url-attachment-sequence-controls">
+                                                        <button class="btn btn-sm btn-outline-secondary url-move-upload-attachment-btn" type="button" data-direction="up" title="Move attachment earlier" aria-label="Move attachment earlier">&#8593;</button>
+                                                        <button class="btn btn-sm btn-outline-secondary url-move-upload-attachment-btn" type="button" data-direction="down" title="Move attachment later" aria-label="Move attachment later">&#8595;</button>
+                                                        <button class="mt-1 add-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
+                                                    </div>
+                                                </div>
                                             </div>
-                                        </div>
-                                        <small class="text-muted">Click + to add more attachments. Supports image and PDF files.</small>
+                                        <small class="text-muted">Click + to add more attachments. Use the arrows to arrange the upload sequence. Supports image and PDF files.</small>
                                         <div class="mt-2" id="url_existing_attachment_links"></div>
                                     </div>
                                     <div class="col-12 col-md-6">

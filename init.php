@@ -263,6 +263,8 @@ define('CUR_SEGMENTATION', 'customer_segmentation');
 define('CUS_LEVEL', 'customer_level');
 define('CUS_REPEAT', 'customer_repeat');
 define('MESSAGE_SHORTCUTS', 'message_shortcuts');
+define('CUSTOMIZE_BOT_MSG', 'customize_bot_msg');
+define('CUSTOMIZE_BOT_MSG_ORDER', 'customize_bot_msg_order');
 define('RACE', 'race');
 define('L_STS', 'leave_status');
 define('ID_TYPE', 'identity_type');
@@ -343,6 +345,8 @@ define('LUCKY_DRAW_REQUEST_LOG', 'lucky_draw_request_log');
 
 //finance
 define('MERCHANT', 'merchant');
+define('SUPPLIER_INVOICE', 'supplier_invoice');
+define('SUPPLIER_INVOICE_QR', 'supplier_invoice_qr');
 define('CURR_BANK_TRANS', 'asset_current_bank_acc_transaction');
 define('INV_TRANS', 'asset_investment_transaction');
 define('INVTR_TRANS', 'asset_inventories_transaction');

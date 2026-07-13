@@ -350,12 +350,12 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
                 $amsFee = parseShopeeOrderAmountByLabels($amountFallbackText, ['Commission Fee']);
             }
 
-            $saverProgramFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Saver Programme Fee', 'Saver Program Fee']);
+            $saverProgramFee = parseShopeeOrderAmountFromPairs($paymentInfoPairs, ['Saver Programme Fee']);
             if ($saverProgramFee === '') {
                 if ($extension === 'pdf') {
-                    $saverProgramFee = parseShopeeOrderAmountByLabels($cleanText, ['Saver Programme Fee', 'Saver Program Fee']);
+                    $saverProgramFee = parseShopeeOrderAmountByLabels($cleanText, ['Saver Programme Fee']);
                 } else if ($paymentSectionText !== '') {
-                    $saverProgramFee = parseShopeeOrderAmountByLabels($paymentSectionText, ['Saver Programme Fee', 'Saver Program Fee']);
+                    $saverProgramFee = parseShopeeOrderAmountByLabels($paymentSectionText, ['Saver Programme Fee']);
                 }
             }
 
@@ -909,6 +909,7 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         $serviceFee = mysqli_real_escape_string($finance_connect, $previewData['service_fee']);
         $transFee = mysqli_real_escape_string($finance_connect, $previewData['trans_fee']);
         $amsFee = mysqli_real_escape_string($finance_connect, $previewData['ams_fee']);
+        $saverProgramFee = mysqli_real_escape_string($finance_connect, $previewData['saver_program_fee']);
         $fees = mysqli_real_escape_string($finance_connect, $previewData['fees']);
         $finalAmt = mysqli_real_escape_string($finance_connect, $previewData['final_amt']);
         $remark = mysqli_real_escape_string($finance_connect, $previewData['remark']);
@@ -922,8 +923,8 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         $customerNameValueSql = $sorCustomerNameColumnExists ? "'$customerNameSafe', " : '';
 
         $query = "INSERT INTO " . SHOPEE_SG_ORDER_REQ . " 
-        (orderID, package, package_qty_json, price, voucher, act_shipping_fee, service_fee, trans_fee, ams_fee, fees, final_amt, order_status, shopee_acc, currency, brand, buyer, buyer_pay_meth, pic, " . $customerNameColumnSql . "customer_address, airbill_no, airbill_attachment, stock_out_warehouse_id, remark, latest_transition_at, date, time, create_by, create_date, create_time) 
-        VALUES ('$orderId', '$pkgId', '$packageQtyJson', '$price', '$voucher', '$actShippingFee', '$serviceFee', '$transFee', '$amsFee', '$fees', '$finalAmt', '$status', '$acc', '$curr', '$brand', '$buyer', '$payMeth', '$pic', " . $customerNameValueSql . "'$customerAddressSafe', '$airbillNoSafe', '$airbillAttachmentSafe', '$stockOutWarehouseIdSafe', '$remark', NOW(), curdate(), curtime(), '" . USER_ID . "', curdate(), curtime())";
+        (orderID, package, package_qty_json, price, voucher, act_shipping_fee, service_fee, trans_fee, ams_fee, saver_program_fee, fees, final_amt, order_status, shopee_acc, currency, brand, buyer, buyer_pay_meth, pic, " . $customerNameColumnSql . "customer_address, airbill_no, airbill_attachment, stock_out_warehouse_id, remark, latest_transition_at, date, time, create_by, create_date, create_time)
+        VALUES ('$orderId', '$pkgId', '$packageQtyJson', '$price', '$voucher', '$actShippingFee', '$serviceFee', '$transFee', '$amsFee', '$saverProgramFee', '$fees', '$finalAmt', '$status', '$acc', '$curr', '$brand', '$buyer', '$payMeth', '$pic', " . $customerNameValueSql . "'$customerAddressSafe', '$airbillNoSafe', '$airbillAttachmentSafe', '$stockOutWarehouseIdSafe', '$remark', NOW(), curdate(), curtime(), '" . USER_ID . "', curdate(), curtime())";
         
         $requiresInitialShippedAutoMove = (shopeeOmsNormalizeStatusCode($previewData['order_status']) === 'SP');
         $startedFinanceTransaction = false;
@@ -1975,56 +1976,6 @@ function extractPdfTextTokensFromDecodedStream($decoded)
 
     return $lines;
 }
-
-function extractTextFromPdfViaCommand($filePath)
-{
-    // 1. Config Gate: Allow disabling via environment/config constant
-    if (defined('DISABLE_PDFTOTEXT_EXEC') && DISABLE_PDFTOTEXT_EXEC) {
-        return '';
-    }
-
-    $filePath = trim((string) $filePath);
-    if ($filePath === '' || !is_file($filePath)) {
-        return '';
-    }
-
-    if (!function_exists('shell_exec')) {
-        return '';
-    }
-
-    $disabled = (string) ini_get('disable_functions');
-    if ($disabled !== '') {
-        $disabledFunctions = array_map('trim', explode(',', strtolower($disabled)));
-        if (in_array('shell_exec', $disabledFunctions, true)) {
-            return '';
-        }
-    }
-
-    $escapedFile = escapeshellarg($filePath);
-    
-    // 2. Resource Limit: Prevent hangs by wrapping the command with a 15-second timeout (Unix/Linux environments)
-    $timeoutPrefix = '';
-    if (strtoupper(substr(PHP_OS, 0, 3)) !== 'WIN') {
-        $timeoutPrefix = 'timeout 15 ';
-    }
-
-    $commands = [
-        $timeoutPrefix . 'pdftotext -enc UTF-8 -layout ' . $escapedFile . ' - 2>/dev/null',
-        $timeoutPrefix . 'pdftotext -enc UTF-8 ' . $escapedFile . ' - 2>/dev/null',
-    ];
-
-    foreach ($commands as $command) {
-        $output = @shell_exec($command);
-        $output = is_string($output) ? trim($output) : '';
-        if ($output !== '') {
-            return $output;
-        }
-    }
-
-    return '';
-}
-
-
 
 function extractPdfFieldByLabels($text, $labels)
 {
@@ -3665,9 +3616,9 @@ function extractShopeePdfMonetaryValues($text)
         $commissionFee = extractShopeePdfAmountByLooseLabels($text, ['Commission Fee']);
     }
 
-    $saverProgramFee = extractShopeePdfAmountByStrictLabels($text, ['Saver Programme Fee', 'Saver Program Fee'], $boundaries, 220, true);
+    $saverProgramFee = extractShopeePdfAmountByStrictLabels($text, ['Saver Programme Fee'], $boundaries, 220, true);
     if ($saverProgramFee === '') {
-        $saverProgramFee = extractShopeePdfAmountByLooseLabels($text, ['Saver Programme Fee', 'Saver Program Fee']);
+        $saverProgramFee = extractShopeePdfAmountByLooseLabels($text, ['Saver Programme Fee']);
     }
 
     if ($serviceFee === '' && $transactionFee !== '' && $commissionFee !== '' && $saverProgramFee !== '') {
@@ -4791,13 +4742,16 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             <?php } ?>
                                         </div>
                                         <div class="col-12 col-md-3">
+                                            <label class="form-label" for="saver_program_fee">Saver Programme Fee</label>
+                                            <input class="form-control" type="number" step="0.01" id="saver_program_fee" name="saver_program_fee" value="<?= htmlspecialchars(isset($previewData['saver_program_fee']) ? $previewData['saver_program_fee'] : '0.00') ?>">
+                                        </div>
+                                    </div>
+
+                                    <div class="row mb-3">
+                                        <div class="col-12 col-md-3">
                                             <label class="form-label" for="fees">Fees & Charges</label>
                                             <input class="form-control" type="number" step="0.01" id="fees" name="fees" value="<?= htmlspecialchars(isset($previewData['fees']) ? $previewData['fees'] : '0.00') ?>" readonly>
                                             <input type="hidden" name="fees_detected" value="<?= htmlspecialchars(isset($previewData['fees_detected']) ? $previewData['fees_detected'] : 'no') ?>">
-                                            <input type="hidden" id="saver_program_fee" name="saver_program_fee" value="<?= htmlspecialchars(isset($previewData['saver_program_fee']) ? $previewData['saver_program_fee'] : '0.00') ?>">
-                                            <small id="saver_program_fee_hint" class="text-muted <?= ((float) (isset($previewData['saver_program_fee']) ? $previewData['saver_program_fee'] : 0)) > 0 ? '' : 'd-none' ?>">
-                                                Includes Saver Programme Fee: <?= htmlspecialchars(isset($previewData['saver_program_fee']) ? $previewData['saver_program_fee'] : '0.00') ?>
-                                            </small>
                                         </div>
                                         <div class="col-12 col-md-3">
                                             <label class="form-label" for="final_amt">Final Amount</label>

@@ -143,6 +143,44 @@ if (!function_exists('extractTextFromPdfContent')) {
     }
 }
 
+if (!function_exists('extractTextFromPdfViaCommand')) {
+    function extractTextFromPdfViaCommand($filePath)
+    {
+        if (defined('DISABLE_PDFTOTEXT_EXEC') && DISABLE_PDFTOTEXT_EXEC) {
+            return '';
+        }
+
+        $filePath = trim((string) $filePath);
+        if ($filePath === '' || !is_file($filePath) || !function_exists('shell_exec')) {
+            return '';
+        }
+
+        $disabledFunctions = array_filter(array_map('trim', explode(',', strtolower((string) ini_get('disable_functions')))));
+        if (in_array('shell_exec', $disabledFunctions, true)) {
+            return '';
+        }
+
+        $escapedFile = escapeshellarg($filePath);
+        $isWindows = strtoupper(substr(PHP_OS, 0, 3)) === 'WIN';
+        $timeoutPrefix = $isWindows ? '' : 'timeout 15 ';
+        $stderrRedirect = $isWindows ? ' 2>NUL' : ' 2>/dev/null';
+        $commands = array(
+            $timeoutPrefix . 'pdftotext -enc UTF-8 -layout ' . $escapedFile . ' -' . $stderrRedirect,
+            $timeoutPrefix . 'pdftotext -enc UTF-8 ' . $escapedFile . ' -' . $stderrRedirect,
+        );
+
+        foreach ($commands as $command) {
+            $output = @shell_exec($command);
+            $output = is_string($output) ? trim($output) : '';
+            if ($output !== '') {
+                return $output;
+            }
+        }
+
+        return '';
+    }
+}
+
 if (!function_exists('getPdfTextLines')) {
     function getPdfTextLines($text)
     {
