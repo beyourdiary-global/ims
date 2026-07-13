@@ -14114,6 +14114,10 @@ if (!function_exists('shopeeOmsAuditLog')) {
             return;
         }
 
+        if (!mysqli_set_charset($auditConn, 'utf8mb4')) {
+            return;
+        }
+
         $auditMessage = $safeEvent . ': ' . $safeMessage . $ctxText;
         $userId = (defined('USER_ID') && USER_ID !== '' ? USER_ID : 'QR_PUBLIC');
         $logDate = !empty($cdate) ? $cdate : date('Y-m-d');
