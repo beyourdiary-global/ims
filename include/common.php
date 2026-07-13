@@ -8986,6 +8986,9 @@ if (!function_exists('customerLabelGetPlatformRecordUrl')) {
         $config = customerLabelGetPlatformConfig($platform);
         $baseUrl = defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
         $path = isset($config['record_url']) ? (string) $config['record_url'] : '';
+        if ($path === '' && strtolower(trim((string) $platform)) === 'customer_info') {
+            $path = '/customer/customerInfoTable.php';
+        }
         if ($baseUrl === '' || $path === '') {
             return $path;
         }

@@ -33,6 +33,7 @@ foreach ($tableRows as $row) {
     }
 }
 $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $customerIds);
+$customerTagActivityMap = customerTagGetAssignmentActivityMap($connect, 'customer_info', $customerIds);
 
 // if (!$result) {
 //     echo "<script type='text/javascript'>alert('Sorry, currently network temporary fail, please try again later.');</script>";
@@ -57,6 +58,7 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
             panelStorageKey: 'customer_info_filter_panel_open',
             deferApply: true,
             selectFieldsMultiple: true,
+            urlFilterParams: { customer_tag: 'tag' },
             scopePaths: ['customerInfoTable.php', 'customerInfo.php'],
             filters: [
                 { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
@@ -112,6 +114,7 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
                                 <th scope="col" width="60px">S/N</th>
                                 <th scope="col" id="action_col">Action</th>
                                 <th scope="col">Name</th>
+                                <th scope="col">Tag Last Update</th>
                                 <th scope="col">Email</th>
                                 <th scope="col">Phone Number</th>
                                 <th scope="col">Gender</th>
@@ -143,6 +146,7 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
                                     }
 
                                     $customerTagRows = isset($customerTagMap[(int) $row['id']]) ? $customerTagMap[(int) $row['id']] : array();
+                                    $customerTagActivityRows = isset($customerTagActivityMap[(int) $row['id']]) ? $customerTagActivityMap[(int) $row['id']] : array();
                                     $customerTagNames = customerRecordExtractTagNames($customerTagRows);
                                     $tagValue = isset($row['tags']) ? trim((string) $row['tags']) : '';
                                     if (empty($customerTagNames) && $tagValue !== '') {
@@ -221,6 +225,9 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
                                             <?php if (isset($row['name'], $row['last_name']))
                                                 echo htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') . " " . htmlspecialchars((string) $row['last_name'], ENT_QUOTES, 'UTF-8') ?>
                                             </td>
+                                            <td scope="row" class="customer-tag-assignment-activity-column">
+                                                <?= customerTagRenderAssignmentActivity($customerTagActivityRows) ?>
+                                            </td>
                                             <td scope="row"><?php if (isset($row['email']))
                                                 echo htmlspecialchars((string) $row['email'], ENT_QUOTES, 'UTF-8') ?></td>
                                             <td scope="row">
@@ -244,6 +251,7 @@ $customerTagMap = customerTagGetCustomerTagMap($connect, 'customer_info', $custo
                                 <th scope="col">S/N</th>
                                 <th scope="col" id="action_col">Action</th>
                                 <th scope="col">Name</th>
+                                <th scope="col">Tag Last Update</th>
                                 <th scope="col">Email</th>
                                 <th scope="col">Phone Number</th>
                                 <th scope="col">Gender</th>
