@@ -436,11 +436,37 @@
       );
     }
 
-    function openAttachmentModal(fileUrl, filePath) {
+    function openAttachmentModal(fileUrl, filePath, attachmentItems, attachmentIndex) {
       if (!$attachmentModal.length || !fileUrl) {
         return;
       }
-      $attachmentPreviewContent.html(buildAttachmentPreviewHtml(fileUrl, filePath));
+      var items = Array.isArray(attachmentItems) ? attachmentItems : [];
+      var index = parseInt(attachmentIndex, 10);
+      if (isNaN(index) || index < 0) {
+        index = 0;
+      }
+      var previewHtml =
+        '<div class="url-attachment-preview-media">' +
+        buildAttachmentPreviewHtml(fileUrl, filePath) +
+        "</div>";
+      if (items.length >= 3) {
+        previewHtml +=
+          '<div class="url-attachment-modal-navigation">' +
+          '<button type="button" class="btn btn-sm btn-outline-primary url-attachment-modal-nav-btn" data-direction="previous"' +
+          (index <= 0 ? " disabled" : "") +
+          '>Previous</button>' +
+          '<span class="small text-muted">' +
+          (index + 1) +
+          " / " +
+          items.length +
+          "</span>" +
+          '<button type="button" class="btn btn-sm btn-outline-primary url-attachment-modal-nav-btn" data-direction="next"' +
+          (index >= items.length - 1 ? " disabled" : "") +
+          '>Next</button></div>';
+      }
+      $attachmentPreviewContent.html(previewHtml);
+      $attachmentPreviewContent.data("attachment-items", items);
+      $attachmentPreviewContent.data("attachment-index", index);
       $attachmentModal.removeClass("d-none");
       $("body").addClass("url-modal-open");
     }
@@ -458,7 +484,7 @@
       currentAttachmentObjectUrls = [];
     }
 
-    function createAttachmentPreviewTrigger(fileUrl, filePath) {
+    function createAttachmentPreviewTrigger(fileUrl, filePath, sequenceNumber) {
       var fileName = String(filePath || "").split(/[\\/]/).pop() || "Attachment";
       var ext = getFileExtension(filePath || fileUrl);
       var trigger = document.createElement("button");
@@ -468,6 +494,13 @@
       trigger.setAttribute("data-file", filePath || fileName);
       trigger.setAttribute("title", fileName);
       trigger.setAttribute("aria-label", "Preview attachment " + fileName);
+
+      if (sequenceNumber) {
+        var sequenceTag = document.createElement("span");
+        sequenceTag.className = "url-attachment-sequence";
+        sequenceTag.textContent = String(sequenceNumber);
+        trigger.appendChild(sequenceTag);
+      }
 
       if (isImageExtension(ext)) {
         var img = document.createElement("img");
@@ -634,6 +667,20 @@
       $existingAttachment.val(list.length ? String(list[0]) : "");
     }
 
+    function moveExistingAttachment(index, direction) {
+      var list = parseAttachmentList($existingAttachments.val());
+      var targetIndex = index + direction;
+      if (index < 0 || index >= list.length || targetIndex < 0 || targetIndex >= list.length) {
+        return;
+      }
+
+      var moved = list.splice(index, 1)[0];
+      list.splice(targetIndex, 0, moved);
+      setExistingAttachments(list);
+      renderExistingAttachmentLinks(list);
+      refreshAttachmentPreview(list);
+    }
+
     function removeExistingAttachmentByIndex(index) {
       var list = parseAttachmentList($existingAttachments.val());
       if (index < 0 || index >= list.length) {
@@ -665,13 +712,23 @@
           continue;
         }
         html +=
-          '<div class="url-existing-attachment-item"><a class="url-existing-attachment-link" href="' +
+          '<div class="url-existing-attachment-item"><span class="url-attachment-sequence-label">' +
+          (i + 1) +
+          '</span><a class="url-existing-attachment-link" href="' +
           escHtml(href) +
           '" target="_blank">Open attachment ' +
           (i + 1) +
-          '</a><button type="button" class="url-remove-existing-attachment-btn" data-index="' +
+          '</a><div class="url-attachment-sequence-controls"><button type="button" class="btn btn-sm btn-outline-secondary url-move-existing-attachment-btn url-attachment-sequence-btn" data-index="' +
           i +
-          '" title="Remove attachment"><i class="fa-regular fa-trash-can"></i></button></div>';
+          '" data-direction="up" title="Move attachment earlier"' +
+          (i === 0 ? " disabled" : "") +
+          '>&#8593;</button><button type="button" class="btn btn-sm btn-outline-secondary url-move-existing-attachment-btn url-attachment-sequence-btn" data-index="' +
+          i +
+          '" data-direction="down" title="Move attachment later"' +
+          (i === list.length - 1 ? " disabled" : "") +
+          '>&#8595;</button><button type="button" class="url-remove-existing-attachment-btn" data-index="' +
+          i +
+          '" title="Remove attachment"><i class="fa-regular fa-trash-can"></i></button></div></div>';
       }
       html += "</div>";
       $wrap.html(html);
@@ -704,6 +761,7 @@
         var previewTrigger = createAttachmentPreviewTrigger(
           attachmentUrl,
           attachmentPath,
+          index + 1,
         );
 
         var removeBtn = document.createElement("button");
@@ -718,6 +776,7 @@
         listWrap.appendChild(existingWrap);
       });
 
+      var uploadSequence = existingList.length;
       document
         .querySelectorAll(".user-record-log-attachment-input")
         .forEach(function (input) {
@@ -739,13 +798,18 @@
             }
 
             hasPreview = true;
+            uploadSequence += 1;
             var objectUrl = URL.createObjectURL(file);
             currentAttachmentObjectUrls.push(objectUrl);
 
             var uploadWrap = document.createElement("div");
             uploadWrap.className = "url-edit-preview-item";
             uploadWrap.appendChild(
-              createAttachmentPreviewTrigger(objectUrl, file.name || ""),
+              createAttachmentPreviewTrigger(
+                objectUrl,
+                file.name || "",
+                uploadSequence,
+              ),
             );
             listWrap.appendChild(uploadWrap);
           });
@@ -754,6 +818,26 @@
       if (placeholder) {
         placeholder.style.display = hasPreview ? "none" : "inline";
       }
+    }
+
+    function refreshUploadAttachmentMoveButtons() {
+      var rows = document.querySelectorAll(
+        "#url_attachment_inputs .si-attachment-input-row",
+      );
+      rows.forEach(function (row, index) {
+        var upBtn = row.querySelector(
+          '.url-move-upload-attachment-btn[data-direction="up"]',
+        );
+        var downBtn = row.querySelector(
+          '.url-move-upload-attachment-btn[data-direction="down"]',
+        );
+        if (upBtn) {
+          upBtn.disabled = index === 0;
+        }
+        if (downBtn) {
+          downBtn.disabled = index === rows.length - 1;
+        }
+      });
     }
 
     function resetAttachmentInputs() {
@@ -765,8 +849,9 @@
       wrap.innerHTML =
         '<div class="mb-2 si-attachment-input-row">' +
         '<input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" id="url_attachment" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf">' +
-        '<button class="mt-1 add-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>' +
+        '<div class="url-attachment-sequence-controls"><button class="btn btn-sm btn-outline-secondary url-move-upload-attachment-btn url-attachment-sequence-btn" type="button" data-direction="up" title="Move attachment earlier" aria-label="Move attachment earlier">&#8593;</button><button class="btn btn-sm btn-outline-secondary url-move-upload-attachment-btn url-attachment-sequence-btn" type="button" data-direction="down" title="Move attachment later" aria-label="Move attachment later">&#8595;</button><button class="mt-1 add-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Add another attachment"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button></div>' +
         "</div>";
+      refreshUploadAttachmentMoveButtons();
     }
 
     function resetForm() {
@@ -1139,7 +1224,7 @@
 
     $(document).on(
       "click",
-      ".add-user-record-log-attachment-btn, .remove-user-record-log-attachment-btn",
+      ".add-user-record-log-attachment-btn, .remove-user-record-log-attachment-btn, .url-move-upload-attachment-btn",
       function (e) {
         var target = e.target;
         if (!target) {
@@ -1150,6 +1235,7 @@
         var removeBtn = target.closest(
           ".remove-user-record-log-attachment-btn",
         );
+        var moveBtn = target.closest(".url-move-upload-attachment-btn");
         var wrap = document.getElementById("url_attachment_inputs");
         if (!wrap) {
           return;
@@ -1160,8 +1246,22 @@
           row.className = "mb-2 si-attachment-input-row";
           row.innerHTML =
             '<input class="form-control user-record-log-attachment-input" type="file" name="attachment[]" accept=".png,.jpg,.jpeg,.webp,.pdf,application/pdf">' +
-            '<button class="mt-1 remove-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Remove attachment row"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
+            '<div class="url-attachment-sequence-controls"><button class="btn btn-sm btn-outline-secondary url-move-upload-attachment-btn url-attachment-sequence-btn" type="button" data-direction="up" title="Move attachment earlier" aria-label="Move attachment earlier">&#8593;</button><button class="btn btn-sm btn-outline-secondary url-move-upload-attachment-btn url-attachment-sequence-btn" type="button" data-direction="down" title="Move attachment later" aria-label="Move attachment later">&#8595;</button><button class="mt-1 remove-user-record-log-attachment-btn" id="action_menu_btn" type="button" title="Remove attachment row"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button></div>';
           wrap.appendChild(row);
+          refreshUploadAttachmentMoveButtons();
+          return;
+        }
+
+        if (moveBtn) {
+          var moveRow = moveBtn.closest(".si-attachment-input-row");
+          var direction = String(moveBtn.getAttribute("data-direction") || "");
+          if (moveRow && direction === "up" && moveRow.previousElementSibling) {
+            wrap.insertBefore(moveRow, moveRow.previousElementSibling);
+          } else if (moveRow && direction === "down" && moveRow.nextElementSibling) {
+            wrap.insertBefore(moveRow.nextElementSibling, moveRow);
+          }
+          refreshUploadAttachmentMoveButtons();
+          refreshAttachmentPreview();
           return;
         }
 
@@ -1179,6 +1279,7 @@
               removeRow.remove();
             }
           }
+          refreshUploadAttachmentMoveButtons();
           refreshAttachmentPreview();
         }
       },
@@ -1190,6 +1291,15 @@
         return;
       }
       removeExistingAttachmentByIndex(index);
+    });
+
+    $(document).on("click", ".url-move-existing-attachment-btn", function () {
+      var index = parseInt($(this).data("index"), 10);
+      var direction = String($(this).data("direction") || "");
+      if (isNaN(index) || (direction !== "up" && direction !== "down")) {
+        return;
+      }
+      moveExistingAttachment(index, direction === "up" ? -1 : 1);
     });
 
     $(document).on("click", ".url-edit-preview-remove-btn", function (e) {
@@ -1208,7 +1318,17 @@
       if (!fileUrl) {
         return;
       }
-      openAttachmentModal(fileUrl, filePath);
+      var $triggers = $(this)
+        .closest("#url_attachment_img_list")
+        .find(".url-edit-preview-open-btn");
+      var attachmentItems = [];
+      $triggers.each(function () {
+        attachmentItems.push({
+          url: String($(this).data("url") || ""),
+          file: String($(this).data("file") || ""),
+        });
+      });
+      openAttachmentModal(fileUrl, filePath, attachmentItems, $triggers.index(this));
     });
 
     $list.on("click", ".url-edit-btn", function () {
@@ -1305,7 +1425,41 @@
       if (!fileUrl) {
         return;
       }
-      openAttachmentModal(fileUrl);
+      var $triggers = $(this)
+        .closest(".url-attachment-preview-grid")
+        .find(".url-view-attachment-btn");
+      var attachmentItems = [];
+      $triggers.each(function () {
+        attachmentItems.push({
+          url: String($(this).data("url") || ""),
+          file: String($(this).data("file") || ""),
+        });
+      });
+      openAttachmentModal(
+        fileUrl,
+        String($(this).data("file") || ""),
+        attachmentItems,
+        $triggers.index(this),
+      );
+    });
+
+    $attachmentPreviewContent.on("click", ".url-attachment-modal-nav-btn", function () {
+      var items = $attachmentPreviewContent.data("attachment-items");
+      var index = parseInt($attachmentPreviewContent.data("attachment-index"), 10);
+      var direction = String($(this).data("direction") || "");
+      if (!Array.isArray(items) || isNaN(index)) {
+        return;
+      }
+      var nextIndex = direction === "next" ? index + 1 : index - 1;
+      if (nextIndex < 0 || nextIndex >= items.length || !items[nextIndex].url) {
+        return;
+      }
+      openAttachmentModal(
+        String(items[nextIndex].url),
+        String(items[nextIndex].file || ""),
+        items,
+        nextIndex,
+      );
     });
 
     $attachmentModalClose.on("click", function () {
