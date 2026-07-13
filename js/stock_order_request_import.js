@@ -1469,13 +1469,15 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
     }
 
     var upperText = text.toUpperCase();
-    var directMatch = upperText.match(/\bMY\d{10,14}\b/g);
+    // Keep the suffix when it is present; otherwise the compact fallback
+    // would accept only the numeric prefix.
+    var directMatch = upperText.match(/\bMY\d{10,14}[A-Z]?\b/g);
     if (directMatch && directMatch.length > 0) {
       return String(directMatch[0] || "").toUpperCase();
     }
 
     var compactText = upperText.replace(/[^A-Z0-9]+/g, "");
-    var compactMatch = compactText.match(/MY\d{10,14}/g);
+    var compactMatch = compactText.match(/MY\d{10,14}[A-Z]?/g);
     if (compactMatch && compactMatch.length > 0) {
       return String(compactMatch[0] || "").toUpperCase();
     }
@@ -1486,7 +1488,7 @@ document.querySelectorAll(".sor-pkg-select").forEach(function (sel) {
       .replace(/MYI(?=\d{9,13})/g, "MY1")
       .replace(/MYL(?=\d{9,13})/g, "MY1");
 
-    var fixedMatch = fixedText.match(/MY\d{10,14}/g);
+    var fixedMatch = fixedText.match(/MY\d{10,14}[A-Z]?/g);
     if (fixedMatch && fixedMatch.length > 0) {
       return String(fixedMatch[0] || "").toUpperCase();
     }
