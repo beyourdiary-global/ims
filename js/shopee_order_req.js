@@ -228,11 +228,11 @@ $(document).ready(function () {
   $("#sor_acc").change(getAccountCurrency);
   $("#sor_user").change(autofill);
   $("#sor_acc").change(calculatePrice);
-  $("#sor_serv, #sor_trans, #sor_ams").on("keyup", calculateFinalAmount);
+  $("#sor_serv, #sor_trans, #sor_ams, #sor_saver_program_fee").on("keyup", calculateFinalAmount);
   $(
-    "#sor_price, #sor_voucher, #sor_shipping, #sor_serv, #sor_trans, #sor_ams",
+    "#sor_price, #sor_voucher, #sor_shipping, #sor_serv, #sor_trans, #sor_ams, #sor_saver_program_fee",
   ).change(calculateFinalAmount);
-  $("#sor_serv, #sor_trans, #sor_ams").on("keyup", calculateFees);
+  $("#sor_serv, #sor_trans, #sor_ams, #sor_saver_program_fee").on("keyup", calculateFees);
   $("#sor_price, #sor_user_hidden, #sor_curr_hidden").change(calculateComm);
 
   function toPositiveNumber(value) {
@@ -265,18 +265,6 @@ $(document).ready(function () {
       $("#fees").val(
         (service + transaction + commission + saverProgramFee).toFixed(2),
       );
-    }
-
-    var saverHint = $("#saver_program_fee_hint");
-    if (saverHint.length > 0) {
-      if (saverProgramFee > 0) {
-        saverHint.text(
-          "Includes Saver Programme Fee: " + saverProgramFee.toFixed(2),
-        );
-        saverHint.removeClass("d-none");
-      } else {
-        saverHint.addClass("d-none");
-      }
     }
 
     recalculateImportFinalAmount();
@@ -313,11 +301,11 @@ $(document).ready(function () {
   $("#fees").prop("readonly", true);
   $("#final_amt").prop("readonly", true);
   
-  $("#service_fee, #trans_fee, #ams_fee").on("input", function () {
+  $("#service_fee, #trans_fee, #ams_fee, #saver_program_fee").on("input", function () {
     recalculateImportFees(false);
   });
 
-  $("#service_fee, #trans_fee, #ams_fee").on("change blur", function () {
+  $("#service_fee, #trans_fee, #ams_fee, #saver_program_fee").on("change blur", function () {
     normalizePositiveField($(this));
     recalculateImportFees();
   });
@@ -341,6 +329,7 @@ $(document).ready(function () {
     "#service_fee",
     "#trans_fee",
     "#ams_fee",
+    "#saver_program_fee",
     "#fees",
     "#final_amt",
   ].forEach(function (selector) {
@@ -544,9 +533,10 @@ function calculateFees() {
   var serviceFee = parseFloat($("#sor_serv").val()) || 0;
   var transactionFee = parseFloat($("#sor_trans").val()) || 0;
   var amsCommissionFee = parseFloat($("#sor_ams").val()) || 0;
+  var saverProgramFee = parseFloat($("#sor_saver_program_fee").val()) || 0;
 
   // Calculate the total fees by summing up the individual fees
-  var totalFees = serviceFee + transactionFee + amsCommissionFee;
+  var totalFees = serviceFee + transactionFee + amsCommissionFee + saverProgramFee;
 
   // Set the total fees value to the output field
   $("#sor_fees").val(totalFees.toFixed(2));
