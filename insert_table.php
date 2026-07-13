@@ -26,6 +26,10 @@ if ($conn->connect_error) {
     die("Connection failed: " . $conn->connect_error);
 }
 
+if (!$conn->set_charset('utf8mb4')) {
+    die("Failed setting database connection charset to utf8mb4: " . $conn->error);
+}
+
 // 2.1 Select Financial Database
 if (!$conn->select_db($db_fin)) {
     die('Unable to select database `' . $db_fin . '`: ' . $conn->error);
@@ -1594,6 +1598,58 @@ function migrationFlagEnabled($value)
     return in_array($value, array('1', 'true', 'yes', 'y', 'on'), true);
 }
 
+function migrationEnsureTableUnicodeInnoDb($conn, $dbName, $tblName)
+{
+    if (!migrationTableExists($conn, $dbName, $tblName)) {
+        echo "<p style='color:orange;'>Skipped Unicode/InnoDB migration for `" . htmlspecialchars($tblName, ENT_QUOTES, 'UTF-8') . "` because the table does not exist.</p>";
+        return;
+    }
+
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tblName);
+    $tableSql = "SELECT ENGINE, TABLE_COLLATION
+        FROM information_schema.TABLES
+        WHERE TABLE_SCHEMA = '" . $safeDb . "'
+          AND TABLE_NAME = '" . $safeTable . "'
+        LIMIT 1";
+    $tableResult = $conn->query($tableSql);
+
+    if (!$tableResult || !($tableRow = $tableResult->fetch_assoc())) {
+        echo "<p style='color:red;'>Failed reading `" . htmlspecialchars($tblName, ENT_QUOTES, 'UTF-8') . "` engine/collation: " . htmlspecialchars($conn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+        return;
+    }
+
+    $columnSql = "SELECT COUNT(*) AS invalid_column_count
+        FROM information_schema.COLUMNS
+        WHERE TABLE_SCHEMA = '" . $safeDb . "'
+          AND TABLE_NAME = '" . $safeTable . "'
+          AND CHARACTER_SET_NAME IS NOT NULL
+          AND (CHARACTER_SET_NAME <> 'utf8mb4' OR COLLATION_NAME <> 'utf8mb4_unicode_ci')";
+    $columnResult = $conn->query($columnSql);
+    $columnRow = $columnResult ? $columnResult->fetch_assoc() : null;
+    $invalidColumnCount = $columnRow ? (int) $columnRow['invalid_column_count'] : 0;
+
+    $isInnoDb = strtoupper((string) $tableRow['ENGINE']) === 'INNODB';
+    $hasUnicodeCollation = strtolower((string) $tableRow['TABLE_COLLATION']) === 'utf8mb4_unicode_ci';
+
+    if ($isInnoDb && $hasUnicodeCollation && $invalidColumnCount === 0) {
+        echo "<p style='color:green;'>Verified `" . htmlspecialchars($tblName, ENT_QUOTES, 'UTF-8') . "` uses ENGINE=InnoDB and utf8mb4_unicode_ci.</p>";
+        return;
+    }
+
+    $safeDbIdentifier = str_replace('`', '``', $dbName);
+    $safeTableIdentifier = str_replace('`', '``', $tblName);
+    $alterSql = "ALTER TABLE `" . $safeDbIdentifier . "`.`" . $safeTableIdentifier . "`
+        ENGINE=InnoDB,
+        CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci";
+
+    if ($conn->query($alterSql)) {
+        echo "<p style='color:green;'>Converted `" . htmlspecialchars($tblName, ENT_QUOTES, 'UTF-8') . "` to ENGINE=InnoDB with utf8mb4_unicode_ci for all text columns.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed converting `" . htmlspecialchars($tblName, ENT_QUOTES, 'UTF-8') . "` to InnoDB/utf8mb4: " . htmlspecialchars($conn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+}
+
 function migrationEnsureTableEngineInnoDb($conn, $dbName, $tblName, $options = array())
 {
     $options = is_array($options) ? $options : array();
@@ -2958,6 +3014,12 @@ function pinBlockHasAccessId($allPins, $targetPinId, $accessId)
 // } else {
 //     echo "<p style='color:red;'>Failed selecting CMS database for user record log migration.</p>";
 // }
+
+if ($conn->select_db($db_cms)) {
+    migrationEnsureTableUnicodeInnoDb($conn, $db_cms, AUDIT_LOG);
+} else {
+    echo "<p style='color:red;'>Failed selecting CMS database for `" . AUDIT_LOG . "` Unicode/InnoDB migration.</p>";
+}
 
 if ($conn->select_db($db_cms)) {
     if (migrationTableExists($conn, $db_cms, USER_RECORD_LOG)) {

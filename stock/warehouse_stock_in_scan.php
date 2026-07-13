@@ -1099,6 +1099,10 @@ if (!function_exists('scanAuditLog')) {
             return;
         }
 
+        if (!mysqli_set_charset($auditConn, 'utf8mb4')) {
+            return;
+        }
+
         $auditMessage = $safeEvent . ': ' . $safeMessage . $ctxText;
         $userId = (USER_ID !== '' ? USER_ID : 'QR_PUBLIC');
         $logDate = !empty($cdate) ? $cdate : date('Y-m-d');
