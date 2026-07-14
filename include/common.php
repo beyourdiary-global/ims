@@ -17333,14 +17333,17 @@ if (!function_exists('sorRefreshTrackingStatus')) {
         }
 
         $trackingNo = isset($row['tracking_no']) ? trim((string) $row['tracking_no']) : '';
-        $courierId = isset($row['courier_id']) ? (int) $row['courier_id'] : 0;
+        // Courier IDs are not always numeric (for example, "ShopeeExpress" in
+        // the CMS courier table). Keep the original identifier for the CMS lookup.
+        $courierId = isset($row['courier_id']) ? trim((string) $row['courier_id']) : '';
 
         $trackingLink = '';
         $courierNameForSlug = '';
         $courierCountryCode = 'MY';
         $lookupConnect = $cmsConnect ? $cmsConnect : $financeConnect;
-        if ($courierId > 0) {
-            $courierSql = "SELECT tracking_link, country, name FROM " . COURIER . " WHERE id = '$courierId' LIMIT 1";
+        if ($courierId !== '') {
+            $safeCourierId = mysqli_real_escape_string($lookupConnect, $courierId);
+            $courierSql = "SELECT tracking_link, country, name FROM " . COURIER . " WHERE id = '$safeCourierId' LIMIT 1";
             $courierRst = mysqli_query($lookupConnect, $courierSql);
             if ($courierRst && ($courierRow = mysqli_fetch_assoc($courierRst))) {
                 $trackingLink = isset($courierRow['tracking_link']) ? trim((string) $courierRow['tracking_link']) : '';
