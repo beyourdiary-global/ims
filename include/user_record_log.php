@@ -2467,6 +2467,35 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                 }
 
                 @media (max-width: 767.98px) {
+                    .user-record-log-module .url-attachment-modal {
+                        padding: 6px;
+                    }
+
+                    .user-record-log-module .url-attachment-modal-dialog {
+                        width: calc(100vw - 12px);
+                        height: calc(100vh - 12px);
+                        height: calc(100dvh - 12px);
+                        max-width: none;
+                        max-height: none;
+                        padding: 32px 8px 8px;
+                        border-radius: 10px;
+                    }
+
+                    .user-record-log-module .url-attachment-preview-content {
+                        padding-top: 4px;
+                    }
+
+                    .user-record-log-module .url-attachment-preview-media img {
+                        width: 100%;
+                        height: 100%;
+                        object-fit: contain;
+                    }
+
+                    .user-record-log-module .url-attachment-modal-navigation {
+                        min-height: 44px;
+                        margin-top: 8px;
+                    }
+
                     .user-record-log-module .url-attachment-action {
                         flex: 1 1 100%;
                         width: 100%;
