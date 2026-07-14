@@ -62,6 +62,7 @@ $currencyUnits = getImportOptionList(CUR_UNIT, 'unit', $connect);
 $paymentMethods = getImportOptionList(FIN_PAY_METH, 'name', $finance_connect);
 if ($action === 'parseShopeeAdsTopup') {
     $module = 'shopee_ads_topup';
+    unset($_SESSION['shopee_ads_topup_import_pending']);
 
     if (!isset($_FILES['import_file']) || !is_uploaded_file($_FILES['import_file']['tmp_name'])) {
         $importErrors[] = 'Please choose a Shopee HTML, PDF, or ZIP file.';
@@ -78,12 +79,22 @@ if ($action === 'parseShopeeAdsTopup') {
                 $parseResult = parseShopeeAdsTopupHtml($html, $shopeeAccounts, $currencyUnits, $paymentMethods);
                 $previewData = $parseResult['data'];
                 $previewData['source_file_name'] = sanitizeImportFilename($uploadedName);
-                $previewData['source_attachment'] = saveShopeeImportAttachmentBinary($html, $uploadedName, basename(__FILE__, '.php'));
+                $previewData['source_attachment'] = '';
+                $previewData['source_attachment_key'] = '0';
                 $importWarnings = $parseResult['warnings'];
 
                 if (!empty($parseResult['errors'])) {
                     $importErrors = array_merge($importErrors, $parseResult['errors']);
                 }
+
+                $_SESSION['shopee_ads_topup_import_pending'] = [
+                    'attachments' => [
+                        '0' => [
+                            'content' => $html,
+                            'original_name' => $previewData['source_file_name'],
+                        ],
+                    ],
+                ];
             }
         } else {
             $sourceFiles = collectShopeeImportSourceFiles($_FILES['import_file'], $importErrors, $importWarnings);
@@ -92,16 +103,31 @@ if ($action === 'parseShopeeAdsTopup') {
                     $importWarnings[] = 'Multiple PDFs detected. Preview currently loads the first matched file only.';
                 }
 
+                $pendingAttachments = [];
+                foreach ($sourceFiles as $sourceIndex => &$sourceFile) {
+                    $sourceFile['attachment_key'] = (string) $sourceIndex;
+                    $pendingAttachments[(string) $sourceIndex] = [
+                        'content' => isset($sourceFile['pdf_content']) ? $sourceFile['pdf_content'] : '',
+                        'original_name' => isset($sourceFile['original_name']) ? $sourceFile['original_name'] : '',
+                    ];
+                }
+                unset($sourceFile);
+
                 $source = $sourceFiles[0];
                 $parseResult = parseShopeeAdsTopupPdf($source['pdf_content'], $source['original_name'], $shopeeAccounts, $currencyUnits, $paymentMethods);
                 $previewData = $parseResult['data'];
                 $previewData['source_file_name'] = isset($source['original_name']) ? (string) $source['original_name'] : '';
-                $previewData['source_attachment'] = isset($source['attachment_path']) ? (string) $source['attachment_path'] : '';
+                $previewData['source_attachment'] = '';
+                $previewData['source_attachment_key'] = isset($source['attachment_key']) ? (string) $source['attachment_key'] : '';
                 $importWarnings = array_merge($importWarnings, $parseResult['warnings']);
 
                 if (!empty($parseResult['errors'])) {
                     $importErrors = array_merge($importErrors, $parseResult['errors']);
                 }
+
+                $_SESSION['shopee_ads_topup_import_pending'] = [
+                    'attachments' => $pendingAttachments,
+                ];
             }
         }
     }
@@ -109,6 +135,9 @@ if ($action === 'parseShopeeAdsTopup') {
     $module = 'shopee_ads_topup';
     $previewData = getShopeeAdsPreviewFromPost();
     $importWarnings = array_filter(post('importWarnings') ? explode("\n", post('importWarnings')) : []);
+    $pendingAttachments = isset($_SESSION['shopee_ads_topup_import_pending']['attachments']) && is_array($_SESSION['shopee_ads_topup_import_pending']['attachments'])
+        ? $_SESSION['shopee_ads_topup_import_pending']['attachments']
+        : [];
 
     validateShopeeAdsPreview($previewData, $importErrors, $shopeeAccounts, $currencyUnits, $paymentMethods, $finance_connect, $connect);
 
@@ -116,8 +145,29 @@ if ($action === 'parseShopeeAdsTopup') {
         $paymentDate = formatImportDatetime($previewData['payment_date']);
         $remark = mysqli_real_escape_string($finance_connect, $previewData['remark']);
         $orderId = mysqli_real_escape_string($finance_connect, $previewData['order_id']);
-        $attachmentPath = mysqli_real_escape_string($finance_connect, isset($previewData['source_attachment']) ? (string) $previewData['source_attachment'] : '');
-        $query = "INSERT INTO " . SHOPEE_ADS_TOPUP . " (shopee_acc, orderID, payment_date, currency, topup_amt, subtotal, gst, pay_meth, attachment, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $previewData['shopee_acc']) . "', '$orderId', '$paymentDate', '" . mysqli_real_escape_string($connect, $previewData['currency']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['topup_amt']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['subtotal']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['gst']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['pay_meth']) . "', '" . $attachmentPath . "', '$remark', '" . USER_ID . "', curdate(), curtime())";
+        $attachmentPath = '';
+        $savedAttachmentPath = '';
+        $attachmentKey = isset($previewData['source_attachment_key']) ? (string) $previewData['source_attachment_key'] : '';
+        if ($attachmentKey !== '' && isset($pendingAttachments[$attachmentKey]) && is_array($pendingAttachments[$attachmentKey])) {
+            $pendingAttachment = $pendingAttachments[$attachmentKey];
+            $savedAttachmentPath = saveShopeeImportAttachmentBinary(
+                isset($pendingAttachment['content']) ? $pendingAttachment['content'] : '',
+                isset($pendingAttachment['original_name']) ? $pendingAttachment['original_name'] : '',
+                basename(__FILE__, '.php')
+            );
+            if ($savedAttachmentPath === '') {
+                $importErrors[] = 'Unable to save the Shopee Ads attachment.';
+            } else {
+                $attachmentPath = mysqli_real_escape_string($finance_connect, $savedAttachmentPath);
+            }
+        }
+
+        if (!empty($importErrors)) {
+            if ($savedAttachmentPath !== '') {
+                deleteShopeeImportAttachment($savedAttachmentPath);
+            }
+        } else {
+            $query = "INSERT INTO " . SHOPEE_ADS_TOPUP . " (shopee_acc, orderID, payment_date, currency, topup_amt, subtotal, gst, pay_meth, attachment, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $previewData['shopee_acc']) . "', '$orderId', '$paymentDate', '" . mysqli_real_escape_string($connect, $previewData['currency']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['topup_amt']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['subtotal']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['gst']) . "', '" . mysqli_real_escape_string($finance_connect, $previewData['pay_meth']) . "', '" . $attachmentPath . "', '$remark', '" . USER_ID . "', curdate(), curtime())";
 
         $returnData = mysqli_query($finance_connect, $query);
 
@@ -150,11 +200,16 @@ if ($action === 'parseShopeeAdsTopup') {
             ];
             audit_log($log);
 
+            unset($_SESSION['shopee_ads_topup_import_pending']);
             echo '<script>alert("Shopee Ads top up transaction imported successfully.");window.location.href="' . $shopeeRedirectPage . '";</script>';
             exit;
         }
 
+        if ($savedAttachmentPath !== '') {
+            deleteShopeeImportAttachment($savedAttachmentPath);
+        }
         $importErrors[] = 'Unable to insert the import record. Please try again.';
+        }
     }
 }
 
@@ -202,6 +257,19 @@ function saveShopeeImportAttachmentBinary($binaryContent, $originalName, $pageNa
     return '';
 }
 
+function deleteShopeeImportAttachment($relativePath)
+{
+    $relativePath = ltrim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string) $relativePath), DIRECTORY_SEPARATOR);
+    if ($relativePath === '') {
+        return;
+    }
+
+    $absolutePath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . $relativePath;
+    if (is_file($absolutePath)) {
+        @unlink($absolutePath);
+    }
+}
+
 function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
 {
     $sourceFiles = array();
@@ -218,7 +286,6 @@ function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
         $sourceFiles[] = array(
             'pdf_content' => $pdfContent,
             'original_name' => sanitizeImportFilename($originalName),
-            'attachment_path' => saveShopeeImportAttachmentBinary($pdfContent, $originalName, basename(__FILE__, '.php')),
         );
         return $sourceFiles;
     }
@@ -254,7 +321,6 @@ function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
             $sourceFiles[] = array(
                 'pdf_content' => $pdfContent,
                 'original_name' => sanitizeImportFilename($entryName),
-                'attachment_path' => saveShopeeImportAttachmentBinary($pdfContent, (string) basename($entryName), basename(__FILE__, '.php')),
             );
         }
 
@@ -282,7 +348,6 @@ function collectShopeeImportSourceFiles($fileInfo, &$errors, &$warnings)
                 $sourceFiles[] = array(
                     'pdf_content' => $pdfContent,
                     'original_name' => sanitizeImportFilename($entryName),
-                    'attachment_path' => saveShopeeImportAttachmentBinary($pdfContent, (string) basename($entryName), basename(__FILE__, '.php')),
                 );
             }
         } catch (Exception $exception) {
@@ -1537,6 +1602,7 @@ function getShopeeAdsPreviewFromPost()
     return [
         'source_file_name' => postSpaceFilter('source_file_name'),
         'source_attachment' => postSpaceFilter('source_attachment'),
+        'source_attachment_key' => postSpaceFilter('source_attachment_key'),
         'source_shop_name' => postSpaceFilter('source_shop_name'),
         'source_currency' => postSpaceFilter('source_currency'),
         'source_payment_method' => postSpaceFilter('source_payment_method'),
@@ -1667,6 +1733,7 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
                                     <input type="hidden" name="source_payment_method" value="<?= htmlspecialchars($previewData['source_payment_method']) ?>">
                                     <input type="hidden" name="source_file_name" value="<?= htmlspecialchars(isset($previewData['source_file_name']) ? $previewData['source_file_name'] : '') ?>">
                                     <input type="hidden" name="source_attachment" value="<?= htmlspecialchars(isset($previewData['source_attachment']) ? $previewData['source_attachment'] : '') ?>">
+                                    <input type="hidden" name="source_attachment_key" value="<?= htmlspecialchars(isset($previewData['source_attachment_key']) ? $previewData['source_attachment_key'] : '') ?>">
                                     <input type="hidden" name="importWarnings" value="<?= htmlspecialchars(implode("\n", $importWarnings)) ?>">
 
                                     <div class="row mb-3">
@@ -1750,5 +1817,3 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
 </script>
 
 </html>
-
-

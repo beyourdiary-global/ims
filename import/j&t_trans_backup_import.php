@@ -84,47 +84,6 @@ if (!function_exists('jtImpToAmount')) {
     }
 }
 
-if (!function_exists('jtImpSaveUploadedImportFile')) {
-    function jtImpSaveUploadedImportFile($upload, $pageName)
-    {
-        if (!isset($upload['tmp_name']) || !isset($upload['name'])) {
-            return '';
-        }
-        $tmpName = (string) $upload['tmp_name'];
-        $originalName = trim((string) $upload['name']);
-        if ($tmpName === '' || $originalName === '' || !is_file($tmpName)) {
-            return '';
-        }
-
-        $ext = strtolower((string) pathinfo($originalName, PATHINFO_EXTENSION));
-        $baseName = (string) pathinfo($originalName, PATHINFO_FILENAME);
-        $safeBase = preg_replace('/[^a-zA-Z0-9_-]/', '_', $baseName);
-        if ($safeBase === '') {
-            $safeBase = 'import_file';
-        }
-        $safePage = preg_replace('/[^a-zA-Z0-9_-]/', '_', (string) $pageName);
-        if ($safePage === '') {
-            $safePage = 'import_page';
-        }
-
-        $relDir = 'attachment/' . substr((string) comYMD, 0, 4) . '/' . substr((string) comYMD, 4, 2) . '/' . $safePage . '/';
-        $absDir = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . ltrim($relDir, '/\\');
-        if (!is_dir($absDir)) {
-            @mkdir($absDir, 0777, true);
-        }
-        if (!is_dir($absDir)) {
-            return '';
-        }
-
-        $newFile = $safeBase . '_' . date('Ymd_His') . ($ext !== '' ? '.' . $ext : '');
-        $absPath = $absDir . $newFile;
-        if (@copy($tmpName, $absPath)) {
-            return $relDir . $newFile;
-        }
-        return '';
-    }
-}
-
 if (!function_exists('jtImpStoreAttachmentBinary')) {
     function jtImpStoreAttachmentBinary($binaryContent, $originalName, $pageName)
     {
@@ -165,6 +124,21 @@ if (!function_exists('jtImpStoreAttachmentBinary')) {
     }
 }
 
+if (!function_exists('jtImpDeleteAttachment')) {
+    function jtImpDeleteAttachment($relativePath)
+    {
+        $relativePath = ltrim(str_replace(array('/', '\\'), DIRECTORY_SEPARATOR, (string) $relativePath), DIRECTORY_SEPARATOR);
+        if ($relativePath === '') {
+            return;
+        }
+
+        $absolutePath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . $relativePath;
+        if (is_file($absolutePath)) {
+            @unlink($absolutePath);
+        }
+    }
+}
+
 if (!function_exists('jtImpBuildSourceAttachmentMap')) {
     function jtImpBuildSourceAttachmentMap($upload, $pageName, &$warnings)
     {
@@ -183,10 +157,10 @@ if (!function_exists('jtImpBuildSourceAttachmentMap')) {
         if ($ext === 'pdf') {
             $content = @file_get_contents($tmpName);
             if ($content !== false && $content !== '') {
-                $savedPath = jtImpStoreAttachmentBinary($content, $originalName, $pageName);
-                if ($savedPath !== '') {
-                    $map[strtolower((string) basename($originalName))] = $savedPath;
-                }
+                $map[strtolower((string) basename($originalName))] = array(
+                    'content' => $content,
+                    'original_name' => basename($originalName),
+                );
             }
             return $map;
         }
@@ -214,10 +188,10 @@ if (!function_exists('jtImpBuildSourceAttachmentMap')) {
                     }
 
                     $baseName = (string) basename($entryName);
-                    $savedPath = jtImpStoreAttachmentBinary($pdfContent, $baseName, $pageName);
-                    if ($savedPath !== '') {
-                        $map[strtolower($baseName)] = $savedPath;
-                    }
+                    $map[strtolower($baseName)] = array(
+                        'content' => $pdfContent,
+                        'original_name' => $baseName,
+                    );
                 }
                 $zip->close();
             }
@@ -322,7 +296,7 @@ if (!function_exists('jtImpExtractSingleValue')) {
 }
 
 if (!function_exists('jtImpBuildRecordFromText')) {
-    function jtImpBuildRecordFromText($text, $sourceFile = '', $sourceAttachment = '')
+    function jtImpBuildRecordFromText($text, $sourceFile = '', $sourceAttachmentKey = '')
     {
         $text = str_replace("\r", "\n", (string) $text);
         $text = preg_replace('/\n+/', "\n", $text);
@@ -450,7 +424,8 @@ if (!function_exists('jtImpBuildRecordFromText')) {
 
         return array(
             'source_file' => (string) $sourceFile,
-            'source_attachment' => (string) $sourceAttachment,
+            'source_attachment' => '',
+            'source_attachment_key' => (string) $sourceAttachmentKey,
             'jt_inv_number' => (string) $invNo,
             'jt_inv_date' => (string) $invDate,
             'currency' => (string) $currency,
@@ -488,8 +463,8 @@ if (post('actionBtn')) {
                     $importErrors[] = 'No OCR text found for the selected PDF.';
                 } else {
                     $lookupKey = strtolower((string) basename($fileName));
-                    $sourceAttachment = isset($sourceAttachmentMap[$lookupKey]) ? (string) $sourceAttachmentMap[$lookupKey] : '';
-                    $records[] = jtImpBuildRecordFromText($clientOcrText, $fileName, $sourceAttachment);
+                    $sourceAttachmentKey = isset($sourceAttachmentMap[$lookupKey]) ? $lookupKey : '';
+                    $records[] = jtImpBuildRecordFromText($clientOcrText, $fileName, $sourceAttachmentKey);
                 }
             } elseif ($ext === 'zip') {
                 $decodedMap = json_decode($clientOcrMapJson, true);
@@ -516,8 +491,8 @@ if (post('actionBtn')) {
                         }
 
                         $lookupKey = strtolower($base);
-                        $sourceAttachment = isset($sourceAttachmentMap[$lookupKey]) ? (string) $sourceAttachmentMap[$lookupKey] : '';
-                        $records[] = jtImpBuildRecordFromText($text, $base, $sourceAttachment);
+                        $sourceAttachmentKey = isset($sourceAttachmentMap[$lookupKey]) ? $lookupKey : '';
+                        $records[] = jtImpBuildRecordFromText($text, $base, $sourceAttachmentKey);
                     }
 
                     if (count($records) === 0) {
@@ -531,6 +506,7 @@ if (post('actionBtn')) {
             if (count($importErrors) === 0) {
                 $_SESSION['jt_backup_import_preview'] = array(
                     'records' => $records,
+                    'attachments' => $sourceAttachmentMap,
                     'summary' => array(
                         'file_count' => count($records),
                         'record_count' => count($records),
@@ -544,6 +520,12 @@ if (post('actionBtn')) {
 
     if ($action === 'insertJtBackupPdf') {
         $postedRecords = (array) post('records') ?: array();
+        $previewBundle = isset($_SESSION['jt_backup_import_preview']) && is_array($_SESSION['jt_backup_import_preview'])
+            ? $_SESSION['jt_backup_import_preview']
+            : array();
+        $pendingAttachments = isset($previewBundle['attachments']) && is_array($previewBundle['attachments'])
+            ? $previewBundle['attachments']
+            : array();
         if (count($postedRecords) === 0) {
             $importErrors[] = 'No preview records available for import.';
         }
@@ -568,12 +550,14 @@ if (post('actionBtn')) {
             try {
                 $inserted = 0;
                 $importedIds = array(); // Added to track IDs for the audit log
+                $savedAttachmentPaths = array();
 
                 foreach ($postedRecords as $record) {
                     $invNo = trim((string) (isset($record['jt_inv_number']) ? $record['jt_inv_number'] : ''));
                     $invDate = jtImpNormalizeDate(isset($record['jt_inv_date']) ? $record['jt_inv_date'] : '');
                     $currency = strtoupper(trim((string) (isset($record['currency']) ? $record['currency'] : '')));
-                    $sourceAttachment = trim((string) (isset($record['source_attachment']) ? $record['source_attachment'] : ''));
+                    $sourceAttachment = '';
+                    $sourceAttachmentKey = strtolower(trim((string) (isset($record['source_attachment_key']) ? $record['source_attachment_key'] : '')));
                     $deliveryRows = isset($record['delivery']) && is_array($record['delivery']) ? $record['delivery'] : array();
                     $gstRows = isset($record['gst']) && is_array($record['gst']) ? $record['gst'] : array();
 
@@ -589,6 +573,18 @@ if (post('actionBtn')) {
 
                     $safeInvNo = mysqli_real_escape_string($finance_connect, $invNo);
                     $safeInvDate = mysqli_real_escape_string($finance_connect, $invDate);
+                    if ($sourceAttachmentKey !== '' && isset($pendingAttachments[$sourceAttachmentKey]) && is_array($pendingAttachments[$sourceAttachmentKey])) {
+                        $pendingAttachment = $pendingAttachments[$sourceAttachmentKey];
+                        $sourceAttachment = jtImpStoreAttachmentBinary(
+                            isset($pendingAttachment['content']) ? $pendingAttachment['content'] : '',
+                            isset($pendingAttachment['original_name']) ? $pendingAttachment['original_name'] : '',
+                            basename(__FILE__, '.php')
+                        );
+                        if ($sourceAttachment === '') {
+                            throw new Exception('Unable to save the J&T PDF attachment for Invoice ' . $invNo . '.');
+                        }
+                        $savedAttachmentPaths[] = $sourceAttachment;
+                    }
                     $safeAttachment = mysqli_real_escape_string($finance_connect, $sourceAttachment);
                     $dupSql = "SELECT id FROM `" . $tblName . "` WHERE number='" . $safeInvNo . "' AND date='" . $safeInvDate . "' AND status='A' LIMIT 1";
                     $dupRst = mysqli_query($finance_connect, $dupSql);
@@ -686,6 +682,9 @@ if (post('actionBtn')) {
                 exit;
             } catch (Exception $ex) {
                 mysqli_rollback($finance_connect);
+                foreach ($savedAttachmentPaths as $savedAttachmentPath) {
+                    jtImpDeleteAttachment($savedAttachmentPath);
+                }
                 $importErrors[] = $ex->getMessage();
             }
         }
@@ -693,6 +692,7 @@ if (post('actionBtn')) {
         if (count($importErrors) > 0) {
             $_SESSION['jt_backup_import_preview'] = array(
                 'records' => $postedRecords,
+                'attachments' => $pendingAttachments,
                 'summary' => array(
                     'file_count' => count($postedRecords),
                     'record_count' => count($postedRecords),
@@ -852,6 +852,7 @@ $previewSummary = ($previewBundle && isset($previewBundle['summary']) && is_arra
 
                                 <input type="hidden" name="records[<?= (int) $recordIdx ?>][source_file]" value="<?= htmlspecialchars((string) (isset($record['source_file']) ? $record['source_file'] : ''), ENT_QUOTES, 'UTF-8') ?>">
                                 <input type="hidden" name="records[<?= (int) $recordIdx ?>][source_attachment]" value="<?= htmlspecialchars((string) (isset($record['source_attachment']) ? $record['source_attachment'] : ''), ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="hidden" name="records[<?= (int) $recordIdx ?>][source_attachment_key]" value="<?= htmlspecialchars((string) (isset($record['source_attachment_key']) ? $record['source_attachment_key'] : ''), ENT_QUOTES, 'UTF-8') ?>">
 
                                 <div class="row">
                                     <div class="col-12 col-md-6 mb-3">

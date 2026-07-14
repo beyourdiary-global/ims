@@ -1,4 +1,10 @@
 <?php
+if (!headers_sent()) {
+    header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+    header('Pragma: no-cache');
+    header('Expires: 0');
+}
+
 $currentPagePin = 0;
 if (!defined('IMPORT_FORCE_MODULE')) {
     define('IMPORT_FORCE_MODULE', 'fb_ads_topup');
@@ -69,6 +75,7 @@ $metaAccounts = getMetaAdsAccountOptions($finance_connect);
 $userOptions = getImportOptionList(USR_USER, 'name', $connect);
 if ($action === 'parseFacebookAdsTopup') {
     $module = 'fb_ads_topup';
+    unset($_SESSION['facebook_ads_topup_import_pending']);
 
     if (!isset($_FILES['import_file']) || !is_uploaded_file($_FILES['import_file']['tmp_name'])) {
         $importErrors[] = 'Please choose a Facebook Ads PDF receipt or ZIP file.';
@@ -76,6 +83,16 @@ if ($action === 'parseFacebookAdsTopup') {
         $sourceFiles = collectFacebookImportSourceFiles($_FILES['import_file'], $importErrors, $importWarnings);
 
         if (!empty($sourceFiles)) {
+            $pendingAttachments = [];
+            foreach ($sourceFiles as $sourceIndex => &$sourceFile) {
+                $sourceFile['attachment_key'] = (string) $sourceIndex;
+                $pendingAttachments[(string) $sourceIndex] = [
+                    'content' => isset($sourceFile['pdf_content']) ? $sourceFile['pdf_content'] : '',
+                    'original_name' => isset($sourceFile['original_name']) ? $sourceFile['original_name'] : '',
+                ];
+            }
+            unset($sourceFile);
+
             $parseResult = parseFacebookImportFiles($sourceFiles, $metaAccounts);
             $facebookPreviewRecords = $parseResult['records'];
             $facebookImportSummary = $parseResult['summary'];
@@ -85,6 +102,12 @@ if ($action === 'parseFacebookAdsTopup') {
             if (empty($facebookPreviewRecords) && empty($importErrors)) {
                 $importErrors[] = 'No paid Facebook Ads receipt was ready for preview.';
             }
+
+            if (!empty($facebookPreviewRecords)) {
+                $_SESSION['facebook_ads_topup_import_pending'] = [
+                    'attachments' => $pendingAttachments,
+                ];
+            }
         }
     }
 } else if ($action === 'insertFacebookAdsTopup') {
@@ -92,6 +115,9 @@ if ($action === 'parseFacebookAdsTopup') {
     $facebookPreviewRecords = getFacebookPreviewRecordsFromPost();
     $importWarnings = array_filter(post('importWarnings') ? explode("\n", post('importWarnings')) : []);
     $facebookImportSummary = getFacebookImportSummaryFromPost();
+    $pendingAttachments = isset($_SESSION['facebook_ads_topup_import_pending']['attachments']) && is_array($_SESSION['facebook_ads_topup_import_pending']['attachments'])
+        ? $_SESSION['facebook_ads_topup_import_pending']['attachments']
+        : [];
 
     validateFacebookPreviewRecords($facebookPreviewRecords, $importErrors, $metaAccounts, $userOptions, $finance_connect);
 
@@ -101,6 +127,7 @@ if ($action === 'parseFacebookAdsTopup') {
 
     if (empty($importErrors)) {
         $insertedCount = 0;
+        $savedAttachmentPaths = [];
         mysqli_begin_transaction($finance_connect);
 
         try {
@@ -108,7 +135,22 @@ if ($action === 'parseFacebookAdsTopup') {
                 $transactionId = mysqli_real_escape_string($finance_connect, $record['transaction_id']);
                 $paymentDate = formatImportDateOnly($record['payment_date']);
                 $remark = mysqli_real_escape_string($finance_connect, $record['remark']);
-                $attachmentPath = mysqli_real_escape_string($finance_connect, isset($record['source_attachment']) ? (string) $record['source_attachment'] : '');
+                $attachmentPath = '';
+                $attachmentKey = isset($record['source_attachment_key']) ? (string) $record['source_attachment_key'] : '';
+                if ($attachmentKey !== '' && isset($pendingAttachments[$attachmentKey]) && is_array($pendingAttachments[$attachmentKey])) {
+                    $pendingAttachment = $pendingAttachments[$attachmentKey];
+                    $savedAttachment = saveImportAttachmentBinary(
+                        isset($pendingAttachment['content']) ? $pendingAttachment['content'] : '',
+                        isset($pendingAttachment['original_name']) ? $pendingAttachment['original_name'] : '',
+                        basename(__FILE__, '.php')
+                    );
+                    if ($savedAttachment === '') {
+                        throw new Exception('Unable to save the Facebook Ads PDF attachment for record #' . ($index + 1) . '.');
+                    }
+                    $savedAttachmentPaths[] = $savedAttachment;
+                    $record['source_attachment'] = $savedAttachment;
+                    $attachmentPath = mysqli_real_escape_string($finance_connect, $savedAttachment);
+                }
                 $query = "INSERT INTO " . FB_ADS_TOPUP . " (meta_acc, transactionID, payment_date, pic, topup_amt, attachment, remark, create_by, create_date, create_time) VALUES ('" . mysqli_real_escape_string($finance_connect, $record['meta_acc']) . "', '$transactionId', '$paymentDate', '" . mysqli_real_escape_string($finance_connect, $record['pic']) . "', '" . mysqli_real_escape_string($finance_connect, $record['topup_amt']) . "', '" . $attachmentPath . "', '$remark', '" . USER_ID . "', curdate(), curtime())";
                 $returnData = mysqli_query($finance_connect, $query);
 
@@ -146,10 +188,14 @@ if ($action === 'parseFacebookAdsTopup') {
             }
 
             mysqli_commit($finance_connect);
+            unset($_SESSION['facebook_ads_topup_import_pending']);
             echo '<script>alert("Imported ' . $insertedCount . ' Facebook Ads top up transaction(s) successfully.");window.location.href="' . $facebookRedirectPage . '";</script>';
             exit;
         } catch (Exception $exception) {
             mysqli_rollback($finance_connect);
+            foreach ($savedAttachmentPaths as $savedAttachmentPath) {
+                deleteImportAttachment($savedAttachmentPath);
+            }
             $importErrors[] = $exception->getMessage();
         }
     }
@@ -278,6 +324,19 @@ function saveImportAttachmentBinary($binaryContent, $originalName, $pageName)
     return '';
 }
 
+function deleteImportAttachment($relativePath)
+{
+    $relativePath = ltrim(str_replace(['/', '\\'], DIRECTORY_SEPARATOR, (string) $relativePath), DIRECTORY_SEPARATOR);
+    if ($relativePath === '') {
+        return;
+    }
+
+    $absolutePath = rtrim((string) ROOT, '/\\') . DIRECTORY_SEPARATOR . $relativePath;
+    if (is_file($absolutePath)) {
+        @unlink($absolutePath);
+    }
+}
+
 function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
 {
     $sourceFiles = [];
@@ -294,7 +353,6 @@ function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
         $sourceFiles[] = [
             'pdf_content' => $pdfContent,
             'original_name' => sanitizeImportFilename($originalName),
-            'attachment_path' => saveImportAttachmentBinary($pdfContent, $originalName, basename(__FILE__, '.php')),
         ];
         return $sourceFiles;
     }
@@ -330,7 +388,6 @@ function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
             $sourceFiles[] = [
                 'pdf_content' => $pdfContent,
                 'original_name' => sanitizeImportFilename($entryName),
-                'attachment_path' => saveImportAttachmentBinary($pdfContent, (string) basename($entryName), basename(__FILE__, '.php')),
             ];
         }
 
@@ -358,7 +415,6 @@ function collectFacebookImportSourceFiles($fileInfo, &$errors, &$warnings)
                 $sourceFiles[] = [
                     'pdf_content' => $pdfContent,
                     'original_name' => sanitizeImportFilename($entryName),
-                    'attachment_path' => saveImportAttachmentBinary($pdfContent, (string) basename($entryName), basename(__FILE__, '.php')),
                 ];
             }
         } catch (Exception $exception) {
@@ -461,7 +517,8 @@ function parseFacebookReceiptPdf($fileInfo, $metaAccounts)
 {
     $data = [
         'source_file_name' => $fileInfo['original_name'],
-        'source_attachment' => isset($fileInfo['attachment_path']) ? (string) $fileInfo['attachment_path'] : '',
+        'source_attachment' => '',
+        'source_attachment_key' => isset($fileInfo['attachment_key']) ? (string) $fileInfo['attachment_key'] : '',
         'source_account_id' => '',
         'source_payment_method' => '',
         'source_reference_number' => '',
@@ -593,6 +650,7 @@ function getFacebookPreviewRecordsFromPost()
         $records[] = [
             'source_file_name' => normalizeImportText(isset($record['source_file_name']) ? $record['source_file_name'] : ''),
             'source_attachment' => normalizeImportText(isset($record['source_attachment']) ? $record['source_attachment'] : ''),
+            'source_attachment_key' => normalizeImportText(isset($record['source_attachment_key']) ? $record['source_attachment_key'] : ''),
             'source_account_id' => normalizeImportText(isset($record['source_account_id']) ? $record['source_account_id'] : ''),
             'source_payment_method' => normalizeImportText(isset($record['source_payment_method']) ? $record['source_payment_method'] : ''),
             'source_reference_number' => normalizeImportText(isset($record['source_reference_number']) ? $record['source_reference_number'] : ''),
@@ -721,7 +779,7 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                         <div class="card-body">
                             <h5 class="card-title mb-3">Step 1: Upload Facebook Ads PDF Or ZIP</h5>
                             <p class="text-muted mb-3">Upload a single PDF receipt or a ZIP file containing multiple PDF receipts. Only receipts with payment status Paid will be prepared for import.</p>
-                            <form method="post" enctype="multipart/form-data">
+                            <form method="post" enctype="multipart/form-data" id="fbUploadForm">
                                 <div class="row g-3 align-items-end">
                                     <div class="col-12 col-md-8">
                                         <label class="form-label" for="import_file">Facebook Ads Receipt File</label>
@@ -749,7 +807,7 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                                     </div>
                                 </div>
 
-                                <form method="post">
+                                <form method="post" id="fbPreviewForm">
                                     <input type="hidden" name="importWarnings" value="<?= htmlspecialchars(implode("\n", $importWarnings)) ?>">
                                     <input type="hidden" name="fb_import_summary[processed_files]" value="<?= (int) $facebookImportSummary['processed_files'] ?>">
                                     <input type="hidden" name="fb_import_summary[preview_records]" value="<?= (int) $facebookImportSummary['preview_records'] ?>">
@@ -767,6 +825,7 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
 
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_file_name]" value="<?= htmlspecialchars($record['source_file_name']) ?>">
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_attachment]" value="<?= htmlspecialchars(isset($record['source_attachment']) ? $record['source_attachment'] : '') ?>">
+                                            <input type="hidden" name="fb_records[<?= $index ?>][source_attachment_key]" value="<?= htmlspecialchars(isset($record['source_attachment_key']) ? $record['source_attachment_key'] : '') ?>">
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_account_id]" value="<?= htmlspecialchars($record['source_account_id']) ?>">
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_payment_method]" value="<?= htmlspecialchars($record['source_payment_method']) ?>">
                                             <input type="hidden" name="fb_records[<?= $index ?>][source_reference_number]" value="<?= htmlspecialchars($record['source_reference_number']) ?>">
