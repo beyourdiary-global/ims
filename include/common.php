@@ -17097,6 +17097,61 @@ if (!function_exists('sorIsShopeeCourier')) {
     }
 }
 
+if (!function_exists('sorFetchSpxTrackingResponse')) {
+    function sorFetchSpxTrackingResponse($trackingUrl, $trackingPageUrl)
+    {
+        $headers = array(
+            'Accept: application/json, text/plain, */*',
+            'Accept-Language: en-US,en;q=0.9',
+            'Content-Type: application/x-www-form-urlencoded',
+            'Referer: ' . $trackingPageUrl,
+        );
+
+        // cURL is more reliable than PHP streams on shared/live hosts because it
+        // uses the server's configured CA bundle while still verifying SPX TLS.
+        if (function_exists('curl_init')) {
+            $request = curl_init($trackingUrl);
+            if ($request !== false) {
+                curl_setopt_array($request, array(
+                    CURLOPT_RETURNTRANSFER => true,
+                    CURLOPT_CONNECTTIMEOUT => 10,
+                    CURLOPT_TIMEOUT => 20,
+                    CURLOPT_FOLLOWLOCATION => false,
+                    CURLOPT_SSL_VERIFYPEER => true,
+                    CURLOPT_SSL_VERIFYHOST => 2,
+                    CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                    CURLOPT_HTTPHEADER => $headers,
+                ));
+                $body = curl_exec($request);
+                $httpCode = (int) curl_getinfo($request, CURLINFO_HTTP_CODE);
+                curl_close($request);
+
+                if (is_string($body) && $body !== '' && $httpCode >= 200 && $httpCode < 300) {
+                    return $body;
+                }
+            }
+        }
+
+        $opts = array(
+            'http' => array(
+                'method' => 'GET',
+                'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n"
+                    . implode("\r\n", $headers) . "\r\n",
+                'timeout' => 20,
+                'ignore_errors' => true,
+            ),
+            'ssl' => array(
+                'verify_peer' => true,
+                'verify_peer_name' => true,
+                'peer_name' => 'spx.com.my',
+            ),
+        );
+
+        $body = @file_get_contents($trackingUrl, false, stream_context_create($opts));
+        return is_string($body) ? $body : '';
+    }
+}
+
 if (!function_exists('sorFetchSpxTrackingStatus')) {
     /**
      * Fetch the public SPX Malaysia tracking data.
@@ -17119,26 +17174,8 @@ if (!function_exists('sorFetchSpxTrackingStatus')) {
         $trackingPageUrl = 'https://spx.com.my/track?' . rawurlencode($trackingNo);
         $trackingUrl = 'https://spx.com.my/api/v2/fleet_order/tracking/search?sls_tracking_number='
             . rawurlencode($signedTrackingNo);
-        $opts = array(
-            'http' => array(
-                'method' => 'GET',
-                'header' => "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36\r\n"
-                    . "Accept: application/json, text/plain, */*\r\n"
-                    . "Accept-Language: en-US,en;q=0.9\r\n"
-                    . "Content-Type: application/x-www-form-urlencoded\r\n"
-                    . "Referer: " . $trackingPageUrl . "\r\n",
-                'timeout' => 20,
-                'ignore_errors' => true,
-            ),
-            'ssl' => array(
-                'verify_peer' => true,
-                'verify_peer_name' => true,
-                'peer_name' => 'spx.com.my',
-            ),
-        );
-
-        $body = @file_get_contents($trackingUrl, false, stream_context_create($opts));
-        if ($body === false || trim((string) $body) === '') {
+        $body = sorFetchSpxTrackingResponse($trackingUrl, $trackingPageUrl);
+        if (trim((string) $body) === '') {
             return '';
         }
 
