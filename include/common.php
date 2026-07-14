@@ -17097,6 +17097,20 @@ if (!function_exists('sorIsShopeeCourier')) {
     }
 }
 
+if (!function_exists('sorTrackingStatusIsFailure')) {
+    function sorTrackingStatusIsFailure($statusText)
+    {
+        $statusText = trim((string) $statusText);
+        return $statusText === ''
+            || stripos($statusText, 'Unable to retrieve') !== false
+            || stripos($statusText, 'unavailable') !== false
+            || stripos($statusText, 'failed') !== false
+            || stripos($statusText, 'no result') !== false
+            || stripos($statusText, 'not found') !== false
+            || stripos($statusText, 'invalid') !== false;
+    }
+}
+
 if (!function_exists('sorFetchSpxTrackingResponse')) {
     function sorFetchSpxTrackingResponse($trackingUrl, $trackingPageUrl, &$failureReason = '')
     {
@@ -17352,11 +17366,16 @@ if (!function_exists('sorRefreshTrackingStatus')) {
         $spxFailureReason = '';
         $canUseSpxFallback = sorIsSpxTrackingNumber($trackingNo)
             && sorIsShopeeCourier($courierNameForSlug);
+        if (sorIsSpxTrackingNumber($trackingNo) && !$canUseSpxFallback) {
+            $spxFailureReason = $courierNameForSlug === ''
+                ? 'SPX fallback was skipped because the courier record could not be resolved.'
+                : 'SPX fallback was skipped because the selected courier is not Shopee.';
+        }
 
         // Try tracking.my first. SPX is only a fallback for couriers labelled as Shopee.
         if (sorIsSpxTrackingNumber($trackingNo)) {
             $statusText = sorFetchTrackingMyWebSocket($courierNameForSlug, $trackingNo);
-            if ($statusText === '' && $canUseSpxFallback) {
+            if (sorTrackingStatusIsFailure($statusText) && $canUseSpxFallback) {
                 $statusText = sorFetchSpxTrackingStatus($trackingNo, $spxFailureReason);
             }
         }
@@ -17375,16 +17394,11 @@ if (!function_exists('sorRefreshTrackingStatus')) {
         // Also runs if the previous step only returned an error/failure message.
         $statusIsUsable = (stripos($statusText, 'Detected:') !== false)
             || (stripos($statusText, 'Source:') !== false);
-        $statusIsError = (stripos($statusText, 'Unable to retrieve') !== false)
-            || (stripos($statusText, 'unavailable') !== false)
-            || (stripos($statusText, 'failed') !== false)
-            || (stripos($statusText, 'no result') !== false)
-            || (stripos($statusText, 'not found') !== false)
-            || (stripos($statusText, 'invalid') !== false);
+        $statusIsError = sorTrackingStatusIsFailure($statusText);
 
         if ((!$statusIsUsable || $statusIsError) && $trackingNo !== '') {
             $wsStatus = sorFetchTrackingMyWebSocket($courierNameForSlug, $trackingNo);
-            if ($wsStatus !== '') {
+            if (!sorTrackingStatusIsFailure($wsStatus)) {
                 $statusText = $wsStatus;
             } else {
                 $slug = sorResolveTrackingMySlug($courierNameForSlug, $trackingNo);
@@ -17398,7 +17412,7 @@ if (!function_exists('sorRefreshTrackingStatus')) {
 
                 // tracking.my has no usable result. For SPX labels, its own public
                 // tracking service is only used when the selected courier is Shopee.
-                $spxFallbackNeeded = $statusText === '' || $statusIsError;
+                $spxFallbackNeeded = sorTrackingStatusIsFailure($statusText);
                 if ($spxFallbackNeeded && $canUseSpxFallback) {
                     $spxStatus = sorFetchSpxTrackingStatus($trackingNo, $spxFailureReason);
                     if ($spxStatus !== '') {
@@ -17409,13 +17423,7 @@ if (!function_exists('sorRefreshTrackingStatus')) {
             }
         }
 
-        $finalStatusIsError = $statusText === ''
-            || (stripos($statusText, 'Unable to retrieve') !== false)
-            || (stripos($statusText, 'unavailable') !== false)
-            || (stripos($statusText, 'failed') !== false)
-            || (stripos($statusText, 'no result') !== false)
-            || (stripos($statusText, 'not found') !== false)
-            || (stripos($statusText, 'invalid') !== false);
+        $finalStatusIsError = sorTrackingStatusIsFailure($statusText);
 
         if ($finalStatusIsError) {
             if ($spxFailureReason === '') {

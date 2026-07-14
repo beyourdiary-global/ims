@@ -62,6 +62,28 @@ if (!function_exists('extractTextFromPdfContent')) {
         $streams = isset($streamMatches[1]) && is_array($streamMatches[1]) ? $streamMatches[1] : array();
         $lines = array();
 
+        if (function_exists('satBuildPdfUnicodeMapsByFont') && function_exists('satExtractPdfTextTokensFromDecodedStreamByFont')) {
+            $unicodeMaps = satBuildPdfUnicodeMapsByFont($content);
+
+            foreach ($streams as $stream) {
+                $decoded = decodePdfStream($stream);
+                if ($decoded === false) {
+                    $decoded = (string) $stream;
+                }
+
+                $streamLines = satExtractPdfTextTokensFromDecodedStreamByFont($decoded, $unicodeMaps);
+                if (!empty($streamLines)) {
+                    foreach ($streamLines as $line) {
+                        $lines[] = $line;
+                    }
+                }
+            }
+
+            if (!empty($lines)) {
+                return implode("\n", $lines);
+            }
+        }
+
         if (function_exists('satBuildPdfUnicodeMapFromContent') && function_exists('satExtractPdfTextTokensFromDecodedStream')) {
             $unicodeMap = satBuildPdfUnicodeMapFromContent($content);
 
