@@ -1,13 +1,16 @@
 (function () {
     var config = window.projectSettingsConfig || {};
     var canEdit = !!config.canEdit;
-    var canManageTaxonomy = !!config.canManageTaxonomy;
+    var canSave = !!config.canSave;
+    var canEditLabels = !!config.canEditLabels;
+    var canDeleteLabels = !!config.canDeleteLabels;
+    var canManageStatusLabels = !!config.canManageStatusLabels;
     var ajaxUrl = typeof config.ajaxUrl === 'string' ? config.ajaxUrl : '';
     var csrfToken = typeof config.csrfToken === 'string' ? config.csrfToken : '';
     var iconOptions = Array.isArray(config.iconOptions) ? config.iconOptions : [];
     var form = document.getElementById('taskProjectSettingsForm');
 
-    if (!form || !canEdit) {
+    if (!form || !canSave) {
         return;
     }
 
@@ -244,18 +247,21 @@
             '</div>';
     }
 
-    function buildLabelRow(label, canWrite, type) {
+    function buildLabelRow(label, canWrite, canDelete, type) {
         var color = String((label && label.color) || '#DCE8FF');
         var inputPrefix = type === 'status_label' ? 'status_label' : 'label';
         var buttonText = type === 'status_label' ? 'Reset this task status color to default?' : 'Reset this label color to default?';
+        var labelId = Number((label && label.id) || 0);
+        var canRemove = canDelete || labelId <= 0;
         return '<div class="task-project-settings-row task-project-' + (type === 'status_label' ? 'status-label' : 'label') + '-row">' +
-            '<input type="hidden" name="' + inputPrefix + '_ids[]" value="' + Number((label && label.id) || 0) + '">' +
-            '<input type="text" class="form-control" name="' + inputPrefix + '_names[]" maxlength="120" value="' + escHtml((label && label.name) || '') + '"' + (canWrite ? '' : ' disabled') + '>' +
+            '<input type="hidden" name="' + inputPrefix + '_ids[]" value="' + labelId + '">' +
+            '<input type="text" class="form-control" name="' + inputPrefix + '_names[]" maxlength="120" value="' + escHtml((label && label.name) || '') + '"' + (canWrite ? '' : ' readonly') + '>' +
             '<div class="task-project-color-control">' +
             '<input type="color" class="form-control form-control-color" name="' + inputPrefix + '_colors[]" value="' + escHtml(color) + '" data-default-color="' + escHtml(color) + '"' + (canWrite ? '' : ' disabled') + '>' +
+            (canWrite ? '' : '<input type="hidden" name="' + inputPrefix + '_colors[]" value="' + escHtml(color) + '">') +
             (canWrite ? '<button type="button" class="btn btn-outline-secondary task-project-reset-color-btn" data-confirm-text="' + escHtml(buttonText) + '" data-color-input="closest" data-default-color="' + escHtml(color) + '">Reset Default</button>' : '') +
             '</div>' +
-            (canWrite ? '<button type="button" class="btn btn-outline-danger task-project-row-remove-btn" data-delete-type="' + type + '" data-existing-id="' + Number((label && label.id) || 0) + '">Remove</button>' : '') +
+            (canRemove ? '<button type="button" class="btn btn-outline-danger task-project-row-remove-btn" data-delete-type="' + type + '" data-existing-id="' + labelId + '">Remove</button>' : '') +
             '</div>';
     }
 
@@ -287,12 +293,12 @@
         document.getElementById('projectWorkTypeDeleteBucket').innerHTML = '';
 
         document.getElementById('projectLabelRows').innerHTML = (Array.isArray(data.labels) ? data.labels : []).map(function (row) {
-            return buildLabelRow(row, canManageTaxonomy, 'label');
+            return buildLabelRow(row, canEditLabels, canDeleteLabels, 'label');
         }).join('');
         document.getElementById('projectLabelDeleteBucket').innerHTML = '';
 
         document.getElementById('projectStatusLabelRows').innerHTML = (Array.isArray(data.statusLabels) ? data.statusLabels : []).map(function (row) {
-            return buildLabelRow(row, canManageTaxonomy, 'status_label');
+            return buildLabelRow(row, canManageStatusLabels, canManageStatusLabels, 'status_label');
         }).join('');
         document.getElementById('projectStatusLabelDeleteBucket').innerHTML = '';
 
@@ -387,7 +393,7 @@
                 return;
             }
             var row = document.createElement('div');
-            row.innerHTML = buildLabelRow({ id: 0, name: '', color: '#DCE8FF' }, true, 'label');
+            row.innerHTML = buildLabelRow({ id: 0, name: '', color: '#DCE8FF' }, true, false, 'label');
             container.appendChild(row.firstChild);
             bindDynamicControls(container);
             var input = container.lastElementChild ? container.lastElementChild.querySelector('input[name="label_names[]"]') : null;
@@ -405,7 +411,7 @@
                 return;
             }
             var row = document.createElement('div');
-            row.innerHTML = buildLabelRow({ id: 0, name: '', color: '#DCE8FF' }, true, 'status_label');
+            row.innerHTML = buildLabelRow({ id: 0, name: '', color: '#DCE8FF' }, true, false, 'status_label');
             container.appendChild(row.firstChild);
             bindDynamicControls(container);
             var input = container.lastElementChild ? container.lastElementChild.querySelector('input[name="status_label_names[]"]') : null;
