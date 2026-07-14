@@ -503,6 +503,133 @@ function satBuildPdfUnicodeMapFromContent($content)
     );
 }
 
+function satParsePdfUnicodeMap($decoded)
+{
+    $map = array();
+    $codeLengths = array();
+    $decoded = (string) $decoded;
+
+    if ($decoded === '') {
+        return array('map' => $map, 'code_lengths' => array());
+    }
+
+    if (preg_match_all('/beginbfchar(.*?)endbfchar/si', $decoded, $bfCharBlocks)) {
+        foreach ($bfCharBlocks[1] as $block) {
+            if (preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/', $block, $pairs, PREG_SET_ORDER)) {
+                foreach ($pairs as $pair) {
+                    $src = strtoupper($pair[1]);
+                    $dst = satPdfHexToUtf8($pair[2]);
+                    if ($src !== '' && $dst !== '') {
+                        $map[$src] = $dst;
+                        $codeLengths[strlen($src)] = true;
+                    }
+                }
+            }
+        }
+    }
+
+    if (preg_match_all('/beginbfrange(.*?)endbfrange/si', $decoded, $bfRangeBlocks)) {
+        foreach ($bfRangeBlocks[1] as $block) {
+            if (preg_match_all('/<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>\s*<([0-9A-Fa-f]+)>/', $block, $rangeMatches, PREG_SET_ORDER)) {
+                foreach ($rangeMatches as $rangeMatch) {
+                    $start = strtoupper($rangeMatch[1]);
+                    $end = strtoupper($rangeMatch[2]);
+                    $destStart = strtoupper($rangeMatch[3]);
+                    if ($start === '' || $end === '' || $destStart === '' || strlen($start) !== strlen($end)) {
+                        continue;
+                    }
+
+                    $startValue = hexdec($start);
+                    $endValue = hexdec($end);
+                    if ($endValue < $startValue || ($endValue - $startValue) > 1024) {
+                        continue;
+                    }
+
+                    for ($offset = 0; $offset <= ($endValue - $startValue); $offset++) {
+                        $src = satPdfIncrementHex($start, $offset);
+                        $dst = satPdfHexToUtf8(satPdfIncrementHex($destStart, $offset));
+                        if ($src !== '' && $dst !== '') {
+                            $map[$src] = $dst;
+                            $codeLengths[strlen($src)] = true;
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    $lengths = array_map('intval', array_keys($codeLengths));
+    rsort($lengths, SORT_NUMERIC);
+
+    return array(
+        'map' => $map,
+        'code_lengths' => $lengths,
+    );
+}
+
+function satBuildPdfUnicodeMapsByFont($content)
+{
+    $objects = array();
+    if (preg_match_all('/(?:^|\r?\n)(\d+)\s+\d+\s+obj\b(.*?)endobj/s', (string) $content, $objectMatches, PREG_SET_ORDER)) {
+        foreach ($objectMatches as $objectMatch) {
+            $objects[(string) $objectMatch[1]] = (string) $objectMatch[2];
+        }
+    }
+
+    $fontToUnicodeObject = array();
+    foreach ($objects as $objectId => $object) {
+        if (stripos($object, '/Type /Font') === false) {
+            continue;
+        }
+
+        if (preg_match('/\/ToUnicode\s+(\d+)\s+\d+\s+R/i', $object, $match)) {
+            $fontToUnicodeObject[$objectId] = (string) $match[1];
+        }
+    }
+
+    $fontNames = array();
+    foreach ($objects as $object) {
+        if (preg_match_all('/\/Font\s*<<(.*?)>>/s', $object, $fontBlocks)) {
+            foreach ($fontBlocks[1] as $fontBlock) {
+                if (preg_match_all('/\/([A-Za-z][A-Za-z0-9_]*)\s+(\d+)\s+\d+\s+R/', $fontBlock, $fontMatches, PREG_SET_ORDER)) {
+                    foreach ($fontMatches as $fontMatch) {
+                        $fontNames[$fontMatch[1]] = (string) $fontMatch[2];
+                    }
+                }
+            }
+        }
+    }
+
+    $maps = array('by_name' => array(), 'default' => satBuildPdfUnicodeMapFromContent($content));
+    foreach ($fontNames as $fontName => $fontObjectId) {
+        if (!isset($fontToUnicodeObject[$fontObjectId])) {
+            continue;
+        }
+
+        $unicodeObjectId = $fontToUnicodeObject[$fontObjectId];
+        if (!isset($objects[$unicodeObjectId])) {
+            continue;
+        }
+
+        $unicodeStream = $objects[$unicodeObjectId];
+        if (!preg_match('/stream\s*\r?\n(.*?)\r?\n?endstream/s', $unicodeStream, $streamMatch)) {
+            continue;
+        }
+
+        $decoded = decodePdfStream($streamMatch[1]);
+        if ($decoded === false || $decoded === '') {
+            continue;
+        }
+
+        $fontMap = satParsePdfUnicodeMap($decoded);
+        if (!empty($fontMap['map'])) {
+            $maps['by_name'][$fontName] = $fontMap;
+        }
+    }
+
+    return $maps;
+}
+
 function satDecodePdfHexTokenWithUnicodeMap($hex, $unicodeMap)
 {
     $hex = strtoupper(preg_replace('/[^0-9A-F]/', '', (string) $hex));
@@ -637,6 +764,39 @@ function satExtractPdfTextTokensFromDecodedStream($decoded, $unicodeMap = array(
                 if ($line !== '') {
                     $lines[] = $line;
                 }
+            }
+        }
+    }
+
+    return $lines;
+}
+
+function satExtractPdfTextTokensFromDecodedStreamByFont($decoded, $unicodeMaps)
+{
+    $decoded = (string) $decoded;
+    if ($decoded === '' || !preg_match_all('/BT(.*?)ET/s', $decoded, $textBlocks)) {
+        return array();
+    }
+
+    $lines = array();
+    $byName = isset($unicodeMaps['by_name']) && is_array($unicodeMaps['by_name']) ? $unicodeMaps['by_name'] : array();
+    $defaultMap = isset($unicodeMaps['default']) && is_array($unicodeMaps['default']) ? $unicodeMaps['default'] : array();
+
+    foreach ($textBlocks[1] as $textBlock) {
+        $fontName = '';
+        if (preg_match_all('/\/([A-Za-z][A-Za-z0-9_]*)\s+[-+0-9.]+\s+Tf/', $textBlock, $fontMatches)) {
+            $fontName = (string) end($fontMatches[1]);
+        }
+
+        $unicodeMap = isset($byName[$fontName]) ? $byName[$fontName] : $defaultMap;
+        $blockLines = satExtractPdfTextTokensFromDecodedStream($textBlock, $unicodeMap);
+        if (!empty($blockLines)) {
+            // A single visual line may be emitted as multiple Tj fragments.
+            // Keep the fragments together so labels such as "Payment Method"
+            // and values split across positioned text runs remain searchable.
+            $line = normalizeImportText(implode('', $blockLines));
+            if ($line !== '') {
+                $lines[] = $line;
             }
         }
     }
