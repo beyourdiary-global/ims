@@ -488,20 +488,11 @@
   });
 
   function isProductInPackage(productId, pkg) {
-    if (!pkg || productId <= 0) return false;
-    if (!Array.isArray(pkg.product_ids) || pkg.product_ids.length === 0)
-      return false;
-    return pkg.product_ids.indexOf(productId) !== -1;
+    return !!pkg && productId > 0;
   }
 
   function getProductOptionsForPackage(pkgId) {
-    var pkg = packageLookupById[parseInt(pkgId || 0, 10)] || null;
-    if (!pkg || !Array.isArray(pkg.product_ids)) {
-      return productOptions;
-    }
-    return productOptions.filter(function (p) {
-      return pkg.product_ids.indexOf(p.id) !== -1;
-    });
+    return productOptions;
   }
 
   function getPackageProductRows(pkg) {
@@ -670,13 +661,8 @@
     }
 
     var groupId = getRowGroupId(packageRow);
-    var shouldExpand =
-      !!forceExpand ||
-      (getPackageProductRows(pkg).length > 0 && hasOnlyBlankProductRows(groupId));
-
-    if (shouldExpand) {
-      expandPackageProducts(packageRow);
-      return;
+    if (getProductRowsForGroup(groupId).length === 0 && action !== "") {
+      addPackageRowWithData(pkg, null, groupId, "product", packageRow);
     }
 
     updateRowDescAndPrice(packageRow);
@@ -753,7 +739,6 @@
     if (!packageRow) return;
 
     var rows = getRowsInGroup(packageRow);
-    if (rows.length <= 1) return;
 
     var pkgNameInput = packageRow.querySelector(".sor-item-pkg-name");
     var pkgIdInput = packageRow.querySelector(".sor-item-pkg-id");
@@ -765,6 +750,9 @@
     var packageQtyHidden = packageRow.querySelector(".sor-item-package-qty");
     var packagePriceHidden = packageRow.querySelector(
       ".sor-item-package-price",
+    );
+    var packagePriceEditInput = packageRow.querySelector(
+      ".sor-item-package-price-edit",
     );
     var totalInput = packageRow.querySelector(".sor-item-total");
 
@@ -780,20 +768,34 @@
     if (qtyInput) qtyInput.value = String(packageQty);
     if (packageQtyHidden) packageQtyHidden.value = String(packageQty);
 
-    var existingGroupPrice = packagePriceHidden
-      ? parseFloat(packagePriceHidden.value || "0")
-      : 0;
-    var groupPrice =
-      !isNaN(existingGroupPrice) && existingGroupPrice > 0
-        ? existingGroupPrice
+    var editedGroupPrice = packagePriceEditInput
+      ? parseFloat(packagePriceEditInput.value || "")
+      : NaN;
+    var storedGroupPrice = packagePriceHidden
+      ? parseFloat(packagePriceHidden.value || "")
+      : NaN;
+    var groupPrice = !isNaN(editedGroupPrice) && editedGroupPrice >= 0
+      ? editedGroupPrice
+      : !isNaN(storedGroupPrice) && storedGroupPrice >= 0
+        ? storedGroupPrice
         : 0;
-    if (forceReprice || groupPrice <= 0) {
+    if (groupPrice <= 0 && !packagePriceEditInput && !packagePriceHidden) {
+      var pkg = getSelectedPackageInRow(packageRow);
+      var unitPrice = pkg ? parseFloat(pkg.price || "0") : 0;
+      if (isNaN(unitPrice)) unitPrice = 0;
+      groupPrice = unitPrice * packageQty;
+    }
+    if (groupPrice <= 0 && !isNaN(storedGroupPrice) && storedGroupPrice === 0) {
+      groupPrice = 0;
+    }
+    if (groupPrice <= 0 && isNaN(editedGroupPrice) && isNaN(storedGroupPrice)) {
       var pkg = getSelectedPackageInRow(packageRow);
       var unitPrice = pkg ? parseFloat(pkg.price || "0") : 0;
       if (isNaN(unitPrice)) unitPrice = 0;
       groupPrice = unitPrice * packageQty;
     }
     if (totalInput) totalInput.value = groupPrice.toFixed(2);
+    if (packagePriceEditInput) packagePriceEditInput.value = groupPrice.toFixed(2);
     if (packagePriceHidden) packagePriceHidden.value = groupPrice.toFixed(2);
 
     rows.forEach(function (row) {
@@ -919,6 +921,7 @@
         if (actionCell && rowRole !== "package") {
           if (action !== "") {
             actionCell.innerHTML =
+              '<button type="button" class="mt-1 add-product-row-btn" id="action_menu_btn"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>' +
               '<button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>';
           } else {
             actionCell.innerHTML = "";
@@ -998,7 +1001,6 @@
     var pkgNameInput = row.querySelector(".sor-item-pkg-name");
     var pkgIdInput = row.querySelector(".sor-item-pkg-id");
     var descInput = row.querySelector(".sor-item-desc");
-    var totalInput = row.querySelector(".sor-item-total");
 
     var pkg = getSelectedPackageInRow(row);
     if (pkgNameInput && pkg) {
@@ -1010,20 +1012,6 @@
     if (descInput) {
       descInput.value = pkg ? pkg.item_description || "" : "";
     }
-    if (totalInput) {
-      var packageRow = getPackageRowForGroup(getRowGroupId(row)) || row;
-      var qtyInput = packageRow.querySelector(".sor-item-qty");
-      var qty = qtyInput ? parseInt(qtyInput.value || "0", 10) : 1;
-      if (isNaN(qty) || qty <= 0) qty = 1;
-      var unitPrice = pkg ? parseFloat(pkg.price || "0") : 0;
-      if (isNaN(unitPrice)) unitPrice = 0;
-      totalInput.value = (unitPrice * qty).toFixed(2);
-      var priceHidden = row.querySelector(".sor-item-package-price");
-      if (priceHidden) {
-        priceHidden.value = (unitPrice * qty).toFixed(2);
-      }
-    }
-
     if (prodNameInput && prodIdInput) {
       if (product) {
         prodIdInput.value = String(product.id);
@@ -1032,25 +1020,8 @@
       }
     }
 
-    if (
-      !isPackageRow(row) &&
-      pkg &&
-      !product &&
-      getPackageProductRows(pkg).length > 0
-    ) {
-      var defaultProductRow = getPackageProductRows(pkg)[0];
-      var defaultProdId = defaultProductRow
-        ? parseInt(defaultProductRow.id || 0, 10)
-        : 0;
-      if (defaultProdId > 0 && productLookupById[defaultProdId]) {
-        if (prodIdInput) prodIdInput.value = String(defaultProdId);
-        if (prodNameInput)
-          prodNameInput.value = productLookupById[defaultProdId].name;
-      }
-    }
-
     validateProductBelongsPackage(row);
-    syncGroupValues(row, true);
+    syncGroupValues(row, false);
   }
 
   function recalculateTotalPrice() {
@@ -1058,10 +1029,8 @@
     document.querySelectorAll("#sorItemBody tr").forEach(function (row) {
       if (!isPackageRow(row)) return;
 
-      var pkgIdInput = row.querySelector(".sor-item-pkg-id");
-      var qtyInput = row.querySelector(".sor-item-qty");
       var packagePriceInput = row.querySelector(".sor-item-package-price");
-      if (!pkgIdInput || !qtyInput) return;
+      if (!packagePriceInput) return;
 
       var price = packagePriceInput
         ? parseFloat(packagePriceInput.value || "0")
@@ -1069,14 +1038,6 @@
 
       if (!isNaN(price) && price > 0) {
         total += price;
-      } else {
-        var pkgId = parseInt(pkgIdInput.value || "0", 10);
-        var pkgData = packageLookupById[pkgId] || null;
-        var qty = parseInt(qtyInput.value || "0", 10);
-        var fallbackPrice = pkgData ? parseFloat(pkgData.price || "0") : 0;
-        if (!isNaN(fallbackPrice) && !isNaN(qty) && qty > 0) {
-          total += fallbackPrice * qty;
-        }
       }
     });
 
@@ -1127,6 +1088,21 @@
         },
       );
     }
+
+    var packagePriceEditInput = row.querySelector(
+      ".sor-item-package-price-edit",
+    );
+    if (packagePriceEditInput && packagePriceEditInput.dataset.priceBound !== "1") {
+      packagePriceEditInput.dataset.priceBound = "1";
+      packagePriceEditInput.addEventListener("input", function () {
+        syncGroupValues(row, false);
+        recalculateTotalPrice();
+      });
+      packagePriceEditInput.addEventListener("change", function () {
+        syncGroupValues(row, false);
+        recalculateTotalPrice();
+      });
+    }
   }
 
   function buildPackageRowHtml(
@@ -1145,6 +1121,11 @@
     if (isNaN(normalizedBaseQty) || normalizedBaseQty <= 0) {
       normalizedBaseQty = 1;
     }
+    var packagePriceField = isPackageHeader
+      ? '<input class="form-control sor-item-total sor-item-package-price-edit" type="number" step="0.01" min="0" value="0.00" ' +
+        (action === "" ? "readonly" : "") +
+        ' aria-label="Package price">'
+      : '<input class="form-control sor-item-total" type="text" value="" readonly>';
     return (
       '<td class="row-no"></td>' +
       '<td class="cell-package"><div class="pkg-main-fields"><div class="autocomplete"><input class="form-control sor-item-pkg-name" type="text" id="sor_item_pkg_name_' +
@@ -1187,11 +1168,11 @@
       escapeAttr(rowKey) +
       '"><input class="sor-item-package-price" type="hidden" name="sor_item_package_price[]" value="0.00' +
       '"></div></td>' +
-      '<td class="cell-total"><div class="total-main-field"><input class="form-control sor-item-total" type="text" value="0.00" readonly></div></td>' +
+      '<td class="cell-total"><div class="total-main-field">' + packagePriceField + '</div></td>' +
       "<td>" +
       (isPackageHeader
         ? '<button type="button" class="mt-1 remove-package-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>'
-        : '<button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>') +
+        : '<button type="button" class="mt-1 add-product-row-btn" id="action_menu_btn"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button><button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>') +
       "</td>"
     );
   }
@@ -1533,10 +1514,18 @@
         }
         recalculateTotalPrice();
       }
+      if (e.target.classList.contains("sor-item-package-price-edit")) {
+        var priceRow = e.target.closest("tr");
+        if (priceRow) {
+          syncGroupValues(priceRow, false);
+          recalculateTotalPrice();
+        }
+      }
     });
 
     sorItemBody.addEventListener("click", function (e) {
       var addItemBtn = e.target.closest(".add-item-row-btn");
+      var addProductBtn = e.target.closest(".add-product-row-btn");
       var packageRemoveBtn = e.target.closest(".remove-package-btn");
       var productRemoveBtn = e.target.closest(
         ".remove-product-btn, .remove-item-btn",
@@ -1544,6 +1533,25 @@
 
       if (addItemBtn) {
         addPackageHeaderRow("pkg_group_" + Date.now().toString());
+        reindexRows();
+        renderPackageGroups();
+        recalculateTotalPrice();
+      } else if (addProductBtn) {
+        var productRow = addProductBtn.closest("tr");
+        if (!productRow) return;
+        var productGroupId = getRowGroupId(productRow);
+        var productPackageRow = getPackageRowForGroup(productGroupId);
+        var productPackage = productPackageRow
+          ? getSelectedPackageInRow(productPackageRow)
+          : null;
+        if (!productPackage) return;
+        addPackageRowWithData(
+          productPackage,
+          null,
+          productGroupId,
+          "product",
+          productRow,
+        );
         reindexRows();
         renderPackageGroups();
         recalculateTotalPrice();
@@ -1572,7 +1580,16 @@
             '"][data-row-role="product"]',
         );
         if (groupProducts.length > 0) {
-          removeRow.remove();
+          if (groupProducts.length === 1) {
+            var productNameInput = removeRow.querySelector(".sor-item-prod-name");
+            var productIdInput = removeRow.querySelector(".sor-item-prod-id");
+            var productQtyInput = removeRow.querySelector(".sor-item-qty");
+            if (productNameInput) productNameInput.value = "";
+            if (productIdInput) productIdInput.value = "";
+            if (productQtyInput) productQtyInput.value = "1";
+          } else {
+            removeRow.remove();
+          }
           reindexRows();
           recalculateTotalPrice();
         }

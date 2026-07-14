@@ -1233,7 +1233,50 @@ if (!function_exists('sorImpExtractMoneyHint')) {
     }
 }
 
+if (!function_exists('sorImpExtractPdfLineTotal')) {
+    /**
+     * Extract the amount charged for one PDF line.
+     *
+     * Package descriptions can contain a catalog price in parentheses, for
+     * example "CARBZERO 2 (RM336) - 1 RM 168.00". The last currency amount
+     * is the invoice line total and must win over the catalog price.
+     */
+    function sorImpExtractPdfLineTotal($text)
+    {
+        $text = trim((string) $text);
+        if ($text === '') {
+            return 0.00;
+        }
+
+        if (preg_match_all('/(?:RM|MYR|SGD|USD)\s*([\d,]+(?:\.\d{1,2})?)/iu', $text, $matches) && !empty($matches[1])) {
+            $lastAmount = end($matches[1]);
+            return (float) str_replace(',', '', (string) $lastAmount);
+        }
+
+        return 0.00;
+    }
+}
+
 if (!function_exists('sorImpResolveUrbanismShorthandPackage')) {
+    function sorImpIsCarbzeroSignature($text)
+    {
+        $normalized = strtolower(preg_replace('/[^a-z0-9]+/i', '', (string) $text));
+        return strpos($normalized, 'carbzero') !== false;
+    }
+
+    function sorImpIsCarbzeroPackage($pkg)
+    {
+        if (!is_array($pkg)) {
+            return false;
+        }
+        $itemCode = strtolower(preg_replace('/[^a-z0-9]+/i', '', (string) (isset($pkg['item_code']) ? $pkg['item_code'] : '')));
+        if ($itemCode === 'mysp2cz1m') {
+            return true;
+        }
+        $packageName = strtolower(preg_replace('/[^a-z0-9]+/i', '', (string) (isset($pkg['name']) ? $pkg['name'] : '')));
+        return strpos($packageName, 'urbanismcarbzero2bottlefree1boxmoonzmy') !== false;
+    }
+
     function sorImpResolveUrbanismShorthandPackage($text, $packages, $fallbackPriceHint = 0.00)
     {
         $text = trim((string) $text);
@@ -1244,9 +1287,9 @@ if (!function_exists('sorImpResolveUrbanismShorthandPackage')) {
         // UMS invoices label this Shopee package only as "CARBZERO 2". The
         // package name is duplicated for other channels, so use its stable item code
         // instead of accepting whichever duplicate happens to be listed first.
-        if (preg_match('/\bcarb\s*zero\s*2\b/i', $text)) {
+        if (sorImpIsCarbzeroSignature($text)) {
             foreach ($packages as $pkg) {
-                if (strcasecmp(trim((string) (isset($pkg['item_code']) ? $pkg['item_code'] : '')), 'MY-SP-2CZ-1M') === 0) {
+                if (sorImpIsCarbzeroPackage($pkg)) {
                     return $pkg;
                 }
             }
@@ -1399,7 +1442,10 @@ if (!function_exists('sorImpParseUrbanismSupplementalInvoiceItems')) {
                 continue;
             }
 
-            $lineTotalHint = sorImpExtractMoneyHint($line);
+            $lineTotalHint = sorImpExtractPdfLineTotal($line);
+            if ($lineTotalHint <= 0) {
+                $lineTotalHint = sorImpExtractMoneyHint($line);
+            }
             $resolvedPkg = sorImpResolveUrbanismShorthandPackage($line, $packages, $lineTotalHint);
             if (!$resolvedPkg || !isset($resolvedPkg['id'])) {
                 continue;
@@ -1535,10 +1581,175 @@ if (!function_exists('sorImpParseUrbanismChooseAnyHint')) {
     }
 }
 
+if (!function_exists('sorImpParseUrbanismChooseAnyHints')) {
+    /**
+     * Parse every repeated Urbanism package section in the OCR text.
+     *
+     * A single invoice can contain the same "Mix & Match" package more than
+     * once. Keep each section separate so the preview can create one package
+     * row per purchased package instead of merging all quantities together.
+     */
+    function sorImpParseUrbanismChooseAnyHints($text)
+    {
+        $emptyHint = array(
+            'package_label' => '',
+            'choose_any_qty' => 0,
+            'row_qty' => 1,
+            'paid' => array(),
+            'free' => array(),
+            'products' => array(),
+            'line_total_price' => 0.00,
+        );
+        $hints = array();
+
+        if (!preg_match('/\bchoose\s+any\b/i', (string) $text) || !preg_match('/\burbanism\b/i', (string) $text)) {
+            return $hints;
+        }
+
+        $lines = sorImpGetPdfTextLines($text);
+        if (count($lines) === 0) {
+            return $hints;
+        }
+
+        $headerIdx = -1;
+        for ($i = 0; $i < count($lines); $i++) {
+            $line = trim((string) $lines[$i]);
+            if (preg_match('/^product(?:\s+sku)?$/i', $line) || (preg_match('/\bproduct\b/i', $line) && preg_match('/\bsku\b/i', $line))) {
+                $headerIdx = $i;
+                break;
+            }
+        }
+        if ($headerIdx < 0) {
+            return $hints;
+        }
+
+        $lineTotal = sorImpFindTotalPrice($text);
+        $newHint = function () use ($emptyHint, $lineTotal) {
+            $hint = $emptyHint;
+            if ($lineTotal !== '') {
+                $hint['line_total_price'] = (float) $lineTotal;
+            }
+            return $hint;
+        };
+
+        $hint = $newHint();
+        $mode = '';
+        $lastCategory = '';
+        $sectionStarted = false;
+        $sawFreeSection = false;
+
+        $appendHint = function () use (&$hints, &$hint, $newHint) {
+            if ((int) $hint['choose_any_qty'] > 0 && count($hint['products']) > 0) {
+                if ($hint['package_label'] === '') {
+                    $hint['package_label'] = 'Mix & Match';
+                }
+                $hints[] = $hint;
+            }
+            $hint = $newHint();
+        };
+
+        for ($i = $headerIdx + 1; $i < count($lines); $i++) {
+            $line = sorImpNorm($lines[$i]);
+            if ($line === '') {
+                continue;
+            }
+
+            if (preg_match('/^mix\s*&\s*match\b/i', $line)) {
+                if ($sectionStarted || count($hint['products']) > 0) {
+                    $appendHint();
+                }
+                $hint['package_label'] = sorImpSanitizeExtractedName($line);
+                $mode = '';
+                $lastCategory = '';
+                $sectionStarted = false;
+                $sawFreeSection = false;
+                continue;
+            }
+
+            if (preg_match('/^choose\s+any\s+(\d{1,4})\s+qty\b/i', $line, $matches)) {
+                // Some OCR output omits the repeated package label. A new
+                // paid section after a free-item section is the next package.
+                if ($sawFreeSection && count($hint['products']) > 0) {
+                    $appendHint();
+                    $mode = '';
+                    $lastCategory = '';
+                    $sectionStarted = false;
+                    $sawFreeSection = false;
+                }
+                $hint['choose_any_qty'] = max($hint['choose_any_qty'], (int) $matches[1]);
+                $mode = 'paid';
+                $lastCategory = '';
+                $sectionStarted = true;
+                continue;
+            }
+
+            if (preg_match('/^free\s+item\b/i', $line)) {
+                $mode = 'free';
+                $lastCategory = '';
+                $sectionStarted = true;
+                $sawFreeSection = true;
+                continue;
+            }
+
+            if (!$sectionStarted) {
+                continue;
+            }
+
+            if (preg_match('/^(sub\s*total|subtotal|grand\s*total|total\s*amount|payment|remarks?|note|thank you)\b/i', $line)) {
+                break;
+            }
+
+            $pdfLineTotal = sorImpExtractPdfLineTotal($line);
+            if ($pdfLineTotal > 0) {
+                if (!preg_match('/\b(?:carb\s*zero|carbzero)\b/i', $line)) {
+                    $hint['line_total_price'] = (float) $pdfLineTotal;
+                    if (preg_match('/(?:^|[-\s])(\d{1,4})\s+(?=(?:RM|MYR|SGD|USD)\b)/i', $line, $packageQtyMatch)) {
+                        $hint['row_qty'] = max(1, (int) $packageQtyMatch[1]);
+                    }
+                }
+            }
+
+            if (preg_match('/^qty\b.*?(\d{1,4})\b/i', $line, $matches)) {
+                $qty = (int) $matches[1];
+                if ($qty > 0 && $lastCategory !== '' && ($mode === 'paid' || $mode === 'free')) {
+                    if (!isset($hint[$mode][$lastCategory])) {
+                        $hint[$mode][$lastCategory] = 0;
+                    }
+                    $hint[$mode][$lastCategory] += $qty;
+                    $hint['products'][] = array(
+                        'name' => sorImpUrbanismCategoryLabel($lastCategory),
+                        'qty' => $qty,
+                        'mode' => $mode,
+                    );
+                }
+                $lastCategory = '';
+                continue;
+            }
+
+            if (preg_match('/\bsku\b/i', $line) || sorImpIsCustomerInfoLine($line)) {
+                continue;
+            }
+
+            $category = sorImpUrbanismCategoryFromText($line);
+            if ($category === '' || $category === 'carbzero') {
+                continue;
+            }
+
+            $lastCategory = $category;
+        }
+
+        $appendHint();
+        return $hints;
+    }
+}
+
 if (!function_exists('sorImpResolveUrbanismChooseAnyPackage')) {
     function sorImpResolveUrbanismChooseAnyPackage($text, $packages)
     {
-        $hint = sorImpParseUrbanismChooseAnyHint($text);
+        $hints = sorImpParseUrbanismChooseAnyHints($text);
+        $hint = isset($hints[0]) && is_array($hints[0])
+            ? $hints[0]
+            : sorImpParseUrbanismChooseAnyHint($text);
         $paidTotal = array_sum(isset($hint['paid']) && is_array($hint['paid']) ? $hint['paid'] : array());
         $freeTotal = array_sum(isset($hint['free']) && is_array($hint['free']) ? $hint['free'] : array());
         if ($paidTotal <= 0 || count($hint['products']) === 0) {
@@ -1614,6 +1825,7 @@ if (!function_exists('sorImpResolveUrbanismChooseAnyPackage')) {
         return array(
             'package' => $bestPkg,
             'hint' => $hint,
+            'hints' => $hints,
             'score' => $bestScore,
         );
     }
@@ -1627,48 +1839,53 @@ if (!function_exists('sorImpApplyUrbanismChooseAnyPackageHint')) {
         }
 
         $matchedPackage = $matchedPackagePayload['package'];
-        $hint = isset($matchedPackagePayload['hint']) && is_array($matchedPackagePayload['hint']) ? $matchedPackagePayload['hint'] : array();
-        $matched = false;
+        $hints = isset($matchedPackagePayload['hints']) && is_array($matchedPackagePayload['hints'])
+            ? $matchedPackagePayload['hints']
+            : array(isset($matchedPackagePayload['hint']) && is_array($matchedPackagePayload['hint']) ? $matchedPackagePayload['hint'] : array());
+        $packageName = isset($matchedPackage['name']) ? (string) $matchedPackage['name'] : '';
+        $existingMatchIndexes = array();
 
         foreach ($lineItems as $idx => $lineItem) {
             $packageText = isset($lineItem['package_text']) ? (string) $lineItem['package_text'] : '';
             $hasSectionMarker = !empty($lineItem['has_section_marker']);
-            if (!$hasSectionMarker && !preg_match('/mix\s*&\s*match/i', $packageText)) {
+            if ($hasSectionMarker || preg_match('/mix\s*&\s*match/i', $packageText)) {
+                $existingMatchIndexes[] = $idx;
+            }
+        }
+
+        foreach ($hints as $hintIndex => $hint) {
+            if (!is_array($hint)) {
                 continue;
             }
 
-            $lineItems[$idx]['package_text'] = isset($matchedPackage['name']) ? (string) $matchedPackage['name'] : $packageText;
-            if (!empty($hint['products']) && is_array($hint['products'])) {
-                $lineItems[$idx]['products'] = array_map(function ($productRow) {
-                    return array(
-                        'name' => isset($productRow['name']) ? (string) $productRow['name'] : '',
-                        'qty' => isset($productRow['qty']) ? (int) $productRow['qty'] : 1,
-                    );
-                }, $hint['products']);
-            }
-            if (
-                (empty($lineItems[$idx]['line_total_price']) || (float) $lineItems[$idx]['line_total_price'] <= 0) &&
-                !empty($hint['line_total_price'])
-            ) {
-                $lineItems[$idx]['line_total_price'] = (float) $hint['line_total_price'];
-            }
-            $lineItems[$idx]['has_section_marker'] = true;
-            $matched = true;
-            break;
-        }
+            $products = !empty($hint['products']) && is_array($hint['products']) ? array_map(function ($productRow) {
+                return array(
+                    'name' => isset($productRow['name']) ? (string) $productRow['name'] : '',
+                    'qty' => isset($productRow['qty']) ? (int) $productRow['qty'] : 1,
+                );
+            }, $hint['products']) : array();
+            $lineTotalPrice = !empty($hint['line_total_price']) ? (float) $hint['line_total_price'] : 0.00;
+            $targetIdx = isset($existingMatchIndexes[$hintIndex]) ? $existingMatchIndexes[$hintIndex] : -1;
 
-        if (!$matched) {
+            if ($targetIdx >= 0) {
+                $lineItems[$targetIdx]['package_text'] = $packageName !== '' ? $packageName : (string) (isset($lineItems[$targetIdx]['package_text']) ? $lineItems[$targetIdx]['package_text'] : '');
+                $lineItems[$targetIdx]['products'] = $products;
+                if ($lineTotalPrice > 0) {
+                    $lineItems[$targetIdx]['line_total_price'] = $lineTotalPrice;
+                }
+                if (isset($hint['row_qty']) && (int) $hint['row_qty'] > 0) {
+                    $lineItems[$targetIdx]['row_qty'] = (int) $hint['row_qty'];
+                }
+                $lineItems[$targetIdx]['has_section_marker'] = true;
+                continue;
+            }
+
             $lineItems[] = array(
                 'index' => count($lineItems) + 1,
-                'package_text' => isset($matchedPackage['name']) ? (string) $matchedPackage['name'] : '',
-                'products' => isset($hint['products']) && is_array($hint['products']) ? array_map(function ($productRow) {
-                    return array(
-                        'name' => isset($productRow['name']) ? (string) $productRow['name'] : '',
-                        'qty' => isset($productRow['qty']) ? (int) $productRow['qty'] : 1,
-                    );
-                }, $hint['products']) : array(),
-                'row_qty' => 1,
-                'line_total_price' => !empty($hint['line_total_price']) ? (float) $hint['line_total_price'] : 0.00,
+                'package_text' => $packageName,
+                'products' => $products,
+                'row_qty' => isset($hint['row_qty']) && (int) $hint['row_qty'] > 0 ? (int) $hint['row_qty'] : 1,
+                'line_total_price' => $lineTotalPrice,
                 'has_section_marker' => true,
             );
         }
@@ -1835,10 +2052,36 @@ if (!function_exists('sorImpResolvePackageFromText')) {
 }
 
 if (!function_exists('sorImpResolveProductFromText')) {
+    function sorImpResolveUrbanismPdfProductId($key, $productKeyToId)
+    {
+        $key = (string) $key;
+        $aliasKey = '';
+        if ($key === 'sunz' || (strpos($key, 'urbanismcandy') !== false && strpos($key, 'sunz') !== false)) {
+            $aliasKey = 'urbanismfullsunz';
+        } else if ($key === 'moonz' || (strpos($key, 'urbanismcandy') !== false && strpos($key, 'moonz') !== false)) {
+            $aliasKey = 'urbanismfullmoonz';
+        }
+
+        if ($aliasKey === '') {
+            return 0;
+        }
+        if (isset($productKeyToId[$aliasKey])) {
+            return (int) $productKeyToId[$aliasKey];
+        }
+        foreach ($productKeyToId as $productKey => $productId) {
+            if (strpos((string) $productKey, $aliasKey) !== false) {
+                return (int) $productId;
+            }
+        }
+        return 0;
+    }
+
     function sorImpResolveProductFromText($name, $productKeyToId)
     {
         $key = sorImpLookup($name);
         if ($key === '') return 0;
+        $urbanismPdfProductId = sorImpResolveUrbanismPdfProductId($key, $productKeyToId);
+        if ($urbanismPdfProductId > 0) return $urbanismPdfProductId;
         if (isset($productKeyToId[$key])) return (int) $productKeyToId[$key];
         foreach ($productKeyToId as $pKey => $pId) {
             if (strlen($pKey) >= 5 && (strpos($key, $pKey) !== false || strpos($pKey, $key) !== false)) {
@@ -2145,6 +2388,7 @@ if (!function_exists('sorImpIsNoiseLine')) {
         $line = strtolower(trim($line));
         if ($line === '') return true;
         if (preg_match('/^(choose\s+any|free\s+item|quantity|qty|#|product|price|discount|total|action)(\s|$)/i', $line)) return true;
+        if (preg_match('/^(?:payment(?:\s+methods?)?|(?:y\s+)?order\s+summary|top\s*up|topup)(\s|$)/i', $line)) return true;
         if (preg_match('/^(rm|myr|sgd|usd)\s*[\d,.]+$/i', $line)) return true;
         if (preg_match('/^\(?\s*member\s*\)?$/i', $line)) return true;
         if (preg_match('/^\d{1,3}$/', $line)) return true;
@@ -2407,7 +2651,81 @@ if (!function_exists('sorImpParsePdfToRows')) {
                 $lineItems = $labelItems;
             }
         }
+
+        // CARBZERO invoices can split the product line across OCR lines, so
+        // the numbered-row parser may produce an empty package row. Resolve
+        // the stable item code from the complete OCR text as a final package
+        // recovery step, then force its single IMS product.
+        $carbzeroPackage = null;
+        if (sorImpIsCarbzeroSignature($text)) {
+            foreach ($packages as $candidatePackage) {
+                if (sorImpIsCarbzeroPackage($candidatePackage)) {
+                    $carbzeroPackage = $candidatePackage;
+                    break;
+                }
+            }
+        }
+        if ($carbzeroPackage) {
+            $carbzeroTargetIdx = -1;
+            foreach ($lineItems as $carbzeroIdx => $carbzeroItem) {
+                $carbzeroPackageText = isset($carbzeroItem['package_text']) ? (string) $carbzeroItem['package_text'] : '';
+                if (sorImpIsCarbzeroSignature($carbzeroPackageText)) {
+                    $carbzeroTargetIdx = $carbzeroIdx;
+                    break;
+                }
+            }
+            if ($carbzeroTargetIdx < 0) {
+                foreach ($lineItems as $carbzeroIdx => $carbzeroItem) {
+                    $carbzeroPackageText = trim((string) (isset($carbzeroItem['package_text']) ? $carbzeroItem['package_text'] : ''));
+                    $carbzeroProducts = isset($carbzeroItem['products']) && is_array($carbzeroItem['products']) ? $carbzeroItem['products'] : array();
+                    if ($carbzeroPackageText === '' && count($carbzeroProducts) === 0) {
+                        $carbzeroTargetIdx = $carbzeroIdx;
+                        break;
+                    }
+                }
+            }
+            if ($carbzeroTargetIdx < 0) {
+                $carbzeroTargetIdx = count($lineItems);
+                $lineItems[] = array(
+                    'index' => $carbzeroTargetIdx + 1,
+                    'package_text' => '',
+                    'products' => array(),
+                    'row_qty' => 1,
+                    'line_total_price' => 0.00,
+                    'has_section_marker' => false,
+                );
+            }
+
+            $carbzeroRowQty = isset($lineItems[$carbzeroTargetIdx]['row_qty'])
+                ? max(1, (int) $lineItems[$carbzeroTargetIdx]['row_qty'])
+                : 1;
+            $carbzeroLinePrice = isset($lineItems[$carbzeroTargetIdx]['line_total_price'])
+                ? (float) $lineItems[$carbzeroTargetIdx]['line_total_price']
+                : 0.00;
+            if ($carbzeroLinePrice <= 0 && is_numeric($totalPrice)) {
+                $carbzeroLinePrice = (float) $totalPrice;
+            }
+            $lineItems[$carbzeroTargetIdx]['package_text'] = (string) $carbzeroPackage['name'];
+            $lineItems[$carbzeroTargetIdx]['products'] = array(
+                array(
+                    'name' => 'Urbanism Carb Zero',
+                    'qty' => $carbzeroRowQty,
+                ),
+            );
+            $lineItems[$carbzeroTargetIdx]['line_total_price'] = $carbzeroLinePrice;
+            $lineItems[$carbzeroTargetIdx]['has_section_marker'] = false;
+        }
         $lineItems = array_values($lineItems);
+        $computedPackageTotal = 0.00;
+        foreach ($lineItems as $lineItem) {
+            $lineItemPrice = isset($lineItem['line_total_price']) ? (float) $lineItem['line_total_price'] : 0.00;
+            if ($lineItemPrice > 0) {
+                $computedPackageTotal += $lineItemPrice;
+            }
+        }
+        if ($computedPackageTotal > 0) {
+            $totalPrice = number_format($computedPackageTotal, 2, '.', '');
+        }
         $rows = array();
 
         foreach ($lineItems as $itemIdx => $item) {
@@ -2462,39 +2780,40 @@ if (!function_exists('sorImpParsePdfToRows')) {
             $rowQty = isset($item['row_qty']) ? (int) $item['row_qty'] : 1;
             $hasSectionMarker = !empty($item['has_section_marker']);
 
-            // When package is matched and has more linked products in DB
-            // than what the PDF extracted, expand from DB instead.
-            // This handles Chinese invoices where only one product name is given
-            // but the package contains multiple products.
-            if ($pkgHit && $pkgId > 0 && isset($packageMap[$pkgId])) {
-                $linkedRawIds = isset($packageMap[$pkgId]['product_ids_raw']) ? $packageMap[$pkgId]['product_ids_raw'] : (isset($packageMap[$pkgId]['product_ids']) ? $packageMap[$pkgId]['product_ids'] : array());
-                $hasLinkedExtractedProduct = false;
-                foreach ($item['products'] as $extractedProduct) {
-                    $extractedProductId = sorImpResolveProductFromText(isset($extractedProduct['name']) ? $extractedProduct['name'] : '', $productKeyToId);
-                    if ($extractedProductId > 0 && in_array($extractedProductId, $linkedRawIds, true)) {
-                        $hasLinkedExtractedProduct = true;
-                        break;
-                    }
-                }
-                if (count($linkedRawIds) > 1 && (count($item['products']) <= 1 || !$hasLinkedExtractedProduct)) {
-                    $item['products'] = array();
-                    $hasSectionMarker = true;
-                }
-            }
-
             $isStandalone = (count($item['products']) === 0 && !$hasSectionMarker);
 
-            if ($pkgId > 0 && count($pkgProductRows) > 0) {
-                foreach ($pkgProductRows as $pkgProductRow) {
-                    $productId = isset($pkgProductRow['product_id']) ? (int) $pkgProductRow['product_id'] : 0;
-                    $baseQty = isset($pkgProductRow['base_qty']) ? (int) $pkgProductRow['base_qty'] : 1;
-                    if ($baseQty <= 0) {
-                        $baseQty = 1;
-                    }
-
+            if (count($item['products']) > 0) {
+                $mergedProducts = array();
+                $mergedProductOrder = array();
+                foreach ($item['products'] as $prod) {
+                    $productId = sorImpResolveProductFromText($prod['name'], $productKeyToId);
                     $resolvedProductName = ($productId > 0 && isset($productNameMap[$productId]))
                         ? (string) $productNameMap[$productId]
-                        : (isset($pkgProductRow['product_name']) ? (string) $pkgProductRow['product_name'] : '');
+                        : sorImpNormalizeProductLabelText((string) $prod['name']);
+
+                    $mergeKey = $productId > 0
+                        ? 'id_' . $productId
+                        : 'name_' . sorImpLookup($resolvedProductName);
+                    if ($mergeKey === 'name_') {
+                        $mergeKey .= sorImpLookup((string) $prod['name']);
+                    }
+                    if (!isset($mergedProducts[$mergeKey])) {
+                        $mergedProducts[$mergeKey] = array(
+                            'product_id' => $productId,
+                            'product_name' => $resolvedProductName,
+                            'qty' => 0,
+                        );
+                        $mergedProductOrder[] = $mergeKey;
+                    }
+                    $mergedProducts[$mergeKey]['qty'] += max(0, (int) (isset($prod['qty']) ? $prod['qty'] : 0));
+                }
+
+                $packageText = sorImpNormalizePackageLabelText((string) $packageText, '');
+                foreach ($mergedProductOrder as $mergeKey) {
+                    $mergedProduct = $mergedProducts[$mergeKey];
+                    $productId = (int) $mergedProduct['product_id'];
+                    $resolvedProductName = (string) $mergedProduct['product_name'];
+                    $productQty = max(1, (int) $mergedProduct['qty']) * max(1, $rowQty);
 
                     $rows[] = array(
                         'source_file' => (string) $pdfFile['name'],
@@ -2513,8 +2832,8 @@ if (!function_exists('sorImpParsePdfToRows')) {
                         'line_type' => 'package',
                         'line_total_price' => $lineTotalPrice,
                         'package_qty' => max(1, $rowQty),
-                        'product_qty' => max(1, $baseQty) * max(1, $rowQty),
-                        'qty' => max(1, $baseQty),
+                        'product_qty' => $productQty,
+                        'qty' => $productQty,
                         'item_description' => $pkgItemDesc,
                         'brand_id' => $pkgBrandId,
                         'company_id' => $pkgCompanyId,
@@ -2550,38 +2869,6 @@ if (!function_exists('sorImpParsePdfToRows')) {
                     'company_id' => $standaloneCompanyId,
                     'warning' => '',
                 );
-            } else if (count($item['products']) > 0) {
-                foreach ($item['products'] as $prod) {
-                    $productId = sorImpResolveProductFromText($prod['name'], $productKeyToId);
-                    $resolvedProductName = ($productId > 0 && isset($productNameMap[$productId]))
-                        ? (string) $productNameMap[$productId]
-                        : sorImpNormalizeProductLabelText((string) $prod['name']);
-                    $packageText = sorImpNormalizePackageLabelText((string) $packageText, $resolvedProductName);
-
-                    $rows[] = array(
-                        'source_file' => (string) $pdfFile['name'],
-                        'source_attachment' => isset($pdfFile['attachment_path']) ? (string) $pdfFile['attachment_path'] : '',
-                        'invoice_no' => $invoiceNo,
-                        'invoice_date' => $invoiceDate,
-                        'total_price' => $totalPrice,
-                        'warehouse_id' => '',
-                        'product_id' => $productId,
-                        'product_name' => $resolvedProductName,
-                        'pdf_product_name' => $resolvedProductName,
-                        'package_id' => $pkgId,
-                        'package_name' => $packageText,
-                        'pdf_package_name' => $packageText,
-                        'package_group_key' => $itemGroupKey,
-                        'line_type' => 'package',
-                        'line_total_price' => $lineTotalPrice,
-                        'package_qty' => max(1, $rowQty),
-                        'item_description' => $pkgItemDesc,
-                        'qty' => max(1, $prod['qty']),
-                        'brand_id' => $pkgBrandId,
-                        'company_id' => $pkgCompanyId,
-                        'warning' => '',
-                    );
-                }
             } else {
                 if ($pkgId > 0 && isset($packageMap[$pkgId])) {
                     $pkgProductIdsRaw = isset($packageMap[$pkgId]['product_ids_raw']) ? $packageMap[$pkgId]['product_ids_raw'] : (isset($packageMap[$pkgId]['product_ids']) ? $packageMap[$pkgId]['product_ids'] : array());
@@ -2979,10 +3266,7 @@ if ($action === 'insertStockOrderPdf') {
             $rowCompanyId = isset($r['company_id']) ? (int) $r['company_id'] : 0;
 
             if ($productId <= 0 && $productName !== '') {
-                $key = sorImpLookup($productName);
-                if (isset($productNameToId[$key])) {
-                    $productId = (int) $productNameToId[$key];
-                }
+                $productId = sorImpResolveProductFromText($productName, $productNameToId);
             }
 
             if ($packageId <= 0 && $packageName !== '') {
@@ -3034,15 +3318,6 @@ if ($action === 'insertStockOrderPdf') {
             }
             if ($packageQty <= 0) $importErrors[] = 'Row #' . $rowNo . ': Package quantity must be more than 0.';
             if ($productQty <= 0) $importErrors[] = 'Row #' . $rowNo . ': Product quantity must be more than 0.';
-
-            if ($packageId > 0 && isset($packageMap[$packageId])) {
-                $pkg = $packageMap[$packageId];
-                $productIds = isset($pkg['product_ids']) ? $pkg['product_ids'] : array();
-                if (is_array($productIds) && count($productIds) > 0 && $productId > 0 && !in_array($productId, $productIds, true)) {
-                    $importErrors[] = 'Row #' . $rowNo . ': Selected product does not belong to selected package.';
-                    $importProductFieldErrors[$idx] = 'Selected product does not belong to this package.';
-                }
-            }
 
             if ($packageId > 0 && isset($packageMap[$packageId])) {
                 $pkg = $packageMap[$packageId];
@@ -3528,7 +3803,7 @@ if ($existingInvoiceRst) {
                                         </div>
                                         <div class="col-md-2 mb-3">
                                             <label class="form-label form_lbl required">Total Price</label>
-                                            <input class="form-control receipt-sync sor-server-value" type="number" step="0.01" min="0" data-receipt="<?= $receiptKey ?>" data-field="total_price" value="<?= htmlspecialchars($totalVal, ENT_QUOTES, 'UTF-8') ?>" data-server-value="<?= htmlspecialchars($totalVal, ENT_QUOTES, 'UTF-8') ?>">
+                                            <input class="form-control receipt-sync sor-server-value" type="number" step="0.01" min="0" readonly data-receipt="<?= $receiptKey ?>" data-field="total_price" value="<?= htmlspecialchars($totalVal, ENT_QUOTES, 'UTF-8') ?>" data-server-value="<?= htmlspecialchars($totalVal, ENT_QUOTES, 'UTF-8') ?>" aria-readonly="true">
                                             <div class="err-missing sor-inline-error" data-receipt="<?= $receiptKey ?>" data-field-err="total_price" style="display:none;"></div>
                                             <?php if ($totalValNum <= 0) { ?>
                                                 <div class="err-missing">Unable to extract total price from PDF. Please fill manually.</div>
@@ -3620,7 +3895,7 @@ if ($existingInvoiceRst) {
                                                                 <input class="form-control group-qty-field" type="number" min="1" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" value="<?= (int) $rowPackageQty ?>" required>
                                                             </td>
                                                             <td>
-                                                                <input class="form-control" type="text" value="<?= $lineTotalPrice > 0 ? htmlspecialchars(number_format($lineTotalPrice, 2, '.', ''), ENT_QUOTES, 'UTF-8') : '' ?>" readonly disabled style="background:#f3f4f6;">
+                                                                <input class="form-control sor-server-value group-package-price-input" type="number" step="0.01" min="0" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" value="<?= $groupPackagePrice > 0 ? htmlspecialchars(number_format($groupPackagePrice, 2, '.', ''), ENT_QUOTES, 'UTF-8') : '' ?>" data-server-value="<?= $groupPackagePrice > 0 ? htmlspecialchars(number_format($groupPackagePrice, 2, '.', ''), ENT_QUOTES, 'UTF-8') : '' ?>" aria-label="Package price">
                                                             </td>
                                                             <td>
                                                                 <button type="button" class="mt-1 action_menu_btn add-preview-package-row" id="action_menu_btn"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
@@ -3670,6 +3945,7 @@ if ($existingInvoiceRst) {
                                                                 <input class="form-control product-total-placeholder" type="text" value="" readonly disabled>
                                                             </td>
                                                             <td>
+                                                                <button type="button" class="mt-1 action_menu_btn add-preview-product-row" id="action_menu_btn"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
                                                                 <button type="button" class="mt-1 action_menu_btn remove-preview-row" id="action_menu_btn" data-remove-scope="product"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>
                                                                 <input type="hidden" class="pkg-brand-hidden" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][brand_id]" id="brand_hidden_<?= $idx ?>" value="<?= (int) $brandId ?>">
                                                                 <input type="hidden" class="pkg-company-hidden" data-group="<?= htmlspecialchars($pkgGroupKey, ENT_QUOTES, 'UTF-8') ?>" name="rows[<?= $idx ?>][company_id]" id="company_hidden_<?= $idx ?>" value="<?= (int) $companyId ?>">

@@ -17112,6 +17112,7 @@ if (!function_exists('sorFetchSpxTrackingResponse')) {
         if (function_exists('curl_init')) {
             $request = curl_init($trackingUrl);
             if ($request !== false) {
+                $browserUserAgent = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36';
                 curl_setopt_array($request, array(
                     CURLOPT_RETURNTRANSFER => true,
                     CURLOPT_CONNECTTIMEOUT => 10,
@@ -17119,9 +17120,25 @@ if (!function_exists('sorFetchSpxTrackingResponse')) {
                     CURLOPT_FOLLOWLOCATION => false,
                     CURLOPT_SSL_VERIFYPEER => true,
                     CURLOPT_SSL_VERIFYHOST => 2,
-                    CURLOPT_USERAGENT => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                    CURLOPT_HTTPHEADER => $headers,
+                    CURLOPT_USERAGENT => $browserUserAgent,
+                    // Enable cURL's in-memory cookie engine. No cookie file is written.
+                    CURLOPT_COOKIEFILE => '',
                 ));
+
+                // SPX's browser tracker establishes its public session before it
+                // sends the signed API request. Reuse that same session on live hosts.
+                if (defined('CURLOPT_IPRESOLVE') && defined('CURL_IPRESOLVE_V4')) {
+                    curl_setopt($request, CURLOPT_IPRESOLVE, CURL_IPRESOLVE_V4);
+                }
+                curl_setopt($request, CURLOPT_URL, $trackingPageUrl);
+                curl_setopt($request, CURLOPT_HTTPHEADER, array(
+                    'Accept: text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+                    'Accept-Language: en-US,en;q=0.9',
+                ));
+                curl_exec($request);
+
+                curl_setopt($request, CURLOPT_URL, $trackingUrl);
+                curl_setopt($request, CURLOPT_HTTPHEADER, $headers);
                 $body = curl_exec($request);
                 $httpCode = (int) curl_getinfo($request, CURLINFO_HTTP_CODE);
                 curl_close($request);

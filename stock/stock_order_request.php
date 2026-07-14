@@ -551,7 +551,7 @@ if (post('actionBtn')) {
                 continue;
             }
 
-            if ($prodId > 0 && empty($productHasPackageMap[$prodId])) {
+            if ($prodId > 0 && $pkgId <= 0 && empty($productHasPackageMap[$prodId])) {
                 $productsWithoutPackage[] = $prodName !== '' ? $prodName : (isset($productNameMap[$prodId]) ? $productNameMap[$prodId] : '');
                 continue;
             }
@@ -563,20 +563,6 @@ if (post('actionBtn')) {
 
             if ($prodId <= 0 || $pkgId <= 0 || $packageQty <= 0 || $productQty <= 0) {
                 continue;
-            }
-
-            $allowedProducts = isset($packageProductMap[$pkgId]) ? $packageProductMap[$pkgId] : array();
-            if ($rowRole !== 'package' && !empty($allowedProducts) && !in_array($prodId, $allowedProducts, true)) {
-                $legacyPairUnchanged = false;
-                if ($action === 'updRecord' && $itemId > 0 && isset($existingItemPairById[$itemId])) {
-                    $legacyPair = $existingItemPairById[$itemId];
-                    $legacyPairUnchanged = ((int) $legacyPair['product_id'] === $prodId && (int) $legacyPair['package_id'] === $pkgId);
-                }
-
-                if (!$legacyPairUnchanged) {
-                    $mismatchItems[] = $pkgName !== '' ? $pkgName : (isset($packageNameMap[$pkgId]) ? $packageNameMap[$pkgId] : '');
-                    continue;
-                }
             }
 
             $pkgPrice = isset($packageMap[$pkgId]) ? (float) $packageMap[$pkgId] : 0.00;
@@ -591,7 +577,8 @@ if (post('actionBtn')) {
             if ($packageGroupKey === '') {
                 $packageGroupKey = 'pkg_' . $pkgId . '_' . ($i + 1);
             }
-            $groupPackagePrice = $postedPackagePrice > 0 ? $postedPackagePrice : ($pkgPrice * $packageQty);
+            $hasPostedPackagePrice = array_key_exists($i, $packagePriceArr) && trim((string) $packagePriceArr[$i]) !== '';
+            $groupPackagePrice = $hasPostedPackagePrice ? $postedPackagePrice : ($pkgPrice * $packageQty);
             if (!isset($countedPackageTotals[$packageGroupKey])) {
                 $computedTotal += (float) $groupPackagePrice;
                 $countedPackageTotals[$packageGroupKey] = true;
@@ -1749,7 +1736,7 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                                         </td>
                                         <td class="cell-total">
                                             <div class="total-main-field">
-                                                <input class="form-control sor-item-total" type="text" value="<?= sorEcho(number_format($groupPrice, 2, '.', '')) ?>" readonly>
+                                                <input class="form-control sor-item-total sor-item-package-price-edit" type="number" step="0.01" min="0" value="<?= sorEcho(number_format($groupPrice, 2, '.', '')) ?>" <?= ($act == '') ? 'readonly' : '' ?> aria-label="Package price">
                                             </div>
                                         </td>
                                         <td>
@@ -1812,6 +1799,7 @@ function sorAttachmentUrl($relativePath, $siteUrl)
                                         </td>
                                         <td>
                                             <?php if ($act != '') { ?>
+                                                <button type="button" class="mt-1 add-product-row-btn" id="action_menu_btn"><i class="fa-regular fa-square-plus fa-xl" style="color:#37c22e"></i></button>
                                                 <button type="button" class="mt-1 remove-product-btn" id="action_menu_btn"><i class="fa-regular fa-trash-can fa-xl" style="color:#ff0000"></i></button>
                                             <?php } ?>
                                         </td>
