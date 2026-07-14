@@ -618,18 +618,6 @@ $tblName = FB_ADS_TOPUP;
 
 
 <script>
-
-    $('#resetButton').click(function() {
-
-$('#datepicker input, #datepicker2 input[name="start"], #datepicker2 input[name="end"], #datepicker3 input[name="start"], #datepicker3 input[name="end"], #datepicker4 input[name="start"], #datepicker4 input[name="end"]').val('');
-
-
-$('#group').val('');
-$('#timeInterval').val('');
-$('#datepicker input').change();
-});
-
-
 <?php include "../js/fb_ads_topup_table.js" ?>
     
     /**

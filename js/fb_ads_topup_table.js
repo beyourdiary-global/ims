@@ -56,29 +56,31 @@ $(document).ready(function ($) {
   });
 });
 
-$("#resetButton").click(function () {
+$("#resetButton").on("click", function (event) {
+  event.preventDefault();
   $(
     '#datepicker input, #datepicker2 input[name="start"], #datepicker2 input[name="end"], #datepicker3 input[name="start"], #datepicker3 input[name="end"], #datepicker4 input[name="start"], #datepicker4 input[name="end"]',
   ).val("");
-  $("#group").val("");
-  $("#timeInterval").val("");
+  $("#group").prop("selectedIndex", 0).val("");
+  $("#groupParam, #timeIntervalParam, #timeRangeParam").val("");
+  $("#timeInterval").val("daily");
   $("#datepicker input").change();
+
+  window.location.href = this.href;
 });
 
 $(document).ready(function () {
   var timeParam3 = getParameterByName("timeInterval");
   var groupParam = getParameterByName("group");
-  window.onload = function () {
-    if (timeParam3 == null) {
-      document.getElementById("timeInterval").value = "daily";
-    } else if (timeParam3) {
-      document.getElementById("timeInterval").value = timeParam3;
-      document.getElementById("group").value = groupParam;
-    } else {
-      document.getElementById("timeInterval").value = "daily";
-      document.getElementById("group").value = "courier";
-    }
-  };
+
+  if (timeParam3) {
+    $("#timeInterval").val(timeParam3);
+  } else {
+    $("#timeInterval").val("daily");
+  }
+  if (groupParam) {
+    $("#group").val(groupParam);
+  }
 
   $(
     '#datepicker input, #datepicker2 input[name="end"], #datepicker3 input[name="end"], #datepicker4 input[name="end"]',
@@ -146,14 +148,8 @@ $(document).ready(function () {
     }
   });
 
-  var groupParam = getParameterByName("group");
-  if (groupParam) {
-    $("#group").val(groupParam);
-  }
-
   var timeParam4 = getParameterByName("timeRange");
-  var timeInterval = $("#timeInterval").val();
-  if (timeParam3 == "weekly") {
+  if (timeParam3 == "weekly" && timeParam4) {
     $("#timeInterval").val(timeParam3);
     var dateRange = timeParam4.split("to");
     $('#datepicker2 input[name="start"]').val(dateRange[0]);
@@ -161,7 +157,7 @@ $(document).ready(function () {
     handleTimeIntervalChange();
     $("#timeRangeParam").val(timeParam4);
     $("#timeIntervalParam").val(timeParam3);
-  } else if (timeParam3 == "monthly") {
+  } else if (timeParam3 == "monthly" && timeParam4) {
     $("#timeInterval").val(timeParam3);
     var dateRange = timeParam4.split("to");
     $('#datepicker3 input[name="start"]').val(dateRange[0]);
@@ -169,7 +165,7 @@ $(document).ready(function () {
     handleTimeIntervalChange();
     $("#timeRangeParam").val(timeParam4);
     $("#timeIntervalParam").val(timeParam3);
-  } else if (timeParam3 == "yearly") {
+  } else if (timeParam3 == "yearly" && timeParam4) {
     $("#timeInterval").val(timeParam3);
     var dateRange = timeParam4.split("to");
     $('#datepicker4 input[name="start"]').val(dateRange[0]);
@@ -195,19 +191,44 @@ $(document).ready(function () {
     $("#datepicker4").prop("disabled", false).show();
   }
 
+  function getCurrentTimeRange() {
+    var selectedInterval = $("#timeInterval").val();
+    var start;
+    var end;
+
+    if (selectedInterval === "weekly") {
+      start = $('#datepicker2 input[name="start"]').val();
+      end = $('#datepicker2 input[name="end"]').val();
+    } else if (selectedInterval === "monthly") {
+      start = $('#datepicker3 input[name="start"]').val();
+      end = $('#datepicker3 input[name="end"]').val();
+    } else if (selectedInterval === "yearly") {
+      start = $('#datepicker4 input[name="start"]').val();
+      end = $('#datepicker4 input[name="end"]').val();
+    } else if (selectedInterval === "daily") {
+      return $("#datepicker input").val();
+    }
+
+    return start && end ? start + "to" + end : "";
+  }
+
   $("#group").change(function () {
     var group = $(this).val();
+    var timeRange = getCurrentTimeRange();
+    var timeInterval = $("#timeInterval").val();
+    var query = [];
 
-    if (timeParam4) {
-      window.location.search =
-        "?group=" +
-        group +
-        "&timeRange=" +
-        timeParam4 +
-        (timeParam3 ? "&timeInterval=" + timeParam3 : "");
-    } else if (group != "") {
-      window.location.search = "?group=" + group;
+    if (group) {
+      query.push("group=" + encodeURIComponent(group));
     }
+    if (timeRange) {
+      query.push("timeRange=" + encodeURIComponent(timeRange));
+      if (timeInterval) {
+        query.push("timeInterval=" + encodeURIComponent(timeInterval));
+      }
+    }
+
+    window.location.search = query.length ? "?" + query.join("&") : "";
   });
 
   $("#datepicker").datepicker({
