@@ -2,7 +2,6 @@
     var config = window.projectSettingsConfig || {};
     var canEdit = !!config.canEdit;
     var canSave = !!config.canSave;
-    var canAddLabels = !!config.canAddLabels;
     var canEditLabels = !!config.canEditLabels;
     var canDeleteLabels = !!config.canDeleteLabels;
     var canManageStatusLabels = !!config.canManageStatusLabels;
