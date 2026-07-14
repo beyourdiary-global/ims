@@ -365,6 +365,16 @@ $taskParentTitle = !empty($currentProject) && isset($currentProject['name']) && 
     ? (string) $currentProject['name']
     : $taskParentTitle;
 $canEdit = $currentProjectId > 0 ? taskCanEditProjectSettings($connect, $currentProjectId) : false;
+$canAddLabels = $currentProjectId > 0
+    ? taskUserCanColumnFieldAction($connect, $currentProjectId, 'labels', 'add', $currentUserId)
+    : false;
+$canEditLabels = $currentProjectId > 0
+    ? taskUserCanColumnFieldAction($connect, $currentProjectId, 'labels', 'edit', $currentUserId)
+    : false;
+$canDeleteLabels = $currentProjectId > 0
+    ? taskUserCanColumnFieldAction($connect, $currentProjectId, 'labels', 'delete', $currentUserId)
+    : false;
+$canSaveProjectSettings = $canEdit || $canAddLabels || $canEditLabels || $canDeleteLabels;
 if ($currentProjectId > 0 && !taskCanAccessProjectSettings($connect, $currentProjectId, true)) {
     renderNotificationScript('You do not have permission to view project settings.', 'error', '../dashboard.php', 1200, true);
     exit;
@@ -383,7 +393,7 @@ if (empty($_SESSION['csrf_token'])) {
 }
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') === 'save_project_settings_ajax') {
-    if (!$canEdit) {
+    if (!$canSaveProjectSettings) {
         taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to edit project settings.'));
     }
 
@@ -449,15 +459,77 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') === 'save_proje
         $labelDeleteIds = (array) post('label_delete_ids') ?: array();
         $statusLabelDeleteIds = (array) post('status_label_delete_ids') ?: array();
 
+        if (!$canEdit) {
+            if (!empty($labelDeleteIds) && !$canDeleteLabels) {
+                taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to remove Labels.'));
+            }
+
+            $existingLabels = taskGetLabels($connect);
+            $existingLabelMap = array();
+            foreach ($existingLabels as $existingLabel) {
+                $existingLabelId = isset($existingLabel['id']) ? (int) $existingLabel['id'] : 0;
+                if ($existingLabelId > 0) {
+                    $existingLabelMap[$existingLabelId] = $existingLabel;
+                }
+            }
+
+            $submittedLabelIds = array();
+            foreach ($labelRows as $labelRow) {
+                $labelId = isset($labelRow['id']) ? (int) $labelRow['id'] : 0;
+                $labelName = trim((string) (isset($labelRow['name']) ? $labelRow['name'] : ''));
+
+                if ($labelId <= 0) {
+                    if ($labelName !== '' && !$canAddLabels) {
+                        taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to add Labels.'));
+                    }
+                    continue;
+                }
+
+                if (!isset($existingLabelMap[$labelId])) {
+                    taskJsonResponse(array('ok' => 0, 'message' => 'Invalid label update request.'));
+                }
+
+                $submittedLabelIds[$labelId] = true;
+                $existingLabel = $existingLabelMap[$labelId];
+                $existingName = trim((string) (isset($existingLabel['name']) ? $existingLabel['name'] : ''));
+                $existingColor = taskNormalizeHexColor(isset($existingLabel['color']) ? $existingLabel['color'] : '', '#DCE8FF');
+                $submittedColor = taskNormalizeHexColor(isset($labelRow['color']) ? $labelRow['color'] : '', '#DCE8FF');
+                if (($labelName !== $existingName || $submittedColor !== $existingColor) && !$canEditLabels) {
+                    taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to edit Labels.'));
+                }
+            }
+
+            foreach ($existingLabelMap as $existingLabelId => $existingLabel) {
+                if (!isset($submittedLabelIds[$existingLabelId]) && !$canDeleteLabels) {
+                    taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to remove Labels.'));
+                }
+            }
+
+            $projectNameToSave = isset($currentProject['name']) ? (string) $currentProject['name'] : '';
+            $currentProjectKey = taskGetProjectKeySetting($connect, $currentProjectId);
+            $projectKeyToSave = isset($currentProjectKey['project_key']) ? (string) $currentProjectKey['project_key'] : '';
+            $boardBackgroundColorToSave = isset($currentProject['board_background_color']) ? (string) $currentProject['board_background_color'] : '#f4f7fb';
+            $statusRows = taskGetColumns($connect, $currentProjectId);
+            $statusDeleteIds = array();
+            $workTypeRows = taskGetWorkTypes($connect, $currentProjectId);
+            $workTypeDeleteIds = array();
+            $statusLabelRows = taskGetStatusLabels($connect);
+            $statusLabelDeleteIds = array();
+        } else {
+            $projectNameToSave = post('project_name');
+            $projectKeyToSave = post('project_key');
+            $boardBackgroundColorToSave = post('board_background_color');
+        }
+
         $oldSettingsAuditSnapshot = taskProjectSettingsAuditSnapshot($connect, $currentProjectId);
         $auditProjectName = isset($currentProject['name']) ? (string) $currentProject['name'] : ('Project #' . $currentProjectId);
 
         $result = taskSaveProjectSettings(
             $connect,
             $currentProjectId,
-            post('project_name'),
-            post('project_key'),
-            post('board_background_color'),
+            $projectNameToSave,
+            $projectKeyToSave,
+            $boardBackgroundColorToSave,
             $statusRows,
             $statusDeleteIds,
             $workTypeRows,
@@ -639,7 +711,7 @@ $workTypeIconOptions = taskGetSvgIconOptions();
                         <div class="card shadow-sm mb-4">
                             <div class="card-header d-flex justify-content-between align-items-center">
                                 <h5 class="mb-0">Labels</h5>
-                                <?php if ($isOwner): ?>
+                                <?php if ($canAddLabels): ?>
                                     <button type="button" class="btn btn-sm btn-outline-primary" id="addProjectLabelRowBtn">Add Label</button>
                                 <?php endif; ?>
                             </div>
@@ -647,16 +719,19 @@ $workTypeIconOptions = taskGetSvgIconOptions();
                                 <div id="projectLabelDeleteBucket"></div>
                                 <div id="projectLabelRows" class="d-flex flex-column gap-2">
                                     <?php foreach ($labelRows as $label): ?>
+                                        <?php $labelColorValue = isset($label['color']) ? (string) $label['color'] : '#DCE8FF'; ?>
                                         <div class="task-project-settings-row task-project-label-row">
                                             <input type="hidden" name="label_ids[]" value="<?= (int) $label['id'] ?>">
-                                            <input type="text" class="form-control" name="label_names[]" maxlength="120" value="<?= htmlspecialchars(isset($label['name']) ? (string) $label['name'] : '', ENT_QUOTES, 'UTF-8') ?>" <?= $isOwner ? '' : 'disabled' ?>>
+                                            <input type="text" class="form-control" name="label_names[]" maxlength="120" value="<?= htmlspecialchars(isset($label['name']) ? (string) $label['name'] : '', ENT_QUOTES, 'UTF-8') ?>" <?= $canEditLabels ? '' : 'readonly' ?>>
                                             <div class="task-project-color-control">
-                                                <input type="color" class="form-control form-control-color" name="label_colors[]" value="<?= htmlspecialchars(isset($label['color']) ? (string) $label['color'] : '#DCE8FF', ENT_QUOTES, 'UTF-8') ?>" data-default-color="<?= htmlspecialchars(isset($label['color']) ? (string) $label['color'] : '#DCE8FF', ENT_QUOTES, 'UTF-8') ?>" <?= $isOwner ? '' : 'disabled' ?>>
-                                                <?php if ($isOwner): ?>
-                                                    <button type="button" class="btn btn-outline-secondary task-project-reset-color-btn" data-confirm-text="Reset this label color to default?" data-color-input="closest" data-default-color="<?= htmlspecialchars(isset($label['color']) ? (string) $label['color'] : '#DCE8FF', ENT_QUOTES, 'UTF-8') ?>">Reset Default</button>
+                                                <input type="color" class="form-control form-control-color" name="label_colors[]" value="<?= htmlspecialchars($labelColorValue, ENT_QUOTES, 'UTF-8') ?>" data-default-color="<?= htmlspecialchars($labelColorValue, ENT_QUOTES, 'UTF-8') ?>" <?= $canEditLabels ? '' : 'disabled' ?>>
+                                                <?php if (!$canEditLabels): ?>
+                                                    <input type="hidden" name="label_colors[]" value="<?= htmlspecialchars($labelColorValue, ENT_QUOTES, 'UTF-8') ?>">
+                                                <?php else: ?>
+                                                    <button type="button" class="btn btn-outline-secondary task-project-reset-color-btn" data-confirm-text="Reset this label color to default?" data-color-input="closest" data-default-color="<?= htmlspecialchars($labelColorValue, ENT_QUOTES, 'UTF-8') ?>">Reset Default</button>
                                                 <?php endif; ?>
                                             </div>
-                                            <?php if ($isOwner): ?>
+                                            <?php if ($canDeleteLabels): ?>
                                                 <button type="button" class="btn btn-outline-danger task-project-row-remove-btn" data-delete-type="label" data-existing-id="<?= (int) $label['id'] ?>">Remove</button>
                                             <?php endif; ?>
                                         </div>
@@ -720,7 +795,11 @@ window.taskBoardConfig = {
 <script>
 window.projectSettingsConfig = {
     canEdit: <?= $canEdit ? 'true' : 'false' ?>,
-    canManageTaxonomy: <?= $isOwner ? 'true' : 'false' ?>,
+    canSave: <?= $canSaveProjectSettings ? 'true' : 'false' ?>,
+    canAddLabels: <?= $canAddLabels ? 'true' : 'false' ?>,
+    canEditLabels: <?= $canEditLabels ? 'true' : 'false' ?>,
+    canDeleteLabels: <?= $canDeleteLabels ? 'true' : 'false' ?>,
+    canManageStatusLabels: <?= $isOwner ? 'true' : 'false' ?>,
     ajaxUrl: <?= json_encode('project_settings.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     csrfToken: <?= json_encode($_SESSION['csrf_token'], JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     iconOptions: <?= json_encode(array_values(array_map(function ($iconPath) {
