@@ -104,6 +104,73 @@ if (!function_exists('fbAdsWhtSubmissionGetDuplicateSourceIds')) {
     }
 }
 
+if (!function_exists('fbAdsWhtSubmissionGetDuplicateDetails')) {
+    function fbAdsWhtSubmissionGetDuplicateDetails($financeConnect, $ids, $excludeSubmissionRef = '')
+    {
+        $idSql = fbAdsWhtSubmissionIdSql($ids);
+        if ($idSql === '' || !($financeConnect instanceof mysqli)) {
+            return array();
+        }
+
+        $excludeSql = '';
+        if (trim((string) $excludeSubmissionRef) !== '') {
+            $safeRef = mysqli_real_escape_string($financeConnect, trim((string) $excludeSubmissionRef));
+            $excludeSql = " AND `submission_ref` <> '" . $safeRef . "'";
+        }
+
+        $query = "SELECT `source_transaction_id`, `transaction_id`, `submission_ref`
+            FROM `" . FB_ADS_WHT_SUBMISSION . "`
+            WHERE `status` = 'A'
+              AND `source_transaction_id` IN (" . $idSql . ")" . $excludeSql . "
+            ORDER BY `id` ASC";
+        $result = mysqli_query($financeConnect, $query);
+        $duplicateDetails = array();
+        $seenSourceIds = array();
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $sourceTransactionId = (int) ($row['source_transaction_id'] ?? 0);
+                if ($sourceTransactionId <= 0 || isset($seenSourceIds[$sourceTransactionId])) {
+                    continue;
+                }
+
+                $seenSourceIds[$sourceTransactionId] = true;
+                $duplicateDetails[] = array(
+                    'source_transaction_id' => $sourceTransactionId,
+                    'transaction_id' => (string) ($row['transaction_id'] ?? ''),
+                    'submission_ref' => (string) ($row['submission_ref'] ?? ''),
+                );
+            }
+        }
+
+        return $duplicateDetails;
+    }
+}
+
+if (!function_exists('fbAdsWhtSubmissionFormatDuplicateMessages')) {
+    function fbAdsWhtSubmissionFormatDuplicateMessages($duplicateDetails)
+    {
+        $messages = array();
+        foreach ((array) $duplicateDetails as $duplicateDetail) {
+            $transactionId = trim((string) ($duplicateDetail['transaction_id'] ?? ''));
+            if ($transactionId === '') {
+                $transactionId = 'source transaction ' . (int) ($duplicateDetail['source_transaction_id'] ?? 0);
+            }
+
+            $submissionRef = trim((string) ($duplicateDetail['submission_ref'] ?? ''));
+            $messages[] = 'Transaction ' . $transactionId . ' already submitted, Submission Reference: ' . $submissionRef;
+        }
+
+        return $messages;
+    }
+}
+
+if (!function_exists('fbAdsWhtSubmissionFormatDuplicateError')) {
+    function fbAdsWhtSubmissionFormatDuplicateError($duplicateDetails)
+    {
+        return implode('; ', fbAdsWhtSubmissionFormatDuplicateMessages($duplicateDetails));
+    }
+}
+
 if (!function_exists('fbAdsWhtSubmissionGenerateRef')) {
     function fbAdsWhtSubmissionGenerateRef()
     {
