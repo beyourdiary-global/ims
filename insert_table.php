@@ -507,12 +507,89 @@ function insertTableEnsureSupplierInvoiceSetup($conn, $cmsConn, $dbFin)
     }
 }
 
+function insertTableEnsureFbAdsWhtSubmissionSetup($conn, $cmsConn, $dbFin)
+{
+    $submissionTable = defined('FB_ADS_WHT_SUBMISSION') ? FB_ADS_WHT_SUBMISSION : 'facebook_ads_topup_wht_submission';
+    $createSubmissionSql = "CREATE TABLE IF NOT EXISTS `" . $dbFin . "`.`" . $submissionTable . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `submission_ref` VARCHAR(60) NOT NULL,
+        `source_transaction_id` INT NOT NULL,
+        `payment_date` DATE DEFAULT NULL,
+        `transaction_id` VARCHAR(255) DEFAULT NULL,
+        `subtotal` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        `sst` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        `amount` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        `remark` TEXT DEFAULT NULL,
+        `attachment` VARCHAR(255) DEFAULT NULL,
+        `submission_status` VARCHAR(20) NOT NULL DEFAULT 'pending',
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_fb_ads_wht_submission_ref` (`submission_ref`),
+        KEY `idx_fb_ads_wht_source_transaction` (`source_transaction_id`, `status`),
+        KEY `idx_fb_ads_wht_submission_status` (`submission_status`, `status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createSubmissionSql)) {
+        echo "<p style='color:green;'>Verified table `" . htmlspecialchars($submissionTable, ENT_QUOTES, 'UTF-8') . "`.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating table `" . htmlspecialchars($submissionTable, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($conn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+
+    if (!($cmsConn instanceof mysqli)) {
+        return;
+    }
+
+    $pinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (168, 'FB-Ads WHT Submission', '1,2,3,4', 'Facebook Ads WHT submission access', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+
+    if ($cmsConn->query($pinGroupSql)) {
+        echo "<p style='color:green;'>Verified pin group 168 for FB-Ads WHT Submission.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating pin group 168: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+
+    foreach (array(1, 2) as $groupId) {
+        $userGroupResult = $cmsConn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>FB-Ads WHT Submission pin setup skipped `user_group` id " . (int) $groupId . " because the group was not found.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = addAccessToPinBlock($currentPins, 168, array(1, 2, 3, 4));
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $cmsConn->real_escape_string($updatedPins);
+            if ($cmsConn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>FB-Ads WHT Submission pin setup granted access to `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>FB-Ads WHT Submission pin setup failed updating `user_group` id " . (int) $groupId . ": " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>FB-Ads WHT Submission pin setup verified for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
+}
+
 $cmsConn = new mysqli($dbhost, $dbUser, $dbpwd, $db_cms, $dbport);
 if ($cmsConn->connect_error) {
     insertTableEnsureSupplierInvoiceSetup($conn, null, $db_fin);
+    insertTableEnsureFbAdsWhtSubmissionSetup($conn, null, $db_fin);
     echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed connecting to CMS database `" . htmlspecialchars($db_cms, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($cmsConn->connect_error, ENT_QUOTES, 'UTF-8') . "</p>";
 } else {
     insertTableEnsureSupplierInvoiceSetup($conn, $cmsConn, $db_fin);
+    insertTableEnsureFbAdsWhtSubmissionSetup($conn, $cmsConn, $db_fin);
     insertTableEnsurePackageParentSkuColumns($cmsConn, $db_cms);
     insertTableEnsureOrderReportPins($cmsConn);
     insertTableEnsureLuckyDrawPins($cmsConn);
