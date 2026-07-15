@@ -13016,6 +13016,33 @@ if (!function_exists('shopeeOmsTelegramDescribeResponse')) {
     }
 }
 
+if (!function_exists('shopeeOmsNormalizeTelegramUserMessage')) {
+    function shopeeOmsNormalizeTelegramUserMessage($message)
+    {
+        $message = trim((string) $message);
+        if ($message === '') {
+            return '';
+        }
+
+        $normalizedMessage = strtolower($message);
+        if (strpos($normalizedMessage, 'group chat was deleted') !== false || strpos($normalizedMessage, 'chat not found') !== false) {
+            return 'The group already deleted.';
+        }
+
+        if (strpos($normalizedMessage, 'not found') !== false) {
+            return 'The bot is not inside the group chat.';
+        }
+
+        if (strpos($normalizedMessage, 'unauthorized') !== false
+            || strpos($normalizedMessage, 'invalid bot token') !== false
+            || strpos($normalizedMessage, 'bot token is missing') !== false) {
+            return 'The bot is not active, please send a msg to the telegram group or send /start to the bot';
+        }
+
+        return $message;
+    }
+}
+
 if (!function_exists('shopeeOmsDetectFileMimeType')) {
     function shopeeOmsDetectFileMimeType($filePath)
     {
@@ -13786,7 +13813,7 @@ if (!function_exists('shopeeOmsExtractPdfRawStrings')) {
         if (preg_match_all('/\((?:\\\\.|[^\\\\()])*\)/s', $rawPdfContent, $matches)) {
             foreach ((array) $matches[0] as $match) {
                 $match = substr((string) $match, 1, -1);
-                $match = preg_replace_callback('/\\([0-7]{1,3})/', function ($groups) {
+                $match = preg_replace_callback('/\\\\([0-7]{1,3})/', function ($groups) {
                     $code = octdec($groups[1]) & 0xFF;
                     return chr($code);
                 }, (string) $match);
@@ -14280,10 +14307,15 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
         $botToken = trim((string) (isset($tokenSetting['bot_token']) ? $tokenSetting['bot_token'] : ''));
         $chatId = shopeeOmsResolveChatIdFromTokenRow($tokenSetting);
         if ($botToken === '' || $chatId === '') {
+            $botInactiveMessage = 'The bot is not active, please send a msg to the telegram group or send /start to the bot';
+            if ($financeConnect instanceof mysqli) {
+                $safeResultMessage = mysqli_real_escape_string($financeConnect, $botInactiveMessage);
+                mysqli_query($financeConnect, "UPDATE `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` SET `sent_result` = '" . $safeResultMessage . "', `update_by` = 'SYSTEM', `update_date` = CURDATE(), `update_time` = CURTIME() WHERE id = " . (int) $tokenRow['id'] . " LIMIT 1");
+            }
             return array(
                 'success' => true,
                 'sent' => false,
-                'message' => 'Warehouse package generated. Telegram Bot Token or Chat ID is missing.',
+                'message' => $botInactiveMessage,
             );
         }
 
@@ -14428,10 +14460,11 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
         $isSent = $hasReadableAttachment
             ? ($documentSent && $messageSent)
             : $messageSent;
-        $resultMessage = $isSent ? 'Telegram warehouse notification sent successfully.' : (($errorMessage !== '' ? $errorMessage : 'Telegram warehouse notification was not sent.') . ($httpCode > 0 ? (' HTTP ' . $httpCode . '.') : ''));
+        $rawResultMessage = $isSent ? 'Telegram warehouse notification sent successfully.' : (($errorMessage !== '' ? $errorMessage : 'Telegram warehouse notification was not sent.') . ($httpCode > 0 ? (' HTTP ' . $httpCode . '.') : ''));
+        $resultMessage = shopeeOmsNormalizeTelegramUserMessage($rawResultMessage);
 
         if ($financeConnect instanceof mysqli) {
-            $safeResultMessage = mysqli_real_escape_string($financeConnect, $resultMessage);
+            $safeResultMessage = mysqli_real_escape_string($financeConnect, $rawResultMessage);
             mysqli_query($financeConnect, "UPDATE `" . ORDER_WAREHOUSE_SCAN_TOKEN . "` SET `sent_result` = '" . $safeResultMessage . "', `update_by` = 'SYSTEM', `update_date` = CURDATE(), `update_time` = CURTIME() WHERE id = " . (int) $tokenRow['id'] . " LIMIT 1");
         }
 
@@ -14439,6 +14472,109 @@ if (!function_exists('shopeeOmsSendWarehouseNotification')) {
             'success' => true,
             'sent' => $isSent,
             'message' => $resultMessage,
+        );
+    }
+}
+
+if (!function_exists('shopeeOmsLogTelegramResendAudit')) {
+    function shopeeOmsLogTelegramResendAudit($cmsConnect, $orderId, $sourceConfig, $sourcePage, $actorUserId)
+    {
+        if (!($cmsConnect instanceof mysqli) || !function_exists('audit_log')) {
+            return;
+        }
+
+        $sourceConfig = is_array($sourceConfig) ? $sourceConfig : array();
+        $platformLabel = isset($sourceConfig['label']) && trim((string) $sourceConfig['label']) !== ''
+            ? trim((string) $sourceConfig['label'])
+            : 'Order Request';
+        $orderTable = isset($sourceConfig['table']) ? trim((string) $sourceConfig['table']) : '';
+        $userId = trim((string) $actorUserId);
+        $userName = defined('USER_NAME') ? trim((string) USER_NAME) : '';
+        if ($userName === '') {
+            $userName = $userId !== '' ? $userId : 'User';
+        }
+
+        audit_log(array(
+            'log_act' => 'edit',
+            'page' => trim((string) $sourcePage) !== '' ? trim((string) $sourcePage) : $platformLabel . ' Order Request',
+            'query_rec' => 'order_id=' . (int) $orderId,
+            'query_table' => $orderTable,
+            'changes' => 'telegram_resend: requested',
+            'uid' => $userId,
+            'act_msg' => $userName . ' clicked Resend Telegram Message for ' . $platformLabel . ' order [ ID = ' . (int) $orderId . ' ].',
+            'cdate' => date('Y-m-d'),
+            'ctime' => date('H:i:s'),
+            'cby' => $userId,
+            'connect' => $cmsConnect,
+        ));
+    }
+}
+
+if (!function_exists('shopeeOmsResendWarehouseNotification')) {
+    function shopeeOmsResendWarehouseNotification($cmsConnect, $financeConnect, $orderId, $source = 'shopee', $actorUserId = '', $sourcePage = '')
+    {
+        $orderId = (int) $orderId;
+        if ($orderId <= 0) {
+            return array(
+                'success' => false,
+                'sent' => false,
+                'message' => 'Invalid order ID.',
+            );
+        }
+
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source, 'shopee');
+        shopeeOmsLogTelegramResendAudit($cmsConnect, $orderId, $sourceConfig, $sourcePage, $actorUserId);
+        $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $sourceConfig);
+        $orderRow = shopeeOmsLoadOrder($orderConnect, $orderId, $sourceConfig);
+        if (empty($orderRow)) {
+            return array(
+                'success' => false,
+                'sent' => false,
+                'message' => 'Order not found.',
+            );
+        }
+
+        $statusCode = shopeeOmsNormalizeStatusCode(isset($orderRow['order_status']) ? $orderRow['order_status'] : '');
+        if ($statusCode !== 'TP') {
+            return array(
+                'success' => false,
+                'sent' => false,
+                'message' => 'Telegram resend is only available for orders in To Pack status.',
+            );
+        }
+
+        $tokenResult = shopeeOmsCreateWarehouseToken($cmsConnect, $financeConnect, $orderRow, $actorUserId, $sourceConfig);
+        if (empty($tokenResult['success']) || empty($tokenResult['token_row']) || empty($tokenResult['notification'])) {
+            return array(
+                'success' => false,
+                'sent' => false,
+                'message' => (string) (isset($tokenResult['message']) ? $tokenResult['message'] : 'Unable to prepare Telegram notification.'),
+            );
+        }
+
+        $notifyResult = shopeeOmsSendWarehouseNotification(
+            $cmsConnect,
+            $financeConnect,
+            $tokenResult['token_row'],
+            $tokenResult['notification'],
+            $sourcePage
+        );
+        $sent = !empty($notifyResult['sent']);
+
+        if ($sent) {
+            $tableName = isset($sourceConfig['table']) ? (string) $sourceConfig['table'] : '';
+            $tableDbName = isset($sourceConfig['db_name']) ? (string) $sourceConfig['db_name'] : dbFinance;
+            if ($tableName !== '' && shopeeOmsTableHasColumn($orderConnect, $tableDbName, $tableName, 'step_a_sent_at')) {
+                mysqli_query($orderConnect, "UPDATE `" . $tableName . "` SET `step_a_sent_at` = NOW() WHERE id = " . $orderId . " LIMIT 1");
+            }
+        }
+
+        return array(
+            'success' => $sent,
+            'sent' => $sent,
+            'message' => (string) (isset($notifyResult['message']) ? $notifyResult['message'] : ($sent ? 'Telegram message sent successfully.' : 'Failed to send Telegram message.')),
+            'token_result' => $tokenResult,
+            'notify_result' => $notifyResult,
         );
     }
 }
@@ -14817,9 +14953,18 @@ if (!function_exists('shopeeOmsExecuteTransition')) {
             ));
         }
 
+        $transitionMessage = 'Order status updated to ' . shopeeOmsGetStatusLabel($targetStatus) . '.';
+        if ($targetStatus === 'TP'
+            && isset($stepAResult['notify_result'])
+            && is_array($stepAResult['notify_result'])
+            && empty($stepAResult['notify_result']['sent'])
+            && trim((string) (isset($stepAResult['notify_result']['message']) ? $stepAResult['notify_result']['message'] : '')) !== '') {
+            $transitionMessage = trim((string) $stepAResult['notify_result']['message']);
+        }
+
         return array(
             'success' => true,
-            'message' => 'Order status updated to ' . shopeeOmsGetStatusLabel($targetStatus) . '.',
+            'message' => $transitionMessage,
             'old_status' => $fromStatus,
             'new_status' => $targetStatus,
             'step_a_result' => $stepAResult,

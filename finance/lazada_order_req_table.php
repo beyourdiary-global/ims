@@ -80,6 +80,26 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('assignEstimatedReceiv
     exit;
 }
 
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('resendTelegramBtn')) {
+    $submittedToken = (string) post('csrf_token');
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $currentTableRedirect, 1200, true);
+        exit;
+    }
+
+    $resendResult = shopeeOmsResendWarehouseNotification(
+        $connect,
+        $finance_connect,
+        postSpaceFilter('resend_telegram_order_id'),
+        'lazada',
+        USER_ID,
+        $pageTitle
+    );
+    $resendMessage = (string) (isset($resendResult['message']) ? $resendResult['message'] : 'Unable to resend Telegram message.');
+    renderNotificationScript($resendMessage, !empty($resendResult['sent']) ? 'success' : 'error', $currentTableRedirect, 1200, true);
+    exit;
+}
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('moveToPackBtn')) {
     $submittedToken = (string) post('csrf_token');
     if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
@@ -348,6 +368,12 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                     <?php } ?>
                                     <?php if ($statusCode === 'TP') { ?>
                                         <a class="btn btn-sm btn-rounded btn-primary" href="<?= htmlspecialchars((string) shopeeOmsGetOrderSourceInfoUrl('lazada', (int) $row['id']), ENT_QUOTES, 'UTF-8') ?>" title="Open QR Info"><i class="fa-solid fa-qrcode"></i></a>
+                                        <form method="post" class="d-inline" onsubmit="return commonConfirmFormSubmit(this, 'Resend Telegram Message');">
+                                            <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                            <input type="hidden" name="resend_telegram_order_id" value="<?= (int) $row['id'] ?>">
+                                            <input type="hidden" name="resendTelegramBtn" value="1">
+                                            <button type="submit" class="btn btn-sm btn-rounded btn-info" name="resendTelegramBtn" value="1" title="Resend Telegram Message"><i class="fa-brands fa-telegram"></i></button>
+                                        </form>
                                     <?php } ?>
                                     <?php if (shouldShowEstimatedReceivedDateButton($row) && $canAssignThisOrder) { ?>
                                         <button
