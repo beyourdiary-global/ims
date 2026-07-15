@@ -203,13 +203,13 @@ $redeemableRows = memberRedeemGetEligibleRows($connect, (int) ($summary['active_
                         <div class="col-md-3">
                             <div class="member-point-card h-100 p-3 bg-white">
                                 <div class="text-muted mb-2">Active Points</div>
-                                <div class="member-point-kpi"><?= number_format((int) ($summary['active_points'] ?? 0)) ?></div>
+                                <div class="member-point-kpi"><?= htmlspecialchars(memberPointFormatPoints($summary['active_points'] ?? 0), ENT_QUOTES, 'UTF-8') ?></div>
                             </div>
                         </div>
                         <div class="col-md-3">
                             <div class="member-point-card h-100 p-3 bg-white">
                                 <div class="text-muted mb-2">Accumulated Points</div>
-                                <div class="member-point-kpi"><?= number_format((int) ($summary['lifetime_points'] ?? 0)) ?></div>
+                                <div class="member-point-kpi"><?= htmlspecialchars(memberPointFormatPoints($summary['lifetime_points'] ?? 0), ENT_QUOTES, 'UTF-8') ?></div>
                             </div>
                         </div>
                         <div class="col-md-3">
@@ -262,7 +262,7 @@ $redeemableRows = memberRedeemGetEligibleRows($connect, (int) ($summary['active_
                                                 <td><?= htmlspecialchars(memberPointPageFormatDate($rowData['order_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= commonFormatAmountRm($rowData['order_amount'] ?? 0) ?></td>
                                                 <td><?= htmlspecialchars((string) ($rowData['rule_label'] ?? '-'), ENT_QUOTES, 'UTF-8') ?></td>
-                                                <td><?= number_format((int) ($rowData['total_points'] ?? 0)) ?></td>
+                                                <td><?= htmlspecialchars(memberPointFormatPoints($rowData['total_points'] ?? 0), ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) ($rowData['point_status_label'] ?? '-'), ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars(memberPointPageFormatDate($rowData['expiry_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                             </tr>
@@ -311,7 +311,7 @@ $redeemableRows = memberRedeemGetEligibleRows($connect, (int) ($summary['active_
                                                 </td>
                                                 <td><?= htmlspecialchars((string) ($transactionRow['source_label'] ?? '-'), ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars(memberPointPageFormatDate($transactionRow['event_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                                                <td><?= number_format((int) ($transactionRow['points_change'] ?? 0)) ?></td>
+                                                <td><?= htmlspecialchars(memberPointFormatPoints($transactionRow['points_change'] ?? 0), ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) ($transactionRow['status_label'] ?? '-'), ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars(memberPointPageFormatDate($transactionRow['expiry_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                             </tr>
