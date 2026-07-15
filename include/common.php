@@ -11047,24 +11047,76 @@ if (!function_exists('shopeeOmsGetStoredStatusVariants')) {
         }
 
         $storedVariantsMap = array(
-            'P' => array('P', 'To Ship'),
-            'TP' => array('TP', 'To Pack'),
-            'SP' => array('SP', 'Processing', 'Shipped'),
+            'P' => array(
+                'P',
+                'To Ship',
+                'Pending To Pack',
+                'Pending To Ship',
+                'Waiting To Ship',
+                'Waiting for Courier to Confirm Shipment',
+                'Successfully Arranged Shipment',
+                'Please Proceed to Ship Out the Parcel',
+                'Please Proceed to Ship Out Parcel',
+                'Ready to Ship',
+                'New Order',
+            ),
+            'TP' => array('TP', 'To Pack', 'Waiting Packing', 'Waiting To Pack'),
+            'SP' => array(
+                'SP',
+                'Processing',
+                'Ship Processing',
+                'SHIP PROCESSING (Warehouse)',
+                'Shipped',
+                'To Receive',
+                'In Transit',
+                'Out for Delivery',
+                'Parcel Picked Up',
+                'Sender is Preparing to Ship Your Parcel',
+            ),
             'WAERD' => array('WAERD', 'Waiting Assign Estimate Received Date'),
-            'WR' => array('WR', 'AED', 'Waiting Receive', 'Assigned Estimate Date'),
+            'WR' => array(
+                'WR',
+                'AED',
+                'Waiting Receive',
+                'Assigned Estimate Date',
+                'Assigned Estimated Date',
+                'Assigned Estimate Received Date',
+            ),
             'PD' => array('PD', 'Postponed'),
             'PR' => array('PR', 'Parcel Received'),
-            'WAFC' => array('WAFC', 'OC', 'Waiting Admin Final Check', 'Order Received'),
+            'WAFC' => array(
+                'WAFC',
+                'OC',
+                'Waiting Admin Final Check',
+                'Order Received',
+                'Order Received (admin checking)',
+            ),
             'V' => array('V', 'Verify', 'Verified'),
-            'C' => array('C', 'Complete'),
+            'C' => array('C', 'Complete', 'Completed'),
             'R' => array('R', 'Return'),
             'CR' => array('CR', 'Closed-Returned'),
         );
 
         $statusCode = shopeeOmsNormalizeStatusCode($status);
         $candidates = array($status);
-        if ($statusCode !== '' && isset($storedVariantsMap[$statusCode])) {
-            $candidates = array_merge($candidates, $storedVariantsMap[$statusCode]);
+        if ($statusCode !== '') {
+            if (isset($storedVariantsMap[$statusCode])) {
+                $candidates = array_merge($candidates, $storedVariantsMap[$statusCode]);
+            }
+
+            // Keep filtering aligned with the values accepted by the normalizer.
+            // Some historical rows store an alias or a formatted status label
+            // instead of the canonical code.
+            $definitions = shopeeOmsStatusDefinitions();
+            if (isset($definitions[$statusCode])) {
+                $definition = $definitions[$statusCode];
+                if (isset($definition['label'])) {
+                    $candidates[] = $definition['label'];
+                }
+                if (isset($definition['aliases']) && is_array($definition['aliases'])) {
+                    $candidates = array_merge($candidates, $definition['aliases']);
+                }
+            }
         }
 
         $uniqueVariants = array();
