@@ -3463,7 +3463,12 @@ function openReferencedWorkItemModal(itemId, fallbackData) {
   $modal
     .off("hidden.bs.modal.taskOpenRelated")
     .one("hidden.bs.modal.taskOpenRelated", function () {
-      openItemDetailModal($card);
+      // Let the shared hidden handler finish clearing the previous modal state
+      // before opening the child item. Otherwise it resets the new item ID,
+      // clears its hash, and prevents detail saves from finding the child.
+      window.setTimeout(function () {
+        openItemDetailModal($card);
+      }, 0);
     });
   modal.hide();
 }
