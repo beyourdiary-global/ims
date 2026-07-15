@@ -1215,8 +1215,8 @@ function isLikelyShopeeSkuNearMatch($leftValue, $rightValue)
         }
     }
 
-    $leftLookup = normalizeImportLookup($leftValue);
-    $rightLookup = normalizeImportLookup($rightValue);
+    $leftLookup = normalizeImportLookup(normalizeShopeeSkuOcrComparisonKey($leftValue));
+    $rightLookup = normalizeImportLookup(normalizeShopeeSkuOcrComparisonKey($rightValue));
     if ($leftLookup === '' || $rightLookup === '' || strlen($leftLookup) !== strlen($rightLookup)) {
         return false;
     }
@@ -1225,7 +1225,7 @@ function isLikelyShopeeSkuNearMatch($leftValue, $rightValue)
         return false;
     }
 
-    return levenshtein($leftLookup, $rightLookup) === 1;
+    return $leftLookup === $rightLookup || levenshtein($leftLookup, $rightLookup) === 1;
 }
 
 function isReliableShopeeReverseSkuCandidate($value)
@@ -1382,6 +1382,8 @@ function resolvePackageMatchesFromDetectedData($detectedSkus, $productNameCandid
 
         $matchedIds = array();
         $normalizedValue = normalizeImportLookup($value);
+        $ocrComparisonValue = normalizeShopeeSkuOcrComparisonKey($value);
+        $ocrComparisonLookup = normalizeImportLookup($ocrComparisonValue);
         $pushMatchedId = function ($id) use (&$matchedIds) {
             $id = (int) $id;
             if ($id > 0 && !in_array($id, $matchedIds, true)) {
@@ -1415,6 +1417,25 @@ function resolvePackageMatchesFromDetectedData($detectedSkus, $productNameCandid
             $itemCodeLookup = normalizeImportLookup(isset($pkgMeta['item_code']) ? $pkgMeta['item_code'] : '');
             if ($itemCodeLookup !== '' && $itemCodeLookup === $normalizedValue) {
                 $pushMatchedId($pkgId);
+            }
+        }
+
+        // PDF/OCR text can confuse 5 with S and 0 with O. Compare the
+        // ambiguity-normalized value only against known package item codes;
+        // the detected text is replaced with the canonical item code only
+        // after a package match is confirmed.
+        if ($ocrComparisonLookup !== '' && $ocrComparisonLookup !== $normalizedValue) {
+            foreach ($packageMetaOptions as $pkgId => $pkgMeta) {
+                $itemCode = isset($pkgMeta['item_code']) ? $pkgMeta['item_code'] : '';
+                $itemCodeLookup = normalizeImportLookup($itemCode);
+                $itemCodeComparisonLookup = normalizeImportLookup(normalizeShopeeSkuOcrComparisonKey($itemCode));
+                if (
+                    $itemCodeLookup !== ''
+                    && $itemCodeComparisonLookup !== ''
+                    && $itemCodeComparisonLookup === $ocrComparisonLookup
+                ) {
+                    $pushMatchedId($pkgId);
+                }
             }
         }
 
@@ -2079,6 +2100,22 @@ function normalizeShopeeSkuCandidate($value)
     return $validateCandidate($repairedCandidate);
 }
 
+function normalizeShopeeSkuOcrComparisonKey($value)
+{
+    $value = normalizeShopeeSkuCandidate($value);
+    if ($value === '') {
+        return '';
+    }
+
+    // OCR commonly confuses these pairs in compact alphanumeric SKUs.
+    // Apply the equivalence only while comparing against a known item code;
+    // the original detected value remains unchanged unless it is matched.
+    return strtr($value, array(
+        '5' => 'S',
+        '0' => 'O',
+    ));
+}
+
 function scoreShopeeSkuCandidate($candidate)
 {
     $candidate = strtoupper(trim((string) $candidate));
@@ -2340,17 +2377,23 @@ function extractShopeeOrderId($cleanText, $html, $pdfSourceText = '', $rawPdfCon
 {
     $orderId = '';
 
-    if ((string) $pdfSourceText !== '') {
+    // Embedded PDF links are generated from the actual order identifier and
+    // are more reliable than OCR/text-layer output for ambiguous glyphs.
+    if ((string) $rawPdfContent !== '') {
+        $orderId = extractShopeeOrderIdFromPdfBinary($rawPdfContent);
+    }
+
+    if ($orderId === '' && (string) $html !== '') {
+        $orderId = extractShopeeOrderIdFromHtml((string) $html);
+    }
+
+    if ($orderId === '' && (string) $pdfSourceText !== '') {
         $orderId = extractPdfFieldByLabels($pdfSourceText, ['Order ID', 'Order SN', 'Order No', 'Order Number']);
         $orderId = normalizeShopeeOrderIdCandidate($orderId);
 
         if ($orderId === '') {
             $orderId = extractShopeeOrderIdFromText($pdfSourceText);
         }
-    }
-
-    if ($orderId === '' && (string) $html !== '') {
-        $orderId = extractShopeeOrderIdFromHtml((string) $html);
     }
 
     if ($orderId === '') {
@@ -2361,10 +2404,6 @@ function extractShopeeOrderId($cleanText, $html, $pdfSourceText = '', $rawPdfCon
         if (preg_match('/sale\/order\/([A-Za-z0-9\-_]{8,40})/i', (string) $html, $m)) {
             $orderId = normalizeShopeeOrderIdCandidate($m[1]);
         }
-    }
-
-    if ($orderId === '' && (string) $rawPdfContent !== '') {
-        $orderId = extractShopeeOrderIdFromPdfBinary($rawPdfContent);
     }
 
     return $orderId;
