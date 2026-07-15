@@ -357,6 +357,7 @@ define('CAONHD', 'asset_cash_on_hand_transaction');
 define('META_ADS_ACC', 'meta_ads_account');
 define('EXPENSE_TYPE', 'expense_type');
 define('FB_ADS_TOPUP', 'facebook_ads_topup_transaction');
+define('FB_ADS_WHT_SUBMISSION', 'facebook_ads_topup_wht_submission');
 define('COUNTRIES', 'countries');
 define('MRCHT_COMM', 'merchant_commission');
 define('BANK_TRANS_BACKUP', 'bank_transaction_backup');
