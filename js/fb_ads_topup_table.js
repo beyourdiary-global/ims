@@ -1,5 +1,28 @@
 ﻿//export notification
 $(document).ready(function ($) {
+  function collectSelectedFbAdsTopupIds() {
+    var selectedIds = [];
+
+    $("#fb_ads_topup_trans_table")
+      .DataTable()
+      .rows({ search: "applied", page: "current" })
+      .nodes()
+      .to$()
+      .find(".export:checked")
+      .each(function () {
+        String($(this).val() || "")
+          .split(",")
+          .forEach(function (id) {
+            id = id.trim();
+            if (/^\d+$/.test(id) && selectedIds.indexOf(id) === -1) {
+              selectedIds.push(id);
+            }
+          });
+      });
+
+    return selectedIds;
+  }
+
   $(document).on("change", ".exportAll", function (event) {
     //checkbox handling
     event.preventDefault();
@@ -15,22 +38,7 @@ $(document).ready(function ($) {
   });
 
   $('a[name="exportBtn"]').on("click", function () {
-    var checkboxValues = [];
-
-    // Loop through all pages to collect checked checkboxes
-    $("#fb_ads_topup_trans_table")
-      .DataTable()
-      .rows({ search: "applied", page: "current" })
-      .nodes()
-      .to$()
-      .each(function () {
-        var checkbox = $(this).find(".export:checked");
-        if (checkbox.length > 0) {
-          checkbox.each(function () {
-            checkboxValues.push($(this).val());
-          });
-        }
-      });
+    var checkboxValues = collectSelectedFbAdsTopupIds();
 
     if (checkboxValues.length > 0) {
       console.log("Checked row IDs:", checkboxValues);
@@ -53,6 +61,19 @@ $(document).ready(function ($) {
     } else {
       showNotification("Please select data to export.", "warning");
     }
+  });
+
+  $('a[name="submitSubmissionBtn"]').on("click", function (event) {
+    event.preventDefault();
+
+    var selectedIds = collectSelectedFbAdsTopupIds();
+    if (selectedIds.length === 0) {
+      showNotification("Please select data to submit.", "warning");
+      return;
+    }
+
+    window.location.href =
+      "fb_ads_topup_wht_submission.php?ids=" + encodeURIComponent(selectedIds.join(","));
   });
 });
 
