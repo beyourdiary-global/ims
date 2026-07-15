@@ -2972,6 +2972,11 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
     case "ErrMO":
       title = msg;
       break;
+    case "CONFIRM":
+      title = "Confirm Action";
+      title2 = "Are You Sure Want To " + pagename + " ?";
+      btn = "Confirm";
+      break;
     case "NC":
       title = "No changes were made.";
       break;
@@ -3001,7 +3006,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
       title = "Error";
   }
 
-  if (act !== "ErrMO") {
+  if (act !== "ErrMO" && act !== "CONFIRM") {
     clearLocalStoragePreservingCustomerRecordFilters();
   }
 
@@ -3019,7 +3024,7 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
   }
 
   let firstContent =
-    act == "D" || act == "LD" || act == "LA" || act == "LC" ? title2 : title;
+    act == "D" || act == "LD" || act == "LA" || act == "LC" || act == "CONFIRM" ? title2 : title;
 
   const modalElem = document.createElement("div");
   modalElem.id = "modal-confirm-action";
@@ -3061,6 +3066,30 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
         </div>
     </div>
     `;
+  if (act == "CONFIRM") {
+    document.body.appendChild(modalElem);
+    const myModal = new bootstrap.Modal(modalElem, {
+      keyboard: false,
+      backdrop: "static",
+    });
+    myModal.show();
+
+    return new Promise((resolve) => {
+      document.body.addEventListener("click", response);
+
+      function response(e) {
+        let confirmed = false;
+        if (e.target.id == "rejectBtn") confirmed = false;
+        else if (e.target.id == "acceptBtn") confirmed = true;
+        else return;
+
+        document.body.removeEventListener("click", response);
+        cleanupConfirmationModal(myModal, modalElem);
+        resolve(confirmed);
+      }
+    });
+  }
+
   if (act == "D" || act == "LD" || act == "LA" || act == "LC") {
     document.body.appendChild(modalElem);
     const myModal = new bootstrap.Modal(modalElem, {
@@ -3224,6 +3253,20 @@ async function confirmationDialog(id, msg, pagename, path, pathreturn, act) {
       }
     });
   }
+}
+
+function commonConfirmFormSubmit(form, actionLabel) {
+  if (!form) {
+    return false;
+  }
+
+  confirmationDialog("", "", actionLabel || "Confirm Action", "", "", "CONFIRM").then(function (confirmed) {
+    if (confirmed) {
+      HTMLFormElement.prototype.submit.call(form);
+    }
+  });
+
+  return false;
 }
 
 /* Rate Checking */

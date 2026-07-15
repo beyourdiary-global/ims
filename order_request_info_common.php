@@ -40,6 +40,10 @@ if (!$canViewPage) {
 
 shopeeOmsEnsureRealtimePostponedSync($connect, $finance_connect);
 
+if (empty($_SESSION['csrf_token'])) {
+    $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+}
+
 $requestId = (int) (!empty(input('id')) ? input('id') : post('id'));
 if ($orderRequestInfoRedirectPage === '') {
     $orderRequestInfoRedirectPage = isset($sourceConfig['table_redirect_url']) ? (string) $sourceConfig['table_redirect_url'] : '';
@@ -77,6 +81,31 @@ $orderConnect = shopeeOmsGetOrderSourceDbConnection($connect, $finance_connect, 
 $requestRow = shopeeOmsLoadOrder($orderConnect, $requestId, $sourceConfig);
 if (empty($requestRow)) {
     echo '<script>alert("Request not found.");location.href = "' . $redirectPage . '";</script>';
+    exit;
+}
+
+if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('resendTelegramBtn')) {
+    $submittedToken = (string) post('csrf_token');
+    $infoRedirectUrl = (string) ($_SERVER['REQUEST_URI'] ?? '');
+    if ($infoRedirectUrl === '') {
+        $infoRedirectUrl = $redirectPage;
+    }
+
+    if (!hash_equals((string) $_SESSION['csrf_token'], $submittedToken)) {
+        renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $infoRedirectUrl, 1200, true);
+        exit;
+    }
+
+    $resendResult = shopeeOmsResendWarehouseNotification(
+        $connect,
+        $finance_connect,
+        $requestId,
+        $orderRequestInfoSource,
+        USER_ID,
+        $pageTitle
+    );
+    $resendMessage = (string) (isset($resendResult['message']) ? $resendResult['message'] : 'Unable to resend Telegram message.');
+    renderNotificationScript($resendMessage, !empty($resendResult['sent']) ? 'success' : 'error', $infoRedirectUrl, 1200, true);
     exit;
 }
 
@@ -274,6 +303,18 @@ $customerFieldLabel = $platform === 'shopee' ? 'Shopee Buyer Username' : $platfo
                                 </div>
                             <?php } else { ?>
                                 <div class="alert alert-warning mb-0"><?= htmlspecialchars($qrUnavailableMessage !== '' ? $qrUnavailableMessage : 'QR image is not available for this order yet.', ENT_QUOTES, 'UTF-8') ?></div>
+                            <?php } ?>
+                            <?php if (shopeeOmsNormalizeStatusCode(isset($requestRow['order_status']) ? $requestRow['order_status'] : '') === 'TP') { ?>
+                                <div class="mt-2">
+                                    <form method="post" onsubmit="return commonConfirmFormSubmit(this, 'Resend Telegram Message');">
+                                        <input type="hidden" name="id" value="<?= (int) $requestId ?>">
+                                        <input type="hidden" name="csrf_token" value="<?= htmlspecialchars((string) $_SESSION['csrf_token'], ENT_QUOTES, 'UTF-8') ?>">
+                                        <input type="hidden" name="resendTelegramBtn" value="1">
+                                        <button type="submit" class="btn btn-sm btn-rounded btn-info" name="resendTelegramBtn" value="1" title="Resend Telegram Message">
+                                            <i class="fa-brands fa-telegram me-1"></i> Resend Telegram Message
+                                        </button>
+                                    </form>
+                                </div>
                             <?php } ?>
                         </div>
                         <div class="col-md-8">
