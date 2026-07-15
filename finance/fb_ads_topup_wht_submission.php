@@ -10,6 +10,22 @@ $listPageRedirectPage = $SITEURL . '/finance/fb_ads_topup_wht_submission.php';
 $listPageDeleteRedirectPage = $SITEURL . '/finance/fb_ads_topup_wht_submission_table.php';
 $sourcePageUrl = $SITEURL . '/finance/fb_ads_topup_trans_table.php';
 $listPageUrl = $SITEURL . '/finance/fb_ads_topup_wht_submission_table.php';
+
+if (!function_exists('fbAdsWhtSubmissionRenderDuplicateDialog')) {
+    function fbAdsWhtSubmissionRenderDuplicateDialog($duplicateDetails, $returnUrl)
+    {
+        $messageLines = fbAdsWhtSubmissionFormatDuplicateMessages($duplicateDetails);
+        $messageHtml = '<span style="display:block; font-size:16px; line-height:1.5; text-align:left;">';
+        foreach ($messageLines as $messageLine) {
+            $messageHtml .= htmlspecialchars($messageLine, ENT_QUOTES, 'UTF-8') . '<br><br>';
+        }
+        $messageHtml .= '</span>';
+
+        echo '<script>document.addEventListener("DOMContentLoaded",function(){confirmationDialog("",' . json_encode($messageHtml, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ',"","",' . json_encode($returnUrl, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ',"ErrMO");});</script>';
+        exit;
+    }
+}
+
 $submissionId = (int) input('id');
 $requestedAction = strtoupper(trim((string) input('act')));
 $formError = '';
@@ -86,9 +102,9 @@ if (post('actionBtn') === 'submitWhtSubmission' || post('actionBtn') === 'update
             if (empty($selectedIds) || count($rows) !== count($selectedIds)) {
                 $formError = 'One or more selected Facebook Ads transactions are no longer available.';
             } else {
-                $duplicateIds = fbAdsWhtSubmissionGetDuplicateSourceIds($finance_connect, $selectedIds);
-                if (!empty($duplicateIds)) {
-                    $formError = 'The selected record is already submitted at FB-Ads WHT Submission.';
+                $duplicateDetails = fbAdsWhtSubmissionGetDuplicateDetails($finance_connect, $selectedIds);
+                if (!empty($duplicateDetails)) {
+                    fbAdsWhtSubmissionRenderDuplicateDialog($duplicateDetails, $sourcePageUrl);
                 }
             }
         } else {
@@ -123,13 +139,13 @@ if (post('actionBtn') === 'submitWhtSubmission' || post('actionBtn') === 'update
             $transactionSuccess = true;
             if ($isCreate) {
                 $lockedRows = fbAdsWhtSubmissionGetSourceRows($finance_connect, $selectedIds, true);
-                $lockedDuplicateIds = fbAdsWhtSubmissionGetDuplicateSourceIds($finance_connect, $selectedIds);
+                $lockedDuplicateDetails = fbAdsWhtSubmissionGetDuplicateDetails($finance_connect, $selectedIds);
                 if (count($lockedRows) !== count($selectedIds)) {
                     $transactionSuccess = false;
                     $formError = 'One or more selected Facebook Ads transactions are no longer available.';
-                } elseif (!empty($lockedDuplicateIds)) {
-                    $transactionSuccess = false;
-                    $formError = 'The selected record is already submitted at FB-Ads WHT Submission.';
+                } elseif (!empty($lockedDuplicateDetails)) {
+                    mysqli_rollback($finance_connect);
+                    fbAdsWhtSubmissionRenderDuplicateDialog($lockedDuplicateDetails, $sourcePageUrl);
                 } else {
                     $rows = $lockedRows;
                     $submissionRef = fbAdsWhtSubmissionGenerateRef();
@@ -205,10 +221,9 @@ if ($mode === 'create' && empty($rows)) {
         exit;
     }
 
-    $duplicateIds = fbAdsWhtSubmissionGetDuplicateSourceIds($finance_connect, $selectedIds);
-    if (!empty($duplicateIds)) {
-        renderNotificationScript('The selected record is already submitted at FB-Ads WHT Submission.', 'error', $sourcePageUrl);
-        exit;
+    $duplicateDetails = fbAdsWhtSubmissionGetDuplicateDetails($finance_connect, $selectedIds);
+    if (!empty($duplicateDetails)) {
+        fbAdsWhtSubmissionRenderDuplicateDialog($duplicateDetails, $sourcePageUrl);
     }
 }
 
