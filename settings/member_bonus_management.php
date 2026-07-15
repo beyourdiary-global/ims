@@ -16,7 +16,10 @@ $pinAccess = checkCurrentPin($connect, $pageTitle);
 $redirectPage = $SITEURL . '/dashboard.php';
 $pageUrl = $SITEURL . '/settings/member_bonus_management.php';
 $canView = isActionAllowed('View', $pinAccess);
-$canManage = isActionAllowed('Add', $pinAccess) || isActionAllowed('Edit', $pinAccess);
+$canAdd = isActionAllowed('Add', $pinAccess);
+$canEdit = isActionAllowed('Edit', $pinAccess);
+$canDelete = isActionAllowed('Delete', $pinAccess);
+$canManage = $canAdd || $canEdit || $canDelete;
 $fieldDisabled = $canManage ? '' : 'readonly disabled';
 $csrfSessionKey = 'member_bonus_management_csrf_token';
 $popupSessionKey = 'member_bonus_management_popup';
@@ -191,6 +194,20 @@ function memberBonusManagementDescribeSpecialRow($row)
     ));
 }
 
+function memberBonusManagementTierRowChanged($existingRow, $tierRow, $displayOrder)
+{
+    return trim((string) ($existingRow['tier_key'] ?? '')) !== (string) ($tierRow['tier_key'] ?? '')
+        || trim((string) ($existingRow['tier_name'] ?? '')) !== (string) ($tierRow['tier_name'] ?? '')
+        || trim((string) ($existingRow['requirement_type'] ?? 'register')) !== (string) ($tierRow['requirement_type'] ?? 'register')
+        || abs((float) ($existingRow['minimum_purchase_amount'] ?? 0) - (float) ($tierRow['minimum_purchase_amount'] ?? 0)) > 0.00001
+        || abs((float) ($existingRow['private_point_rate'] ?? 0) - (float) ($tierRow['private_point_rate'] ?? 0)) > 0.00001
+        || abs((float) ($existingRow['marketplace_point_rate'] ?? 0) - (float) ($tierRow['marketplace_point_rate'] ?? 0)) > 0.00001
+        || (int) ($existingRow['bonus_points'] ?? 0) !== (int) ($tierRow['bonus_points'] ?? 0)
+        || trim((string) ($existingRow['bonus_frequency'] ?? 'monthly')) !== (string) ($tierRow['bonus_frequency'] ?? 'monthly')
+        || trim((string) ($existingRow['remark'] ?? '')) !== (string) ($tierRow['remark'] ?? '')
+        || (int) ($existingRow['display_order'] ?? 0) !== (int) $displayOrder;
+}
+
 function memberBonusManagementWriteAudit($connect, $pageTitle, $logAct, $message, $queryTable, $query = '', $oldVal = '', $newVal = '', $changes = '')
 {
     audit_log(array(
@@ -351,6 +368,27 @@ if (post('actionBtn') === 'saveTierSetting') {
     if (empty($tierRows)) {
         $tierErrors[] = 'At least one member tier row is required.';
         $tierRows = array(memberBonusManagementBlankTierRow());
+    }
+
+    if (empty($tierErrors)) {
+        $retainedTierIds = array();
+        foreach ($tierRows as $tierIndex => $tierRow) {
+            $rowId = (int) ($tierRow['id'] ?? 0);
+            if ($rowId > 0 && isset($existingTierRowsById[$rowId])) {
+                $retainedTierIds[] = $rowId;
+                if (memberBonusManagementTierRowChanged($existingTierRowsById[$rowId], $tierRow, $tierIndex + 1) && !$canEdit) {
+                    $tierErrors[] = 'You do not have Edit PIN access for existing member tier settings.';
+                }
+            } else if ($rowId <= 0 && !$canAdd) {
+                $tierErrors[] = 'You do not have Add PIN access for new member tier settings.';
+            }
+        }
+
+        foreach ($existingTierRowsById as $existingId => $existingTierRow) {
+            if (!in_array((int) $existingId, $retainedTierIds, true) && !$canDelete) {
+                $tierErrors[] = 'You do not have Delete PIN access for removing member tier settings.';
+            }
+        }
     }
 
     if (empty($tierErrors)) {
@@ -529,7 +567,7 @@ if (post('actionBtn') === 'saveTierSetting') {
 }
 
 if (post('actionBtn') === 'saveSpecialBonusSetting') {
-    if (!$canManage) {
+    if (!$canEdit) {
         renderNotificationScript('You do not have permission to save Member Bonus Management special bonus settings.', 'error', $pageUrl, 1200, true);
         exit;
     }
@@ -860,12 +898,16 @@ if (empty($tierRows)) {
                                                 <?php if ($canManage) { ?>
                                                     <td>
                                                         <div class="d-flex gap-2 justify-content-center">
-                                                            <button type="button" class="member-bonus-action-btn member-bonus-add-btn" data-member-bonus-add="1" aria-label="Add row">
-                                                                <i class="fa-solid fa-square-plus"></i>
-                                                            </button>
-                                                            <button type="button" class="member-bonus-action-btn member-bonus-remove-btn" data-member-bonus-remove="1" aria-label="Remove row">
-                                                                <i class="fa-solid fa-trash-can"></i>
-                                                            </button>
+                                                            <?php if ($canAdd) { ?>
+                                                                <button type="button" class="member-bonus-action-btn member-bonus-add-btn" data-member-bonus-add="1" aria-label="Add row">
+                                                                    <i class="fa-solid fa-square-plus"></i>
+                                                                </button>
+                                                            <?php } ?>
+                                                            <?php if ($canDelete) { ?>
+                                                                <button type="button" class="member-bonus-action-btn member-bonus-remove-btn" data-member-bonus-remove="1" aria-label="Remove row">
+                                                                    <i class="fa-solid fa-trash-can"></i>
+                                                                </button>
+                                                            <?php } ?>
                                                         </div>
                                                     </td>
                                                 <?php } ?>
@@ -930,7 +972,7 @@ if (empty($tierRows)) {
                                 </table>
                             </div>
 
-                            <?php if ($canManage) { ?>
+                            <?php if ($canEdit) { ?>
                                 <div class="member-bonus-save-wrap">
                                     <button type="submit" class="btn btn-primary btn-rounded px-4 member-bonus-save-btn" name="actionBtn" value="saveSpecialBonusSetting">Save</button>
                                 </div>
@@ -981,12 +1023,16 @@ if (empty($tierRows)) {
                 </td>
                 <td>
                     <div class="d-flex gap-2 justify-content-center">
-                        <button type="button" class="member-bonus-action-btn member-bonus-add-btn" data-member-bonus-add="1" aria-label="Add row">
-                            <i class="fa-solid fa-square-plus"></i>
-                        </button>
-                        <button type="button" class="member-bonus-action-btn member-bonus-remove-btn" data-member-bonus-remove="1" aria-label="Remove row">
-                            <i class="fa-solid fa-trash-can"></i>
-                        </button>
+                        <?php if ($canAdd) { ?>
+                            <button type="button" class="member-bonus-action-btn member-bonus-add-btn" data-member-bonus-add="1" aria-label="Add row">
+                                <i class="fa-solid fa-square-plus"></i>
+                            </button>
+                        <?php } ?>
+                        <?php if ($canDelete) { ?>
+                            <button type="button" class="member-bonus-action-btn member-bonus-remove-btn" data-member-bonus-remove="1" aria-label="Remove row">
+                                <i class="fa-solid fa-trash-can"></i>
+                            </button>
+                        <?php } ?>
                     </div>
                 </td>
             </tr>

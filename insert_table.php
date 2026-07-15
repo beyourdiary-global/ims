@@ -1551,6 +1551,30 @@ function migrationEnsureColumnAfter($conn, $dbName, $tblName, $columnName, $afte
     }
 }
 
+function migrationEnsureDecimalColumn($conn, $dbName, $tblName, $columnName, $definitionSql, $successMessage)
+{
+    $safeDb = $conn->real_escape_string($dbName);
+    $safeTable = $conn->real_escape_string($tblName);
+    $safeColumn = $conn->real_escape_string($columnName);
+    $result = $conn->query("SELECT `DATA_TYPE`, `NUMERIC_SCALE` FROM `information_schema`.`COLUMNS` WHERE `TABLE_SCHEMA` = '" . $safeDb . "' AND `TABLE_NAME` = '" . $safeTable . "' AND `COLUMN_NAME` = '" . $safeColumn . "' LIMIT 1");
+    if (!$result || $result->num_rows === 0) {
+        return;
+    }
+
+    $row = $result->fetch_assoc();
+    if (strtolower((string) ($row['DATA_TYPE'] ?? '')) === 'decimal' && (int) ($row['NUMERIC_SCALE'] ?? -1) === 4) {
+        return;
+    }
+
+    $qualifiedTable = "`" . str_replace('`', '``', $dbName) . "`.`" . str_replace('`', '``', $tblName) . "`";
+    $qualifiedColumn = "`" . str_replace('`', '``', $columnName) . "`";
+    if ($conn->query("ALTER TABLE " . $qualifiedTable . " MODIFY COLUMN " . $qualifiedColumn . " " . trim((string) $definitionSql))) {
+        echo "<p style='color:blue;'>" . $successMessage . "</p>";
+    } else {
+        echo "<p style='color:red;'>Failed changing type for `" . $tblName . "`.`" . $columnName . "`: " . $conn->error . "</p>";
+    }
+}
+
 function migrationEnsureIndex($conn, $dbName, $tblName, $indexName, $alterSql, $successMessage)
 {
     if (!migrationIndexExists($conn, $dbName, $tblName, $indexName)) {
@@ -5116,9 +5140,9 @@ if ($conn->select_db($db_fin)) {
         `bonus_month` CHAR(7) DEFAULT NULL,
         `order_amount` DECIMAL(12,2) NOT NULL DEFAULT 0.00,
         `point_rate` DECIMAL(8,4) NOT NULL DEFAULT 0.0000,
-        `base_points` INT NOT NULL DEFAULT 0,
-        `bonus_points` INT NOT NULL DEFAULT 0,
-        `total_points` INT NOT NULL DEFAULT 0,
+        `base_points` DECIMAL(12,4) NOT NULL DEFAULT 0.0000,
+        `bonus_points` DECIMAL(12,4) NOT NULL DEFAULT 0.0000,
+        `total_points` DECIMAL(12,4) NOT NULL DEFAULT 0.0000,
         `point_status` VARCHAR(30) DEFAULT NULL,
         `usage_scope` VARCHAR(120) DEFAULT NULL,
         `expiry_date` DATE DEFAULT NULL,
@@ -5177,7 +5201,7 @@ if ($conn->select_db($db_fin)) {
         `customer_label` VARCHAR(255) DEFAULT NULL,
         `transaction_type` VARCHAR(30) NOT NULL DEFAULT 'earn',
         `wallet_type` VARCHAR(30) NOT NULL DEFAULT 'frozen',
-        `points_change` INT NOT NULL DEFAULT 0,
+        `points_change` DECIMAL(12,4) NOT NULL DEFAULT 0.0000,
         `source_platform` VARCHAR(20) DEFAULT NULL,
         `source_table` VARCHAR(80) DEFAULT NULL,
         `source_record_id` INT DEFAULT NULL,
@@ -5330,6 +5354,10 @@ if ($conn->select_db($db_fin)) {
 
     migrationEnsureColumn($conn, $db_cms, MEMBER_POINT_TRANSACTION, 'wallet_type', "ALTER TABLE `" . MEMBER_POINT_TRANSACTION . "` ADD COLUMN `wallet_type` VARCHAR(30) NOT NULL DEFAULT 'frozen' AFTER `transaction_type`", "Verified `" . MEMBER_POINT_TRANSACTION . "` includes `wallet_type`.");
     migrationEnsureIndex($conn, $db_cms, MEMBER_POINT_TRANSACTION, 'idx_member_point_tx_wallet', "ALTER TABLE `" . MEMBER_POINT_TRANSACTION . "` ADD INDEX `idx_member_point_tx_wallet` (`platform`, `customer_id`, `wallet_type`, `status`, `expiry_date`)", "Verified `" . MEMBER_POINT_TRANSACTION . "` wallet type index.");
+    migrationEnsureDecimalColumn($conn, $db_cms, MEMBER_POINT_LEDGER, 'base_points', 'DECIMAL(12,4) NOT NULL DEFAULT 0.0000', "Updated `" . MEMBER_POINT_LEDGER . "`.`base_points` to four-decimal points.");
+    migrationEnsureDecimalColumn($conn, $db_cms, MEMBER_POINT_LEDGER, 'bonus_points', 'DECIMAL(12,4) NOT NULL DEFAULT 0.0000', "Updated `" . MEMBER_POINT_LEDGER . "`.`bonus_points` to four-decimal points.");
+    migrationEnsureDecimalColumn($conn, $db_cms, MEMBER_POINT_LEDGER, 'total_points', 'DECIMAL(12,4) NOT NULL DEFAULT 0.0000', "Updated `" . MEMBER_POINT_LEDGER . "`.`total_points` to four-decimal points.");
+    migrationEnsureDecimalColumn($conn, $db_cms, MEMBER_POINT_TRANSACTION, 'points_change', 'DECIMAL(12,4) NOT NULL DEFAULT 0.0000', "Updated `" . MEMBER_POINT_TRANSACTION . "`.`points_change` to four-decimal points.");
 
     migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'airbill_no', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `airbill_no` VARCHAR(150) DEFAULT NULL AFTER `order_status`", "Verified `" . FB_ORDER_REQ . "` includes `airbill_no`.");
     migrationEnsureColumn($conn, $db_fin, FB_ORDER_REQ, 'airbill_attachment', "ALTER TABLE `" . FB_ORDER_REQ . "` ADD COLUMN `airbill_attachment` TEXT DEFAULT NULL AFTER `airbill_no`", "Verified `" . FB_ORDER_REQ . "` includes `airbill_attachment`.");

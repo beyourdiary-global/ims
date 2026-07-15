@@ -430,7 +430,7 @@ function memberPointParseAmount(value) {
 }
 
 function memberPointGetAvailablePoints() {
-    return parseInt($('#member_point_available_points').text() || '0', 10) || 0;
+    return parseFloat($('#member_point_available_points').text() || '0') || 0;
 }
 
 function memberPointGetUseType() {
@@ -602,7 +602,7 @@ function memberPointRenderLookup(payload, options) {
         linkedLabel = 'No member linked';
     }
 
-    $('#member_point_available_points').text(parseInt(payload.available_points || 0, 10));
+    $('#member_point_available_points').text((parseFloat(payload.available_points || 0) || 0).toFixed(4));
     $('#member_point_customer_summary').text(linkedLabel);
     $('#member_point_customer_search').val(customerLabel);
     $('#member_point_customer_label').val(customerLabel);
@@ -617,7 +617,7 @@ function memberPointClearState(clearInput) {
     }
     $('#member_point_customer_id').val('');
     $('#member_point_customer_label').val('');
-    $('#member_point_available_points').text('0');
+    $('#member_point_available_points').text('0.0000');
     $('#member_point_customer_summary').text('No member linked');
     memberPointRenderRewardSummary([]);
     if (!memberPointConfig.locked && !memberPointConfig.viewOnly) {

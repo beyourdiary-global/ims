@@ -908,7 +908,7 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                         $error = 1;
                     } else {
                         $memberPointRequiredPoints = (int) (isset($memberPointSelectedReward['point_tier']) ? $memberPointSelectedReward['point_tier'] : 0);
-                        $memberPointAvailablePoints = (int) (isset($memberPointLookup['available_points']) ? $memberPointLookup['available_points'] : 0);
+                        $memberPointAvailablePoints = (float) (isset($memberPointLookup['available_points']) ? $memberPointLookup['available_points'] : 0);
                         $memberPointEligibleRewardIds = array_map(function ($rewardRow) {
                             return isset($rewardRow['id']) ? (int) $rewardRow['id'] : 0;
                         }, isset($memberPointLookup['rewards']) && is_array($memberPointLookup['rewards']) ? $memberPointLookup['rewards'] : array());
@@ -927,7 +927,7 @@ if (post('actionBtn') || $forShouldSaveBeforeStatusUpdate) {
                         }
                     }
                 } else if ($memberPointUseType === 'cashback' && !$error) {
-                    $memberPointAvailablePoints = (int) (isset($memberPointLookup['available_points']) ? $memberPointLookup['available_points'] : 0);
+                    $memberPointAvailablePoints = (float) (isset($memberPointLookup['available_points']) ? $memberPointLookup['available_points'] : 0);
                     $memberPointOriginalPrice = $memberPointPostedOriginalPrice > 0 ? $memberPointPostedOriginalPrice : 0;
                     $memberPointCashbackPoints = max(0, (int) $memberPointPostedCashbackPoints);
 
@@ -1861,7 +1861,7 @@ if ($memberPointRenderUseType === 'gift' && $memberPointRenderRedeemId > 0 && !i
 }
 
 $memberPointRenderLinkedMember = fbOrderReqBuildLinkedMemberLabel($memberPointRenderPlatform, $memberPointRenderCustomerLabel);
-$memberPointRenderAvailablePoints = (int) (isset($memberPointRenderLookup['available_points']) ? $memberPointRenderLookup['available_points'] : 0);
+$memberPointRenderAvailablePoints = (float) (isset($memberPointRenderLookup['available_points']) ? $memberPointRenderLookup['available_points'] : 0);
 $memberPointRenderSummaryRewards = array();
 foreach ($memberPointRenderRewards as $memberPointRewardRow) {
     $memberPointRenderSummaryRewards[] = isset($memberPointRewardRow['display_text']) ? (string) $memberPointRewardRow['display_text'] : '';
@@ -2820,7 +2820,7 @@ foreach ($memberPointRenderRewards as $memberPointRewardRow) {
                             <div class="col-md-4 mb-3">
                                 <div class="member-point-summary-card">
                                     <h6>Available Points</h6>
-                                    <div id="member_point_available_points" class="member-point-summary-value"><?= (int) $memberPointRenderAvailablePoints ?></div>
+                                    <div id="member_point_available_points" class="member-point-summary-value"><?= htmlspecialchars(memberPointFormatPoints($memberPointRenderAvailablePoints), ENT_QUOTES, 'UTF-8') ?></div>
                                 </div>
                             </div>
                             <div class="col-md-4 mb-3">
