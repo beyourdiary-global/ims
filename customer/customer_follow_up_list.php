@@ -607,6 +607,78 @@ foreach ($messageShortcutOptions as $shortcutRow) {
 $customerTagOptions = function_exists('customerTagGetActiveTagOptions')
     ? (array) customerTagGetActiveTagOptions($connect)
     : array();
+$customerTagLabelOptions = array();
+foreach ($customerTagOptions as $tagOption) {
+    $tagId = isset($tagOption['id']) ? (int) $tagOption['id'] : 0;
+    $tagName = trim((string) (isset($tagOption['name']) ? $tagOption['name'] : ''));
+    if ($tagId <= 0 || $tagName === '') {
+        continue;
+    }
+
+    $customerTagLabelOptions[] = array(
+        'value' => 'tag:' . $tagId,
+        'label' => 'Tag: ' . $tagName,
+        'kind' => 'tag',
+        'id' => $tagId,
+        'type' => '',
+    );
+}
+
+foreach (array('segmentation', 'level', 'repeat') as $labelType) {
+    $labelConfig = function_exists('customerLabelGetTypeConfig')
+        ? customerLabelGetTypeConfig($labelType)
+        : array();
+    $labelTable = isset($labelConfig['table']) ? trim((string) $labelConfig['table']) : '';
+    if ($labelTable === '' || !tableExists($labelTable, $connect)) {
+        continue;
+    }
+
+    $labelSql = "SELECT `id`, `name` FROM `" . $labelTable . "` WHERE `status` = 'A' ORDER BY `name` ASC, `id` ASC";
+    $labelResult = mysqli_query($connect, $labelSql);
+    if (!($labelResult instanceof mysqli_result)) {
+        continue;
+    }
+
+    while ($labelRow = $labelResult->fetch_assoc()) {
+        $labelId = isset($labelRow['id']) ? (int) $labelRow['id'] : 0;
+        $labelName = trim((string) (isset($labelRow['name']) ? $labelRow['name'] : ''));
+        if ($labelId <= 0 || $labelName === '') {
+            continue;
+        }
+
+        $customerTagLabelOptions[] = array(
+            'value' => 'label:' . $labelType . ':' . $labelId,
+            'label' => ucfirst($labelType) . ': ' . $labelName,
+            'kind' => 'label',
+            'id' => $labelId,
+            'type' => $labelType,
+        );
+    }
+    $labelResult->free();
+}
+
+$customerTagLabelOptionMap = array();
+foreach ($customerTagLabelOptions as $tagLabelOption) {
+    $optionValue = isset($tagLabelOption['value']) ? (string) $tagLabelOption['value'] : '';
+    if ($optionValue !== '') {
+        $customerTagLabelOptionMap[$optionValue] = $tagLabelOption;
+    }
+}
+
+$customerTagLabelFilters = array();
+foreach (customerFollowUpPageReadRequestValues('customer_tag_label') as $tagLabelValue) {
+    $tagLabelValue = trim((string) $tagLabelValue);
+    if ($tagLabelValue !== '' && isset($customerTagLabelOptionMap[$tagLabelValue])) {
+        $customerTagLabelFilters[$tagLabelValue] = $customerTagLabelOptionMap[$tagLabelValue];
+    }
+}
+$customerTagLabelFilters = array_values($customerTagLabelFilters);
+$selectedCustomerTagLabelLabels = array_map(function ($tagLabelFilter) {
+    return isset($tagLabelFilter['label']) ? (string) $tagLabelFilter['label'] : '';
+}, $customerTagLabelFilters);
+$selectedCustomerTagLabelValues = array_map(function ($tagLabelFilter) {
+    return isset($tagLabelFilter['value']) ? (string) $tagLabelFilter['value'] : '';
+}, $customerTagLabelFilters);
 
 $assignedUsers = array();
 $assignedUserLabelsById = array();
@@ -767,6 +839,43 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
     $customerTagMapByPlatform[$rowPlatform] = function_exists('customerTagGetCustomerTagMap')
         ? (array) customerTagGetCustomerTagMap($connect, $rowPlatform, $platformCustomerIds)
         : array();
+}
+
+if (!empty($customerTagLabelFilters)) {
+    $rows = array_values(array_filter($rows, function ($row) use ($customerTagLabelFilters, $customerLabelMapByPlatform, $customerTagMapByPlatform) {
+        $rowPlatform = customerFollowUpNormalizePlatform(isset($row['platform']) ? $row['platform'] : '');
+        $rowCustomerId = isset($row['customer_id']) ? (int) $row['customer_id'] : 0;
+        if ($rowPlatform === '' || $rowCustomerId <= 0) {
+            return false;
+        }
+
+        $customerLabels = isset($customerLabelMapByPlatform[$rowPlatform][$rowCustomerId])
+            ? (array) $customerLabelMapByPlatform[$rowPlatform][$rowCustomerId]
+            : array();
+        $customerTags = isset($customerTagMapByPlatform[$rowPlatform][$rowCustomerId])
+            ? (array) $customerTagMapByPlatform[$rowPlatform][$rowCustomerId]
+            : array();
+
+        foreach ($customerTagLabelFilters as $tagLabelFilter) {
+            $filterKind = isset($tagLabelFilter['kind']) ? (string) $tagLabelFilter['kind'] : '';
+            $filterId = isset($tagLabelFilter['id']) ? (int) $tagLabelFilter['id'] : 0;
+            if ($filterKind === 'tag') {
+                foreach ($customerTags as $customerTag) {
+                    if ((int) (isset($customerTag['tag_id']) ? $customerTag['tag_id'] : 0) === $filterId) {
+                        return true;
+                    }
+                }
+            } elseif ($filterKind === 'label') {
+                $filterType = isset($tagLabelFilter['type']) ? (string) $tagLabelFilter['type'] : '';
+                $customerLabel = isset($customerLabels[$filterType]) ? (array) $customerLabels[$filterType] : array();
+                if ((int) (isset($customerLabel['id']) ? $customerLabel['id'] : 0) === $filterId) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }));
 }
 ?>
     <style>
@@ -1365,6 +1474,36 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
                                                 <input class="form-check-input customer-record-filter-checkbox" type="checkbox" name="customer_type[]" value="return" id="customer_type_return" <?= in_array('return', $customerTypeFilters, true) ? 'checked' : '' ?>>
                                                 <label class="form-check-label" for="customer_type_return">Return</label>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+                                <div>
+                                    <label class="form-label" for="customer_tag_label">Customer Tag / Label</label>
+                                    <div class="dropdown customer-record-filter-dropdown follow-up-filter-multiselect" data-follow-up-multiselect="customer_tag_label">
+                                        <button
+                                            class="customer-record-filter-dropdown-toggle"
+                                            type="button"
+                                            id="customer_tag_label"
+                                            data-placeholder="All Tags / Labels"
+                                            aria-expanded="false"><?= htmlspecialchars(customerFollowUpPageBuildMultiSelectButtonLabel($selectedCustomerTagLabelLabels, 'All Tags / Labels'), ENT_QUOTES, 'UTF-8') ?></button>
+                                        <div class="dropdown-menu" aria-labelledby="customer_tag_label">
+                                            <div class="form-check">
+                                                <input class="form-check-input customer-record-filter-checkbox" type="checkbox" value="" id="customer_tag_label_all" <?= empty($customerTagLabelFilters) ? 'checked' : '' ?>>
+                                                <label class="form-check-label" for="customer_tag_label_all">All Tags / Labels</label>
+                                            </div>
+                                            <?php foreach ($customerTagLabelOptions as $tagLabelOption) {
+                                                $optionValue = isset($tagLabelOption['value']) ? (string) $tagLabelOption['value'] : '';
+                                                $optionLabel = isset($tagLabelOption['label']) ? (string) $tagLabelOption['label'] : '';
+                                                if ($optionValue === '' || $optionLabel === '') {
+                                                    continue;
+                                                }
+                                                $optionId = 'customer_tag_label_' . preg_replace('/[^a-zA-Z0-9_-]/', '_', $optionValue);
+                                                ?>
+                                                <div class="form-check">
+                                                    <input class="form-check-input customer-record-filter-checkbox" type="checkbox" name="customer_tag_label[]" value="<?= htmlspecialchars($optionValue, ENT_QUOTES, 'UTF-8') ?>" id="<?= htmlspecialchars($optionId, ENT_QUOTES, 'UTF-8') ?>" <?= in_array($optionValue, $selectedCustomerTagLabelValues, true) ? 'checked' : '' ?>>
+                                                    <label class="form-check-label" for="<?= htmlspecialchars($optionId, ENT_QUOTES, 'UTF-8') ?>"><?= htmlspecialchars($optionLabel, ENT_QUOTES, 'UTF-8') ?></label>
+                                                </div>
+                                            <?php } ?>
                                         </div>
                                     </div>
                                 </div>
