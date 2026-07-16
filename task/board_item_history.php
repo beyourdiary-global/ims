@@ -15,10 +15,10 @@ if (!function_exists('taskRenderBoardItemHistorySection')) {
                 <div class="task-item-activity-toolbar">
                     <ul class="nav nav-tabs task-item-activity-tabs" role="tablist">
                         <li class="nav-item" role="presentation">
-                            <button id="taskItemActivityTabAll" class="nav-link active task-item-activity-tab" type="button" role="tab" aria-selected="true" aria-controls="taskItemActivityPanelAll" data-tab-target="all">All</button>
+                            <button id="taskItemActivityTabAll" class="nav-link task-item-activity-tab" type="button" role="tab" aria-selected="false" aria-controls="taskItemActivityPanelAll" data-tab-target="all">All</button>
                         </li>
                         <li class="nav-item" role="presentation">
-                            <button id="taskItemActivityTabComment" class="nav-link task-item-activity-tab" type="button" role="tab" aria-selected="false" aria-controls="taskItemActivityPanelComment" data-tab-target="comment">Comments</button>
+                            <button id="taskItemActivityTabComment" class="nav-link active task-item-activity-tab" type="button" role="tab" aria-selected="true" aria-controls="taskItemActivityPanelComment" data-tab-target="comment">Comments</button>
                         </li>
                         <li class="nav-item" role="presentation">
                             <button id="taskItemActivityTabHistory" class="nav-link task-item-activity-tab" type="button" role="tab" aria-selected="false" aria-controls="taskItemActivityPanelHistory" data-tab-target="history">History</button>
@@ -34,13 +34,13 @@ if (!function_exists('taskRenderBoardItemHistorySection')) {
                     </div>
                 </div>
 
-                <div id="taskItemActivityPanelAll" class="task-item-activity-panel task-item-activity-tab-panel is-active" role="tabpanel" aria-labelledby="taskItemActivityTabAll">
+                <div id="taskItemActivityPanelAll" class="task-item-activity-panel task-item-activity-tab-panel d-none" role="tabpanel" aria-labelledby="taskItemActivityTabAll">
                 <div id="taskItemActivityAllList" class="task-item-activity-feed">
                     <div class="task-item-activity-empty">No activity yet.</div>
                 </div>
                 </div>
 
-                <div id="taskItemActivityPanelComment" class="task-item-activity-panel task-item-activity-tab-panel d-none" role="tabpanel" aria-labelledby="taskItemActivityTabComment">
+                <div id="taskItemActivityPanelComment" class="task-item-activity-panel task-item-activity-tab-panel is-active" role="tabpanel" aria-labelledby="taskItemActivityTabComment">
                 <div id="taskItemCommentDraftNotice" class="task-item-comment-draft-line d-none">
                     <span id="taskItemCommentDraftRestoreBtn" class="task-item-comment-draft-link" role="button" tabindex="0">• You have an unsaved comment</span>
                 </div>

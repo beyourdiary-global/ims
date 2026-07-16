@@ -431,7 +431,7 @@ var itemDetailModalState = {
   history: [],
   historyRequestSeq: 0,
   activityCollapsed: false,
-  activityTab: "all",
+  activityTab: "comment",
   activitySortDirection: "desc",
   worklogRequestSeq: 0,
 };

@@ -3263,7 +3263,7 @@ function openItemDetailModal($card) {
   itemDetailModalState.childWorkItemsCollapsed = false;
   itemDetailModalState.history = [];
   itemDetailModalState.activityCollapsed = false;
-  itemDetailModalState.activityTab = "all";
+  itemDetailModalState.activityTab = "comment";
   itemDetailModalState.activitySortDirection = "desc";
   itemDetailModalState.detailsCollapsed = false;
   itemDetailModalState.initialSaveSnapshot = "";
@@ -3282,7 +3282,7 @@ function openItemDetailModal($card) {
   setAttachmentPanelCollapsed(false);
   renderItemAttachments([]);
   renderItemHistoryPanels();
-  setItemActivityTab("all");
+  setItemActivityTab("comment");
   setSelectedStatusLabels([]);
   renderStatusLabelOptions("");
   renderDetailAssigneeSelect(0);
@@ -6373,7 +6373,7 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
   itemDetailModalState.childWorkItemsCollapsed = false;
   itemDetailModalState.history = [];
   itemDetailModalState.activityCollapsed = false;
-  itemDetailModalState.activityTab = "all";
+  itemDetailModalState.activityTab = "comment";
   itemDetailModalState.activitySortDirection = "desc";
   $(".task-item-detail-title-row").removeClass("is-editing");
   $("#taskItemDetailDescriptionInput").val("");
@@ -6404,7 +6404,7 @@ $(document).on("hidden.bs.modal", "#taskItemDetailModal", function () {
 
   applyWorklogTimerUi();
   renderItemHistoryPanels();
-  setItemActivityTab("all");
+  setItemActivityTab("comment");
 });
 
 function getDropTargetElement($list, y, $dragItem) {
