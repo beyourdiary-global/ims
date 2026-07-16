@@ -682,10 +682,36 @@ if (!function_exists('shopeeOrderDetailPdfExtractVoucherAmount')) {
         }
 
         $normalizedText = shopeeOrderDetailPdfNormalizeText($text);
-        $labelPattern = '(?:shop|seller)\s+voucher\s+paid\s+by\s+seller';
+        $feeAmount = shopeeOrderDetailPdfParseAmountByLabels($text, array('Fees & Charges', 'Fees and Charges'));
+        $voucherBoundaryLabels = array(
+            'Fees & Charges',
+            'Fees and Charges',
+            'Estimated Order Income',
+            'Order Income',
+            'Final Amount',
+        );
 
-        if (preg_match('/' . $labelPattern . '.{0,180}?-\s*(?:RM|MYR|SGD|USD)?\s*([0-9][0-9,]*\.[0-9]{2})/i', $normalizedText, $matches)) {
-            return shopeeOrderDetailPdfNormalizeAmount(isset($matches[1]) ? $matches[1] : '');
+        $sectionPattern = '/(?:vouchers\s*(?:&|and)\s*rebates)(.*?)(?=(?:fees\s*(?:&|and)\s*charges|estimated\s+order\s+income|order\s+income|final\s+amount)\b|$)/is';
+        if (preg_match($sectionPattern, $normalizedText, $sectionMatch)) {
+            if (preg_match_all('/-\s*(?:RM|MYR|SGD|USD)?\s*([0-9][0-9,]*\.[0-9]{2})/i', (string) $sectionMatch[1], $sectionAmounts)) {
+                foreach ((array) $sectionAmounts[1] as $rawAmount) {
+                    $amount = shopeeOrderDetailPdfNormalizeAmount($rawAmount);
+                    if ($amount !== '' && ($feeAmount === '' || $amount !== $feeAmount)) {
+                        return $amount;
+                    }
+                }
+            }
+        }
+
+        $strictAmount = shopeeOrderDetailPdfExtractAmountByStrictLabels(
+            $text,
+            array('Shop voucher paid by seller', 'Seller voucher paid by seller'),
+            $voucherBoundaryLabels,
+            180,
+            true
+        );
+        if ($strictAmount !== '' && ($feeAmount === '' || $strictAmount !== $feeAmount)) {
+            return $strictAmount;
         }
 
         $lines = shopeeOrderDetailPdfGetTextLines($text);
@@ -696,16 +722,34 @@ if (!function_exists('shopeeOrderDetailPdfExtractVoucherAmount')) {
                 continue;
             }
 
-            $nearText = $lineText;
-            for ($j = 1; $j <= 3; $j++) {
-                if (isset($lines[$i + $j])) {
-                    $nearText .= ' ' . trim((string) $lines[$i + $j]);
+            for ($j = 0; $j <= 2; $j++) {
+                if (!isset($lines[$i + $j])) {
+                    break;
+                }
+
+                $nearLine = trim((string) $lines[$i + $j]);
+                if ($j > 0 && preg_match('/^\s*(?:fees\s*(?:&|and)\s*charges|estimated\s+order\s+income|order\s+income|final\s+amount)\b/i', $nearLine)) {
+                    break;
+                }
+
+                if (preg_match('/-\s*(?:RM|MYR|SGD|USD)?\s*([0-9][0-9,]*\.[0-9]{2})/i', $nearLine, $matches)) {
+                    $amount = shopeeOrderDetailPdfNormalizeAmount(isset($matches[1]) ? $matches[1] : '');
+                    if ($amount !== '' && ($feeAmount === '' || $amount !== $feeAmount)) {
+                        return $amount;
+                    }
                 }
             }
+        }
 
-            if (preg_match_all('/-\s*(?:RM|MYR|SGD|USD)?\s*([0-9][0-9,]*\.[0-9]{2})/i', $nearText, $matches) && !empty($matches[1])) {
-                $amount = end($matches[1]);
-                return shopeeOrderDetailPdfNormalizeAmount($amount);
+        $labelPattern = '(?:shop|seller)\s+voucher\s+paid\s+by\s+seller';
+        if (preg_match('/' . $labelPattern . '.{0,360}/i', $normalizedText, $labelMatch)) {
+            if (preg_match_all('/-\s*(?:RM|MYR|SGD|USD)?\s*([0-9][0-9,]*\.[0-9]{2})/i', (string) $labelMatch[0], $labelAmounts)) {
+                foreach ((array) $labelAmounts[1] as $rawAmount) {
+                    $amount = shopeeOrderDetailPdfNormalizeAmount($rawAmount);
+                    if ($amount !== '' && ($feeAmount === '' || $amount !== $feeAmount)) {
+                        return $amount;
+                    }
+                }
             }
         }
 
