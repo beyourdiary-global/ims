@@ -20,7 +20,7 @@
                     <div class="col-12 col-lg-8 task-item-detail-main-col">
                         <div class="mb-3">
                             <div class="task-item-detail-title-row">
-                                <textarea id="taskItemDetailTitleInput" class="form-control task-item-detail-title-input" rows="2" maxlength="255" placeholder="Work item name"></textarea>
+                                <textarea id="taskItemDetailTitleInput" class="form-control task-item-detail-title-input" rows="1" maxlength="255" placeholder="Work item name"></textarea>
                                 <button id="taskItemDetailTitleSaveBtn" class="btn task-item-detail-title-btn task-item-detail-title-btn-save" type="button" title="Save title" aria-label="Save title">
                                     <i class="fa-solid fa-check"></i>
                                 </button>

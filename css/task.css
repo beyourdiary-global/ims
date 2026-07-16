@@ -2614,7 +2614,7 @@ body.task-board-page .task-board-scroll {
   min-width: 0;
   width: 100%;
   height: auto;
-  min-height: calc(2 * 1.2em + 0.6rem);
+  min-height: 0;
   max-height: none;
   resize: none !important;
   overflow-wrap: anywhere;
@@ -3295,9 +3295,14 @@ body.task-board-page .task-board-scroll {
 
 .task-item-detail-title-row {
   display: flex;
-  align-items: center;
-  gap: 0.4rem;
+  align-items: flex-start;
+  gap: 0.25rem;
   min-width: 0;
+}
+
+.task-item-detail-title-row:not(.is-editing) {
+  width: 100%;
+  gap: 0;
 }
 
 .task-item-detail-title-row .form-control {
@@ -3309,17 +3314,23 @@ body.task-board-page .task-board-scroll {
   box-shadow: none !important;
   background: transparent;
   color: #2e333b;
-  font-size: clamp(1.8rem, 1.1rem + 1vw, 2.35rem);
+  font-size: 32px;
   font-weight: 600;
   line-height: 1.2;
   letter-spacing: -0.03em;
-  padding: 0.3rem 0.4rem;
+  padding: 0.2rem 0.25rem;
   border-radius: 8px;
   height: auto;
-  min-height: calc(2 * 1.2em + 0.6rem);
+  min-height: 0;
   max-height: none;
   resize: none !important;
   overflow: hidden;
+}
+
+.task-item-detail-title-row:not(.is-editing) .task-item-detail-title-input {
+  flex: 1 1 100%;
+  width: 100%;
+  padding: 0;
 }
 
 .task-item-detail-title-row.is-editing .task-item-detail-title-input {
@@ -3367,6 +3378,14 @@ body.task-board-page .task-board-scroll {
   transition: opacity 0.15s ease;
 }
 
+.task-item-detail-title-row:not(.is-editing) .task-item-detail-title-btn {
+  display: none;
+}
+
+.task-item-detail-title-row.is-editing .task-item-detail-title-btn {
+  display: inline-flex;
+}
+
 .task-item-detail-title-row.is-editing .task-item-detail-title-btn {
   opacity: 1;
   pointer-events: auto;
@@ -3401,16 +3420,21 @@ body.task-board-page .task-board-scroll {
 .task-item-detail-add-wrap {
   display: inline-flex;
   align-items: center;
+  margin-top: 0.25rem !important;
 }
 
 .task-item-detail-add-btn {
-  width: 40px;
-  min-width: 40px;
-  height: 40px;
+  width: 32px;
+  min-width: 32px;
+  height: 32px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: 5px;
+}
+
+#taskItemDetailModal .task-item-detail-main-col > .mb-3:first-child {
+  margin-bottom: 0.5rem !important;
 }
 
 .task-item-detail-add-menu {
@@ -4661,7 +4685,7 @@ body.task-board-page .task-board-scroll {
   width: 100%;
   min-height: 44px;
   text-align: left;
-  border: 0;
+  border: 1px solid #dfe1e6;
   border-radius: 10px;
   background: #ffffff;
   color: #44546f;

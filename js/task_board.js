@@ -3057,6 +3057,7 @@ function saveItemCoreFromModal(closeAfterSave) {
       if (settings.exitTitleEditModeOnSuccess) {
         itemDetailModalState.titleEditing = false;
         $(".task-item-detail-title-row").removeClass("is-editing");
+        resizeItemDetailTitleInput();
       }
 
       if (settings.exitDescriptionEditModeOnSuccess) {
@@ -3110,6 +3111,7 @@ function setItemDetailTitleEditMode(isEditing) {
   var editing = !!isEditing && canEdit;
   itemDetailModalState.titleEditing = editing;
   $(".task-item-detail-title-row").toggleClass("is-editing", editing);
+  resizeItemDetailTitleInput({ fitFont: false });
 }
 
 function resetItemDetailTitleEdit() {
@@ -3117,8 +3119,8 @@ function resetItemDetailTitleEdit() {
   $("#taskItemDetailTitleInput").val(
     String(itemDetailModalState.initialTitle || ""),
   );
-  resizeItemDetailTitleInput();
   setItemDetailTitleEditMode(false);
+  resizeItemDetailTitleInput({ fitFont: true });
 }
 
 function scheduleItemDetailCoreAutosave(delay) {
@@ -3206,7 +3208,6 @@ function openItemDetailModal($card) {
   };
 
   $("#taskItemDetailTitleInput").val(title);
-  resizeItemDetailTitleInput();
   $("#taskItemDetailDescriptionInput").val(description);
   setItemDetailTitleEditMode(false);
   setDescriptionPanelCollapsed(false);
@@ -3327,13 +3328,15 @@ function openItemDetailModal($card) {
   $("#taskItemDetailSecondAmendTimeInput").val("");
   openWorklogTimerForItem(itemId);
   loadItemAttachments(itemId);
-  loadItemDetail(itemId);
   loadItemHistory(itemId);
   loadItemWorklogs(itemId);
   if (typeof loadItemComments === "function") {
     loadItemComments(itemId);
   }
+
+  loadItemDetail(itemId);
   modal.show();
+  resizeItemDetailTitleInput({ fitFont: true });
 }
 
 function buildWorkItemPermalink(itemId) {
@@ -7452,18 +7455,101 @@ bindTaskBoardTouchSwipeScroll();
 window.setTimeout(safeRefreshBoardUi, 120);
 window.setTimeout(safeRefreshBoardUi, 420);
 
-function resizeItemDetailTitleInput() {
+function resizeItemDetailTitleInput(options) {
   var titleInput = document.getElementById("taskItemDetailTitleInput");
   if (!titleInput) {
     return;
   }
 
+  var settings = options || {};
+  var fitFont = settings.fitFont !== false;
+  var titleRow = titleInput.closest(".task-item-detail-title-row");
+  var wasEditing = !!titleRow && titleRow.classList.contains("is-editing");
+  if (fitFont && wasEditing) {
+    // Measure the font against the full display width so clicking into edit
+    // mode does not change the title size when the action buttons appear.
+    titleRow.classList.remove("is-editing");
+  }
+
+  titleInput.rows = 1;
+  titleInput.style.minHeight = "0px";
+  titleInput.style.maxHeight = "none";
   titleInput.style.height = "auto";
-  titleInput.style.height = titleInput.scrollHeight + "px";
+
+  if (fitFont) {
+    titleInput.style.fontSize = "32px";
+
+    var fontSize = titleFontSizeForLineCount(
+      getItemDetailTitleLineCount(titleInput, titleRow),
+    );
+    titleInput.style.fontSize = fontSize + "px";
+
+    // Changing the font can change wrapping. Re-measure once after applying
+    // the first size so the final font follows the final visible line count.
+    var finalLineCount = getItemDetailTitleLineCount(titleInput, titleRow);
+    var finalFontSize = titleFontSizeForLineCount(finalLineCount);
+    if (finalFontSize !== fontSize) {
+      titleInput.style.fontSize = finalFontSize + "px";
+    }
+
+    if (wasEditing) {
+      titleRow.classList.add("is-editing");
+    }
+  }
+
+  titleInput.style.height =
+    measureItemDetailTitleNaturalHeight(titleInput, titleRow) + "px";
+}
+
+function getItemDetailTitleLineCount(titleInput, titleRow) {
+  var computedStyle = window.getComputedStyle(titleInput);
+  var lineHeight = parseFloat(computedStyle.lineHeight) || 38.4;
+  var paddingTop = parseFloat(computedStyle.paddingTop) || 0;
+  var paddingBottom = parseFloat(computedStyle.paddingBottom) || 0;
+  var naturalHeight = measureItemDetailTitleNaturalHeight(
+    titleInput,
+    titleRow,
+  );
+  var contentHeight = Math.max(
+    0,
+    naturalHeight - paddingTop - paddingBottom,
+  );
+  return Math.max(1, Math.ceil(contentHeight / lineHeight));
+}
+
+function titleFontSizeForLineCount(lineCount) {
+  return Math.max(12, 32 - (Math.max(1, Number(lineCount || 1)) - 1) * 4);
+}
+
+function measureItemDetailTitleNaturalHeight(titleInput, titleRow) {
+  var parent = titleRow || titleInput.parentElement;
+  if (!parent) {
+    return Math.max(1, titleInput.scrollHeight);
+  }
+
+  var clone = titleInput.cloneNode(false);
+  clone.removeAttribute("id");
+  clone.value = titleInput.value;
+  clone.rows = 1;
+  clone.style.position = "absolute";
+  clone.style.left = "0px";
+  clone.style.top = "0px";
+  clone.style.width =
+    Math.max(1, Math.ceil(titleInput.getBoundingClientRect().width)) + "px";
+  clone.style.height = "auto";
+  clone.style.minHeight = "0px";
+  clone.style.maxHeight = "none";
+  clone.style.visibility = "hidden";
+  clone.style.pointerEvents = "none";
+  clone.style.overflow = "hidden";
+  parent.appendChild(clone);
+  var naturalHeight = Math.max(1, clone.scrollHeight);
+  parent.removeChild(clone);
+  return naturalHeight;
 }
 
 $(document).on("input", "#taskItemDetailTitleInput", function () {
-  resizeItemDetailTitleInput();
+  resizeItemDetailTitleInput({ fitFont: false });
 });
 
 $(window).on("resize", function () {
@@ -7471,5 +7557,8 @@ $(window).on("resize", function () {
 });
 
 $(document).on("shown.bs.modal", "#taskItemDetailModal", function () {
-  resizeItemDetailTitleInput();
+  // Bootstrap lays out the modal only after its show transition starts. The
+  // initial resize can therefore see a zero-width hidden modal; resize once
+  // more using the real popup width before the user interacts with the title.
+  resizeItemDetailTitleInput({ fitFont: true });
 });
