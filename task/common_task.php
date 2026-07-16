@@ -4488,7 +4488,10 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
             $lastColumnSortOrder = isset($lastColumnRow['max_sort_order']) ? (int) $lastColumnRow['max_sort_order'] : 0;
         }
 
-        $sql = "SELECT id,title,priority,assignee_user_id,sort_order,time_tracking,original_estimate,column_id,project_key_id
+        $sql = "SELECT id,title,priority,assignee_user_id,reporter_user_id,work_type_id,parent_item_id,
+                       sort_order,time_tracking,remaining_estimate_seconds,original_estimate,column_id,project_key_id,
+                       task_status,start_date,due_date,amendement_date,amendement_time,
+                       second_amendement_date,second_amendement_time
                 FROM " . TASK_ITEM . "
                 WHERE status='A' AND (
                     parent_item_id='" . $epicItemId . "'
@@ -4509,19 +4512,75 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
         }
 
         $itemRows = array();
+        $itemIds = array();
         $columnIds = array();
         $projectKeyIds = array();
         $assigneeIds = array();
+        $reporterIds = array();
+        $workTypeIds = array();
+        $parentIds = array();
         while ($row = $result->fetch_assoc()) {
             $itemRows[] = $row;
+            $itemIds[] = isset($row['id']) ? (int) $row['id'] : 0;
             $columnIds[] = isset($row['column_id']) ? (int) $row['column_id'] : 0;
             $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
             $assigneeIds[] = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+            $reporterIds[] = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
+            $workTypeIds[] = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+            $parentIds[] = isset($row['parent_item_id']) ? (int) $row['parent_item_id'] : 0;
         }
 
         $columnMap = taskFetchColumnInfoMap($connect, $columnIds, true);
         $projectKeyMap = taskFetchProjectKeyMap($connect, $projectKeyIds, true);
         $assigneeMap = taskFetchUserDisplayMap($connect, $assigneeIds, true);
+        $reporterMap = taskFetchUserDisplayMap($connect, $reporterIds, true);
+        $workTypeMap = taskFetchWorkTypeInfoMap($connect, $workTypeIds, true);
+        $labelsMap = taskGetItemLabelsByItemIds($connect, $itemIds);
+        $statusLabelMap = array();
+        foreach (taskGetStatusLabels($connect) as $statusLabel) {
+            $statusLabelId = isset($statusLabel['id']) ? (int) $statusLabel['id'] : 0;
+            if ($statusLabelId > 0) {
+                $statusLabelMap[$statusLabelId] = $statusLabel;
+            }
+        }
+
+        $parentMap = array();
+        $defaultParentDisplay = '';
+        $parentIds = taskUniquePositiveIntIds($parentIds);
+        if (!empty($parentIds)) {
+            $parentSql = "SELECT id,title,project_key_id FROM " . TASK_ITEM . " WHERE status='A' AND id IN (" . implode(',', $parentIds) . ")";
+            $parentResult = mysqli_query($connect, $parentSql);
+            $parentRows = array();
+            $parentProjectKeyIds = array();
+            if ($parentResult) {
+                while ($parentRow = $parentResult->fetch_assoc()) {
+                    $parentRows[] = $parentRow;
+                    $parentProjectKeyIds[] = isset($parentRow['project_key_id']) ? (int) $parentRow['project_key_id'] : 0;
+                }
+            }
+            $parentProjectKeyMap = taskFetchProjectKeyMap($connect, $parentProjectKeyIds, true);
+            foreach ($parentRows as $parentRow) {
+                $parentId = isset($parentRow['id']) ? (int) $parentRow['id'] : 0;
+                if ($parentId <= 0) {
+                    continue;
+                }
+                $parentProjectKeyId = isset($parentRow['project_key_id']) ? (int) $parentRow['project_key_id'] : 0;
+                $parentProjectKey = isset($parentProjectKeyMap[$parentProjectKeyId]) ? (string) $parentProjectKeyMap[$parentProjectKeyId] : $defaultProjectKey;
+                $parentMap[$parentId] = trim(taskBuildWorkItemKey($parentProjectKey, $parentId) . ' ' . (isset($parentRow['title']) ? (string) $parentRow['title'] : ''));
+            }
+        }
+        $epicParentSql = "SELECT title,project_key_id FROM " . TASK_ITEM . " WHERE id='" . $epicItemId . "' AND status='A' LIMIT 1";
+        $epicParentResult = mysqli_query($connect, $epicParentSql);
+        if ($epicParentResult && $epicParentResult->num_rows > 0) {
+            $epicParentRow = $epicParentResult->fetch_assoc();
+            $epicProjectKeyId = isset($epicParentRow['project_key_id']) ? (int) $epicParentRow['project_key_id'] : 0;
+            $epicProjectKey = isset($projectKeyMap[$epicProjectKeyId]) ? (string) $projectKeyMap[$epicProjectKeyId] : '';
+            if ($epicProjectKey === '') {
+                $epicProjectKeyMap = taskFetchProjectKeyMap($connect, array($epicProjectKeyId), true);
+                $epicProjectKey = isset($epicProjectKeyMap[$epicProjectKeyId]) ? (string) $epicProjectKeyMap[$epicProjectKeyId] : $defaultProjectKey;
+            }
+            $defaultParentDisplay = trim(taskBuildWorkItemKey($epicProjectKey, $epicItemId) . ' ' . (isset($epicParentRow['title']) ? (string) $epicParentRow['title'] : ''));
+        }
 
         foreach ($itemRows as $row) {
             $itemId = isset($row['id']) ? (int) $row['id'] : 0;
@@ -4555,18 +4614,53 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
             );
 
             $assigneeUserId = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+            $reporterUserId = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
+            $workTypeId = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+            $workTypeName = isset($workTypeMap[$workTypeId]['name']) ? (string) $workTypeMap[$workTypeId]['name'] : 'Task';
+            $parentItemId = isset($row['parent_item_id']) ? (int) $row['parent_item_id'] : 0;
+            $taskStatusLabelIds = taskParseCsvIdList(isset($row['task_status']) ? $row['task_status'] : '');
+            $taskStatusLabels = array();
+            foreach ($taskStatusLabelIds as $taskStatusLabelId) {
+                if (isset($statusLabelMap[$taskStatusLabelId])) {
+                    $taskStatusLabels[] = $statusLabelMap[$taskStatusLabelId];
+                }
+            }
+            $estimateValue = isset($estimateInfo['value']) ? (int) $estimateInfo['value'] : 0;
+            $estimateUnit = isset($estimateInfo['unit']) ? (string) $estimateInfo['unit'] : 'minutes';
 
             $summary['items'][] = array(
                 'id' => $itemId,
                 'work_item_key' => taskBuildWorkItemKey($projectKey, $itemId),
                 'title' => isset($row['title']) ? (string) $row['title'] : '',
                 'priority' => taskNormalizePriority(isset($row['priority']) ? $row['priority'] : 'Medium'),
+                'original_estimate' => isset($row['original_estimate']) && $row['original_estimate'] !== null
+                    ? (string) $row['original_estimate']
+                    : '',
+                'original_estimate_value' => $estimateValue,
+                'original_estimate_unit' => $estimateUnit,
+                'labels' => isset($labelsMap[$itemId]) ? $labelsMap[$itemId] : array(),
                 'assignee_user_id' => $assigneeUserId,
                 'assignee_name' => isset($assigneeMap[$assigneeUserId]) ? (string) $assigneeMap[$assigneeUserId] : '',
+                'reporter_user_id' => $reporterUserId,
+                'reporter_name' => isset($reporterMap[$reporterUserId]) ? (string) $reporterMap[$reporterUserId] : '',
+                'work_type_id' => $workTypeId,
+                'work_type_name' => $workTypeName,
+                'parent_item_id' => $parentItemId,
+                'parent_display' => isset($parentMap[$parentItemId]) ? (string) $parentMap[$parentItemId] : $defaultParentDisplay,
+                'task_status' => isset($row['task_status']) && $row['task_status'] !== null ? (string) $row['task_status'] : '',
+                'task_status_label_ids' => $taskStatusLabelIds,
+                'task_status_labels' => $taskStatusLabels,
                 'column_id' => $columnId,
                 'status_name' => $statusName,
                 'is_done' => $isDone ? 1 : 0,
                 'time_tracking' => $timeTracking !== '' ? $timeTracking : 'No time logged',
+                'remaining_estimate_seconds' => isset($row['remaining_estimate_seconds']) && $row['remaining_estimate_seconds'] !== null ? (int) $row['remaining_estimate_seconds'] : null,
+                'due_date' => isset($row['due_date']) && $row['due_date'] !== null ? (string) $row['due_date'] : '',
+                'start_date' => isset($row['start_date']) && $row['start_date'] !== null ? (string) $row['start_date'] : '',
+                'amendement_date' => isset($row['amendement_date']) && $row['amendement_date'] !== null ? (string) $row['amendement_date'] : '',
+                'amendement_time' => isset($row['amendement_time']) && $row['amendement_time'] !== null ? (string) $row['amendement_time'] : '',
+                'second_amendement_date' => isset($row['second_amendement_date']) && $row['second_amendement_date'] !== null ? (string) $row['second_amendement_date'] : '',
+                'second_amendement_time' => isset($row['second_amendement_time']) && $row['second_amendement_time'] !== null ? (string) $row['second_amendement_time'] : '',
             );
         }
 
@@ -4579,6 +4673,874 @@ if (!function_exists('taskGetEpicChildWorkItemsSummary')) {
         }
 
         return $summary;
+    }
+}
+
+if (!function_exists('taskGetBulkChildWorkItems')) {
+    function taskGetBulkChildWorkItems($connect, $projectId, $parentItemId, $limit = 0)
+    {
+        $projectId = (int) $projectId;
+        $parentItemId = (int) $parentItemId;
+        $limit = (int) $limit;
+        $items = array();
+
+        if ($projectId <= 0 || $parentItemId <= 0) {
+            return $items;
+        }
+
+        $sql = "SELECT id,project_id,column_id,title,work_type_id,project_key_id,
+                       assignee_user_id,reporter_user_id,priority,original_estimate,
+                       task_status,parent_item_id,time_tracking,remaining_estimate_seconds,
+                       start_date,due_date,amendement_date,amendement_time,
+                       second_amendement_date,second_amendement_time,sort_order
+                FROM " . TASK_ITEM . "
+                WHERE status='A' AND project_id='" . $projectId . "' AND (
+                    parent_item_id='" . $parentItemId . "'
+                    OR id IN (
+                        SELECT r.child_board_item_id
+                        FROM " . TASK_ITEM_RELATION . " r
+                        WHERE r.parent_board_item_id='" . $parentItemId . "' AND r.status='A'
+                    )
+                )
+                ORDER BY sort_order ASC, id ASC";
+        if ($limit > 0) {
+            $sql .= " LIMIT " . ($limit + 1);
+        }
+
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return $items;
+        }
+
+        $rows = array();
+        $itemIds = array();
+        $columnIds = array();
+        $projectKeyIds = array();
+        $workTypeIds = array();
+        $userIds = array();
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+            $itemIds[] = isset($row['id']) ? (int) $row['id'] : 0;
+            $columnIds[] = isset($row['column_id']) ? (int) $row['column_id'] : 0;
+            $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+            $workTypeIds[] = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+            $userIds[] = isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0;
+            $userIds[] = isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0;
+        }
+
+        $projectKeySetting = taskGetProjectKeySetting($connect, $projectId);
+        $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
+        $columnMap = taskFetchColumnInfoMap($connect, $columnIds, true);
+        $projectKeyMap = taskFetchProjectKeyMap($connect, $projectKeyIds, true);
+        $workTypeMap = taskFetchWorkTypeInfoMap($connect, $workTypeIds, true);
+        $userMap = taskFetchUserDisplayMap($connect, $userIds, true);
+        $labelsMap = taskGetItemLabelsByItemIds($connect, $itemIds);
+        $lastColumnSortOrder = 0;
+        $lastColumnSql = "SELECT MAX(sort_order) AS max_sort_order FROM " . TASK_COLUMN . " WHERE status='A' AND project_id='" . $projectId . "'";
+        $lastColumnRst = mysqli_query($connect, $lastColumnSql);
+        if ($lastColumnRst && $lastColumnRst->num_rows > 0) {
+            $lastColumnRow = $lastColumnRst->fetch_assoc();
+            $lastColumnSortOrder = isset($lastColumnRow['max_sort_order']) ? (int) $lastColumnRow['max_sort_order'] : 0;
+        }
+
+        foreach ($rows as $row) {
+            $itemId = isset($row['id']) ? (int) $row['id'] : 0;
+            if ($itemId <= 0) {
+                continue;
+            }
+
+            $projectKeyId = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
+            $projectKey = isset($projectKeyMap[$projectKeyId]) ? (string) $projectKeyMap[$projectKeyId] : '';
+            if ($projectKey === '') {
+                $projectKey = taskNormalizeProjectKey($defaultProjectKey);
+            }
+
+            $workTypeId = isset($row['work_type_id']) ? (int) $row['work_type_id'] : 0;
+            $workTypeName = isset($workTypeMap[$workTypeId]['name']) ? (string) $workTypeMap[$workTypeId]['name'] : 'Task';
+            $columnId = isset($row['column_id']) ? (int) $row['column_id'] : 0;
+            $columnInfo = isset($columnMap[$columnId]) ? $columnMap[$columnId] : array('name' => '', 'sort_order' => 0);
+            $statusName = isset($columnInfo['name']) ? trim((string) $columnInfo['name']) : '';
+            $columnSortOrder = isset($columnInfo['sort_order']) ? (int) $columnInfo['sort_order'] : 0;
+            $estimate = taskParseOriginalEstimate(isset($row['original_estimate']) ? $row['original_estimate'] : '');
+            $labels = isset($labelsMap[$itemId]) ? $labelsMap[$itemId] : array();
+            $labelIds = array();
+            foreach ($labels as $label) {
+                $labelId = isset($label['id']) ? (int) $label['id'] : 0;
+                if ($labelId > 0) {
+                    $labelIds[] = $labelId;
+                }
+            }
+
+            $items[] = array(
+                'id' => $itemId,
+                'project_id' => isset($row['project_id']) ? (int) $row['project_id'] : $projectId,
+                'work_item_key' => taskBuildWorkItemKey($projectKey, $itemId),
+                'title' => isset($row['title']) ? (string) $row['title'] : '',
+                'work_type_id' => $workTypeId,
+                'work_type_name' => $workTypeName,
+                'parent_item_id' => isset($row['parent_item_id']) ? (int) $row['parent_item_id'] : 0,
+                'priority' => taskNormalizePriority(isset($row['priority']) ? $row['priority'] : 'Medium'),
+                'original_estimate' => isset($row['original_estimate']) && $row['original_estimate'] !== null ? (string) $row['original_estimate'] : '',
+                'original_estimate_value' => isset($estimate['value']) ? (int) $estimate['value'] : 0,
+                'original_estimate_unit' => isset($estimate['unit']) ? (string) $estimate['unit'] : 'minutes',
+                'task_status' => isset($row['task_status']) && $row['task_status'] !== null ? (string) $row['task_status'] : '',
+                'task_status_label_ids' => taskParseCsvIdList(isset($row['task_status']) ? $row['task_status'] : ''),
+                'label_ids' => array_values(array_unique($labelIds)),
+                'labels' => $labels,
+                'assignee_user_id' => isset($row['assignee_user_id']) ? (int) $row['assignee_user_id'] : 0,
+                'assignee_name' => isset($userMap[(int) $row['assignee_user_id']]) ? (string) $userMap[(int) $row['assignee_user_id']] : '',
+                'reporter_user_id' => isset($row['reporter_user_id']) ? (int) $row['reporter_user_id'] : 0,
+                'reporter_name' => isset($userMap[(int) $row['reporter_user_id']]) ? (string) $userMap[(int) $row['reporter_user_id']] : '',
+                'column_id' => $columnId,
+                'status_name' => $statusName,
+                'is_done' => taskIsDoneColumnName($statusName) || ($lastColumnSortOrder > 0 && $columnSortOrder >= $lastColumnSortOrder) ? 1 : 0,
+                'time_tracking' => isset($row['time_tracking']) && $row['time_tracking'] !== null ? (string) $row['time_tracking'] : '',
+                'remaining_estimate_seconds' => isset($row['remaining_estimate_seconds']) && $row['remaining_estimate_seconds'] !== null ? (int) $row['remaining_estimate_seconds'] : null,
+                'start_date' => isset($row['start_date']) && $row['start_date'] !== null ? (string) $row['start_date'] : '',
+                'due_date' => isset($row['due_date']) && $row['due_date'] !== null ? (string) $row['due_date'] : '',
+                'amendement_date' => isset($row['amendement_date']) && $row['amendement_date'] !== null ? (string) $row['amendement_date'] : '',
+                'amendement_time_minutes' => taskSqlTimeToMinutes(isset($row['amendement_time']) ? $row['amendement_time'] : ''),
+                'second_amendement_date' => isset($row['second_amendement_date']) && $row['second_amendement_date'] !== null ? (string) $row['second_amendement_date'] : '',
+                'second_amendement_time_minutes' => taskSqlTimeToMinutes(isset($row['second_amendement_time']) ? $row['second_amendement_time'] : ''),
+            );
+        }
+
+        return $items;
+    }
+}
+
+if (!function_exists('taskGetBulkChildSelection')) {
+    function taskGetBulkChildSelection($connect, $projectId, $parentItemId, $itemIds, $maxItems = 1000)
+    {
+        $projectId = (int) $projectId;
+        $parentItemId = (int) $parentItemId;
+        $maxItems = max(1, (int) $maxItems);
+        $itemIds = taskUniquePositiveIntIds($itemIds);
+        if ($projectId <= 0 || $parentItemId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid project or parent work item.', 'items' => array());
+        }
+        if (empty($itemIds)) {
+            return array('ok' => 0, 'message' => 'Select at least one child work item.', 'items' => array());
+        }
+        if (count($itemIds) > $maxItems) {
+            return array('ok' => 0, 'message' => 'Bulk changes are limited to ' . $maxItems . ' work items.', 'items' => array());
+        }
+
+        $parentSql = "SELECT id,project_id,work_type_id FROM " . TASK_ITEM . " WHERE id='" . $parentItemId . "' AND status='A' LIMIT 1";
+        $parentRst = mysqli_query($connect, $parentSql);
+        if (!$parentRst || $parentRst->num_rows === 0) {
+            return array('ok' => 0, 'message' => 'Parent work item not found.', 'items' => array());
+        }
+        $parentRow = $parentRst->fetch_assoc();
+        if ((int) $parentRow['project_id'] !== $projectId) {
+            return array('ok' => 0, 'message' => 'Parent work item does not belong to this project.', 'items' => array());
+        }
+        $parentTypes = taskFetchWorkTypeInfoMap($connect, array((int) $parentRow['work_type_id']), true);
+        $parentTypeName = isset($parentTypes[(int) $parentRow['work_type_id']]['name']) ? $parentTypes[(int) $parentRow['work_type_id']]['name'] : '';
+        if (!taskIsParentWorkTypeName($parentTypeName)) {
+            return array('ok' => 0, 'message' => 'Bulk edit is available only for parent work items.', 'items' => array());
+        }
+
+        $allItems = taskGetBulkChildWorkItems($connect, $projectId, $parentItemId, 0);
+        $itemMap = array();
+        foreach ($allItems as $item) {
+            $itemMap[(int) $item['id']] = $item;
+        }
+        $selectedItems = array();
+        $missingIds = array();
+        foreach ($itemIds as $itemId) {
+            if (!isset($itemMap[$itemId])) {
+                $missingIds[] = $itemId;
+                continue;
+            }
+            $selectedItems[] = $itemMap[$itemId];
+        }
+        if (!empty($missingIds)) {
+            return array('ok' => 0, 'message' => 'One or more selected work items are no longer active children of this parent.', 'items' => array(), 'missing_ids' => $missingIds);
+        }
+
+        return array(
+            'ok' => 1,
+            'message' => '',
+            'items' => $selectedItems,
+            'all_items' => $allItems,
+            'parent' => array('id' => $parentItemId, 'project_id' => $projectId, 'work_type_name' => (string) $parentTypeName),
+        );
+    }
+}
+
+if (!function_exists('taskGetBulkChildPageData')) {
+    function taskGetBulkChildPageData($connect, $projectId, $parentItemId)
+    {
+        $projectId = (int) $projectId;
+        $parentItemId = (int) $parentItemId;
+        if ($projectId <= 0 || $parentItemId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid project or parent work item.', 'items' => array());
+        }
+
+        $parentResult = mysqli_query(
+            $connect,
+            "SELECT id,project_id,title,work_type_id,project_key_id
+             FROM " . TASK_ITEM . "
+             WHERE id='" . $parentItemId . "' AND project_id='" . $projectId . "' AND status='A'
+             LIMIT 1"
+        );
+        if (!$parentResult || $parentResult->num_rows === 0) {
+            return array('ok' => 0, 'message' => 'Parent work item not found.', 'items' => array());
+        }
+
+        $parentRow = $parentResult->fetch_assoc();
+        $workTypeId = isset($parentRow['work_type_id']) ? (int) $parentRow['work_type_id'] : 0;
+        $workTypeMap = taskFetchWorkTypeInfoMap($connect, array($workTypeId), true);
+        $workTypeName = isset($workTypeMap[$workTypeId]['name']) ? (string) $workTypeMap[$workTypeId]['name'] : '';
+        if (!taskIsParentWorkTypeName($workTypeName)) {
+            return array('ok' => 0, 'message' => 'Bulk edit is available only for parent work items.', 'items' => array());
+        }
+
+        $projectKeyMap = taskFetchProjectKeyMap($connect, array((int) $parentRow['project_key_id']), true);
+        $projectKey = isset($projectKeyMap[(int) $parentRow['project_key_id']]) ? (string) $projectKeyMap[(int) $parentRow['project_key_id']] : '';
+        if ($projectKey === '') {
+            $projectKeySetting = taskGetProjectKeySetting($connect, $projectId);
+            $projectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
+        }
+        $parent = array(
+            'id' => $parentItemId,
+            'project_id' => $projectId,
+            'work_item_key' => taskBuildWorkItemKey($projectKey, $parentItemId),
+            'title' => isset($parentRow['title']) ? (string) $parentRow['title'] : '',
+            'work_type_name' => $workTypeName,
+        );
+
+        return array(
+            'ok' => 1,
+            'message' => '',
+            'parent' => $parent,
+            'items' => taskGetBulkChildWorkItems($connect, $projectId, $parentItemId, 0),
+        );
+    }
+}
+
+if (!function_exists('taskBulkNormalizeLabelOperation')) {
+    function taskBulkNormalizeLabelOperation($operation)
+    {
+        $operation = strtolower(trim((string) $operation));
+        return in_array($operation, array('replace', 'add', 'clear', 'remove'), true) ? $operation : '';
+    }
+}
+
+if (!function_exists('taskBulkResolveLabelIds')) {
+    function taskBulkResolveLabelIds($connect, $values, $isStatusLabel, $currentUserId, $cdate, $ctime)
+    {
+        $ids = array();
+        $names = array();
+        $seenNames = array();
+        foreach ((array) $values as $value) {
+            $id = 0;
+            $name = '';
+            if (is_array($value)) {
+                $id = isset($value['id']) ? (int) $value['id'] : 0;
+                $name = isset($value['name']) ? trim((string) $value['name']) : '';
+            } elseif (is_numeric($value) && (int) $value > 0) {
+                $id = (int) $value;
+            } else {
+                $name = trim((string) $value);
+            }
+
+            if ($id > 0) {
+                $ids[] = $id;
+            } elseif ($name !== '') {
+                $lookup = strtolower($name);
+                if (!isset($seenNames[$lookup])) {
+                    $seenNames[$lookup] = true;
+                    $names[] = $name;
+                }
+            }
+        }
+
+        foreach ($names as $name) {
+            $created = $isStatusLabel
+                ? taskCreateStatusLabel($connect, $name, $currentUserId, $cdate, $ctime)
+                : taskCreateLabel($connect, $name, $currentUserId, $cdate, $ctime);
+            if (empty($created['ok'])) {
+                return array('ok' => 0, 'message' => isset($created['message']) ? $created['message'] : 'Failed to create label.');
+            }
+            $createdLabel = $isStatusLabel ? (isset($created['statusLabel']) ? $created['statusLabel'] : array()) : (isset($created['label']) ? $created['label'] : array());
+            $createdId = isset($createdLabel['id']) ? (int) $createdLabel['id'] : 0;
+            if ($createdId <= 0) {
+                return array('ok' => 0, 'message' => 'Failed to resolve the selected label.');
+            }
+            $ids[] = $createdId;
+        }
+
+        $ids = taskUniquePositiveIntIds($ids);
+        if (empty($ids)) {
+            return array('ok' => 1, 'ids' => array());
+        }
+        $table = $isStatusLabel ? TASK_STATUS_LABEL : TASK_LABEL;
+        $result = mysqli_query($connect, "SELECT id FROM " . $table . " WHERE status='A' AND id IN (" . implode(',', $ids) . ")");
+        if (!$result) {
+            return array('ok' => 0, 'message' => 'One or more selected labels are not available.');
+        }
+        $found = array();
+        while ($row = $result->fetch_assoc()) {
+            $found[] = (int) $row['id'];
+        }
+        sort($found);
+        $expected = $ids;
+        sort($expected);
+        if ($found !== $expected) {
+            return array('ok' => 0, 'message' => $isStatusLabel ? 'One or more selected task status labels are not available.' : 'One or more selected labels are not available.');
+        }
+        return array('ok' => 1, 'ids' => $ids);
+    }
+}
+
+if (!function_exists('taskBulkApplyLabelOperation')) {
+    function taskBulkApplyLabelOperation($currentIds, $selectedIds, $operation)
+    {
+        $currentIds = taskUniquePositiveIntIds($currentIds);
+        $selectedIds = taskUniquePositiveIntIds($selectedIds);
+        if ($operation === 'clear') {
+            return array();
+        }
+        if ($operation === 'add') {
+            return taskUniquePositiveIntIds(array_merge($currentIds, $selectedIds));
+        }
+        if ($operation === 'remove') {
+            return array_values(array_diff($currentIds, $selectedIds));
+        }
+        return $selectedIds;
+    }
+}
+
+if (!function_exists('taskBulkApplyChildOperation')) {
+    function taskBulkApplyChildOperation($connect, $projectId, $parentItemId, $itemIds, $operation, $changes, $currentUserId, $cdate, $ctime)
+    {
+        $projectId = (int) $projectId;
+        $parentItemId = (int) $parentItemId;
+        $operation = strtolower(trim((string) $operation));
+        $changes = is_array($changes) ? $changes : array();
+        $currentUserId = (int) $currentUserId;
+        $selection = taskGetBulkChildSelection($connect, $projectId, $parentItemId, $itemIds, 1000);
+        if (empty($selection['ok'])) {
+            return $selection;
+        }
+
+        $editOperation = $operation === 'edit';
+        $moveOperation = $operation === 'move';
+        $transitionOperation = $operation === 'transition';
+        $deleteOperation = $operation === 'delete';
+        if (!$editOperation && !$moveOperation && !$transitionOperation && !$deleteOperation) {
+            return array('ok' => 0, 'message' => 'Invalid bulk operation.');
+        }
+
+        $requiredAction = $deleteOperation ? 'delete' : 'edit';
+        if (!taskUserCanWorkItemAction($connect, $projectId, $requiredAction, $currentUserId)) {
+            return array('ok' => 0, 'message' => 'You do not have permission to perform this bulk operation.');
+        }
+
+        $fields = isset($changes['fields']) && is_array($changes['fields']) ? $changes['fields'] : array();
+        $fieldValue = function ($key, $default = null) use ($fields) {
+            return isset($fields[$key]) && is_array($fields[$key]) && array_key_exists('value', $fields[$key])
+                ? $fields[$key]['value']
+                : $default;
+        };
+        $fieldEnabled = function ($key) use ($fields) {
+            return isset($fields[$key]) && is_array($fields[$key]) && !empty($fields[$key]['enabled']);
+        };
+        $fieldPermissionMap = array(
+            'assignee' => 'assignee_name',
+            'reporter' => 'reporter_name',
+            'priority' => 'priority',
+            'original_estimate' => 'original_estimate',
+            'labels' => 'labels',
+            'task_status' => 'task_status',
+            'start_date' => 'start_date',
+            'due_date' => 'due_date',
+            'amendement_date' => 'amendement_date',
+            'amendement_time' => 'amendement_time_minutes',
+            'second_amendement_date' => 'second_amendement_date',
+            'second_amendement_time' => 'second_amendement_time_minutes',
+        );
+
+        foreach ($fieldPermissionMap as $fieldKey => $columnKey) {
+            if ($editOperation && $fieldEnabled($fieldKey)) {
+                if (!taskUserCanColumnFieldAction($connect, $projectId, $columnKey, 'edit', $currentUserId)) {
+                    return array('ok' => 0, 'message' => 'You do not have permission to edit ' . $columnKey . '.');
+                }
+            }
+        }
+
+        if ($moveOperation && $fieldEnabled('parent')
+            && !taskUserCanColumnFieldAction($connect, $projectId, 'parent_display', 'edit', $currentUserId)) {
+            return array('ok' => 0, 'message' => 'You do not have permission to edit Parent.');
+        }
+
+        $assigneeId = (int) $fieldValue('assignee', 0);
+        $reporterId = (int) $fieldValue('reporter', 0);
+        $priority = taskNormalizePriority($fieldValue('priority', 'Medium'));
+        $estimateValue = max(0, (int) $fieldValue('original_estimate_value', 0));
+        $estimateUnit = taskNormalizeEstimateUnit($fieldValue('original_estimate_unit', 'minutes'));
+        $estimateText = $estimateValue . ' ' . $estimateUnit;
+        $labelValues = $fieldValue('labels', array());
+        $statusLabelValues = $fieldValue('task_status', array());
+        $labelIds = array();
+        $statusLabelIds = array();
+        $labelOperation = taskBulkNormalizeLabelOperation($fieldValue('labels_operation', 'replace'));
+        $statusLabelOperation = taskBulkNormalizeLabelOperation($fieldValue('task_status_operation', 'replace'));
+        $rawStartDate = trim((string) $fieldValue('start_date', ''));
+        $rawDueDate = trim((string) $fieldValue('due_date', ''));
+        $rawAmendementDate = trim((string) $fieldValue('amendement_date', ''));
+        $rawSecondAmendementDate = trim((string) $fieldValue('second_amendement_date', ''));
+        $startDate = taskNormalizeBoardDate($rawStartDate);
+        $dueDate = taskNormalizeBoardDate($rawDueDate);
+        $amendementDate = taskNormalizeBoardDate($rawAmendementDate);
+        $secondAmendementDate = taskNormalizeBoardDate($rawSecondAmendementDate);
+        $allowedMinuteOptions = array(0, 5, 10, 15, 20, 25, 30, 35, 40, 45);
+        $amendementTimeMinutes = (int) $fieldValue('amendement_time', 0);
+        $secondAmendementTimeMinutes = (int) $fieldValue('second_amendement_time', 0);
+
+        $validateUser = function ($userId) use ($connect) {
+            $userId = (int) $userId;
+            if ($userId <= 0) {
+                return true;
+            }
+            $result = getData('id', "id='" . $userId . "' AND status='A'", 'LIMIT 1', USR_USER, $connect);
+            return (bool) ($result && $result->num_rows > 0);
+        };
+        if ($editOperation) {
+            if ($fieldEnabled('assignee') && !$validateUser($assigneeId)) {
+                return array('ok' => 0, 'message' => 'Selected assignee is not available.');
+            }
+            if ($fieldEnabled('reporter') && !$validateUser($reporterId)) {
+                return array('ok' => 0, 'message' => 'Selected reporter is not available.');
+            }
+            if ($fieldEnabled('labels') && $labelOperation === '') {
+                return array('ok' => 0, 'message' => 'Invalid Labels operation.');
+            }
+            if ($fieldEnabled('task_status') && $statusLabelOperation === '') {
+                return array('ok' => 0, 'message' => 'Invalid Task Status labels operation.');
+            }
+            if ($fieldEnabled('amendement_time') && !in_array($amendementTimeMinutes, $allowedMinuteOptions, true)) {
+                return array('ok' => 0, 'message' => 'Invalid amendment time.');
+            }
+            if ($fieldEnabled('second_amendement_time') && !in_array($secondAmendementTimeMinutes, $allowedMinuteOptions, true)) {
+                return array('ok' => 0, 'message' => 'Invalid second amendment time.');
+            }
+            $dateInputs = array(
+                'start_date' => array($rawStartDate, $startDate),
+                'due_date' => array($rawDueDate, $dueDate),
+                'amendement_date' => array($rawAmendementDate, $amendementDate),
+                'second_amendement_date' => array($rawSecondAmendementDate, $secondAmendementDate),
+            );
+            foreach ($dateInputs as $dateKey => $dateInput) {
+                if ($fieldEnabled($dateKey) && $dateInput[0] !== '' && $dateInput[1] === '') {
+                    return array('ok' => 0, 'message' => 'Invalid ' . str_replace('_', ' ', $dateKey) . '.');
+                }
+            }
+            $hasEditField = false;
+            foreach ($fieldPermissionMap as $fieldKey => $columnKey) {
+                if ($fieldEnabled($fieldKey)) {
+                    $hasEditField = true;
+                    break;
+                }
+            }
+            if (!$hasEditField) {
+                return array('ok' => 0, 'message' => 'Select at least one field to edit.');
+            }
+        }
+
+        $targetWorkTypeId = (int) $fieldValue('work_type', 0);
+        $targetParentId = (int) $fieldValue('parent', 0);
+        if ($moveOperation) {
+            $hasMoveField = $fieldEnabled('work_type') || $fieldEnabled('parent');
+            if (!$hasMoveField) {
+                return array('ok' => 0, 'message' => 'Select a work type or parent destination.');
+            }
+            if ($fieldEnabled('work_type')) {
+                $workTypeMap = taskFetchWorkTypeInfoMap($connect, array($targetWorkTypeId), true);
+                if ($targetWorkTypeId <= 0 || !isset($workTypeMap[$targetWorkTypeId])) {
+                    return array('ok' => 0, 'message' => 'Selected work type is not available.');
+                }
+                if (taskIsParentWorkTypeName(isset($workTypeMap[$targetWorkTypeId]['name']) ? $workTypeMap[$targetWorkTypeId]['name'] : '')) {
+                    return array('ok' => 0, 'message' => 'Child work items cannot use a parent work type.');
+                }
+                if (!taskUserHasFullProjectTaskAccess($connect, $projectId, $currentUserId)) {
+                    $allowedTypes = taskUserAllowedWorkTypeIds($connect, $projectId, $currentUserId);
+                    if (!in_array($targetWorkTypeId, $allowedTypes, true)) {
+                        return array('ok' => 0, 'message' => 'You do not have access to the selected work type.');
+                    }
+                }
+            }
+            if ($fieldEnabled('parent')) {
+                if ($targetParentId > 0) {
+                    $targetParentRst = mysqli_query($connect, "SELECT id,project_id,work_type_id FROM " . TASK_ITEM . " WHERE id='" . $targetParentId . "' AND status='A' LIMIT 1");
+                    if (!$targetParentRst || $targetParentRst->num_rows === 0) {
+                        return array('ok' => 0, 'message' => 'Selected parent work item is not available.');
+                    }
+                    $targetParent = $targetParentRst->fetch_assoc();
+                    if ((int) $targetParent['project_id'] !== $projectId) {
+                        return array('ok' => 0, 'message' => 'Selected parent must belong to the current project.');
+                    }
+                    $targetParentTypes = taskFetchWorkTypeInfoMap($connect, array((int) $targetParent['work_type_id']), true);
+                    if (!taskIsParentWorkTypeName(isset($targetParentTypes[(int) $targetParent['work_type_id']]['name']) ? $targetParentTypes[(int) $targetParent['work_type_id']]['name'] : '')) {
+                        return array('ok' => 0, 'message' => 'Selected parent must be an Epic work item.');
+                    }
+                }
+                foreach ($selection['items'] as $item) {
+                    if ($targetParentId > 0 && taskWouldCreateParentChildCycle($connect, $projectId, $targetParentId, (int) $item['id'])) {
+                        return array('ok' => 0, 'message' => 'The selected parent would create a parent-child cycle.');
+                    }
+                }
+            }
+        }
+
+        $targetColumnId = (int) $fieldValue('transition', 0);
+        if ($transitionOperation) {
+            $columnRst = mysqli_query($connect, "SELECT id FROM " . TASK_COLUMN . " WHERE id='" . $targetColumnId . "' AND project_id='" . $projectId . "' AND status='A' LIMIT 1");
+            if ($targetColumnId <= 0 || !$columnRst || $columnRst->num_rows === 0) {
+                return array('ok' => 0, 'message' => 'Select a valid target status.');
+            }
+            if (!taskUserHasFullProjectTaskAccess($connect, $projectId, $currentUserId)) {
+                $allowedStatusIds = taskUserAllowedStatusIds($connect, $projectId, $currentUserId);
+                if (!in_array($targetColumnId, $allowedStatusIds, true)) {
+                    return array('ok' => 0, 'message' => 'You do not have access to the selected target status.');
+                }
+            }
+        }
+
+        $safeUser = taskEsc($connect, $currentUserId);
+        $safeDate = taskEsc($connect, $cdate);
+        $safeTime = taskEsc($connect, $ctime);
+        $safeEstimate = taskEsc($connect, $estimateText);
+        $safePriority = taskEsc($connect, $priority);
+        $userNameValue = function ($userId) use ($connect) {
+            return taskFormatHistoryUserValue($connect, (int) $userId);
+        };
+        $labelsText = function ($ids, $nameMap) {
+            $names = array();
+            foreach (taskUniquePositiveIntIds($ids) as $id) {
+                if (isset($nameMap[$id])) {
+                    $names[] = (string) $nameMap[$id];
+                }
+            }
+            return implode(', ', $names);
+        };
+        $fail = function ($message) use ($connect) {
+            mysqli_rollback($connect);
+            return array('ok' => 0, 'message' => $message);
+        };
+
+        if (!mysqli_begin_transaction($connect)) {
+            return array('ok' => 0, 'message' => 'Failed to start the bulk operation transaction.');
+        }
+
+        if ($editOperation && $fieldEnabled('labels')) {
+            $resolvedLabels = taskBulkResolveLabelIds($connect, $labelValues, false, $currentUserId, $cdate, $ctime);
+            if (empty($resolvedLabels['ok'])) {
+                return $fail(isset($resolvedLabels['message']) ? $resolvedLabels['message'] : 'One or more selected labels are not available.');
+            }
+            $labelIds = isset($resolvedLabels['ids']) ? $resolvedLabels['ids'] : array();
+        }
+        if ($editOperation && $fieldEnabled('task_status')) {
+            $resolvedStatusLabels = taskBulkResolveLabelIds($connect, $statusLabelValues, true, $currentUserId, $cdate, $ctime);
+            if (empty($resolvedStatusLabels['ok'])) {
+                return $fail(isset($resolvedStatusLabels['message']) ? $resolvedStatusLabels['message'] : 'One or more selected task status labels are not available.');
+            }
+            $statusLabelIds = isset($resolvedStatusLabels['ids']) ? $resolvedStatusLabels['ids'] : array();
+        }
+
+        $labelNameMap = array();
+        foreach (taskGetLabels($connect) as $label) {
+            $labelNameMap[(int) $label['id']] = (string) $label['name'];
+        }
+        $statusLabelNameMap = array();
+        foreach (taskGetStatusLabels($connect) as $label) {
+            $statusLabelNameMap[(int) $label['id']] = (string) $label['name'];
+        }
+
+        $parentLockResult = mysqli_query(
+            $connect,
+            "SELECT id,project_id,status FROM " . TASK_ITEM . " WHERE id='" . $parentItemId . "' FOR UPDATE"
+        );
+        if (!$parentLockResult || $parentLockResult->num_rows === 0) {
+            return $fail('The parent work item is no longer available.');
+        }
+        $parentLockRow = $parentLockResult->fetch_assoc();
+        if ((int) $parentLockRow['project_id'] !== $projectId || (string) $parentLockRow['status'] !== 'A') {
+            return $fail('The parent work item is no longer active in this project.');
+        }
+
+        $sourceColumns = array();
+        $targetSortOrder = 0;
+        if ($transitionOperation) {
+            $sortRst = mysqli_query($connect, "SELECT IFNULL(MAX(sort_order),0)+1 AS next_sort FROM " . TASK_ITEM . " WHERE status='A' AND column_id='" . $targetColumnId . "'");
+            if ($sortRst && $sortRst->num_rows > 0) {
+                $sortRow = $sortRst->fetch_assoc();
+                $targetSortOrder = max(1, (int) $sortRow['next_sort']);
+            } else {
+                $targetSortOrder = 1;
+            }
+        }
+
+        foreach ($selection['items'] as $item) {
+            $itemId = (int) $item['id'];
+
+            $lockResult = mysqli_query(
+                $connect,
+                "SELECT id,project_id,status FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' FOR UPDATE"
+            );
+            if (!$lockResult || $lockResult->num_rows === 0) {
+                return $fail('One or more selected work items are no longer available.');
+            }
+            $lockRow = $lockResult->fetch_assoc();
+            if ((int) $lockRow['project_id'] !== $projectId || (string) $lockRow['status'] !== 'A') {
+                return $fail('One or more selected work items are no longer active.');
+            }
+
+            $childCheck = mysqli_query(
+                $connect,
+                "SELECT id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND project_id='" . $projectId . "' AND status='A' AND (
+                    parent_item_id='" . $parentItemId . "'
+                    OR id IN (
+                        SELECT r.child_board_item_id
+                        FROM " . TASK_ITEM_RELATION . " r
+                        WHERE r.parent_board_item_id='" . $parentItemId . "' AND r.status='A'
+                    )
+                ) LIMIT 1"
+            );
+            if (!$childCheck || $childCheck->num_rows === 0) {
+                return $fail('One or more selected work items are no longer active children of this parent.');
+            }
+
+            $itemLabelIds = $fieldEnabled('labels')
+                ? taskBulkApplyLabelOperation(isset($item['label_ids']) ? $item['label_ids'] : array(), $labelIds, $labelOperation)
+                : array();
+            $itemStatusLabelIds = $fieldEnabled('task_status')
+                ? taskBulkApplyLabelOperation(isset($item['task_status_label_ids']) ? $item['task_status_label_ids'] : array(), $statusLabelIds, $statusLabelOperation)
+                : array();
+            $itemSafeTaskStatus = taskEsc($connect, implode(',', $itemStatusLabelIds));
+            $itemSql = '';
+            $setParts = array();
+            if ($editOperation) {
+                if ($fieldEnabled('assignee')) {
+                    $setParts[] = "assignee_user_id='" . $assigneeId . "'";
+                }
+                if ($fieldEnabled('reporter')) {
+                    $setParts[] = "reporter_user_id='" . $reporterId . "'";
+                }
+                if ($fieldEnabled('priority')) {
+                    $setParts[] = "priority='" . $safePriority . "'";
+                }
+                if ($fieldEnabled('original_estimate')) {
+                    $newEstimateSeconds = taskEstimateToSeconds($estimateValue, $estimateUnit);
+                    $loggedSeconds = taskParseWorklogDurationSeconds(isset($item['time_tracking']) ? $item['time_tracking'] : '');
+                    $newRemainingSeconds = taskResolveOwnRemainingEstimateSeconds($newEstimateSeconds, $loggedSeconds, isset($item['remaining_estimate_seconds']) ? $item['remaining_estimate_seconds'] : null);
+                    $setParts[] = "original_estimate='" . $safeEstimate . "'";
+                    $setParts[] = "remaining_estimate_seconds='" . (int) $newRemainingSeconds . "'";
+                }
+                if ($fieldEnabled('task_status')) {
+                    $setParts[] = "task_status='" . $itemSafeTaskStatus . "'";
+                }
+                if ($fieldEnabled('start_date')) {
+                    $setParts[] = "start_date=" . ($startDate !== '' ? "'" . taskEsc($connect, $startDate) . "'" : 'NULL');
+                }
+                if ($fieldEnabled('due_date')) {
+                    $setParts[] = "due_date=" . ($dueDate !== '' ? "'" . taskEsc($connect, $dueDate) . "'" : 'NULL');
+                }
+                if ($fieldEnabled('amendement_date')) {
+                    $setParts[] = "amendement_date=" . ($amendementDate !== '' ? "'" . taskEsc($connect, $amendementDate) . "'" : 'NULL');
+                }
+                if ($fieldEnabled('amendement_time')) {
+                    $setParts[] = "amendement_time=" . ($amendementTimeMinutes > 0 ? "'" . taskEsc($connect, taskMinutesToSqlTime($amendementTimeMinutes)) . "'" : 'NULL');
+                }
+                if ($fieldEnabled('second_amendement_date')) {
+                    $setParts[] = "second_amendement_date=" . ($secondAmendementDate !== '' ? "'" . taskEsc($connect, $secondAmendementDate) . "'" : 'NULL');
+                }
+                if ($fieldEnabled('second_amendement_time')) {
+                    $setParts[] = "second_amendement_time=" . ($secondAmendementTimeMinutes > 0 ? "'" . taskEsc($connect, taskMinutesToSqlTime($secondAmendementTimeMinutes)) . "'" : 'NULL');
+                }
+            }
+            if ($moveOperation && $fieldEnabled('work_type')) {
+                $setParts[] = "work_type_id='" . $targetWorkTypeId . "'";
+            }
+            if ($transitionOperation && (int) $item['column_id'] !== $targetColumnId) {
+                $sourceColumns[(int) $item['column_id']] = true;
+                $setParts[] = "column_id='" . $targetColumnId . "'";
+                $setParts[] = "sort_order='" . $targetSortOrder . "'";
+                $targetSortOrder++;
+            }
+            if ($deleteOperation) {
+                $sourceColumns[(int) $item['column_id']] = true;
+                $setParts[] = "status='D'";
+            }
+
+            if (!empty($setParts)) {
+                $setParts[] = "update_by='" . $safeUser . "'";
+                $setParts[] = "update_date='" . $safeDate . "'";
+                $setParts[] = "update_time='" . $safeTime . "'";
+                $itemSql = "UPDATE " . TASK_ITEM . " SET " . implode(',', $setParts) . " WHERE id='" . $itemId . "' AND status='A'";
+                if (!mysqli_query($connect, $itemSql)) {
+                    return $fail('Failed to update selected work items.');
+                }
+            }
+
+            if ($moveOperation && $fieldEnabled('parent')) {
+                $oldParentInfo = taskGetParentRelationInfo($connect, $itemId);
+                $parentUpdate = mysqli_query($connect, "UPDATE " . TASK_ITEM . " SET parent_item_id='" . $targetParentId . "',update_by='" . $safeUser . "',update_date='" . $safeDate . "',update_time='" . $safeTime . "' WHERE id='" . $itemId . "' AND status='A'");
+                if (!$parentUpdate) {
+                    return $fail('Failed to update selected parent relations.');
+                }
+                $deactivate = mysqli_query($connect, "UPDATE " . TASK_ITEM_RELATION . " SET status='D',update_by='" . $safeUser . "',update_date='" . $safeDate . "',update_time='" . $safeTime . "' WHERE child_board_item_id='" . $itemId . "' AND status='A'");
+                if ($deactivate === false) {
+                    return $fail('Failed to update selected parent relations.');
+                }
+                if ($targetParentId > 0) {
+                    $existingRelation = mysqli_query($connect, "SELECT id FROM " . TASK_ITEM_RELATION . " WHERE child_board_item_id='" . $itemId . "' ORDER BY (status='A') DESC,id DESC LIMIT 1");
+                    if ($existingRelation === false) {
+                        return $fail('Failed to update selected parent relations.');
+                    }
+                    if ($existingRelation->num_rows > 0) {
+                        $relationRow = $existingRelation->fetch_assoc();
+                        $relationSql = "UPDATE " . TASK_ITEM_RELATION . " SET parent_board_item_id='" . $targetParentId . "',status='A',update_by='" . $safeUser . "',update_date='" . $safeDate . "',update_time='" . $safeTime . "' WHERE id='" . (int) $relationRow['id'] . "'";
+                    } else {
+                        $relationSql = "INSERT INTO " . TASK_ITEM_RELATION . " (parent_board_item_id,child_board_item_id,create_by,create_date,create_time,status) VALUES ('" . $targetParentId . "','" . $itemId . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')";
+                    }
+                    if (!mysqli_query($connect, $relationSql)) {
+                        return $fail('Failed to update selected parent relations.');
+                    }
+                }
+                $oldParent = isset($oldParentInfo['parent_display']) ? (string) $oldParentInfo['parent_display'] : 'None';
+                $newParent = 'None';
+                if ($targetParentId > 0) {
+                    $newParentInfo = taskGetParentRelationInfo($connect, $itemId);
+                    if (!empty($newParentInfo['parent_item_id']) && (int) $newParentInfo['parent_item_id'] === $targetParentId) {
+                        $newParent = isset($newParentInfo['parent_display']) ? (string) $newParentInfo['parent_display'] : (string) $targetParentId;
+                    } else {
+                        $newParentResult = mysqli_query($connect, "SELECT id,title,project_key_id FROM " . TASK_ITEM . " WHERE id='" . $targetParentId . "' AND status='A' LIMIT 1");
+                        if ($newParentResult && $newParentResult->num_rows > 0) {
+                            $newParentRow = $newParentResult->fetch_assoc();
+                            $newParentKeyMap = taskFetchProjectKeyMap($connect, array((int) $newParentRow['project_key_id']), true);
+                            $newParentKey = isset($newParentKeyMap[(int) $newParentRow['project_key_id']]) ? (string) $newParentKeyMap[(int) $newParentRow['project_key_id']] : '';
+                            $newParent = trim($newParentKey . '-' . (int) $newParentRow['id'] . ' ' . (string) $newParentRow['title']);
+                        }
+                    }
+                }
+                if ($oldParent !== $newParent) {
+                    taskLogItemHistory($connect, $itemId, 'update_field', 'Parent', $oldParent, $newParent, 'changed Parent', $currentUserId, $cdate, $ctime);
+                }
+            }
+
+            if ($editOperation && $fieldEnabled('labels')) {
+                $oldLabels = isset($item['label_ids']) ? $item['label_ids'] : array();
+                $deactivateLabels = mysqli_query($connect, "UPDATE " . TASK_ITEM_LABEL . " SET status='D',update_by='" . $safeUser . "',update_date='" . $safeDate . "',update_time='" . $safeTime . "' WHERE item_id='" . $itemId . "' AND status='A'");
+                if (!$deactivateLabels) {
+                    return $fail('Failed to update selected labels.');
+                }
+                foreach ($itemLabelIds as $labelId) {
+                    $existingLabel = mysqli_query($connect, "SELECT id FROM " . TASK_ITEM_LABEL . " WHERE item_id='" . $itemId . "' AND label_id='" . $labelId . "' LIMIT 1");
+                    if ($existingLabel === false) {
+                        return $fail('Failed to update selected labels.');
+                    }
+                    if ($existingLabel->num_rows > 0) {
+                        $existingLabelRow = $existingLabel->fetch_assoc();
+                        $labelSql = "UPDATE " . TASK_ITEM_LABEL . " SET status='A',update_by='" . $safeUser . "',update_date='" . $safeDate . "',update_time='" . $safeTime . "' WHERE id='" . (int) $existingLabelRow['id'] . "'";
+                    } else {
+                        $labelSql = "INSERT INTO " . TASK_ITEM_LABEL . " (item_id,label_id,create_by,create_date,create_time,status) VALUES ('" . $itemId . "','" . $labelId . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')";
+                    }
+                    if (!mysqli_query($connect, $labelSql)) {
+                        return $fail('Failed to update selected labels.');
+                    }
+                }
+                $oldText = $labelsText($oldLabels, $labelNameMap);
+                $newText = $labelsText($itemLabelIds, $labelNameMap);
+                if ($oldText !== $newText) {
+                    taskLogItemHistory($connect, $itemId, 'update_field', 'Labels', $oldText, $newText, 'changed Labels', $currentUserId, $cdate, $ctime);
+                }
+            }
+
+            if ($deleteOperation) {
+                $deleteLabels = mysqli_query($connect, "UPDATE " . TASK_ITEM_LABEL . " SET status='D',update_by='" . $safeUser . "',update_date='" . $safeDate . "',update_time='" . $safeTime . "' WHERE item_id='" . $itemId . "' AND status='A'");
+                if (!$deleteLabels) {
+                    return $fail('Failed to remove labels for selected work items.');
+                }
+                taskLogItemHistory($connect, $itemId, 'delete_item', 'Work item', (string) $item['title'], '', 'deleted the Work item', $currentUserId, $cdate, $ctime);
+            }
+
+            if ($editOperation) {
+                if ($fieldEnabled('assignee') && (int) $item['assignee_user_id'] !== $assigneeId) {
+                    taskLogItemHistory($connect, $itemId, 'update_field', 'Assignee', $userNameValue($item['assignee_user_id']), $userNameValue($assigneeId), 'changed Assignee', $currentUserId, $cdate, $ctime);
+                    taskSendAssigneeReassignmentAlert($connect, $itemId, (int) $item['assignee_user_id'], $assigneeId, $currentUserId, $cdate, $ctime);
+                }
+                if ($fieldEnabled('reporter') && (int) $item['reporter_user_id'] !== $reporterId) {
+                    taskLogItemHistory($connect, $itemId, 'update_field', 'Reporter', $userNameValue($item['reporter_user_id']), $userNameValue($reporterId), 'changed Reporter', $currentUserId, $cdate, $ctime);
+                }
+                if ($fieldEnabled('priority') && (string) $item['priority'] !== $priority) {
+                    taskLogItemHistory($connect, $itemId, 'update_field', 'Priority', (string) $item['priority'], $priority, 'changed Priority', $currentUserId, $cdate, $ctime);
+                }
+                if ($fieldEnabled('original_estimate') && (string) $item['original_estimate'] !== $estimateText) {
+                    taskLogItemHistory($connect, $itemId, 'update_field', 'Original Estimate', (string) $item['original_estimate'], $estimateText, 'changed Original Estimate', $currentUserId, $cdate, $ctime);
+                }
+                if ($fieldEnabled('task_status')) {
+                    $oldStatusText = $labelsText($item['task_status_label_ids'], $statusLabelNameMap);
+                    $newStatusText = $labelsText($itemStatusLabelIds, $statusLabelNameMap);
+                    if ($oldStatusText !== $newStatusText) {
+                        taskLogItemHistory($connect, $itemId, 'update_field', 'Task Status', $oldStatusText, $newStatusText, 'changed Task Status', $currentUserId, $cdate, $ctime);
+                    }
+                }
+                $dateFields = array(
+                    'start_date' => array('label' => 'Start Date', 'old' => $item['start_date'], 'new' => $startDate),
+                    'due_date' => array('label' => 'Due Date', 'old' => $item['due_date'], 'new' => $dueDate),
+                    'amendement_date' => array('label' => 'Amendment Date', 'old' => $item['amendement_date'], 'new' => $amendementDate),
+                    'second_amendement_date' => array('label' => 'Second Amendment Date', 'old' => $item['second_amendement_date'], 'new' => $secondAmendementDate),
+                    'amendement_time' => array('label' => 'Amendment Time', 'old' => $item['amendement_time_minutes'], 'new' => $amendementTimeMinutes),
+                    'second_amendement_time' => array('label' => 'Second Amendment Time', 'old' => $item['second_amendement_time_minutes'], 'new' => $secondAmendementTimeMinutes),
+                );
+                foreach ($dateFields as $dateKey => $dateField) {
+                    if ($fieldEnabled($dateKey) && (string) $dateField['old'] !== (string) $dateField['new']) {
+                        taskLogItemHistory($connect, $itemId, 'update_field', $dateField['label'], (string) $dateField['old'], (string) $dateField['new'], 'changed ' . $dateField['label'], $currentUserId, $cdate, $ctime);
+                    }
+                }
+            }
+
+            if ($moveOperation && $fieldEnabled('work_type') && (int) $item['work_type_id'] !== $targetWorkTypeId) {
+                $targetWorkTypeName = (string) $targetWorkTypeId;
+                $targetWorkTypeMap = taskFetchWorkTypeInfoMap($connect, array($targetWorkTypeId), true);
+                if (isset($targetWorkTypeMap[$targetWorkTypeId]['name'])) {
+                    $targetWorkTypeName = (string) $targetWorkTypeMap[$targetWorkTypeId]['name'];
+                }
+                taskLogItemHistory($connect, $itemId, 'update_field', 'Work Type', (string) $item['work_type_name'], $targetWorkTypeName, 'changed Work Type', $currentUserId, $cdate, $ctime);
+            }
+            if ($transitionOperation && (int) $item['column_id'] !== $targetColumnId) {
+                $sourceColumns[(int) $item['column_id']] = true;
+                $targetColumnName = (string) $targetColumnId;
+                $targetColumnMap = taskFetchColumnInfoMap($connect, array($targetColumnId), true);
+                if (isset($targetColumnMap[$targetColumnId]['name'])) {
+                    $targetColumnName = (string) $targetColumnMap[$targetColumnId]['name'];
+                }
+                taskLogItemHistory($connect, $itemId, 'change_status', 'Status', (string) $item['status_name'], $targetColumnName, 'changed the Status', $currentUserId, $cdate, $ctime);
+            }
+        }
+
+        if ($transitionOperation || $deleteOperation) {
+            $sourceColumns[$targetColumnId] = true;
+            foreach (array_keys($sourceColumns) as $columnId) {
+                if ((int) $columnId > 0) {
+                    taskResequenceItemsInColumn($connect, (int) $columnId);
+                }
+            }
+        }
+
+        if (!mysqli_commit($connect)) {
+            mysqli_rollback($connect);
+            return array('ok' => 0, 'message' => 'Failed to commit bulk changes.');
+        }
+
+        return array(
+            'ok' => 1,
+            'message' => 'Bulk changes applied successfully.',
+            'items' => taskGetBulkChildWorkItems($connect, $projectId, $parentItemId, 0),
+        );
     }
 }
 

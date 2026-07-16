@@ -90,7 +90,31 @@
                                 <span class="task-item-child-title">Child work items</span>
                                 <span id="taskItemChildWorkItemsCount" class="task-item-child-count">0</span>
                                 <div class="task-item-child-header-actions ms-auto">
-                                    <span id="taskItemChildWorkItemsProgressText" class="task-item-child-progress-text">0% Done</span>
+                                <span id="taskItemChildWorkItemsProgressText" class="task-item-child-progress-text">0% Done</span>
+                                    <div id="taskItemChildWorkItemsBulkEditMenuWrap" class="dropdown task-item-child-more-wrap d-none">
+                                        <button id="taskItemChildWorkItemsMoreBtn" class="btn task-item-child-more-btn" type="button" data-bs-toggle="dropdown" aria-expanded="false" title="More child work item actions" aria-label="More child work item actions">
+                                            <i class="fa-solid fa-ellipsis"></i>
+                                        </button>
+                                        <ul class="dropdown-menu dropdown-menu-end task-item-child-more-menu">
+                                            <li><a id="taskItemChildWorkItemsBulkEditBtn" class="dropdown-item task-item-child-bulk-edit-menu-item" href="#">Bulk Edit</a></li>
+                                        </ul>
+                                    </div>
+                                    <div id="taskItemChildWorkItemsColumnConfigMenuWrap" class="dropdown task-item-child-column-config-wrap d-none">
+                                        <button id="taskItemChildWorkItemsColumnConfigBtn" class="btn task-item-child-column-config-btn" type="button" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" title="Configure columns" aria-label="Configure columns">
+                                            <i class="fa-solid fa-table-columns"></i>
+                                        </button>
+                                        <div class="dropdown-menu dropdown-menu-end task-item-child-column-config-menu">
+                                            <div class="task-item-child-column-search-wrap">
+                                                <i class="fa-solid fa-magnifying-glass"></i>
+                                                <input id="taskItemChildWorkItemsColumnSearch" class="form-control" type="search" placeholder="Search columns" autocomplete="off">
+                                            </div>
+                                            <div id="taskItemChildWorkItemsColumnOptions" class="task-item-child-column-options"></div>
+                                            <div class="task-item-child-column-config-footer">
+                                                <button id="taskItemChildWorkItemsColumnResetBtn" type="button" class="btn task-item-child-column-reset-btn">Reset to default</button>
+                                                <div id="taskItemChildWorkItemsColumnCount" class="task-item-child-column-count"></div>
+                                            </div>
+                                        </div>
+                                    </div>
                                     <button id="taskItemChildWorkItemsAddBtn" class="btn btn-outline-primary task-item-linked-add-btn d-none" type="button" title="Add child work item" aria-label="Add child work item">
                                         <i class="fa-solid fa-plus"></i>
                                     </button>
@@ -100,13 +124,15 @@
                                 <div class="task-item-child-progress-bar-wrap">
                                     <div id="taskItemChildWorkItemsProgressBar" class="task-item-child-progress-bar" style="width:0%;"></div>
                                 </div>
-                                <div class="task-item-child-table-head">
-                                    <span>Work</span>
-                                    <span>Priority</span>
-                                    <span>Assignee</span>
-                                    <span>Status</span>
+                                <div class="task-item-child-table-scroll">
+                                    <div class="task-item-child-table-head">
+                                        <span>Work</span>
+                                        <span>Priority</span>
+                                        <span>Assignee</span>
+                                        <span>Status</span>
+                                    </div>
+                                    <div id="taskItemChildWorkItemsList" class="task-item-child-list"></div>
                                 </div>
-                                <div id="taskItemChildWorkItemsList" class="task-item-child-list"></div>
                             </div>
                         </div>
 

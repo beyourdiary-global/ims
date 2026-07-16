@@ -4974,6 +4974,172 @@ $(document).on(
   },
 );
 
+$(document).on("click", "#taskItemChildWorkItemsBulkEditBtn", function (e) {
+  e.preventDefault();
+
+  var projectId = Number(state.currentProjectId || 0);
+  var parentItemId = Number(itemDetailModalState.itemId || 0);
+  if (projectId <= 0 || parentItemId <= 0) {
+    notify("Unable to open bulk edit for this parent work item.");
+    return;
+  }
+
+  var siteUrl = String(state.siteUrl || "").replace(/\/+$/, "");
+  var pagePath = siteUrl + "/task/bulk_edit_task.php";
+  window.location.href =
+    pagePath +
+    "?project_id=" +
+    encodeURIComponent(projectId) +
+    "&step=1#parent-task-item-" +
+    encodeURIComponent(parentItemId);
+});
+
+$(document).on("input", "#taskItemChildWorkItemsColumnSearch", function () {
+  renderTaskChildWorkItemColumnConfigMenu($(this).val());
+});
+
+$(document).on("click", "#taskItemChildWorkItemsColumnResetBtn", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+  saveTaskChildWorkItemColumnSettings({
+    order: taskChildWorkItemDefaultColumnOrder(),
+    widths: {},
+    sortKey: "",
+    sortDirection: "asc",
+  });
+  $("#taskItemChildWorkItemsColumnSearch").val("");
+  renderChildWorkItemsSection();
+});
+
+function repositionTaskChildColumnDropdown($dropdown) {
+  var $wrap = $dropdown && $dropdown.length ? $dropdown : $();
+  if (!$wrap.length || !$wrap.hasClass("show")) {
+    return;
+  }
+
+  var $toggle = $wrap.children('[data-bs-toggle="dropdown"]').first();
+  var $menu = $wrap.children(".dropdown-menu").first();
+  if (!$toggle.length || !$menu.length) {
+    return;
+  }
+
+  var toggleRect = $toggle.get(0).getBoundingClientRect();
+  if (!toggleRect || (toggleRect.width === 0 && toggleRect.height === 0)) {
+    return;
+  }
+
+  $menu.attr("data-bs-popper", "static").addClass("task-item-child-column-menu-fixed").css({
+    visibility: "hidden",
+    left: "0px",
+    top: "0px",
+    right: "auto",
+    bottom: "auto",
+    transform: "none",
+  });
+
+  var menuWidth = $menu.outerWidth() || 235;
+  var menuHeight = $menu.outerHeight() || 0;
+  var viewportWidth = window.innerWidth || document.documentElement.clientWidth || 0;
+  var viewportHeight = window.innerHeight || document.documentElement.clientHeight || 0;
+  var edgePadding = 8;
+  var gap = 6;
+  var left = Math.floor(toggleRect.left);
+  if (left + menuWidth > viewportWidth - edgePadding) {
+    left = Math.floor(toggleRect.right - menuWidth);
+  }
+  left = Math.max(edgePadding, Math.min(left, Math.max(edgePadding, viewportWidth - menuWidth - edgePadding)));
+
+  var top = Math.floor(toggleRect.bottom + gap);
+  if (top + menuHeight > viewportHeight - edgePadding && toggleRect.top - menuHeight - gap >= edgePadding) {
+    top = Math.floor(toggleRect.top - menuHeight - gap);
+  }
+  top = Math.max(edgePadding, Math.min(top, Math.max(edgePadding, viewportHeight - menuHeight - edgePadding)));
+
+  $menu.css({
+    left: String(left) + "px",
+    top: String(top) + "px",
+    right: "auto",
+    bottom: "auto",
+    transform: "none",
+    visibility: "",
+  });
+}
+
+$(document).on("shown.bs.dropdown", ".task-item-child-column-head-menu", function () {
+  repositionTaskChildColumnDropdown($(this));
+});
+
+$(document).on("hidden.bs.dropdown", ".task-item-child-column-head-menu", function () {
+  $(this).find(".dropdown-menu").first().removeAttr("data-bs-popper").removeClass("task-item-child-column-menu-fixed").css({
+    left: "",
+    top: "",
+    right: "",
+    bottom: "",
+    transform: "",
+    visibility: "",
+  });
+});
+
+$(document).on("change", "#taskItemChildWorkItemsColumnOptions [data-child-column-toggle]", function (e) {
+  e.stopPropagation();
+  var key = String($(this).attr("data-child-column-toggle") || "");
+  var settings = taskChildWorkItemColumnSettings();
+  var index = settings.order.indexOf(key);
+  if (this.checked && index === -1) {
+    settings.order.push(key);
+  } else if (!this.checked && index !== -1) {
+    if (settings.order.length <= 1) {
+      this.checked = true;
+      notify("At least one child work item column must be displayed.");
+      return;
+    }
+    settings.order.splice(index, 1);
+    if (settings.sortKey === key) settings.sortKey = "";
+  }
+  saveTaskChildWorkItemColumnSettings(settings);
+  renderChildWorkItemsSection();
+});
+
+$(document).on("click", "[data-child-column-action]", function (e) {
+  e.preventDefault();
+  var action = String($(this).attr("data-child-column-action") || "");
+  var key = String($(this).attr("data-child-column-key") || "");
+  var settings = taskChildWorkItemColumnSettings();
+  var index = settings.order.indexOf(key);
+  if (index === -1) return;
+
+  if (action === "sort-asc" || action === "sort-desc") {
+    settings.sortKey = key;
+    settings.sortDirection = action === "sort-desc" ? "desc" : "asc";
+  } else if (action === "remove") {
+    if (settings.order.length <= 1) {
+      notify("At least one child work item column must be displayed.");
+      return;
+    }
+    settings.order.splice(index, 1);
+    if (settings.sortKey === key) settings.sortKey = "";
+  } else if (action === "move-first" || action === "move-left" || action === "move-right" || action === "move-last") {
+    settings.order.splice(index, 1);
+    var newIndex = action === "move-first" ? 0 : action === "move-last" ? settings.order.length : action === "move-left" ? Math.max(0, index - 1) : Math.min(settings.order.length, index + 1);
+    settings.order.splice(newIndex, 0, key);
+  } else if (action === "resize") {
+    var definition = taskChildWorkItemColumnDefinition(key);
+    var currentWidth = String(settings.widths[key] || "").replace(/px$/, "") || "";
+    var enteredWidth = window.prompt("Enter column width in pixels", currentWidth || "180");
+    if (enteredWidth === null) return;
+    var width = Math.round(Number(enteredWidth));
+    if (!Number.isFinite(width) || width < 80 || width > 600) {
+      notify("Column width must be between 80 and 600 pixels.");
+      return;
+    }
+    settings.widths[key] = width + "px";
+  } else {
+    return;
+  }
+  saveTaskChildWorkItemColumnSettings(settings);
+  renderChildWorkItemsSection();
+});
+
 $(document).on("click", "#taskItemChildCreateChooseExistingBtn", function () {
   if (!canEdit) {
     notify("You do not have permission to update work item.");
@@ -5082,6 +5248,23 @@ $(document).on("click", ".task-item-child-picker-trigger", function (e) {
     $(this).data("childField"),
     true,
   );
+});
+
+$(document).on("click", ".task-item-child-label-more", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+
+  var $button = $(this);
+  var $labels = $button.closest(".task-item-child-labels");
+  var expanded = $labels.hasClass("task-item-child-labels-expanded");
+  var count = Number($button.data("labelCount") || 0);
+
+  $labels.toggleClass("task-item-child-labels-expanded", !expanded);
+  $button
+    .attr("aria-expanded", expanded ? "false" : "true")
+    .attr("aria-label", expanded ? "Show all labels" : "Hide extra labels")
+    .attr("title", expanded ? "Show all labels" : "Hide extra labels")
+    .text(expanded ? "+" + count : "−" + count);
 });
 
 $(document).on("keydown", ".task-item-child-title-input", function (e) {
