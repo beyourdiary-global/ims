@@ -19104,6 +19104,25 @@ if (!function_exists('orderDeleteApprovalGetModuleConfigs')) {
                 'page_path' => ROUTE_STOCK_ORDER_REQUEST,
                 'table_path' => ROUTE_STOCK_ORDER_REQUEST_TABLE,
             ),
+            'user_record_log' => array(
+                'title' => 'User Record Log',
+                'platform' => 'user_record_log',
+                'source_db' => 'cms',
+                'source_table' => defined('USER_RECORD_LOG') ? USER_RECORD_LOG : 'user_record_log',
+                'page_path' => defined('ROUTE_USER_RECORD_LOG') ? ROUTE_USER_RECORD_LOG : '/users/user_record_log.php',
+                'table_path' => defined('ROUTE_USER_RECORD_LOG') ? ROUTE_USER_RECORD_LOG : '/users/user_record_log.php',
+                'source_noun' => 'User Record',
+                'alert_title' => 'User Record Log Delete Request',
+                'alert_module_key' => 'user_record_log_delete_approval',
+                'requester_action_label' => 'Open User Record Log',
+                'request_success_message' => 'User record delete request has been sent to supervisor.',
+                'approval_success_message' => 'User record delete request approved and the record was deleted successfully.',
+                'rejection_success_message' => 'User record delete request rejected successfully.',
+                'delete_success_message' => 'User record deleted successfully.',
+                'rejected_action_to_detail' => true,
+                'superadmin_direct_delete' => true,
+                'require_supervisor' => true,
+            ),
         );
     }
 }
@@ -19122,7 +19141,9 @@ if (!function_exists('orderDeleteApprovalInitPageState')) {
     {
         $approvalMode = input('approval_mode') == '1' || post('approval_mode') == '1';
         $dataId = input('id');
-        if ($dataId === '' || $dataId === null) {
+        if ($approvalMode && post('id') !== '' && post('id') !== null) {
+            $dataId = post('id');
+        } else if ($dataId === '' || $dataId === null) {
             $dataId = post('id');
         }
 
@@ -19141,6 +19162,60 @@ if (!function_exists('orderDeleteApprovalInitPageState')) {
             'data_id' => $dataId,
             'act' => $act,
             'panel_html' => '',
+        );
+    }
+}
+
+if (!function_exists('orderDeleteApprovalPrepareUserRecordLogCustomerPage')) {
+    function orderDeleteApprovalPrepareUserRecordLogCustomerPage($connect, $customerId, $pageTitle, $pageUrl)
+    {
+        $state = orderDeleteApprovalInitPageState();
+        $approvalPanelHtml = '';
+        $approvalRecordId = 0;
+        $approvalRequestId = isset($state['request_id']) ? (int) $state['request_id'] : 0;
+
+        if (!empty($state['approval_mode']) && $approvalRequestId > 0 && $connect instanceof mysqli) {
+            $requestRow = orderDeleteApprovalReadRequest($connect, $approvalRequestId);
+            if (
+                !empty($requestRow)
+                && trim((string) (isset($requestRow['module_key']) ? $requestRow['module_key'] : '')) === 'user_record_log'
+            ) {
+                $approvalRecordId = (int) (isset($requestRow['source_order_id']) ? $requestRow['source_order_id'] : 0);
+                if ($approvalRecordId > 0) {
+                    $state['data_id'] = $approvalRecordId;
+                }
+            }
+
+            $deleteCallback = orderDeleteApprovalBuildStandardDeleteCallback(array(
+                'data_connect' => $connect,
+                'audit_connect' => $connect,
+                'table_name' => defined('USER_RECORD_LOG') ? USER_RECORD_LOG : 'user_record_log',
+                'page_title' => $pageTitle,
+                'fallback_data_id' => $approvalRecordId,
+                'source_noun' => 'User Record',
+                'delete_success_message' => 'User record deleted successfully.',
+                'not_found_message' => 'User record log was not found.',
+            ));
+            $approvalPanelHtml = orderDeleteApprovalHandlePageFlow(array(
+                'connect' => $connect,
+                'request_id' => $approvalRequestId,
+                'module_key' => 'user_record_log',
+                'data_id' => isset($state['data_id']) ? (int) $state['data_id'] : 0,
+                'current_user_id' => defined('USER_ID') ? (int) USER_ID : 0,
+                'page_title' => $pageTitle,
+                'redirect_page' => $pageUrl,
+                'approval_mode' => true,
+                'use_confirmation_dialog' => true,
+                'delete_callback' => $deleteCallback,
+            ));
+        }
+
+        return array(
+            'state' => $state,
+            'panel_html' => $approvalPanelHtml,
+            'approval_record_id' => $approvalRecordId,
+            'approval_request_id' => $approvalRequestId,
+            'action_url' => (string) $pageUrl,
         );
     }
 }
@@ -19187,8 +19262,91 @@ if (!function_exists('orderDeleteApprovalSerializeSupervisorIds')) {
 }
 
 if (!function_exists('orderDeleteApprovalBuildPageUrl')) {
-    function orderDeleteApprovalBuildPageUrl($moduleKey, $sourceOrderId, $requestId = 0, $approvalMode = false)
+    function orderDeleteApprovalBuildUserRecordLogPageUrl($connect, $sourceOrderId, $requestId = 0, $approvalMode = false)
     {
+        $sourceOrderId = (int) $sourceOrderId;
+        if (!($connect instanceof mysqli) || $sourceOrderId <= 0) {
+            return '';
+        }
+
+        $customerRoutes = array(
+            'shopee_cust_id' => '/shopee/shopee_cust_info.php',
+            'lazada_cust_id' => '/finance/lazada_cust_rcd.php',
+            'facebook_cust_id' => '/customer/fb_cust_deals.php',
+            'website_cust_id' => '/customer/website_customer_record.php',
+            'urbanism_member_id' => '/customer/urb_cust_reg.php',
+            'cust_id' => '/customer/customerInfo.php',
+        );
+        $availableColumns = array();
+        foreach (array_keys($customerRoutes) as $columnName) {
+            $columnResult = mysqli_query(
+                $connect,
+                "SHOW COLUMNS FROM `" . (defined('USER_RECORD_LOG') ? USER_RECORD_LOG : 'user_record_log') . "` LIKE '" . $columnName . "'"
+            );
+            if ($columnResult && $columnResult->num_rows > 0) {
+                $availableColumns[] = $columnName;
+            }
+        }
+
+        if (empty($availableColumns)) {
+            return '';
+        }
+
+        $selectColumns = array_map(function ($columnName) {
+            return '`' . $columnName . '`';
+        }, $availableColumns);
+        $tableName = defined('USER_RECORD_LOG') ? USER_RECORD_LOG : 'user_record_log';
+        $result = mysqli_query(
+            $connect,
+            "SELECT " . implode(',', $selectColumns) . " FROM `" . $tableName . "` WHERE `id` = " . $sourceOrderId . " LIMIT 1"
+        );
+        if (!$result || $result->num_rows === 0) {
+            return '';
+        }
+
+        $recordRow = mysqli_fetch_assoc($result);
+        $customerId = 0;
+        $customerPath = '';
+        foreach ($availableColumns as $columnName) {
+            $candidateId = isset($recordRow[$columnName]) ? (int) $recordRow[$columnName] : 0;
+            if ($candidateId > 0) {
+                $customerId = $candidateId;
+                $customerPath = $customerRoutes[$columnName];
+                break;
+            }
+        }
+
+        if ($customerId <= 0 || $customerPath === '') {
+            return '';
+        }
+
+        $baseUrl = orderDeleteApprovalGetBaseUrl();
+        $url = $baseUrl . $customerPath;
+        $params = array('id' => $customerId);
+        if ($approvalMode) {
+            $params['approval_mode'] = 1;
+        }
+        if ((int) $requestId > 0) {
+            $params['approval_request_id'] = (int) $requestId;
+        }
+
+        return $url . '?' . http_build_query($params);
+    }
+
+    function orderDeleteApprovalBuildPageUrl($moduleKey, $sourceOrderId, $requestId = 0, $approvalMode = false, $connect = null)
+    {
+        if (trim((string) $moduleKey) === 'user_record_log' && $connect instanceof mysqli) {
+            $userRecordLogUrl = orderDeleteApprovalBuildUserRecordLogPageUrl(
+                $connect,
+                $sourceOrderId,
+                $requestId,
+                $approvalMode
+            );
+            if ($userRecordLogUrl !== '') {
+                return $userRecordLogUrl;
+            }
+        }
+
         $config = orderDeleteApprovalGetModuleConfig($moduleKey);
         if (empty($config)) {
             $baseUrl = orderDeleteApprovalGetBaseUrl();
@@ -19279,6 +19437,30 @@ if (!function_exists('orderDeleteApprovalReadUserRow')) {
     }
 }
 
+if (!function_exists('orderDeleteApprovalIsSuperAdmin')) {
+    function orderDeleteApprovalIsSuperAdmin($connect, $userId)
+    {
+        $userId = (int) $userId;
+        if (!($connect instanceof mysqli) || $userId <= 0) {
+            return false;
+        }
+
+        $userRow = orderDeleteApprovalReadUserRow($connect, $userId);
+        $accessId = isset($userRow['access_id']) ? (int) $userRow['access_id'] : 0;
+        if ($accessId <= 0) {
+            return false;
+        }
+
+        $groupResult = getData('name', "id = '" . $accessId . "'", 'LIMIT 1', USR_GRP, $connect);
+        if (!$groupResult || $groupResult->num_rows === 0) {
+            return false;
+        }
+
+        $groupRow = $groupResult->fetch_assoc();
+        return strtolower(trim((string) (isset($groupRow['name']) ? $groupRow['name'] : ''))) === 'superadmin';
+    }
+}
+
 if (!function_exists('orderDeleteApprovalResolveSupervisorIdsForUser')) {
     function orderDeleteApprovalResolveSupervisorIdsForUser($connect, $userId)
     {
@@ -19358,6 +19540,33 @@ if (!function_exists('orderDeleteApprovalReadPendingRequestBySource')) {
     }
 }
 
+if (!function_exists('orderDeleteApprovalReadLatestRequestBySource')) {
+    function orderDeleteApprovalReadLatestRequestBySource($connect, $moduleKey, $sourceOrderId)
+    {
+        $moduleKey = trim((string) $moduleKey);
+        $sourceOrderId = (int) $sourceOrderId;
+        if (!($connect instanceof mysqli) || $moduleKey === '' || $sourceOrderId <= 0) {
+            return array();
+        }
+
+        $tableName = orderDeleteApprovalGetTableName();
+        $safeModuleKey = mysqli_real_escape_string($connect, $moduleKey);
+        $sql = "SELECT *
+                FROM `" . $tableName . "`
+                WHERE `module_key` = '" . $safeModuleKey . "'
+                  AND `source_order_id` = " . $sourceOrderId . "
+                  AND `status` = 'A'
+                ORDER BY `id` DESC
+                LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && $result->num_rows > 0) {
+            return (array) mysqli_fetch_assoc($result);
+        }
+
+        return array();
+    }
+}
+
 if (!function_exists('orderDeleteApprovalCanUserReviewRequest')) {
     function orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $userId)
     {
@@ -19409,6 +19618,10 @@ if (!function_exists('orderDeleteApprovalBuildDeletedMessage')) {
             return 'The Stock order request ' . $sourceOrderLabel . ' already deleted';
         }
 
+        if (!empty($config['source_noun'])) {
+            return 'The ' . trim((string) $config['source_noun']) . ' ' . $sourceOrderLabel . ' already deleted';
+        }
+
         $platformLabel = '';
         if (!empty($config) && isset($config['platform'])) {
             $platformLabel = ucwords(str_replace('_', ' ', trim((string) $config['platform'])));
@@ -19440,6 +19653,67 @@ if (!function_exists('orderDeleteApprovalShowDeletedPopup')) {
 
         echo '<script>confirmationDialog("", ' . json_encode($message, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ', ' . json_encode((string) $pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ', "", ' . json_encode((string) $redirectPage, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ', "ErrMO");</script>';
         exit;
+    }
+}
+
+if (!function_exists('orderDeleteApprovalShowRejectedPopup')) {
+    function orderDeleteApprovalShowRejectedPopup($connect, $requestRow, $moduleKey, $sourceOrderId, $pageTitle)
+    {
+        if (!is_array($requestRow) || empty($requestRow)) {
+            return;
+        }
+
+        $config = orderDeleteApprovalGetModuleConfig($moduleKey);
+        $actorUserId = isset($requestRow['decision_user_id']) ? (int) $requestRow['decision_user_id'] : 0;
+        $actorName = orderDeleteApprovalResolveDisplayName($connect, $actorUserId, 'User', 'Supervisor');
+        $message = $actorName . ' rejected your delete request for ' . (string) (isset($config['title']) ? $config['title'] : 'Delete Request');
+        $sourceOrderLabel = orderDeleteApprovalGetSourceOrderLabel($requestRow, $sourceOrderId);
+        if ($sourceOrderLabel !== '') {
+            $message .= ' ' . $sourceOrderLabel;
+        }
+
+        $remark = trim((string) (isset($requestRow['reject_reason']) ? $requestRow['reject_reason'] : ''));
+        if ($remark === '') {
+            $remark = trim((string) (isset($requestRow['approval_remark']) ? $requestRow['approval_remark'] : ''));
+        }
+        if ($remark !== '') {
+            $message .= ' Remark: ' . $remark;
+        }
+        $message .= '.';
+
+        echo '<script>confirmationDialog("", ' . json_encode($message, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ', ' . json_encode((string) $pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) . ', "", "", "ErrMO");</script>';
+    }
+}
+
+if (!function_exists('orderDeleteApprovalShowResultPopup')) {
+    function orderDeleteApprovalShowResultPopup($message, $pageTitle, $redirectPage = '')
+    {
+        $messageJson = json_encode((string) $message, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        $pageTitleJson = json_encode((string) $pageTitle, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        $redirectPageJson = json_encode((string) $redirectPage, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+        $siteUrl = '';
+        if (isset($GLOBALS['SITEURL'])) {
+            $siteUrl = rtrim((string) $GLOBALS['SITEURL'], '/');
+        } else if (defined('SITEURL')) {
+            $siteUrl = rtrim((string) SITEURL, '/');
+        }
+        $assetUrl = function ($path) use ($siteUrl) {
+            return htmlspecialchars($siteUrl . '/' . ltrim((string) $path, '/'), ENT_QUOTES, 'UTF-8');
+        };
+
+        echo '<!doctype html><html><head>'
+            . '<meta charset="utf-8">'
+            . '<link rel="stylesheet" href="' . $assetUrl('header/DataTable/twitter-bootstrap_5.3.0_css_bootstrap.min.css') . '">'
+            . '<script src="' . $assetUrl('header/js/jquery_1.11.1_jquery.min.js') . '"></script>'
+            . '<script src="' . $assetUrl('header/js/@popperjs_core@2.9.2_dist_umd_popper.min.js') . '"></script>'
+            . '<script src="' . $assetUrl('header/bootstrap-5.0.2-dist/js/bootstrap.min.js') . '"></script>'
+            . '<script src="' . $assetUrl('js/common.fun.js') . '"></script>'
+            . '</head><body><script>(function(){'
+            . 'var message=' . $messageJson . ';'
+            . 'var pageTitle=' . $pageTitleJson . ';'
+            . 'var redirectPage=' . $redirectPageJson . ';'
+            . 'window.confirmationDialog("",message,pageTitle,"",redirectPage,"ErrMO");'
+        . '})();</script></body></html>';
     }
 }
 
@@ -19566,6 +19840,9 @@ if (!function_exists('orderDeleteApprovalExecuteStandardSoftDelete')) {
         $pageTitle = isset($config['page_title']) ? (string) $config['page_title'] : '';
         $fallbackDataId = isset($config['fallback_data_id']) ? (int) $config['fallback_data_id'] : 0;
         $labelField = isset($config['label_field']) ? trim((string) $config['label_field']) : '';
+        $sourceNoun = isset($config['source_noun']) && trim((string) $config['source_noun']) !== ''
+            ? trim((string) $config['source_noun'])
+            : 'Order';
         $notFoundMessage = isset($config['not_found_message']) && trim((string) $config['not_found_message']) !== ''
             ? trim((string) $config['not_found_message'])
             : 'Order record was not found.';
@@ -19583,7 +19860,7 @@ if (!function_exists('orderDeleteApprovalExecuteStandardSoftDelete')) {
         $deleteRow = $deleteResult->fetch_assoc();
         $deleteLabel = $labelField !== '' && isset($deleteRow[$labelField]) ? trim((string) $deleteRow[$labelField]) : '';
         if ($deleteLabel === '') {
-            $deleteLabel = 'Order #' . $deleteDataId;
+            $deleteLabel = $sourceNoun . ' #' . $deleteDataId;
         }
 
         $deleteResponse = orderDeleteApprovalSoftDeleteSingleRecord(
@@ -19597,6 +19874,9 @@ if (!function_exists('orderDeleteApprovalExecuteStandardSoftDelete')) {
         );
         if (!empty($deleteResponse['success'])) {
             $_SESSION['delChk'] = 1;
+            if (isset($config['delete_success_message']) && trim((string) $config['delete_success_message']) !== '') {
+                $deleteResponse['message'] = trim((string) $config['delete_success_message']);
+            }
         }
 
         return $deleteResponse;
@@ -19632,6 +19912,9 @@ if (!function_exists('orderDeleteApprovalCreateSupervisorAlerts')) {
         $sourceOrderLabel = orderDeleteApprovalGetSourceOrderLabel($requestRow, $sourceOrderId);
         $requestUserId = isset($requestRow['request_user_id']) ? (int) $requestRow['request_user_id'] : 0;
         $requestUserName = orderDeleteApprovalResolveDisplayName($connect, $requestUserId);
+        $alertModuleKey = isset($config['alert_module_key']) && trim((string) $config['alert_module_key']) !== ''
+            ? trim((string) $config['alert_module_key'])
+            : 'order_delete_approval';
 
         $message = $requestUserName . ' requested delete for ' . (string) $config['title'];
         if ($sourceOrderLabel !== '') {
@@ -19641,13 +19924,13 @@ if (!function_exists('orderDeleteApprovalCreateSupervisorAlerts')) {
 
         foreach (orderDeleteApprovalParseSupervisorIds(isset($requestRow['supervisor_user_ids']) ? $requestRow['supervisor_user_ids'] : '') as $supervisorUserId) {
             systemAlertCreateOnce($connect, array(
-                'module_key' => 'order_delete_approval',
+                'module_key' => $alertModuleKey,
                 'notification_type' => 'order_delete_pending_approval',
                 'target_user_id' => $supervisorUserId,
                 'target_user_group_id' => function_exists('systemAlertGetUserGroupId') ? systemAlertGetUserGroupId($connect, $supervisorUserId) : 0,
-                'title' => 'Order Delete Request',
+                'title' => isset($config['alert_title']) && trim((string) $config['alert_title']) !== '' ? (string) $config['alert_title'] : 'Order Delete Request',
                 'message' => $message,
-                'action_url' => orderDeleteApprovalBuildPageUrl($moduleKey, $sourceOrderId, $requestId, true),
+                'action_url' => orderDeleteApprovalBuildPageUrl($moduleKey, $sourceOrderId, $requestId, true, $connect),
                 'action_label' => 'Review Request',
                 'related_table' => orderDeleteApprovalGetTableName(),
                 'related_id' => $requestId,
@@ -19679,11 +19962,16 @@ if (!function_exists('orderDeleteApprovalNotifyRequester')) {
         $sourceOrderLabel = orderDeleteApprovalGetSourceOrderLabel($requestRow, isset($requestRow['source_order_id']) ? (int) $requestRow['source_order_id'] : 0);
         $actorUserId = isset($requestRow['decision_user_id']) ? (int) $requestRow['decision_user_id'] : 0;
         $actorName = orderDeleteApprovalResolveDisplayName($connect, $actorUserId, 'User', 'Supervisor');
+        $alertModuleKey = isset($config['alert_module_key']) && trim((string) $config['alert_module_key']) !== ''
+            ? trim((string) $config['alert_module_key'])
+            : 'order_delete_approval';
 
-        $title = 'Order Delete Request';
+        $title = isset($config['alert_title']) && trim((string) $config['alert_title']) !== '' ? (string) $config['alert_title'] : 'Order Delete Request';
         $message = '';
         $actionUrl = orderDeleteApprovalBuildTableUrl($moduleKey);
-        $actionLabel = 'Open Table';
+        $actionLabel = isset($config['requester_action_label']) && trim((string) $config['requester_action_label']) !== ''
+            ? (string) $config['requester_action_label']
+            : 'Open Table';
         if ($notificationType === 'order_delete_approved') {
             $message = $actorName . ' approved your delete request ' . (string) $config['title'];
             if ($sourceOrderLabel !== '') {
@@ -19703,14 +19991,33 @@ if (!function_exists('orderDeleteApprovalNotifyRequester')) {
                 $message .= ' Remark: ' . $remark;
             }
             $message .= '.';
-            $actionUrl = orderDeleteApprovalBuildPageUrl($moduleKey, (int) (isset($requestRow['source_order_id']) ? $requestRow['source_order_id'] : 0));
-            $actionLabel = 'Open Order';
+            if (!empty($config['rejected_action_to_detail'])) {
+                $actionUrl = orderDeleteApprovalBuildPageUrl(
+                    $moduleKey,
+                    (int) (isset($requestRow['source_order_id']) ? $requestRow['source_order_id'] : 0),
+                    $requestId,
+                    true,
+                    $connect
+                );
+                $actionLabel = isset($config['requester_action_label']) && trim((string) $config['requester_action_label']) !== ''
+                    ? (string) $config['requester_action_label']
+                    : 'Open Record';
+            } else {
+                $actionUrl = orderDeleteApprovalBuildPageUrl(
+                    $moduleKey,
+                    (int) (isset($requestRow['source_order_id']) ? $requestRow['source_order_id'] : 0),
+                    0,
+                    false,
+                    $connect
+                );
+                $actionLabel = 'Open Order';
+            }
         } else {
             return;
         }
 
         systemAlertCreateOnce($connect, array(
-            'module_key' => 'order_delete_approval',
+            'module_key' => $alertModuleKey,
             'notification_type' => $notificationType,
             'target_user_id' => $requestUserId,
             'target_user_group_id' => function_exists('systemAlertGetUserGroupId') ? systemAlertGetUserGroupId($connect, $requestUserId) : 0,
@@ -19754,6 +20061,15 @@ if (!function_exists('orderDeleteApprovalRequestDelete')) {
             );
         }
 
+        if (!empty($config['superadmin_direct_delete']) && orderDeleteApprovalIsSuperAdmin($connect, (int) USER_ID)) {
+            return array(
+                'success' => true,
+                'direct_delete' => true,
+                'notification_type' => 'success',
+                'message' => '',
+            );
+        }
+
         $pendingRequest = orderDeleteApprovalReadPendingRequestBySource($connect, $moduleKey, $sourceOrderId);
         if (!empty($pendingRequest)) {
             return array(
@@ -19766,7 +20082,17 @@ if (!function_exists('orderDeleteApprovalRequestDelete')) {
         }
 
         $supervisorIds = orderDeleteApprovalResolveSupervisorIdsForUser($connect, (int) USER_ID);
+
         if (empty($supervisorIds)) {
+            if (!empty($config['require_supervisor'])) {
+                return array(
+                    'success' => false,
+                    'direct_delete' => false,
+                    'notification_type' => 'error',
+                    'message' => 'No supervisor is configured for your account. Please contact an administrator.',
+                );
+            }
+
             return array(
                 'success' => true,
                 'direct_delete' => true,
@@ -19842,18 +20168,20 @@ if (!function_exists('orderDeleteApprovalRequestDelete')) {
             ? trim((string) USER_NAME)
             : orderDeleteApprovalResolveDisplayName($connect, $requestUserId);
 
-        $auditMessage = $requestUserName . ' submitted delete request for ' . (string) $config['title'];
-        if ($sourceOrderLabel !== '') {
-            $auditMessage .= ' <b>' . htmlspecialchars($sourceOrderLabel, ENT_QUOTES, 'UTF-8') . '</b>';
-        }
-        $auditMessage .= '.';
-        orderDeleteApprovalWriteAuditLog($connect, $pageTitle, 'request', $auditMessage, $sql, $tableName);
+    $auditMessage = $requestUserName . ' sent a delete request for ' . (string) $config['title'];
+    if ($sourceOrderLabel !== '') {
+        $auditMessage .= ' <b>' . htmlspecialchars($sourceOrderLabel, ENT_QUOTES, 'UTF-8') . '</b>';
+    }
+    $auditMessage .= ' for supervisor approval.';
+    orderDeleteApprovalWriteAuditLog($connect, $pageTitle, 'approval', $auditMessage, $sql, $tableName);
 
         return array(
             'success' => true,
             'direct_delete' => false,
             'notification_type' => 'success',
-            'message' => 'Delete request has been sent to supervisor.',
+            'message' => isset($config['request_success_message']) && trim((string) $config['request_success_message']) !== ''
+                ? trim((string) $config['request_success_message'])
+                : 'Delete request has been sent to supervisor.',
             'request_row' => $requestRow,
         );
     }
@@ -19978,7 +20306,14 @@ if (!function_exists('orderDeleteApprovalProcessDecision')) {
         $auditMessage .= '.';
         orderDeleteApprovalWriteAuditLog($connect, $pageTitle, $decisionConfig['log_act'], $auditMessage, $sql, $tableName);
 
-        return array('success' => true, 'message' => $decisionConfig['success_message']);
+        $successMessage = $decisionConfig['success_message'];
+        if ($decisionType === 'approve' && isset($config['approval_success_message']) && trim((string) $config['approval_success_message']) !== '') {
+            $successMessage = trim((string) $config['approval_success_message']);
+        } else if ($decisionType === 'reject' && isset($config['rejection_success_message']) && trim((string) $config['rejection_success_message']) !== '') {
+            $successMessage = trim((string) $config['rejection_success_message']);
+        }
+
+        return array('success' => true, 'message' => $successMessage);
     }
 }
 
@@ -20011,6 +20346,10 @@ if (!function_exists('orderDeleteApprovalRenderDecisionPanel')) {
         }
 
         $requestStatus = trim((string) (isset($requestRow['request_status']) ? $requestRow['request_status'] : ''));
+        $config = orderDeleteApprovalGetModuleConfig($moduleKey);
+        $sourceNoun = isset($config['source_noun']) && trim((string) $config['source_noun']) !== ''
+            ? trim((string) $config['source_noun'])
+            : 'Order';
         $sourceOrderLabel = orderDeleteApprovalGetSourceOrderLabel($requestRow, $sourceOrderId, '#');
         $requestUserId = isset($requestRow['request_user_id']) ? (int) $requestRow['request_user_id'] : 0;
         $requestUserName = orderDeleteApprovalResolveDisplayName($connect, $requestUserId);
@@ -20066,9 +20405,10 @@ if (!function_exists('orderDeleteApprovalRenderDecisionPanel')) {
                 <div class="d-flex flex-column gap-1">
                     <strong>Delete Request - ' . htmlspecialchars($statusLabel, ENT_QUOTES, 'UTF-8') . '</strong>
                     <span><strong>Requested By:</strong> ' . htmlspecialchars($requestUserName, ENT_QUOTES, 'UTF-8') . '</span>
-                    <span><strong>Order:</strong> ' . htmlspecialchars($sourceOrderLabel, ENT_QUOTES, 'UTF-8') . '</span>
+                    <span><strong>' . htmlspecialchars($sourceNoun, ENT_QUOTES, 'UTF-8') . ':</strong> ' . htmlspecialchars($sourceOrderLabel, ENT_QUOTES, 'UTF-8') . '</span>
                 </div>
                 <input type="hidden" name="approval_request_id" value="' . (int) (isset($requestRow['id']) ? $requestRow['id'] : 0) . '">
+                <input type="hidden" name="id" value="' . $sourceOrderId . '">
                 <input type="hidden" name="approval_mode" value="1">
                 ' . $detailHtml . '
             </div>';
@@ -20090,6 +20430,7 @@ if (!function_exists('orderDeleteApprovalHandlePageFlow')) {
         $redirectPage = isset($config['redirect_page']) ? (string) $config['redirect_page'] : '';
         $clearLocalStorage = isset($config['clear_local_storage']) ? (string) $config['clear_local_storage'] : '';
         $orderDeleteApprovalMode = !empty($config['approval_mode']);
+        $useConfirmationDialog = !empty($config['use_confirmation_dialog']);
         $deleteCallback = isset($config['delete_callback']) ? $config['delete_callback'] : null;
         $decisionRemark = isset($config['decision_remark']) ? trim((string) $config['decision_remark']) : trim((string) postSpaceFilter('decision_remark'));
         $panelHtml = '';
@@ -20115,6 +20456,14 @@ if (!function_exists('orderDeleteApprovalHandlePageFlow')) {
                 );
             }
 
+            if (
+                trim((string) (isset($requestRow['request_status']) ? $requestRow['request_status'] : '')) === 'rejected' &&
+                (int) (isset($requestRow['request_user_id']) ? $requestRow['request_user_id'] : 0) === $currentUserId &&
+                function_exists('orderDeleteApprovalShowRejectedPopup')
+            ) {
+                orderDeleteApprovalShowRejectedPopup($connect, $requestRow, $moduleKey, $dataId, $pageTitle);
+            }
+
             $panelHtml = orderDeleteApprovalRenderDecisionPanel(
                 $connect,
                 $requestRow,
@@ -20134,13 +20483,17 @@ if (!function_exists('orderDeleteApprovalHandlePageFlow')) {
                 $pageTitle,
                 $deleteCallback
             );
-            renderNotificationScript(
-                $approvalResult['message'],
-                !empty($approvalResult['success']) ? 'success' : 'error',
-                $redirectPage,
-                1200,
-                true
-            );
+            if ($useConfirmationDialog && function_exists('orderDeleteApprovalShowResultPopup')) {
+                orderDeleteApprovalShowResultPopup($approvalResult['message'], $pageTitle, $redirectPage);
+            } else {
+                renderNotificationScript(
+                    $approvalResult['message'],
+                    !empty($approvalResult['success']) ? 'success' : 'error',
+                    $redirectPage,
+                    1200,
+                    true
+                );
+            }
             exit;
         }
 
@@ -20153,13 +20506,17 @@ if (!function_exists('orderDeleteApprovalHandlePageFlow')) {
                 $decisionRemark,
                 $pageTitle
             );
-            renderNotificationScript(
-                $rejectResult['message'],
-                !empty($rejectResult['success']) ? 'success' : 'error',
-                $redirectPage,
-                1200,
-                true
-            );
+            if ($useConfirmationDialog && function_exists('orderDeleteApprovalShowResultPopup')) {
+                orderDeleteApprovalShowResultPopup($rejectResult['message'], $pageTitle, $redirectPage);
+            } else {
+                renderNotificationScript(
+                    $rejectResult['message'],
+                    !empty($rejectResult['success']) ? 'success' : 'error',
+                    $redirectPage,
+                    1200,
+                    true
+                );
+            }
             exit;
         }
 

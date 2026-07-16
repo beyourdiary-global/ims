@@ -170,6 +170,12 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
                 'path' => systemAlertGetDefaultPath(),
                 'action_label' => 'Review Request',
             ),
+            'user_record_log_delete_approval' => array(
+                'pin_group_id' => 0,
+                'title' => 'User Record Log Delete Approval',
+                'path' => defined('ROUTE_USER_RECORD_LOG') ? ROUTE_USER_RECORD_LOG : '/users/user_record_log.php',
+                'action_label' => 'Review Request',
+            ),
         );
     }
 }
@@ -185,11 +191,39 @@ if (!function_exists('systemAlertBuildActionUrl')) {
 }
 
 if (!function_exists('systemAlertResolveRowActionUrl')) {
-    function systemAlertResolveRowActionUrl($alertRow)
+    function systemAlertResolveRowActionUrl($alertRow, $connect = null)
     {
         $actionUrl = trim((string) (isset($alertRow['action_url']) ? $alertRow['action_url'] : ''));
         $moduleKey = trim((string) (isset($alertRow['module_key']) ? $alertRow['module_key'] : ''));
         $relatedTable = trim((string) (isset($alertRow['related_table']) ? $alertRow['related_table'] : ''));
+        $relatedPlatform = trim((string) (isset($alertRow['related_platform']) ? $alertRow['related_platform'] : ''));
+
+        if (
+            function_exists('orderDeleteApprovalBuildPageUrl')
+            && function_exists('orderDeleteApprovalReadRequest')
+            && ($moduleKey === 'user_record_log_delete_approval' || ($moduleKey === 'order_delete_approval' && $relatedPlatform === 'user_record_log'))
+        ) {
+            if (!($connect instanceof mysqli) && isset($GLOBALS['connect']) && $GLOBALS['connect'] instanceof mysqli) {
+                $connect = $GLOBALS['connect'];
+            }
+            $requestId = (int) (isset($alertRow['related_id']) ? $alertRow['related_id'] : 0);
+            $requestRow = $requestId > 0 && $connect instanceof mysqli
+                ? orderDeleteApprovalReadRequest($connect, $requestId)
+                : array();
+            if (!empty($requestRow)) {
+                $sourceOrderId = (int) (isset($requestRow['source_order_id']) ? $requestRow['source_order_id'] : 0);
+                $resolvedUrl = orderDeleteApprovalBuildPageUrl(
+                    'user_record_log',
+                    $sourceOrderId,
+                    $requestId,
+                    true,
+                    $connect
+                );
+                if ($resolvedUrl !== '') {
+                    return $resolvedUrl;
+                }
+            }
+        }
 
         // Module notice alerts should always follow the current module route.
         if ($moduleKey !== '' && $relatedTable === 'module_notice') {
@@ -637,9 +671,13 @@ if (!function_exists('systemAlertFetchForUser')) {
 }
 
 if (!function_exists('systemAlertFormatModuleLabel')) {
-    function systemAlertFormatModuleLabel($moduleKey)
+    function systemAlertFormatModuleLabel($moduleKey, $relatedPlatform = '')
     {
         $moduleKey = trim((string) $moduleKey);
+        $relatedPlatform = trim((string) $relatedPlatform);
+        if ($moduleKey === 'order_delete_approval' && $relatedPlatform === 'user_record_log') {
+            return 'User Record Log Delete Approval';
+        }
         $configs = systemAlertGetModuleConfigs();
         if ($moduleKey !== '' && isset($configs[$moduleKey]['title']) && trim((string) $configs[$moduleKey]['title']) !== '') {
             return trim((string) $configs[$moduleKey]['title']);

@@ -891,7 +891,34 @@
         customer_id: customerId,
         customer_column: customerColumn,
         return_url: pathReturn,
+        approval_mode: cfg.approvalMode ? 1 : 0,
+        approval_request_id: parseInt(cfg.approvalRequestId || "0", 10) || 0,
+        id: parseInt(cfg.approvalRecordId || "0", 10) || 0,
       };
+    }
+
+    function scrollToApprovalPanel() {
+      if (!cfg.approvalMode) {
+        return;
+      }
+
+      var $approvalPanel = $list.find(".user-record-log-approval-panel").first();
+      var approvalRecordId = parseInt(cfg.approvalRecordId || "0", 10) || 0;
+      var $target = $approvalPanel;
+      if (!$target.length && approvalRecordId > 0) {
+        $target = $list.find('.url-log-row[data-record-id="' + approvalRecordId + '"]').first();
+      }
+      if (!$target.length) {
+        return;
+      }
+
+      var headerOffset = 190;
+      var panelTop = parseInt($target.offset().top, 10) || 0;
+      var scrollTop = Math.max(0, panelTop - headerOffset);
+
+      window.setTimeout(function () {
+        $("html, body").stop(true).animate({ scrollTop: scrollTop }, 500);
+      }, 50);
     }
 
     function renderPagingSummary(total, page, totalPages, pageSize) {
@@ -1061,6 +1088,7 @@
             currentPageSize,
           );
           renderPagination(parseInt(res.total_pages || 1, 10), currentPage);
+          scrollToApprovalPanel();
           hideAlert();
         })
         .fail(function (xhr) {
@@ -1155,6 +1183,90 @@
         .always(function () {
           setLoading(false);
         });
+    }
+
+    function showDeleteConfirmationMessage(message) {
+      message = String(message || "Failed to delete user record log.").trim();
+      if (typeof confirmationDialog === "function") {
+        confirmationDialog("", message, "User Record Log", "", "", "ErrMO");
+        return;
+      }
+
+      showAlert("danger", message);
+    }
+
+    function executeDeleteRecord(recordId, $button) {
+      hideAlert();
+      if ($button && $button.length) {
+        $button.prop("disabled", true);
+      }
+      setLoading(true);
+
+      $.ajax({
+        url: ajaxUrl,
+        method: "POST",
+        dataType: "json",
+        data: {
+          url_action: "delete",
+          record_id: String(recordId),
+          customer_id: String(customerId || 0),
+          customer_column: customerColumn,
+          return_url: pathReturn,
+        },
+        timeout: 25000,
+      })
+        .done(function (res) {
+          if (!res || !res.ok) {
+            showDeleteConfirmationMessage(
+              res && res.message ? res.message : "Failed to delete user record log.",
+            );
+            return;
+          }
+
+          loadList();
+          hideAlert();
+          showSuccessPopup(
+            res.message || "User record log delete request submitted successfully.",
+          );
+        })
+        .fail(function (xhr) {
+          var extra = "";
+          if (xhr && xhr.responseText) {
+            extra = " " + String(xhr.responseText).substring(0, 120);
+          }
+          showDeleteConfirmationMessage(
+            "Request failed while deleting user record log." + extra,
+          );
+        })
+        .always(function () {
+          if ($button && $button.length) {
+            $button.prop("disabled", false);
+          }
+          setLoading(false);
+        });
+    }
+
+    function deleteRecord(recordId, $button) {
+      recordId = parseInt(recordId || "0", 10) || 0;
+      if (!recordId) {
+        showAlert("danger", "Invalid user record log.");
+        return;
+      }
+
+      var confirmationMessage =
+        "Delete this user record log? If approval is required, it will be sent to your supervisor.";
+      confirmationDialog(
+        "",
+        confirmationMessage,
+        "Delete User Record Log",
+        "",
+        "",
+        "CONFIRM",
+      ).then(function (confirmed) {
+        if (confirmed) {
+          executeDeleteRecord(recordId, $button);
+        }
+      });
     }
 
     $form.off("submit.url").on("submit.url", function (e) {
@@ -1386,6 +1498,10 @@
       if ($form.offset()) {
         $("html, body").animate({ scrollTop: $form.offset().top - 100 }, 250);
       }
+    });
+
+    $list.on("click", ".url-delete-btn", function () {
+      deleteRecord($(this).data("id"), $(this));
     });
 
     $list.on("click", ".url-toggle-btn", function () {

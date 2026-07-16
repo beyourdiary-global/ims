@@ -123,6 +123,6 @@ if (
 }
 
 $targetUrl = function_exists('systemAlertResolveRowActionUrl')
-    ? systemAlertResolveRowActionUrl($alertRow)
+    ? systemAlertResolveRowActionUrl($alertRow, $connect)
     : trim((string) (isset($alertRow['action_url']) ? $alertRow['action_url'] : ''));
 systemAlertActionRedirect($targetUrl !== '' ? $targetUrl : $fallbackUrl);
