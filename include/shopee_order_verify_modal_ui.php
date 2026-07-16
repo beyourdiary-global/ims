@@ -15,8 +15,22 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModal')) {
                 text-transform: none !important;
             }
 
+            #<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?> .shopee-order-verify-modal-dialog {
+                width: calc(100% - 2rem);
+                max-width: 1800px;
+            }
+
+            #<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?> .shopee-order-verify-modal-dialog .modal-content {
+                max-height: 96vh;
+            }
+
             .shopee-airbill-preview-media {
                 margin-top: 12px;
+            }
+
+            #<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?>PreviewWrap {
+                position: relative;
+                z-index: 1;
             }
 
             .shopee-verify-method-card {
@@ -45,19 +59,52 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModal')) {
 
             .shopee-airbill-preview-media img,
             .shopee-airbill-preview-media iframe {
+                display: block;
                 width: 100%;
-                max-width: 520px;
+                max-width: none;
                 border: 1px solid #d9e2ef;
                 border-radius: 10px;
                 background: #fff;
             }
 
             .shopee-airbill-preview-media iframe {
-                min-height: 520px;
+                height: min(78vh, 900px);
+                min-height: 640px;
+            }
+
+            @media (min-width: 992px) {
+                #<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?>PreviewWrap {
+                    width: calc(150% + 0.75rem);
+                    margin-left: calc(-50% - 0.75rem);
+                }
+            }
+
+            @media (max-width: 991.98px) {
+                #<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?> .shopee-order-verify-modal-dialog {
+                    width: 100%;
+                    max-width: none;
+                    margin: 0;
+                }
+
+                #<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?> .shopee-order-verify-modal-dialog .modal-content {
+                    min-height: 100vh;
+                    max-height: none;
+                    border-radius: 0;
+                }
+
+                .shopee-airbill-preview-media iframe {
+                    height: 72vh;
+                    min-height: 520px;
+                }
+
+                #<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?>PreviewWrap {
+                    width: 100%;
+                    margin-left: 0;
+                }
             }
         </style>
         <div class="modal fade" id="<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?>" tabindex="-1" aria-hidden="true">
-            <div class="modal-dialog modal-xl modal-dialog-scrollable">
+            <div class="modal-dialog modal-xl modal-dialog-scrollable shopee-order-verify-modal-dialog">
                 <div class="modal-content">
                     <div class="modal-header">
                         <h5 class="modal-title" id="<?= htmlspecialchars($modalId, ENT_QUOTES, 'UTF-8') ?>Title">Verify Order</h5>
@@ -413,20 +460,70 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
                         return file.arrayBuffer().then(function (buffer) {
                             return pdfjsLib.getDocument({ data: buffer }).promise;
                         }).then(function (pdfDoc) {
-                            var pagePromises = [];
-                            for (var pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
-                                pagePromises.push(
-                                    pdfDoc.getPage(pageNumber).then(function (page) {
-                                        return page.getTextContent().then(function (textContent) {
-                                            return textContent.items.map(function (item) {
-                                                return String(item.str || '').trim();
-                                            }).filter(Boolean).join(' ');
-                                        });
-                                    })
-                                );
+                            var pages = [];
+                            var currentPageNumber = 1;
+
+                            function recognizePdfPage(page, pageNumber) {
+                                if (typeof Tesseract === 'undefined') {
+                                    return Promise.resolve('');
+                                }
+
+                                var viewport = page.getViewport({ scale: 2.0 });
+                                var canvas = document.createElement('canvas');
+                                canvas.width = Math.ceil(viewport.width);
+                                canvas.height = Math.ceil(viewport.height);
+                                var context = canvas.getContext('2d');
+                                if (!context) {
+                                    return Promise.resolve('');
+                                }
+
+                                setStatus('PDF has no text layer. Scanning page ' + pageNumber + ' of ' + pdfDoc.numPages + '...', false);
+                                return page.render({ canvasContext: context, viewport: viewport }).promise.then(function () {
+                                    return Tesseract.recognize(canvas, 'eng');
+                                }).then(function (result) {
+                                    return result && result.data && result.data.text ? String(result.data.text) : '';
+                                }).catch(function () {
+                                    return '';
+                                }).then(function (text) {
+                                    canvas.width = 0;
+                                    canvas.height = 0;
+                                    return text;
+                                });
                             }
-                            return Promise.all(pagePromises).then(function (pages) {
-                                return pages.join("\n");
+
+                            function readNextPage() {
+                                if (currentPageNumber > pdfDoc.numPages) {
+                                    return Promise.resolve(pages.join("\n").trim());
+                                }
+
+                                var pageNumber = currentPageNumber;
+                                currentPageNumber += 1;
+                                return pdfDoc.getPage(pageNumber).then(function (page) {
+                                    return page.getTextContent().catch(function () {
+                                        return { items: [] };
+                                    }).then(function (textContent) {
+                                        var pageText = (textContent.items || []).map(function (item) {
+                                            return String(item.str || '').trim();
+                                        }).filter(Boolean).join(' ');
+
+                                        if (pageText.trim() !== '') {
+                                            pages.push(pageText);
+                                            return '';
+                                        }
+
+                                        return recognizePdfPage(page, pageNumber).then(function (ocrText) {
+                                            pages.push(String(ocrText || '').trim());
+                                            return '';
+                                        });
+                                    });
+                                }).then(readNextPage);
+                            }
+
+                            return readNextPage().then(function (text) {
+                                if (typeof pdfDoc.destroy === 'function') {
+                                    pdfDoc.destroy();
+                                }
+                                return text;
                             });
                         }).catch(function () {
                             return '';
