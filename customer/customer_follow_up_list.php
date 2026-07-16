@@ -2474,7 +2474,7 @@ foreach ($customerIdsByPlatform as $rowPlatform => $customerIdMap) {
 
         function customerFollowUpInitializeTableSection() {
             if (document.getElementById('customer_follow_up_table')) {
-                createSortingTable('customer_follow_up_table', { searching: false });
+                createSortingTable('customer_follow_up_table', { searching: true });
                 datatableAlignment('customer_follow_up_table');
                 keepDataTableControlsVisible('customer_follow_up_table');
             }
