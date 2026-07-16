@@ -35,6 +35,50 @@ if (!empty($returnUrlParams)) {
     $returnUrl .= '?' . http_build_query($returnUrlParams);
 }
 
+$userRecordLogDeleteModuleKey = 'user_record_log';
+$userRecordLogDeleteState = orderDeleteApprovalInitPageState();
+if (
+    empty($userRecordLogDeleteState['approval_mode']) &&
+    !empty($userRecordLogDeleteState['data_id']) &&
+    function_exists('orderDeleteApprovalReadLatestRequestBySource')
+) {
+    $legacyUserRecordLogRequest = orderDeleteApprovalReadLatestRequestBySource(
+        $connect,
+        $userRecordLogDeleteModuleKey,
+        (int) $userRecordLogDeleteState['data_id']
+    );
+    if (
+        !empty($legacyUserRecordLogRequest) &&
+        trim((string) (isset($legacyUserRecordLogRequest['request_status']) ? $legacyUserRecordLogRequest['request_status'] : '')) === 'rejected' &&
+        (int) (isset($legacyUserRecordLogRequest['request_user_id']) ? $legacyUserRecordLogRequest['request_user_id'] : 0) === (int) USER_ID
+    ) {
+        $userRecordLogDeleteState['approval_mode'] = true;
+        $userRecordLogDeleteState['request_id'] = (int) (isset($legacyUserRecordLogRequest['id']) ? $legacyUserRecordLogRequest['id'] : 0);
+    }
+}
+$userRecordLogDeleteCallback = orderDeleteApprovalBuildStandardDeleteCallback(array(
+    'data_connect' => $connect,
+    'audit_connect' => $connect,
+    'table_name' => USER_RECORD_LOG,
+    'page_title' => $pageTitle,
+    'fallback_data_id' => isset($userRecordLogDeleteState['data_id']) ? (int) $userRecordLogDeleteState['data_id'] : 0,
+    'source_noun' => 'User Record',
+    'delete_success_message' => 'User record deleted successfully.',
+    'not_found_message' => 'User record log was not found.',
+));
+$userRecordLogApprovalPanelHtml = orderDeleteApprovalHandlePageFlow(array(
+    'connect' => $connect,
+    'request_id' => isset($userRecordLogDeleteState['request_id']) ? (int) $userRecordLogDeleteState['request_id'] : 0,
+    'module_key' => $userRecordLogDeleteModuleKey,
+    'data_id' => isset($userRecordLogDeleteState['data_id']) ? (int) $userRecordLogDeleteState['data_id'] : 0,
+    'current_user_id' => (int) USER_ID,
+    'page_title' => $pageTitle,
+    'redirect_page' => $SITEURL . $returnUrl,
+    'approval_mode' => !empty($userRecordLogDeleteState['approval_mode']),
+    'use_confirmation_dialog' => true,
+    'delete_callback' => $userRecordLogDeleteCallback,
+));
+
 if (isset($finance_connect) && ($finance_connect instanceof mysqli)) {
     $customerLookupConnect = $finance_connect;
 } else {
@@ -91,6 +135,9 @@ if (!empty($context['customer_label'])) {
                 'context' => $context,
                 'section_heading' => '',
                 'show_scope_note' => true,
+                'approval_panel_html' => $userRecordLogApprovalPanelHtml,
+                'approval_record_id' => isset($userRecordLogDeleteState['data_id']) ? (int) $userRecordLogDeleteState['data_id'] : 0,
+                'approval_request_id' => isset($userRecordLogDeleteState['request_id']) ? (int) $userRecordLogDeleteState['request_id'] : 0,
             ));
             ?>
         </div>

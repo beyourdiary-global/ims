@@ -38,6 +38,14 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+$facebookCustomerPageUrl = $SITEURL . '/customer/fb_cust_deals.php?id=' . (int) $dataId;
+$facebookUserRecordLogApproval = orderDeleteApprovalPrepareUserRecordLogCustomerPage(
+    $connect,
+    (int) $dataId,
+    $pageTitle,
+    $facebookCustomerPageUrl
+);
+
 if (!($dataId) && !($act)) {
     renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
@@ -980,6 +988,10 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         'context' => $customerLogContext,
                         'section_heading' => 'User Record Log',
                         'show_scope_note' => true,
+                        'approval_panel_html' => isset($facebookUserRecordLogApproval['panel_html']) ? $facebookUserRecordLogApproval['panel_html'] : '',
+                        'approval_record_id' => isset($facebookUserRecordLogApproval['approval_record_id']) ? $facebookUserRecordLogApproval['approval_record_id'] : 0,
+                        'approval_request_id' => isset($facebookUserRecordLogApproval['approval_request_id']) ? $facebookUserRecordLogApproval['approval_request_id'] : 0,
+                        'approval_action_url' => isset($facebookUserRecordLogApproval['action_url']) ? $facebookUserRecordLogApproval['action_url'] : '',
                     ));
                 }
                 ?>

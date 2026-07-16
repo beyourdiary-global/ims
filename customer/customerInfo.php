@@ -38,6 +38,14 @@ if ($act != 'I' && (!$result || !($row = $result->fetch_assoc()))) {
     $act = "F";
 }
 
+$customerInfoPageUrl = $SITEURL . '/customer/customerInfo.php?id=' . (int) $dataId;
+$customerInfoUserRecordLogApproval = orderDeleteApprovalPrepareUserRecordLogCustomerPage(
+    $connect,
+    (int) $dataId,
+    $pageTitle,
+    $customerInfoPageUrl
+);
+
 //Delete Data
 if ($act == 'D') {
     deleteRecord($tblName, '', $dataId, $row['name'] ." ". $row['last_name'], $connect, $connect, $cdate, $ctime, $pageTitle); 
@@ -583,6 +591,10 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             'context' => $customerLogContext,
                             'section_heading' => 'User Record Log',
                             'show_scope_note' => true,
+                            'approval_panel_html' => isset($customerInfoUserRecordLogApproval['panel_html']) ? $customerInfoUserRecordLogApproval['panel_html'] : '',
+                            'approval_record_id' => isset($customerInfoUserRecordLogApproval['approval_record_id']) ? $customerInfoUserRecordLogApproval['approval_record_id'] : 0,
+                            'approval_request_id' => isset($customerInfoUserRecordLogApproval['approval_request_id']) ? $customerInfoUserRecordLogApproval['approval_request_id'] : 0,
+                            'approval_action_url' => isset($customerInfoUserRecordLogApproval['action_url']) ? $customerInfoUserRecordLogApproval['action_url'] : '',
                         ));
                     }
                     ?>

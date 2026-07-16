@@ -117,6 +117,8 @@ define('ROUTE_FINANCE_FLOW_REPORT', '/finance/flow_report.php');
 define('ROUTE_CUSTOMER_FOLLOW_UP_LIST', '/customer/customer_follow_up_list.php');
 define('ROUTE_CAMPAIGN_FOLLOW_UP_TASK', '/campaign/campaign_follow_up_task.php');
 define('ROUTE_TASK_BOARD', '/task/board.php');
+define('ROUTE_TASK_BULK_EDIT', '/task/bulk_edit_task.php');
+define('ROUTE_USER_RECORD_LOG', '/users/user_record_log.php');
 define('ROUTE_SHOPEE_VERIFY', '/shopee/shopee_verify.php');
 define('ROUTE_FINANCE_WEBSITE_ORDER_REQUEST', '/finance/website_order_request.php');
 define('ROUTE_FINANCE_WEBSITE_ORDER_REQUEST_TABLE', '/finance/website_order_request_table.php');

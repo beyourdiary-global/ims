@@ -37,6 +37,14 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+$websiteCustomerPageUrl = $SITEURL . '/customer/website_customer_record.php?id=' . (int) $dataId;
+$websiteUserRecordLogApproval = orderDeleteApprovalPrepareUserRecordLogCustomerPage(
+    $connect,
+    (int) $dataId,
+    $pageTitle,
+    $websiteCustomerPageUrl
+);
+
 if (!($dataId) && !($act)) {
     renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
@@ -922,6 +930,10 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         'context' => $customerLogContext,
                         'section_heading' => 'User Record Log',
                         'show_scope_note' => true,
+                        'approval_panel_html' => isset($websiteUserRecordLogApproval['panel_html']) ? $websiteUserRecordLogApproval['panel_html'] : '',
+                        'approval_record_id' => isset($websiteUserRecordLogApproval['approval_record_id']) ? $websiteUserRecordLogApproval['approval_record_id'] : 0,
+                        'approval_request_id' => isset($websiteUserRecordLogApproval['approval_request_id']) ? $websiteUserRecordLogApproval['approval_request_id'] : 0,
+                        'approval_action_url' => isset($websiteUserRecordLogApproval['action_url']) ? $websiteUserRecordLogApproval['action_url'] : '',
                     ));
                 }
                 ?>

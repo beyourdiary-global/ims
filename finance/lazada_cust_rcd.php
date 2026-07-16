@@ -73,6 +73,14 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+$lazadaCustomerPageUrl = $SITEURL . '/finance/lazada_cust_rcd.php?id=' . (int) $dataId;
+$lazadaUserRecordLogApproval = orderDeleteApprovalPrepareUserRecordLogCustomerPage(
+    $connect,
+    (int) $dataId,
+    $pageTitle,
+    $lazadaCustomerPageUrl
+);
+
 if (!($dataId) && !($act)) {
     renderNotificationScript('Invalid action.', 'error', $redirectPage);
 
@@ -900,6 +908,10 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         'context' => $customerLogContext,
                         'section_heading' => 'User Record Log',
                         'show_scope_note' => true,
+                        'approval_panel_html' => isset($lazadaUserRecordLogApproval['panel_html']) ? $lazadaUserRecordLogApproval['panel_html'] : '',
+                        'approval_record_id' => isset($lazadaUserRecordLogApproval['approval_record_id']) ? $lazadaUserRecordLogApproval['approval_record_id'] : 0,
+                        'approval_request_id' => isset($lazadaUserRecordLogApproval['approval_request_id']) ? $lazadaUserRecordLogApproval['approval_request_id'] : 0,
+                        'approval_action_url' => isset($lazadaUserRecordLogApproval['action_url']) ? $lazadaUserRecordLogApproval['action_url'] : '',
                     ));
                 }
                 ?>
