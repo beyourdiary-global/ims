@@ -1218,6 +1218,14 @@
       $("[id^='url-body-']").hide();
     });
 
+    $("#url_expand_system_btn").on("click", function () {
+      $list.find(".url-system-record .card-body").show();
+    });
+
+    $("#url_collapse_system_btn").on("click", function () {
+      $list.find(".url-system-record .card-body").hide();
+    });
+
     $(document).on("change", ".user-record-log-attachment-input", function () {
       refreshAttachmentPreview();
     });

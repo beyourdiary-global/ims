@@ -2664,6 +2664,12 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                                 <div class="col-12 col-md-auto d-grid">
                                     <button type="button" class="btn btn-sm btn-rounded btn-outline-primary w-100" id="url_collapse_all_btn">Collapse All</button>
                                 </div>
+                                <div class="col-12 col-md-auto d-grid">
+                                    <button type="button" class="btn btn-sm btn-rounded btn-outline-primary w-100" id="url_expand_system_btn">Expand System</button>
+                                </div>
+                                <div class="col-12 col-md-auto d-grid">
+                                    <button type="button" class="btn btn-sm btn-rounded btn-outline-primary w-100" id="url_collapse_system_btn">Collapse System</button>
+                                </div>
                             </div>
                         </div>
                     </div>
