@@ -3098,13 +3098,20 @@ function applyItemDetailToModal(
 
   var title = String(info.title || "").trim();
   var description = String(info.description || "").trim();
+  var previousTitle = String($("#taskItemDetailTitleInput").val() || "").trim();
   $("#taskItemDetailTitleInput").val(title);
-  resizeItemDetailTitleInput();
   $("#taskItemDetailDescriptionInput").val(description);
   itemDetailModalState.initialTitle = title;
   itemDetailModalState.initialDescription = description;
   itemDetailModalState.titleEditing = false;
   $(".task-item-detail-title-row").removeClass("is-editing");
+  if (
+    previousTitle !== title &&
+    $("#taskItemDetailModal").hasClass("show") &&
+    typeof resizeItemDetailTitleInput === "function"
+  ) {
+    resizeItemDetailTitleInput({ fitFont: false });
+  }
 
   if (typeof window.setDescriptionEditorContent === "function") {
     window.setDescriptionEditorContent(description);
@@ -3622,9 +3629,12 @@ function saveItemDetailsFromModal(closeAfterSave, options) {
   );
 }
 
-function loadItemDetail(itemId) {
+function loadItemDetail(itemId, onComplete) {
   var id = Number(itemId || 0);
   if (!id) {
+    if (typeof onComplete === "function") {
+      onComplete(false);
+    }
     return;
   }
 
@@ -3635,6 +3645,9 @@ function loadItemDetail(itemId) {
     },
     function (res) {
       if (!res || !res.ok) {
+        if (typeof onComplete === "function") {
+          onComplete(false);
+        }
         return;
       }
       applyItemDetailToModal(
@@ -3644,6 +3657,14 @@ function loadItemDetail(itemId) {
         Array.isArray(res.webLinks) ? res.webLinks : null,
         res.itemLinks && typeof res.itemLinks === "object" ? res.itemLinks : null,
       );
+      if (typeof onComplete === "function") {
+        onComplete(true);
+      }
+    },
+    function () {
+      if (typeof onComplete === "function") {
+        onComplete(false);
+      }
     },
   );
 }
