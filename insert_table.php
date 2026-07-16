@@ -514,6 +514,7 @@ if ($cmsConn->connect_error) {
 } else {
     insertTableEnsureSupplierInvoiceSetup($conn, $cmsConn, $db_fin);
     insertTableEnsurePackageParentSkuColumns($cmsConn, $db_cms);
+    migrationEnsureTableUnicodeInnoDb($cmsConn, $db_cms, PKG);
     insertTableEnsureOrderReportPins($cmsConn);
     insertTableEnsureLuckyDrawPins($cmsConn);
     insertTableEnsureLazadaImportPin($cmsConn);
@@ -5310,46 +5311,6 @@ if ($conn->select_db($db_fin)) {
         echo "<p style='color:green;'>Verified table `" . MEMBER_BONUS_SPECIAL_SETTING . "` for member bonus special settings.</p>";
     } else {
         echo "<p style='color:red;'>Failed creating `" . MEMBER_BONUS_SPECIAL_SETTING . "`: " . $conn->error . "</p>";
-    }
-
-    $memberBonusTierCountResult = $conn->query("SELECT COUNT(*) AS `total` FROM `" . MEMBER_BONUS_TIER_SETTING . "` WHERE `status` = 'A'");
-    $memberBonusTierCount = ($memberBonusTierCountResult && ($memberBonusTierCountRow = $memberBonusTierCountResult->fetch_assoc())) ? (int) ($memberBonusTierCountRow['total'] ?? 0) : 0;
-    if ($memberBonusTierCount === 0) {
-        $seedMemberBonusTierSql = "INSERT INTO `" . MEMBER_BONUS_TIER_SETTING . "` (
-                `tier_key`, `tier_name`, `requirement_type`, `minimum_purchase_amount`,
-                `private_point_rate`, `marketplace_point_rate`, `bonus_points`, `bonus_frequency`,
-                `remark`, `display_order`, `create_by`, `create_date`, `create_time`, `update_by`, `update_date`, `update_time`, `status`
-            ) VALUES
-                ('normal', 'Normal Member', 'register', 0.00, 0.0300, 0.0300, 0, 'monthly', 'System records the base point ratio after member registration/purchase.', 1, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A'),
-                ('silver', 'Silver Member', 'minimum_purchase_amount', 500.00, 0.0500, 0.0300, 10, 'monthly', 'Auto upgrade after cumulative purchase reaches RM500.', 2, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A'),
-                ('gold', 'Gold Member', 'minimum_purchase_amount', 1500.00, 0.0800, 0.0300, 15, 'monthly', 'Auto upgrade after cumulative purchase reaches RM1500.', 3, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A'),
-                ('vip', 'VIP', 'minimum_purchase_amount', 3000.00, 0.1000, 0.0300, 20, 'monthly', 'Auto upgrade after cumulative purchase reaches RM3000.', 4, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A')";
-        if ($conn->query($seedMemberBonusTierSql)) {
-            echo "<p style='color:green;'>Seeded default rows for `" . MEMBER_BONUS_TIER_SETTING . "`.</p>";
-        } else {
-            echo "<p style='color:red;'>Failed seeding `" . MEMBER_BONUS_TIER_SETTING . "`: " . $conn->error . "</p>";
-        }
-    } else {
-        echo "<p style='color:green;'>Verified `" . MEMBER_BONUS_TIER_SETTING . "` already has active rows.</p>";
-    }
-
-    $memberBonusSpecialCountResult = $conn->query("SELECT COUNT(*) AS `total` FROM `" . MEMBER_BONUS_SPECIAL_SETTING . "` WHERE `status` = 'A'");
-    $memberBonusSpecialCount = ($memberBonusSpecialCountResult && ($memberBonusSpecialCountRow = $memberBonusSpecialCountResult->fetch_assoc())) ? (int) ($memberBonusSpecialCountRow['total'] ?? 0) : 0;
-    if ($memberBonusSpecialCount === 0) {
-        $seedMemberBonusSpecialSql = "INSERT INTO `" . MEMBER_BONUS_SPECIAL_SETTING . "` (
-                `bonus_key`, `bonus_name`, `minimum_purchase_amount`, `minimum_purchase_times`,
-                `bonus_points`, `remark`, `display_order`,
-                `create_by`, `create_date`, `create_time`, `update_by`, `update_date`, `update_time`, `status`
-            ) VALUES
-                ('birthday', 'Birthday Bonus', 0.00, 0, 10, 'Give private bonus points during the registered Urbanism member birthday month.', 1, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A'),
-                ('monthly_purchase', 'Monthly Purchase Bonus', 300.00, 2, 10, 'Give private bonus points when current month purchase amount or order count reaches the configured target.', 2, 'SYSTEM', CURDATE(), CURTIME(), 'SYSTEM', CURDATE(), CURTIME(), 'A')";
-        if ($conn->query($seedMemberBonusSpecialSql)) {
-            echo "<p style='color:green;'>Seeded default rows for `" . MEMBER_BONUS_SPECIAL_SETTING . "`.</p>";
-        } else {
-            echo "<p style='color:red;'>Failed seeding `" . MEMBER_BONUS_SPECIAL_SETTING . "`: " . $conn->error . "</p>";
-        }
-    } else {
-        echo "<p style='color:green;'>Verified `" . MEMBER_BONUS_SPECIAL_SETTING . "` already has active rows.</p>";
     }
 
     migrationEnsureColumn($conn, $db_cms, MEMBER_POINT_TRANSACTION, 'wallet_type', "ALTER TABLE `" . MEMBER_POINT_TRANSACTION . "` ADD COLUMN `wallet_type` VARCHAR(30) NOT NULL DEFAULT 'frozen' AFTER `transaction_type`", "Verified `" . MEMBER_POINT_TRANSACTION . "` includes `wallet_type`.");
