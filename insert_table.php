@@ -4857,7 +4857,8 @@ if ($conn->select_db($db_cms)) {
             if (in_array($groupId, array(1, 2), true)) {
                 $updatedPins = addAccessToPinBlock($currentPins, 162, array(1));
             } else {
-                $updatedPins = removePinBlockById($currentPins, 162);
+                // Preserve any Member Point assignment configured for other user groups.
+                $updatedPins = $currentPins;
             }
 
             if ($updatedPins !== $currentPins) {
