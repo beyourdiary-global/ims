@@ -1823,12 +1823,30 @@ function normalizeChildWorkItems(raw) {
       work_item_key: String(row.work_item_key || "").trim(),
       title: String(row.title || "").trim(),
       priority: String(row.priority || "Medium").trim() || "Medium",
+      original_estimate: String(row.original_estimate || "").trim(),
+      original_estimate_value: Math.max(0, Number(row.original_estimate_value || 0)),
+      original_estimate_unit: String(row.original_estimate_unit || "minutes").trim() || "minutes",
+      labels: Array.isArray(row.labels) ? row.labels : [],
+      task_status_labels: Array.isArray(row.task_status_labels) ? row.task_status_labels : [],
+      work_type_id: Number(row.work_type_id || 0),
+      work_type_name: String(row.work_type_name || "Task").trim() || "Task",
+      parent_item_id: Number(row.parent_item_id || 0),
+      parent_display: String(row.parent_display || "").trim(),
       assignee_user_id: Number(row.assignee_user_id || 0),
       assignee_name: String(row.assignee_name || "").trim(),
+      reporter_user_id: Number(row.reporter_user_id || 0),
+      reporter_name: String(row.reporter_name || "").trim(),
       column_id: Number(row.column_id || 0),
       status_name: String(row.status_name || "").trim(),
       is_done: Number(row.is_done || 0) > 0 ? 1 : 0,
-      time_tracking: String(row.time_tracking || "").trim(),
+      time_tracking: String(row.time_tracking || "").trim() || "No time logged",
+      remaining_estimate_seconds: row.remaining_estimate_seconds === null || row.remaining_estimate_seconds === undefined ? null : Number(row.remaining_estimate_seconds || 0),
+      due_date: String(row.due_date || "").trim(),
+      start_date: String(row.start_date || "").trim(),
+      amendement_date: String(row.amendement_date || "").trim(),
+      amendement_time: String(row.amendement_time || "").trim(),
+      second_amendement_date: String(row.second_amendement_date || "").trim(),
+      second_amendement_time: String(row.second_amendement_time || "").trim(),
     };
   });
 
@@ -1914,6 +1932,88 @@ function childWorkItemPriorityOptionsHtml(selectedPriority) {
   }
 
   return html;
+}
+
+function childWorkItemEstimateHtml(value, unit, storedValue) {
+  var rawEstimate = String(storedValue || "").trim();
+  if (rawEstimate) {
+    return (
+      '<span class="task-item-child-estimate-value">' +
+      escHtml(rawEstimate) +
+      "</span>"
+    );
+  }
+
+  var estimateValue = Math.max(0, Number(value || 0));
+  if (!estimateValue) {
+    return '<span class="task-item-child-estimate-empty">—</span>';
+  }
+
+  var estimateUnit = String(unit || "minutes").trim().toLowerCase();
+  var unitMap = {
+    minute: "minute",
+    minutes: "minute",
+    hour: "hour",
+    hours: "hour",
+    day: "day",
+    days: "day",
+    week: "week",
+    weeks: "week",
+  };
+  var unitLabel = unitMap[estimateUnit] || "minute";
+  if (estimateValue !== 1) {
+    unitLabel += "s";
+  }
+
+  return (
+    '<span class="task-item-child-estimate-value">' +
+    escHtml(String(estimateValue) + " " + unitLabel) +
+    "</span>"
+  );
+}
+
+function childWorkItemLabelsHtml(labels) {
+  var items = Array.isArray(labels) ? labels : [];
+  var validLabels = [];
+  for (var index = 0; index < items.length; index++) {
+    var label = items[index] || {};
+    var labelName = String(label.name || "").trim();
+    if (labelName) {
+      validLabels.push(label);
+    }
+  }
+
+  if (!validLabels.length) {
+    return '<span class="task-item-child-labels-empty">—</span>';
+  }
+
+  var html =
+    '<span class="task-item-child-labels">' +
+    '<span class="task-label-pill task-item-child-label-pill" style="' +
+    labelPillStyle(validLabels[0].color, "#DCE8FF") +
+    '">' +
+    escHtml(String(validLabels[0].name || "")) +
+    "</span>";
+
+  for (var extraIndex = 1; extraIndex < validLabels.length; extraIndex++) {
+    html +=
+      '<span class="task-label-pill task-item-child-label-pill task-item-child-label-extra" style="' +
+      labelPillStyle(validLabels[extraIndex].color, "#DCE8FF") +
+      '">' +
+      escHtml(String(validLabels[extraIndex].name || "")) +
+      "</span>";
+  }
+
+  if (validLabels.length > 1) {
+    html +=
+      '<button type="button" class="btn task-item-child-label-more" data-label-count="' +
+      (validLabels.length - 1) +
+      '" aria-expanded="false" aria-label="Show all labels" title="Show all labels">+' +
+      (validLabels.length - 1) +
+      "</button>";
+  }
+
+  return html + "</span>";
 }
 
 function childWorkItemAssigneePreviewHtml(userId, userName) {
@@ -2083,6 +2183,14 @@ function applyDetailFieldVisibility() {
 
   $("#taskItemDetailCreateChildActionWrap").toggleClass("d-none", !isEpic);
   $("#taskItemChildWorkItemsAddBtn").toggleClass("d-none", !isEpic);
+  $("#taskItemChildWorkItemsBulkEditMenuWrap").toggleClass(
+    "d-none",
+    !isEpic || (!canEdit && !canDelete),
+  );
+  $("#taskItemChildWorkItemsColumnConfigMenuWrap").toggleClass(
+    "d-none",
+    !isEpic,
+  );
   $("#taskItemDetailLinkWorkItemActionWrap").toggleClass("d-none", !isEpic);
   if (!isEpic) {
     itemDetailModalState.childCreatePanelOpen = false;
@@ -2094,7 +2202,293 @@ function applyDetailFieldVisibility() {
   renderLinkedWorkItemsSection();
 }
 
+var taskChildWorkItemColumnDefinitions = [
+  { key: "work", label: "Work", defaultWidth: "minmax(260px, 1.35fr)" },
+  { key: "work_type", label: "Work Type", defaultWidth: "minmax(125px, .7fr)" },
+  { key: "original_estimate", label: "Original Estimate", defaultWidth: "minmax(125px, .65fr)" },
+  { key: "labels", label: "Labels", defaultWidth: "minmax(150px, .85fr)" },
+  { key: "task_status", label: "Task Status labels", defaultWidth: "minmax(160px, .9fr)" },
+  { key: "parent", label: "Parent", defaultWidth: "minmax(160px, .9fr)" },
+  { key: "priority", label: "Priority", defaultWidth: "minmax(132px, .72fr)" },
+  { key: "time_tracking", label: "Time Tracking", defaultWidth: "minmax(150px, .8fr)" },
+  { key: "assignee", label: "Assignee", defaultWidth: "minmax(160px, .82fr)" },
+  { key: "due_date", label: "Due date", defaultWidth: "minmax(120px, .7fr)" },
+  { key: "start_date", label: "Start date", defaultWidth: "minmax(120px, .7fr)" },
+  { key: "reporter", label: "Reporter", defaultWidth: "minmax(150px, .8fr)" },
+  { key: "amendement_date", label: "Amendment Date", defaultWidth: "minmax(135px, .75fr)" },
+  { key: "amendement_time", label: "Amendment Time", defaultWidth: "minmax(135px, .75fr)" },
+  { key: "second_amendement_date", label: "Second Amen-Date", defaultWidth: "minmax(145px, .8fr)" },
+  { key: "second_amendement_time", label: "Second Amen-Time", defaultWidth: "minmax(145px, .8fr)" },
+  { key: "status", label: "Status", defaultWidth: "minmax(220px, max-content)" },
+];
+
+function taskChildWorkItemColumnDefinition(key) {
+  for (var i = 0; i < taskChildWorkItemColumnDefinitions.length; i++) {
+    if (taskChildWorkItemColumnDefinitions[i].key === key) {
+      return taskChildWorkItemColumnDefinitions[i];
+    }
+  }
+  return null;
+}
+
+function taskChildWorkItemColumnStorageKey() {
+  var currentUserId = Number(state.currentUserId || (window.taskBoardConfig || {}).currentUserId || 0);
+  return "task_child_work_item_columns_v1_project_" +
+    String(Number(state.currentProjectId || 0)) +
+    "_user_" + String(currentUserId) +
+    "_parent_" + String(Number(itemDetailModalState.itemId || 0));
+}
+
+function taskChildWorkItemDefaultColumnOrder() {
+  return taskChildWorkItemColumnDefinitions.map(function (column) {
+    return column.key;
+  }).filter(function (key) {
+    return ["work", "priority", "assignee", "status"].indexOf(key) !== -1;
+  });
+}
+
+function taskChildWorkItemColumnSettings() {
+  var defaultOrder = taskChildWorkItemDefaultColumnOrder();
+  var settings = { order: defaultOrder, widths: {}, sortKey: "", sortDirection: "asc" };
+  try {
+    var saved = JSON.parse(window.localStorage.getItem(taskChildWorkItemColumnStorageKey()) || "null");
+    if (saved && Array.isArray(saved.order)) {
+      var validOrder = [];
+      saved.order.forEach(function (key) {
+        if (taskChildWorkItemColumnDefinition(key) && validOrder.indexOf(key) === -1) {
+          validOrder.push(key);
+        }
+      });
+      if (validOrder.length) settings.order = validOrder;
+    }
+    if (saved && saved.widths && typeof saved.widths === "object") settings.widths = saved.widths;
+    if (saved && taskChildWorkItemColumnDefinition(saved.sortKey) && settings.order.indexOf(saved.sortKey) !== -1) {
+      settings.sortKey = saved.sortKey;
+      settings.sortDirection = saved.sortDirection === "desc" ? "desc" : "asc";
+    }
+  } catch (error) {
+    // Use the defaults when browser storage is unavailable.
+  }
+  return settings;
+}
+
+function saveTaskChildWorkItemColumnSettings(settings) {
+  try {
+    window.localStorage.setItem(taskChildWorkItemColumnStorageKey(), JSON.stringify(settings));
+  } catch (error) {
+    // Keep the current layout working when browser storage is unavailable.
+  }
+}
+
+function taskChildWorkItemColumnGridTemplate(settings) {
+  return settings.order.map(function (key) {
+    var definition = taskChildWorkItemColumnDefinition(key);
+    var width = settings.widths && settings.widths[key];
+    if (key === "status") {
+      var savedStatusWidth = Number.parseInt(String(width || "").replace(/px$/, ""), 10);
+      var statusMinimum = Number.isFinite(savedStatusWidth) ? Math.max(220, savedStatusWidth) : 220;
+      return "minmax(" + statusMinimum + "px, max-content)";
+    }
+    return /^\d{2,4}px$/.test(String(width || "")) ? width : definition.defaultWidth;
+  }).join(" ");
+}
+
+function applyTaskChildWorkItemColumnTemplate($elements, template) {
+  if (!$elements || !$elements.length) return;
+  $elements.each(function () {
+    this.style.setProperty("--task-item-child-column-template", template);
+  });
+}
+
+function taskChildWorkItemDateDisplay(value) {
+  var text = String(value || "").trim();
+  if (!text) return "—";
+  var match = /^(\d{4})-(\d{2})-(\d{2})/.exec(text);
+  return match ? match[3] + "/" + match[2] + "/" + match[1] : text;
+}
+
+function taskChildWorkItemTimeDisplay(value) {
+  var text = String(value || "").trim();
+  if (!text) return "—";
+  var match = /^(\d{2}:\d{2})/.exec(text);
+  return match ? match[1] : text;
+}
+
+function taskChildWorkItemTimeTrackingHtml(row) {
+  var logged = String(row.time_tracking || "").trim() || "No time logged";
+  var remainingSeconds = Number(row.remaining_estimate_seconds || 0);
+  var remaining = remainingSeconds > 0 && typeof formatDurationBrief === "function"
+    ? formatDurationBrief(remainingSeconds) + " remaining"
+    : "";
+  return '<span class="task-item-child-time-tracking"><span>' + escHtml(logged) + '</span>' +
+    (remaining ? '<span class="task-item-child-time-tracking-remaining">' + escHtml(remaining) + '</span>' : "") +
+    '</span>';
+}
+
+function renderTaskChildWorkItemColumnConfigMenu(keyword) {
+  var settings = taskChildWorkItemColumnSettings();
+  var filter = String(keyword === undefined ? $("#taskItemChildWorkItemsColumnSearch").val() || "" : keyword).trim().toLowerCase();
+  var html = "";
+  taskChildWorkItemColumnDefinitions.forEach(function (definition) {
+    if (filter && definition.label.toLowerCase().indexOf(filter) === -1) return;
+    var checked = settings.order.indexOf(definition.key) !== -1 ? " checked" : "";
+    html += '<label class="task-item-child-column-option"><input type="checkbox" data-child-column-toggle="' + definition.key + '"' + checked + '><span>' + escHtml(definition.label) + '</span></label>';
+  });
+  $("#taskItemChildWorkItemsColumnOptions").html(html || '<div class="task-item-child-column-option-empty">No columns found.</div>');
+  $("#taskItemChildWorkItemsColumnCount").text(settings.order.length + " of " + taskChildWorkItemColumnDefinitions.length);
+}
+
+function taskChildWorkItemColumnHeaderHtml(definition) {
+  var key = definition.key;
+  return '<div class="task-item-child-column-head" data-child-column-head="' + key + '">' +
+    '<span class="task-item-child-column-head-label">' + escHtml(definition.label) + '</span>' +
+    '<div class="dropdown task-item-child-column-head-menu">' +
+      '<button type="button" class="task-item-child-column-head-menu-btn" data-bs-toggle="dropdown" aria-expanded="false" aria-label="' + escHtml(definition.label) + ' column options"><i class="fa-solid fa-ellipsis"></i></button>' +
+      '<ul class="dropdown-menu dropdown-menu-end">' +
+        '<li><button type="button" class="dropdown-item" data-child-column-action="sort-asc" data-child-column-key="' + key + '">Sort in ascending order</button></li>' +
+        '<li><button type="button" class="dropdown-item" data-child-column-action="sort-desc" data-child-column-key="' + key + '">Sort in descending order</button></li>' +
+        '<li><hr class="dropdown-divider"></li>' +
+        '<li><button type="button" class="dropdown-item" data-child-column-action="move-first" data-child-column-key="' + key + '">Move column to first position</button></li>' +
+        '<li><button type="button" class="dropdown-item" data-child-column-action="move-left" data-child-column-key="' + key + '">Move column to left</button></li>' +
+        '<li><button type="button" class="dropdown-item" data-child-column-action="move-right" data-child-column-key="' + key + '">Move column to right</button></li>' +
+        '<li><button type="button" class="dropdown-item" data-child-column-action="move-last" data-child-column-key="' + key + '">Move column to last position</button></li>' +
+        '<li><button type="button" class="dropdown-item" data-child-column-action="remove" data-child-column-key="' + key + '">Remove column</button></li>' +
+        '<li><hr class="dropdown-divider"></li>' +
+        '<li><button type="button" class="dropdown-item" data-child-column-action="resize" data-child-column-key="' + key + '">Resize column</button></li>' +
+      '</ul>' +
+    '</div>' +
+  '</div>';
+}
+
+function taskChildWorkItemSortValue(row, key) {
+  if (key === "work") return String((row.work_item_key || "") + " " + (row.title || "")).toLowerCase();
+  if (key === "work_type") return String(row.work_type_name || "Task").toLowerCase();
+  if (key === "original_estimate") return Number(row.original_estimate_value || 0);
+  if (key === "labels") return String((row.labels || []).map(function (label) { return label.name || ""; }).join(", ")).toLowerCase();
+  if (key === "task_status") return String((row.task_status_labels || []).map(function (label) { return label.name || ""; }).join(", ")).toLowerCase();
+  if (key === "parent") return String(row.parent_display || "").toLowerCase();
+  if (key === "priority") return ["Highest", "High", "Medium", "Low", "Lowest"].indexOf(String(row.priority || "Medium"));
+  if (key === "time_tracking") return String(row.time_tracking || "").toLowerCase();
+  if (key === "assignee") return String(row.assignee_name || "Unassigned").toLowerCase();
+  if (key === "due_date") return String(row.due_date || "");
+  if (key === "start_date") return String(row.start_date || "");
+  if (key === "reporter") return String(row.reporter_name || "Unassigned").toLowerCase();
+  if (key === "amendement_date") return String(row.amendement_date || "");
+  if (key === "amendement_time") return String(row.amendement_time || "");
+  if (key === "second_amendement_date") return String(row.second_amendement_date || "");
+  if (key === "second_amendement_time") return String(row.second_amendement_time || "");
+  if (key === "status") return String(row.status_name || "").toLowerCase();
+  return "";
+}
+
+function taskChildWorkItemColumnCellHtml(key, row, context) {
+  var childItemId = context.childItemId;
+  if (key === "work") {
+    return '<div class="task-item-child-col-work">' + (context.canEdit
+      ? (context.isTitleEditing
+        ? '<div class="task-item-child-title-editor"><button type="button" class="btn task-item-child-open-trigger task-item-child-open-btn" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '"><span class="task-item-child-open-key">' + escHtml(context.workKeyText) + '</span></button><input type="text" class="form-control form-control-sm task-item-child-title-input" data-child-item-id="' + childItemId + '" value="' + escHtml(context.workTitle) + '" maxlength="255" placeholder="Work item title"><div class="task-item-child-title-editor-actions"><button type="button" class="btn task-item-child-title-save-btn" data-child-item-id="' + childItemId + '" title="Save title"><i class="fa-solid fa-check"></i></button><button type="button" class="btn task-item-child-title-cancel-btn" data-child-item-id="' + childItemId + '" title="Cancel title edit"><i class="fa-solid fa-xmark"></i></button></div></div>'
+        : '<div class="task-item-child-work-display"><button type="button" class="btn task-item-child-open-trigger task-item-child-open-btn" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '"><span class="task-item-child-open-key">' + escHtml(context.workKeyText) + '</span></button><button type="button" class="btn task-item-child-open-trigger task-item-child-title-link" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '">' + escHtml(context.workTitle || "Open work item") + '</button><button type="button" class="btn task-item-child-title-edit-btn" data-child-item-id="' + childItemId + '" title="Edit title"><i class="fa-regular fa-pen-to-square"></i></button></div>')
+      : '<button type="button" class="btn task-item-child-open-btn" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '"><span class="task-item-child-open-key">' + escHtml(context.workKeyText) + '</span><span class="task-item-child-open-title">' + escHtml(context.workTitle || "Open work item") + '</span></button>') + '</div>';
+  }
+  if (key === "work_type") return '<div class="task-item-child-col-work-type">' + escHtml(context.workTypeName || "Task") + '</div>';
+  if (key === "original_estimate") return '<div class="task-item-child-col-estimate">' + context.estimateHtml + '</div>';
+  if (key === "labels") return '<div class="task-item-child-col-labels">' + context.labelsHtml + '</div>';
+  if (key === "task_status") return '<div class="task-item-child-col-task-status">' + context.taskStatusLabelsHtml + '</div>';
+  if (key === "parent") return '<div class="task-item-child-col-parent">' + escHtml(context.parentDisplay || "—") + '</div>';
+  if (key === "priority") return '<div class="task-item-child-col-priority">' + (context.canEdit && context.activeField === "priority" ? '<select class="form-select form-select-sm task-item-child-picker-select task-item-child-priority-select" data-child-item-id="' + childItemId + '" data-child-field="priority">' + childWorkItemPriorityOptionsHtml(context.priority) + '</select>' : context.canEdit ? '<button type="button" class="btn task-item-child-display-btn task-item-child-picker-trigger" data-child-item-id="' + childItemId + '" data-child-field="priority">' + childWorkItemPriorityPreviewHtml(context.priority, false) + '</button>' : '<span class="task-item-child-readonly-pill">' + childWorkItemPriorityPreviewHtml(context.priority, false) + '</span>') + '</div>';
+  if (key === "time_tracking") return '<div class="task-item-child-col-time-tracking">' + context.timeTrackingHtml + '</div>';
+  if (key === "assignee") return '<div class="task-item-child-col-assignee">' + (context.canEdit && context.activeField === "assignee" ? '<select class="form-select form-select-sm task-item-child-picker-select task-item-child-assignee-select" data-child-item-id="' + childItemId + '" data-child-field="assignee">' + childWorkItemAssigneeOptionsHtml(Number(row.assignee_user_id || 0)) + '</select>' : context.canEdit ? '<button type="button" class="btn task-item-child-display-btn task-item-child-picker-trigger" data-child-item-id="' + childItemId + '" data-child-field="assignee">' + childWorkItemAssigneePreviewHtml(Number(row.assignee_user_id || 0), context.assignee) + '</button>' : escHtml(context.assignee)) + '</div>';
+  if (key === "due_date") return '<div class="task-item-child-col-date">' + escHtml(taskChildWorkItemDateDisplay(row.due_date)) + '</div>';
+  if (key === "start_date") return '<div class="task-item-child-col-date">' + escHtml(taskChildWorkItemDateDisplay(row.start_date)) + '</div>';
+  if (key === "reporter") return '<div class="task-item-child-col-reporter">' + escHtml(context.reporter || "Unassigned") + '</div>';
+  if (key === "amendement_date") return '<div class="task-item-child-col-date">' + escHtml(taskChildWorkItemDateDisplay(row.amendement_date)) + '</div>';
+  if (key === "amendement_time") return '<div class="task-item-child-col-time">' + escHtml(taskChildWorkItemTimeDisplay(row.amendement_time)) + '</div>';
+  if (key === "second_amendement_date") return '<div class="task-item-child-col-date">' + escHtml(taskChildWorkItemDateDisplay(row.second_amendement_date)) + '</div>';
+  if (key === "second_amendement_time") return '<div class="task-item-child-col-time">' + escHtml(taskChildWorkItemTimeDisplay(row.second_amendement_time)) + '</div>';
+  return '<div class="task-item-child-col-status' + context.statusClass + '">' + (context.canEdit && context.activeField === "status" ? '<select class="form-select form-select-sm task-item-child-picker-select task-item-child-status-select" data-child-item-id="' + childItemId + '" data-child-field="status">' + childWorkItemStatusOptionsHtml(context.statusColumnId) + '</select>' : context.canEdit ? '<button type="button" class="btn task-item-child-display-btn task-item-child-display-btn-status task-item-child-picker-trigger' + context.statusClass + '" data-child-item-id="' + childItemId + '" data-child-field="status">' + escHtml(context.statusName) + '<i class="fa-solid fa-chevron-down"></i></button>' : escHtml(context.statusName)) + '</div>';
+}
+
+function renderChildWorkItemsSectionConfigured() {
+  var childInfo = normalizeChildWorkItems(itemDetailModalState.childWorkItems);
+  itemDetailModalState.childWorkItems = childInfo;
+  var settings = taskChildWorkItemColumnSettings();
+  var columns = settings.order.map(taskChildWorkItemColumnDefinition).filter(Boolean);
+  var template = taskChildWorkItemColumnGridTemplate(settings);
+  var $head = $("#taskItemChildWorkItemsSection .task-item-child-table-head");
+  $head.html(columns.map(taskChildWorkItemColumnHeaderHtml).join(""));
+  applyTaskChildWorkItemColumnTemplate($head, template);
+  renderTaskChildWorkItemColumnConfigMenu();
+
+  var rows = Array.isArray(childInfo.items) ? childInfo.items.slice() : [];
+  if (settings.sortKey) {
+    var direction = settings.sortDirection === "desc" ? -1 : 1;
+    rows.sort(function (a, b) {
+      var left = taskChildWorkItemSortValue(a, settings.sortKey);
+      var right = taskChildWorkItemSortValue(b, settings.sortKey);
+      if (left === right) return 0;
+      return (left < right ? -1 : 1) * direction;
+    });
+  }
+
+  var total = Number(childInfo.total || 0);
+  var done = Number(childInfo.done || 0);
+  var progress = Math.max(0, Math.min(100, Number(childInfo.progress_percent || 0)));
+  $("#taskItemChildWorkItemsCount").text(String(total));
+  $("#taskItemChildWorkItemsProgressText").text(String(progress) + "% Done (" + done + "/" + total + ")");
+  $("#taskItemChildWorkItemsProgressBar").css("width", String(progress) + "%");
+  applyTaskChildWorkItemColumnTemplate($("#taskItemChildWorkItemsList"), template);
+
+  var html = "";
+  var editingTitleItemId = Number(itemDetailModalState.childTitleEditingItemId || 0);
+  var pickerItemId = Number(itemDetailModalState.childPickerItemId || 0);
+  var pickerField = String(itemDetailModalState.childPickerField || "").trim();
+  rows.forEach(function (row) {
+    row = row || {};
+    var childItemId = Number(row.id || 0);
+    var workKey = String(row.work_item_key || "").trim();
+    var workTitle = String(row.title || "").trim();
+    var workText = String((workKey ? workKey + " " : "") + workTitle).trim();
+    var priority = String(row.priority || "Medium").trim() || "Medium";
+    var estimateHtml = childWorkItemEstimateHtml(row.original_estimate_value, row.original_estimate_unit, row.original_estimate);
+    var labelsHtml = childWorkItemLabelsHtml(row.labels);
+    var taskStatusLabelsHtml = childWorkItemLabelsHtml(row.task_status_labels);
+    var assignee = String(row.assignee_name || "").trim() || "Unassigned";
+    var reporter = String(row.reporter_name || "").trim() || "Unassigned";
+    var statusColumnId = Number(row.column_id || 0);
+    var statusName = childWorkItemStatusName(statusColumnId, row.status_name);
+    var statusClass = Number(row.is_done || 0) > 0 ? " task-item-child-col-status-done" : "";
+    var workKeyText = workKey || (childItemId > 0 ? "Item #" + childItemId : "Work item");
+    var activeField = pickerItemId === childItemId ? pickerField : "";
+    var context = {
+      childItemId: childItemId,
+      workTitle: workTitle,
+      workText: workText,
+      workKeyText: workKeyText,
+      estimateHtml: estimateHtml,
+      labelsHtml: labelsHtml,
+      taskStatusLabelsHtml: taskStatusLabelsHtml,
+      workTypeName: String(row.work_type_name || "Task").trim() || "Task",
+      parentDisplay: String(row.parent_display || "").trim(),
+      timeTrackingHtml: taskChildWorkItemTimeTrackingHtml(row),
+      priority: priority,
+      assignee: assignee,
+      reporter: reporter,
+      statusColumnId: statusColumnId,
+      statusName: statusName,
+      statusClass: statusClass,
+      activeField: activeField,
+      canEdit: canEdit,
+      isTitleEditing: editingTitleItemId === childItemId,
+    };
+    var rowClass = "task-item-child-row" + (canEdit ? " task-item-child-row-editable" : "") + (context.isTitleEditing ? " task-item-child-row-title-editing" : "");
+    var mobileMeta = '<div class="task-item-child-mobile-meta"><span class="task-item-child-mobile-estimate">' + estimateHtml + '</span><span class="task-item-child-mobile-labels">' + labelsHtml + '</span><span class="task-item-child-mobile-priority" aria-hidden="true">' + childWorkItemPriorityPreviewHtml(priority, true) + '</span><span class="task-item-child-mobile-status' + statusClass + '">' + escHtml(statusName) + '</span></div>';
+    html += '<div class="' + rowClass + '" data-child-item-id="' + childItemId + '">' + columns.map(function (column) { return taskChildWorkItemColumnCellHtml(column.key, row, context); }).join("") + mobileMeta + '</div>';
+  });
+  $("#taskItemChildWorkItemsList").html(html || '<div class="task-item-child-empty">No child work items.</div>');
+}
+
 function renderChildWorkItemsSection() {
+  return renderChildWorkItemsSectionConfigured();
   var childInfo = normalizeChildWorkItems(itemDetailModalState.childWorkItems);
   itemDetailModalState.childWorkItems = childInfo;
 
@@ -2124,6 +2518,12 @@ function renderChildWorkItemsSection() {
     var workTitle = String(row.title || "").trim();
     var workText = String((workKey ? workKey + " " : "") + workTitle).trim();
     var priority = String(row.priority || "Medium").trim() || "Medium";
+    var estimateHtml = childWorkItemEstimateHtml(
+      row.original_estimate_value,
+      row.original_estimate_unit,
+      row.original_estimate,
+    );
+    var labelsHtml = childWorkItemLabelsHtml(row.labels);
     var assignee = String(row.assignee_name || "").trim() || "Unassigned";
     var statusColumnId = Number(row.column_id || 0);
     var statusName = childWorkItemStatusName(statusColumnId, row.status_name);
@@ -2188,6 +2588,12 @@ function renderChildWorkItemsSection() {
             '" title="Edit title"><i class="fa-regular fa-pen-to-square"></i></button>' +
             "</div>") +
         "</div>" +
+        '<div class="task-item-child-col-estimate">' +
+        estimateHtml +
+        "</div>" +
+        '<div class="task-item-child-col-labels">' +
+        labelsHtml +
+        "</div>" +
         '<div class="task-item-child-col-priority">' +
         (activeField === "priority"
           ? '<select class="form-select form-select-sm task-item-child-picker-select task-item-child-priority-select" data-child-item-id="' +
@@ -2239,6 +2645,12 @@ function renderChildWorkItemsSection() {
             "</button>") +
         "</div>" +
         '<div class="task-item-child-mobile-meta">' +
+        '<span class="task-item-child-mobile-estimate">' +
+        estimateHtml +
+        "</span>" +
+        '<span class="task-item-child-mobile-labels">' +
+        labelsHtml +
+        "</span>" +
         '<span class="task-item-child-mobile-priority" aria-hidden="true">' +
         childWorkItemPriorityPreviewHtml(priority, true) +
         "</span>" +
@@ -2268,6 +2680,12 @@ function renderChildWorkItemsSection() {
       "</span>" +
       "</button>" +
       "</div>" +
+      '<div class="task-item-child-col-estimate">' +
+      estimateHtml +
+      "</div>" +
+      '<div class="task-item-child-col-labels">' +
+      labelsHtml +
+      "</div>" +
       '<div class="task-item-child-col-priority">' +
       '<span class="task-item-child-readonly-pill">' +
       childWorkItemPriorityPreviewHtml(priority, false) +
@@ -2282,6 +2700,12 @@ function renderChildWorkItemsSection() {
       escHtml(statusName) +
       "</div>" +
       '<div class="task-item-child-mobile-meta">' +
+      '<span class="task-item-child-mobile-estimate">' +
+      estimateHtml +
+      "</span>" +
+      '<span class="task-item-child-mobile-labels">' +
+      labelsHtml +
+      "</span>" +
       '<span class="task-item-child-mobile-priority" aria-hidden="true">' +
       childWorkItemPriorityPreviewHtml(priority, true) +
       "</span>" +
@@ -2674,13 +3098,20 @@ function applyItemDetailToModal(
 
   var title = String(info.title || "").trim();
   var description = String(info.description || "").trim();
+  var previousTitle = String($("#taskItemDetailTitleInput").val() || "").trim();
   $("#taskItemDetailTitleInput").val(title);
-  resizeItemDetailTitleInput();
   $("#taskItemDetailDescriptionInput").val(description);
   itemDetailModalState.initialTitle = title;
   itemDetailModalState.initialDescription = description;
   itemDetailModalState.titleEditing = false;
   $(".task-item-detail-title-row").removeClass("is-editing");
+  if (
+    previousTitle !== title &&
+    $("#taskItemDetailModal").hasClass("show") &&
+    typeof resizeItemDetailTitleInput === "function"
+  ) {
+    resizeItemDetailTitleInput({ fitFont: false });
+  }
 
   if (typeof window.setDescriptionEditorContent === "function") {
     window.setDescriptionEditorContent(description);
@@ -3198,9 +3629,12 @@ function saveItemDetailsFromModal(closeAfterSave, options) {
   );
 }
 
-function loadItemDetail(itemId) {
+function loadItemDetail(itemId, onComplete) {
   var id = Number(itemId || 0);
   if (!id) {
+    if (typeof onComplete === "function") {
+      onComplete(false);
+    }
     return;
   }
 
@@ -3211,6 +3645,9 @@ function loadItemDetail(itemId) {
     },
     function (res) {
       if (!res || !res.ok) {
+        if (typeof onComplete === "function") {
+          onComplete(false);
+        }
         return;
       }
       applyItemDetailToModal(
@@ -3220,6 +3657,14 @@ function loadItemDetail(itemId) {
         Array.isArray(res.webLinks) ? res.webLinks : null,
         res.itemLinks && typeof res.itemLinks === "object" ? res.itemLinks : null,
       );
+      if (typeof onComplete === "function") {
+        onComplete(true);
+      }
+    },
+    function () {
+      if (typeof onComplete === "function") {
+        onComplete(false);
+      }
     },
   );
 }

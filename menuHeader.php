@@ -717,7 +717,10 @@
                                     $menuAlertTitle = trim((string) (isset($menuAlertRow['title']) ? $menuAlertRow['title'] : 'Notification'));
                                     $menuAlertMessage = trim((string) (isset($menuAlertRow['message']) ? $menuAlertRow['message'] : ''));
                                     $menuAlertModuleLabel = function_exists('systemAlertFormatModuleLabel')
-                                        ? systemAlertFormatModuleLabel(isset($menuAlertRow['module_key']) ? $menuAlertRow['module_key'] : '')
+                                        ? systemAlertFormatModuleLabel(
+                                            isset($menuAlertRow['module_key']) ? $menuAlertRow['module_key'] : '',
+                                            isset($menuAlertRow['related_platform']) ? $menuAlertRow['related_platform'] : ''
+                                        )
                                         : trim((string) (isset($menuAlertRow['module_key']) ? $menuAlertRow['module_key'] : 'General'));
                                     $menuAlertOpenLink = systemAlertBuildOpenUrl($menuAlertId, $menuAlertCurrentPageUrl);
                                     $menuAlertMarkReadLink = systemAlertBuildMarkReadUrl($menuAlertId, $menuAlertModalReturnUrl);

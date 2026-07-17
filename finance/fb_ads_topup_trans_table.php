@@ -5,6 +5,8 @@ $currentPagePin = 50;
 
 include_once '../include/list_page_header.php';
 
+$fbAdsWhtPinAccess = checkPinByGroupId($connect, 168);
+
 require_once '../header/PhpXlsxGenerator/PhpXlsxGenerator.php';
 $fileName = date('Y-m-d_H-i-s') . "_list.xlsx";
 $img_path = '../' . img_server . 'finance/fb_ads_topup_trans/';
@@ -224,6 +226,9 @@ $tblName = FB_ADS_TOPUP;
                             <?php endif; ?>
                             <?php if (isActionAllowed("Import", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary px-3" name="importBtn" id="addBtn" href="<?= $SITEURL ?>/import/facebook_ads_topup_import.php"><i class="fa-solid fa-file-import"></i> Import </a>
+                            <?php endif; ?>
+                            <?php if (isActionAllowed("Add", $fbAdsWhtPinAccess)) : ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3" name="submitSubmissionBtn" id="addBtn" href="javascript:void(0);"><i class="fa-solid fa-file-circle-check"></i> Submit Submission </a>
                             <?php endif; ?>
                             <?php if (isActionAllowed("Export", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary px-3" name="exportBtn" id="addBtn" onclick="captureAndExport('<?php echo $tblName; ?>')"><i class="fa-solid fa-file-export"></i> Export</a>

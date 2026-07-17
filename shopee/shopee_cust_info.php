@@ -96,6 +96,14 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+$shopeeCustomerPageUrl = $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $dataId;
+$shopeeUserRecordLogApproval = orderDeleteApprovalPrepareUserRecordLogCustomerPage(
+    $connect,
+    (int) $dataId,
+    $pageTitle,
+    $shopeeCustomerPageUrl
+);
+
 $shopeeCustomerLabelMeta = array();
 $shopeeCustomerLabelDisplayHtml = '';
 if (isset($dataExisted) && !empty($dataId) && $act !== 'I' && isset($row['id']) && (int) $row['id'] > 0) {
@@ -424,7 +432,7 @@ if (post('act') == 'D') {
 }
 
 //view
-if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($_SESSION['delChk'] != 1)) {
+if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && empty($_SESSION['delChk'])) {
     $acc_name = isset($dataExisted) ? $row['buyer_username'] : '';
     $_SESSION['viewChk'] = 1;
 
@@ -798,6 +806,10 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         'context' => $customerLogContext,
                         'section_heading' => 'User Record Log',
                         'show_scope_note' => true,
+                        'approval_panel_html' => isset($shopeeUserRecordLogApproval['panel_html']) ? $shopeeUserRecordLogApproval['panel_html'] : '',
+                        'approval_record_id' => isset($shopeeUserRecordLogApproval['approval_record_id']) ? $shopeeUserRecordLogApproval['approval_record_id'] : 0,
+                        'approval_request_id' => isset($shopeeUserRecordLogApproval['approval_request_id']) ? $shopeeUserRecordLogApproval['approval_request_id'] : 0,
+                        'approval_action_url' => isset($shopeeUserRecordLogApproval['action_url']) ? $shopeeUserRecordLogApproval['action_url'] : '',
                     ));
                 }
                 ?>

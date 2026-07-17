@@ -1,5 +1,9 @@
 <?php
 
+if (defined('ROOT')) {
+    include_once ROOT . '/include/system_alert_common.php';
+}
+
 if (!function_exists('urlServerLog')) {
     function urlServerLog($message, $context = array())
     {
@@ -108,6 +112,22 @@ if (!function_exists('urlWithin3Days')) {
         }
 
         return (time() - $createdTs) <= (3 * 24 * 60 * 60);
+    }
+}
+
+if (!function_exists('urlIsUserRecordLogSystemRecord')) {
+    function urlIsUserRecordLogSystemRecord($row, $createdByDisplay = '')
+    {
+        if (is_array($row) && array_key_exists('is_system_record', $row) && $row['is_system_record'] !== null && trim((string) $row['is_system_record']) !== '') {
+            return (int) $row['is_system_record'] === 1;
+        }
+
+        $createdBy = trim((string) $createdByDisplay);
+        if ($createdBy === '' && is_array($row)) {
+            $createdBy = trim((string) (isset($row['created_by']) ? $row['created_by'] : ''));
+        }
+
+        return strcasecmp($createdBy, 'SYSTEM') === 0;
     }
 }
 
@@ -1015,6 +1035,12 @@ if (!function_exists('urlBuildListHtml')) {
     {
         $dbConnect = $financeConnect instanceof mysqli ? $financeConnect : $connect;
         $uploadWebDir = urlGetUserRecordLogUploadWebDir();
+        $approvalRecordId = isset($context['approval_record_id']) ? (int) $context['approval_record_id'] : 0;
+        $approvalPanelHtml = isset($context['approval_panel_html']) ? trim((string) $context['approval_panel_html']) : '';
+        $approvalActionUrl = isset($context['approval_action_url']) ? trim((string) $context['approval_action_url']) : '';
+        if ($approvalActionUrl === '') {
+            $approvalActionUrl = rtrim((string) $GLOBALS['SITEURL'], '/') . '/users/user_record_log.php';
+        }
         $keyword = trim((string) post('keyword'));
         $filterDate = trim((string) post('filter_date'));
         $filterUser = trim((string) post('filter_user'));
@@ -1087,6 +1113,33 @@ if (!function_exists('urlBuildListHtml')) {
             );
         }
 
+        $approvalTargetPage = 1;
+        if ($approvalRecordId > 0 && $approvalPanelHtml !== '' && $pageSize !== -1 && $page <= 1) {
+            $targetRecordSql = "SELECT created_at FROM " . $tblName . " WHERE id='" . $approvalRecordId . "' AND status='A' LIMIT 1";
+            $targetRecordResult = mysqli_query($dbConnect, $targetRecordSql);
+            if ($targetRecordResult && $targetRecordResult->num_rows > 0) {
+                $targetRecordRow = $targetRecordResult->fetch_assoc();
+                $targetCreatedAt = trim((string) (isset($targetRecordRow['created_at']) ? $targetRecordRow['created_at'] : ''));
+                $targetRankWhere = $whereSql;
+                if ($targetCreatedAt !== '') {
+                    $safeTargetCreatedAt = urlEsc($dbConnect, $targetCreatedAt);
+                    $targetRankWhere .= " AND (created_at > '" . $safeTargetCreatedAt . "' OR (created_at='" . $safeTargetCreatedAt . "' AND id >= '" . $approvalRecordId . "'))";
+                } else {
+                    $targetRankWhere .= " AND id >= '" . $approvalRecordId . "'";
+                }
+
+                $targetRankSql = "SELECT COUNT(*) AS target_position FROM " . $tblName . " WHERE " . $targetRankWhere;
+                $targetRankResult = mysqli_query($dbConnect, $targetRankSql);
+                if ($targetRankResult && $targetRankResult->num_rows > 0) {
+                    $targetRankRow = $targetRankResult->fetch_assoc();
+                    $targetPosition = isset($targetRankRow['target_position']) ? (int) $targetRankRow['target_position'] : 0;
+                    if ($targetPosition > 0) {
+                        $approvalTargetPage = (int) ceil($targetPosition / $pageSize);
+                    }
+                }
+            }
+        }
+
         if ($pageSize === -1) {
             $page = 1;
             $totalPages = 1;
@@ -1097,6 +1150,9 @@ if (!function_exists('urlBuildListHtml')) {
             $totalPages = (int) ceil($totalCount / $pageSize);
             if ($totalPages < 1) {
                 $totalPages = 1;
+            }
+            if ($page <= 1 && $approvalTargetPage > 1 && $approvalTargetPage <= $totalPages) {
+                $page = $approvalTargetPage;
             }
             if ($page > $totalPages) {
                 $page = $totalPages;
@@ -1137,9 +1193,11 @@ if (!function_exists('urlBuildListHtml')) {
             $updatedAt = isset($row['updated_at']) ? $row['updated_at'] : '';
             $createdBy = urlGetUserName($connect, isset($row['created_by']) ? $row['created_by'] : '');
             $updatedBy = urlGetUserName($connect, isset($row['updated_by']) ? $row['updated_by'] : '');
-            $isSystemRecord = strcasecmp(trim((string) $createdBy), 'SYSTEM') === 0;
+            $isSystemRecord = urlIsUserRecordLogSystemRecord($row, $createdBy);
             $canEdit = urlWithin3Days($createdAt);
             $editBtn = '';
+            $deleteBtn = '<button type="button" class="btn btn-sm btn-rounded btn-danger url-delete-btn" data-id="' . $recordId . '" title="Delete User Log">Delete</button>';
+            $systemRecordBtn = '<button type="button" class="btn btn-sm btn-rounded ' . ($isSystemRecord ? 'btn-outline-secondary' : 'btn-outline-primary') . ' url-system-record-btn" data-id="' . $recordId . '" data-system-state="' . ($isSystemRecord ? '0' : '1') . '" title="' . ($isSystemRecord ? 'Unmark System Record' : 'Mark as System Record') . '">' . ($isSystemRecord ? 'Unmark System' : 'Mark as System') . '</button>';
 
             if ($canEdit) {
                 $editBtn = '<button type="button" class="btn btn-sm btn-rounded btn-warning url-edit-btn" data-id="' . $recordId . '">Edit User Log</button>';
@@ -1184,7 +1242,7 @@ if (!function_exists('urlBuildListHtml')) {
             if ($isSystemRecord) {
                 $rowClass .= ' url-system-record';
             }
-            $html .= '<div class="card mb-3 url-log-row' . $rowClass . '">';
+            $html .= '<div class="card mb-3 url-log-row' . $rowClass . '" data-record-id="' . $recordId . '">';
             $html .= '  <div class="card-header">';
             $html .= '    <div class="d-flex justify-content-between align-items-center gap-2">';
             $html .= '      <div><strong>#' . $displayNo . '</strong> <span class="ms-2 text-muted small">' . $auditMeta . '</span></div>';
@@ -1196,6 +1254,8 @@ if (!function_exists('urlBuildListHtml')) {
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-secondary url-copy-btn" title="Copy User Log">Copy</button>';
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-info text-white url-toggle-btn" data-target="url-body-' . $recordId . '">Collapse/Expand</button>';
             $html .= $editBtn;
+            $html .= $systemRecordBtn;
+            $html .= $deleteBtn;
             $html .= '    </div>';
             $html .= '  </div>';
             $html .= '  <div id="url-body-' . $recordId . '" class="card-body">';
@@ -1222,6 +1282,15 @@ if (!function_exists('urlBuildListHtml')) {
             $html .= '    <input type="hidden" class="url-edit-follow-up-times" value="' . htmlspecialchars($followUpTimes, ENT_QUOTES, 'UTF-8') . '">';
             $html .= '    <input type="hidden" class="url-edit-follow-up-day" value="' . htmlspecialchars($followUpDay, ENT_QUOTES, 'UTF-8') . '">';
             $html .= '  </div>';
+
+            if ($approvalRecordId > 0 && $approvalRecordId === $recordId && $approvalPanelHtml !== '') {
+                $html .= '<div class="user-record-log-approval-panel">';
+                $html .= '<form method="post" action="' . htmlspecialchars($approvalActionUrl, ENT_QUOTES, 'UTF-8') . '">';
+                $html .= $approvalPanelHtml;
+                $html .= '</form>';
+                $html .= '</div>';
+            }
+
             $html .= '</div>';
 
             $displayNo++;
@@ -1275,6 +1344,31 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         }
 
         if ($urlAction === 'list') {
+            $approvalMode = post('approval_mode') === '1';
+            $approvalRequestId = (int) post('approval_request_id');
+            $approvalRecordId = (int) post('id');
+            $approvalActionUrl = trim((string) post('return_url'));
+            if ($approvalMode && $approvalActionUrl !== '') {
+                $context['approval_action_url'] = $approvalActionUrl;
+            }
+            if ($approvalMode && $approvalRequestId > 0 && $approvalRecordId > 0 && function_exists('orderDeleteApprovalReadRequest')) {
+                $approvalRequestRow = orderDeleteApprovalReadRequest($connect, $approvalRequestId);
+                if (
+                    !empty($approvalRequestRow) &&
+                    function_exists('orderDeleteApprovalCanUserAccessRequestView') &&
+                    orderDeleteApprovalCanUserAccessRequestView($approvalRequestRow, 'user_record_log', $approvalRecordId, (int) USER_ID) &&
+                    function_exists('orderDeleteApprovalRenderDecisionPanel')
+                ) {
+                    $context['approval_record_id'] = $approvalRecordId;
+                    $context['approval_panel_html'] = orderDeleteApprovalRenderDecisionPanel(
+                        $connect,
+                        $approvalRequestRow,
+                        'user_record_log',
+                        $approvalRecordId,
+                        (int) USER_ID
+                    );
+                }
+            }
             $payload = urlBuildListHtml($connect, $dbConnect, $tblName, $context);
             urlJsonResponse(array(
                 'ok' => 1,
@@ -1285,6 +1379,130 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 'effective_page_size' => isset($payload['effective_page_size']) ? (int) $payload['effective_page_size'] : 10,
                 'total_pages' => isset($payload['total_pages']) ? (int) $payload['total_pages'] : 1,
                 'html' => isset($payload['html']) ? $payload['html'] : ''
+            ));
+        }
+
+        if ($urlAction === 'toggle_system_record') {
+            $recordId = (int) post('record_id');
+            $requestedState = trim((string) post('system_state'));
+            $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+            if ($recordId <= 0 || $safeTable === '' || !in_array($requestedState, array('0', '1'), true)) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'Invalid user record log system-record action.'));
+            }
+
+            if (!urlUserRecordLogColumnExists($dbConnect, $safeTable, 'is_system_record')) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'System record action is not ready yet. Please run insert_table.php first.'));
+            }
+
+            $recordResult = getData('*', "id='" . $recordId . "' AND status='A'", 'LIMIT 1', $safeTable, $dbConnect);
+            if (!$recordResult || $recordResult->num_rows === 0) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'User record log was not found.'));
+            }
+
+            $recordRow = $recordResult->fetch_assoc();
+            $recordCustomerId = isset($recordRow[$customerColumn]) ? (int) $recordRow[$customerColumn] : 0;
+            if (!empty($context['customer_only']) && (int) $context['customer_id'] !== $recordCustomerId) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'User record log was not found.'));
+            }
+
+            $oldState = urlIsUserRecordLogSystemRecord($recordRow);
+            $newState = $requestedState === '1';
+            $sql = "UPDATE `" . $safeTable . "` SET `is_system_record`='" . ($newState ? '1' : '0') . "', `updated_by`='" . urlEsc($dbConnect, USER_ID) . "', `updated_at`=NOW() WHERE `id`='" . $recordId . "' AND `status`='A' LIMIT 1";
+            $ok = mysqli_query($dbConnect, $sql);
+            if (!$ok) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'Failed to update system record status.'));
+            }
+
+            $actionText = $newState ? 'marked User Record Log #' . $recordId . ' as a system record.' : 'unmarked User Record Log #' . $recordId . ' as a system record.';
+            audit_log(array(
+                'log_act' => 'Edit',
+                'cdate' => $GLOBALS['cdate'],
+                'ctime' => $GLOBALS['ctime'],
+                'uid' => USER_ID,
+                'cby' => USER_ID,
+                'query_rec' => $sql,
+                'query_table' => $safeTable,
+                'oldval' => $oldState ? '1' : '0',
+                'changes' => $newState ? '1' : '0',
+                'newval' => $newState ? '1' : '0',
+                'act_msg' => USER_NAME . ' ' . $actionText,
+                'page' => $pageTitle,
+                'connect' => $connect,
+            ));
+
+            urlJsonResponse(array(
+                'ok' => 1,
+                'message' => $newState ? 'User record log marked as a system record.' : 'User record log unmarked as a system record.',
+            ));
+        }
+
+        if ($urlAction === 'delete') {
+            $recordId = (int) post('record_id');
+            $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+            if ($recordId <= 0 || $safeTable === '') {
+                urlJsonResponse(array('ok' => 0, 'message' => 'Invalid user record log.'));
+            }
+
+            $recordResult = getData('*', "id='" . $recordId . "' AND status='A'", 'LIMIT 1', $safeTable, $dbConnect);
+            if (!$recordResult || $recordResult->num_rows === 0) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'User record log was not found.'));
+            }
+
+            $recordRow = $recordResult->fetch_assoc();
+            $recordCustomerId = isset($recordRow[$customerColumn]) ? (int) $recordRow[$customerColumn] : 0;
+            if (!empty($context['customer_only']) && (int) $context['customer_id'] !== $recordCustomerId) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'User record log was not found.'));
+            }
+
+            $customerLabel = '';
+            if ($recordCustomerId > 0 && (int) $context['customer_id'] === $recordCustomerId) {
+                $customerLabel = trim((string) (isset($context['customer_label']) ? $context['customer_label'] : ''));
+            }
+            if ($customerLabel === '' && $recordCustomerId > 0) {
+                $customerLookupConnect = isset($options['customer_lookup_connect']) && ($options['customer_lookup_connect'] instanceof mysqli)
+                    ? $options['customer_lookup_connect']
+                    : $dbConnect;
+                $customerRow = urlFetchShopeeCustomerRow($customerLookupConnect, $recordCustomerId);
+                $customerLabel = urlGetShopeeCustomerLabel($customerRow, $recordCustomerId);
+            }
+            $sourceOrderLabel = '#' . $recordId;
+            if ($customerLabel !== '') {
+                $sourceOrderLabel .= ' for customer ' . $customerLabel;
+            }
+
+            $deleteConfig = array(
+                'data_connect' => $dbConnect,
+                'audit_connect' => $connect,
+                'table_name' => $safeTable,
+                'page_title' => $pageTitle,
+                'fallback_data_id' => $recordId,
+                'source_noun' => 'User Record',
+                'delete_success_message' => 'User record deleted successfully.',
+                'not_found_message' => 'User record log was not found.',
+            );
+            $executeDelete = orderDeleteApprovalBuildStandardDeleteCallback($deleteConfig);
+            $deleteApprovalResult = orderDeleteApprovalRequestDelete(
+                $connect,
+                'user_record_log',
+                $recordId,
+                $sourceOrderLabel,
+                $pageTitle
+            );
+
+            if (!empty($deleteApprovalResult['direct_delete'])) {
+                $deleteResult = $executeDelete(array(
+                    'source_order_id' => $recordId,
+                    'source_order_label' => '#' . $recordId,
+                ));
+                urlJsonResponse(array(
+                    'ok' => !empty($deleteResult['success']) ? 1 : 0,
+                    'message' => isset($deleteResult['message']) ? (string) $deleteResult['message'] : 'Unable to delete user record log.',
+                ));
+            }
+
+            urlJsonResponse(array(
+                'ok' => !empty($deleteApprovalResult['success']) ? 1 : 0,
+                'message' => isset($deleteApprovalResult['message']) ? (string) $deleteApprovalResult['message'] : 'Unable to prepare user record log delete request.',
             ));
         }
 
@@ -1920,6 +2138,16 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
         $context['customer_column'] = $customerColumn;
         $sectionHeading = isset($options['section_heading']) ? (string) $options['section_heading'] : '';
         $showScopeNote = !isset($options['show_scope_note']) || (bool) $options['show_scope_note'];
+        $approvalPanelHtml = isset($options['approval_panel_html']) ? trim((string) $options['approval_panel_html']) : '';
+        $approvalRecordId = isset($options['approval_record_id']) ? (int) $options['approval_record_id'] : 0;
+        $moduleActionUrl = isset($options['approval_action_url']) && trim((string) $options['approval_action_url']) !== ''
+            ? trim((string) $options['approval_action_url'])
+            : rtrim((string) $GLOBALS['SITEURL'], '/') . '/users/user_record_log.php';
+        if ($approvalPanelHtml !== '' && $approvalRecordId > 0) {
+            $context['approval_record_id'] = $approvalRecordId;
+            $context['approval_panel_html'] = $approvalPanelHtml;
+            $context['approval_action_url'] = $moduleActionUrl;
+        }
         $pathReturn = isset($context['return_url']) ? (string) $context['return_url'] : '';
         $initialList = urlBuildListHtml($connect, $dbConnect, $tblName, $context);
         $currentSummary = urlGetLatestUserRecordLogSummary($dbConnect, $tblName, $context);
@@ -1938,9 +2166,11 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
             'messageShortcuts' => $messageShortcutOptions,
             'messageShortcutTable' => defined('MESSAGE_SHORTCUTS') ? (string) MESSAGE_SHORTCUTS : '',
             'confirmationPageName' => 'User Record Log',
+            'approvalMode' => ($approvalPanelHtml !== '' && $approvalRecordId > 0) ? 1 : 0,
+            'approvalRequestId' => isset($options['approval_request_id']) ? (int) $options['approval_request_id'] : 0,
+            'approvalRecordId' => $approvalRecordId,
         );
         $configJson = json_encode($config);
-        $moduleActionUrl = rtrim((string) $GLOBALS['SITEURL'], '/') . '/users/user_record_log.php';
         ?>
         <div class="user-record-log-module mt-4">
             <style>
@@ -1961,6 +2191,15 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                 .user-record-log-module .url-log-row.url-system-record .card-header {
                     background-color: #ffe6e6;
                     position: relative;
+                }
+
+                .user-record-log-module .user-record-log-approval-panel {
+                    margin-top: -1rem;
+                }
+
+                .user-record-log-module .user-record-log-approval-panel .alert {
+                    margin-bottom: 0 !important;
+                    border-radius: 0 0 0.375rem 0.375rem;
                 }
 
                 .user-record-log-module .url-system-record-icon {
@@ -2663,6 +2902,12 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                                 </div>
                                 <div class="col-12 col-md-auto d-grid">
                                     <button type="button" class="btn btn-sm btn-rounded btn-outline-primary w-100" id="url_collapse_all_btn">Collapse All</button>
+                                </div>
+                                <div class="col-12 col-md-auto d-grid">
+                                    <button type="button" class="btn btn-sm btn-rounded btn-outline-primary w-100" id="url_expand_system_btn">Expand System</button>
+                                </div>
+                                <div class="col-12 col-md-auto d-grid">
+                                    <button type="button" class="btn btn-sm btn-rounded btn-outline-primary w-100" id="url_collapse_system_btn">Collapse System</button>
                                 </div>
                             </div>
                         </div>

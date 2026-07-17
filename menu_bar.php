@@ -361,6 +361,7 @@ $menuList = array(
         'expand' => array(
             array('Shopee Ads Top Up Transaction', 'mdi storefront-outline', $SITEURL . '/shopee/shopee_ads_topup_trans_table.php', '77'),
             array('Facebook Ads Top Up', 'mdi storefront-outline', $SITEURL . '/finance/fb_ads_topup_trans_table.php', '50'),
+            array('FB-Ads WHT Submission', 'mdi mdi-file-document-check-outline', $SITEURL . '/finance/fb_ads_topup_wht_submission_table.php', '168'),
             array('Delivery Fees Claim Record', 'mdi storefront-outline', $SITEURL . '/finance/del_fees_claim_table.php', '66'),
             array('Internal Consume Ticket/Credit', 'mdi storefront-outline', $SITEURL . '/finance/internal_consume_ticket_credit_table.php', '65'),
             array('Stock Credit Top Up Record', 'mdi storefront-outline', $SITEURL . '/finance/stock_credit_top_up_request_table.php', '78'),
@@ -377,7 +378,7 @@ $menuList = array(
                 'pin' => array('48', '76'),
             ),
         ),
-        'pin' => array('77', '50', '66', '65', '78', '88', '48', '76')
+        'pin' => array('77', '50', '168', '66', '65', '78', '88', '48', '76')
     ),
     array(
         'Income',

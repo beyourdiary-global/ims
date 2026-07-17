@@ -891,7 +891,34 @@
         customer_id: customerId,
         customer_column: customerColumn,
         return_url: pathReturn,
+        approval_mode: cfg.approvalMode ? 1 : 0,
+        approval_request_id: parseInt(cfg.approvalRequestId || "0", 10) || 0,
+        id: parseInt(cfg.approvalRecordId || "0", 10) || 0,
       };
+    }
+
+    function scrollToApprovalPanel() {
+      if (!cfg.approvalMode) {
+        return;
+      }
+
+      var $approvalPanel = $list.find(".user-record-log-approval-panel").first();
+      var approvalRecordId = parseInt(cfg.approvalRecordId || "0", 10) || 0;
+      var $target = $approvalPanel;
+      if (!$target.length && approvalRecordId > 0) {
+        $target = $list.find('.url-log-row[data-record-id="' + approvalRecordId + '"]').first();
+      }
+      if (!$target.length) {
+        return;
+      }
+
+      var headerOffset = 190;
+      var panelTop = parseInt($target.offset().top, 10) || 0;
+      var scrollTop = Math.max(0, panelTop - headerOffset);
+
+      window.setTimeout(function () {
+        $("html, body").stop(true).animate({ scrollTop: scrollTop }, 500);
+      }, 50);
     }
 
     function renderPagingSummary(total, page, totalPages, pageSize) {
@@ -1061,6 +1088,7 @@
             currentPageSize,
           );
           renderPagination(parseInt(res.total_pages || 1, 10), currentPage);
+          scrollToApprovalPanel();
           hideAlert();
         })
         .fail(function (xhr) {
@@ -1157,6 +1185,173 @@
         });
     }
 
+    function showDeleteConfirmationMessage(message) {
+      message = String(message || "Failed to delete user record log.").trim();
+      if (typeof confirmationDialog === "function") {
+        confirmationDialog("", message, "User Record Log", "", "", "ErrMO");
+        return;
+      }
+
+      showAlert("danger", message);
+    }
+
+    function executeDeleteRecord(recordId, $button) {
+      hideAlert();
+      if ($button && $button.length) {
+        $button.prop("disabled", true);
+      }
+      setLoading(true);
+
+      $.ajax({
+        url: ajaxUrl,
+        method: "POST",
+        dataType: "json",
+        data: {
+          url_action: "delete",
+          record_id: String(recordId),
+          customer_id: String(customerId || 0),
+          customer_column: customerColumn,
+          return_url: pathReturn,
+        },
+        timeout: 25000,
+      })
+        .done(function (res) {
+          if (!res || !res.ok) {
+            showDeleteConfirmationMessage(
+              res && res.message ? res.message : "Failed to delete user record log.",
+            );
+            return;
+          }
+
+          loadList();
+          hideAlert();
+          showSuccessPopup(
+            res.message || "User record log delete request submitted successfully.",
+          );
+        })
+        .fail(function (xhr) {
+          var extra = "";
+          if (xhr && xhr.responseText) {
+            extra = " " + String(xhr.responseText).substring(0, 120);
+          }
+          showDeleteConfirmationMessage(
+            "Request failed while deleting user record log." + extra,
+          );
+        })
+        .always(function () {
+          if ($button && $button.length) {
+            $button.prop("disabled", false);
+          }
+          setLoading(false);
+        });
+    }
+
+    function deleteRecord(recordId, $button) {
+      recordId = parseInt(recordId || "0", 10) || 0;
+      if (!recordId) {
+        showAlert("danger", "Invalid user record log.");
+        return;
+      }
+
+      var confirmationMessage =
+        "Delete this user record log? If approval is required, it will be sent to your supervisor.";
+      confirmationDialog(
+        "",
+        confirmationMessage,
+        "Delete User Record Log",
+        "",
+        "",
+        "CONFIRM",
+      ).then(function (confirmed) {
+        if (confirmed) {
+          executeDeleteRecord(recordId, $button);
+        }
+      });
+    }
+
+    function executeSystemRecordToggle(recordId, systemState, $button) {
+      hideAlert();
+      if ($button && $button.length) {
+        $button.prop("disabled", true);
+      }
+      setLoading(true);
+
+      $.ajax({
+        url: ajaxUrl,
+        method: "POST",
+        dataType: "json",
+        data: {
+          url_action: "toggle_system_record",
+          record_id: String(recordId),
+          system_state: systemState ? "1" : "0",
+          customer_id: String(customerId || 0),
+          customer_column: customerColumn,
+          return_url: pathReturn,
+        },
+        timeout: 25000,
+      })
+        .done(function (res) {
+          if (!res || !res.ok) {
+            showAlert(
+              "danger",
+              res && res.message
+                ? res.message
+                : "Failed to update system record status.",
+            );
+            return;
+          }
+
+          loadList();
+          showSuccessPopup(
+            res.message ||
+              (systemState
+                ? "User record log marked as a system record."
+                : "User record log unmarked as a system record."),
+          );
+        })
+        .fail(function (xhr) {
+          var extra = "";
+          if (xhr && xhr.responseText) {
+            extra = " " + String(xhr.responseText).substring(0, 120);
+          }
+          showAlert(
+            "danger",
+            "Request failed while updating system record status." + extra,
+          );
+        })
+        .always(function () {
+          if ($button && $button.length) {
+            $button.prop("disabled", false);
+          }
+          setLoading(false);
+        });
+    }
+
+    function toggleSystemRecord(recordId, systemState, $button) {
+      recordId = parseInt(recordId || "0", 10) || 0;
+      if (!recordId) {
+        showAlert("danger", "Invalid user record log.");
+        return;
+      }
+
+      var shouldMark = Boolean(systemState);
+      var confirmationMessage = shouldMark
+        ? "Mark this user record log as a system record?"
+        : "Remove this user record log from system records?";
+      confirmationDialog(
+        "",
+        confirmationMessage,
+        shouldMark ? "Mark System Record" : "Unmark System Record",
+        "",
+        "",
+        "CONFIRM",
+      ).then(function (confirmed) {
+        if (confirmed) {
+          executeSystemRecordToggle(recordId, shouldMark, $button);
+        }
+      });
+    }
+
     $form.off("submit.url").on("submit.url", function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -1216,6 +1411,14 @@
 
     $("#url_collapse_all_btn").on("click", function () {
       $("[id^='url-body-']").hide();
+    });
+
+    $("#url_expand_system_btn").on("click", function () {
+      $list.find(".url-system-record .card-body").show();
+    });
+
+    $("#url_collapse_system_btn").on("click", function () {
+      $list.find(".url-system-record .card-body").hide();
     });
 
     $(document).on("change", ".user-record-log-attachment-input", function () {
@@ -1378,6 +1581,16 @@
       if ($form.offset()) {
         $("html, body").animate({ scrollTop: $form.offset().top - 100 }, 250);
       }
+    });
+
+    $list.on("click", ".url-delete-btn", function () {
+      deleteRecord($(this).data("id"), $(this));
+    });
+
+    $list.on("click", ".url-system-record-btn", function () {
+      var $button = $(this);
+      var systemState = String($button.data("system-state") || "0") === "1";
+      toggleSystemRecord($button.data("id"), systemState, $button);
     });
 
     $list.on("click", ".url-toggle-btn", function () {
