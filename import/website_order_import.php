@@ -1,7 +1,10 @@
 <?php
-header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Cache-Control: private, no-store, no-cache, must-revalidate, max-age=0, s-maxage=0');
 header('Pragma: no-cache');
 header('Expires: 0');
+header('Surrogate-Control: no-store');
+header('X-Accel-Expires: 0');
+header('Vary: *');
 
 $currentPagePin = 0;
 $websiteOrderPinGroupId = 92;
@@ -198,7 +201,7 @@ if ($action !== '' && !in_array($action, $allowedActions, true)) {
     $action = '';
 }
 if (post('cancelImportBtn') !== '' || $action === 'cancelImport') {
-    echo '<script>location.href = ' . json_encode($importPageUrl) . ';</script>';
+    header('Location: ' . $importPageUrl, true, 303);
     exit;
 }
 
@@ -487,7 +490,7 @@ $selectedPicLabel = websiteOrderImportGetOptionLabel($selectedPic, $userOptions)
                             </div>
                             <div class="col-12 col-md-4 mb-3 d-flex gap-2 flex-wrap">
                                 <button class="btn btn-lg btn-rounded btn-primary px-4" type="submit" name="actionBtn" value="parseWebsiteOrderReq"><i class="fa-solid fa-wand-magic-sparkles"></i> Extract Details</button>
-                                <button class="btn btn-lg btn-rounded btn-secondary px-4" type="submit" name="cancelImportBtn" value="1">Cancel</button>
+                                <button class="btn btn-lg btn-rounded btn-secondary px-4" type="button" onclick="websiteImportResetPage()">Cancel</button>
                             </div>
                         </div>
                     </form>
@@ -530,7 +533,7 @@ $selectedPicLabel = websiteOrderImportGetOptionLabel($selectedPic, $userOptions)
                                 <div class="col-md-3 mb-3"><label class="form-label" for="payment_method">Payment Method<span class="requireRed">*</span></label><div class="autocomplete"><input class="form-control" type="text" id="payment_method" value="<?= htmlspecialchars($selectedPaymentLabel, ENT_QUOTES, 'UTF-8') ?>" autocomplete="off" required><input type="hidden" name="payment_method" id="payment_method_hidden" value="<?= $selectedPayment > 0 ? (int) $selectedPayment : '' ?>"></div></div>
                                 <div class="col-md-3 mb-3"><label class="form-label" for="pic">Person In Charge<span class="requireRed">*</span></label><div class="autocomplete"><input class="form-control" type="text" id="pic" value="<?= htmlspecialchars($selectedPicLabel, ENT_QUOTES, 'UTF-8') ?>" autocomplete="off" required><input type="hidden" name="pic" id="pic_hidden" value="<?= $selectedPic > 0 ? (int) $selectedPic : '' ?>"></div></div>
                             </div>
-                            <div class="d-flex justify-content-center flex-wrap gap-2 mt-3"><button class="btn btn-lg btn-rounded btn-primary px-4" type="submit"><i class="fa-solid fa-database"></i> Insert Website Order Request</button><button class="btn btn-lg btn-rounded btn-secondary px-4" type="submit" name="cancelImportBtn" value="1">Cancel</button></div>
+                            <div class="d-flex justify-content-center flex-wrap gap-2 mt-3"><button class="btn btn-lg btn-rounded btn-primary px-4" type="submit"><i class="fa-solid fa-database"></i> Insert Website Order Request</button><button class="btn btn-lg btn-rounded btn-secondary px-4" type="button" onclick="websiteImportResetPage()">Cancel</button></div>
                         </form>
                     </div>
                 </div>
@@ -666,4 +669,46 @@ $selectedPicLabel = websiteOrderImportGetOptionLabel($selectedPic, $userOptions)
         </script>
     <?php } ?>
 </body>
+<script>
+    function websiteImportResetPage() {
+        window.location.replace(window.location.pathname);
+    }
+
+    (function () {
+        var currentUrl = new URL(window.location.href);
+        if (currentUrl.searchParams.has('_import_reset')) {
+            currentUrl.searchParams.delete('_import_reset');
+            var cleanUrl = currentUrl.pathname + (currentUrl.search ? currentUrl.search : '') + currentUrl.hash;
+            window.history.replaceState({}, document.title, cleanUrl);
+        }
+    }());
+
+    window.addEventListener('pagehide', function () {
+        var preview = document.querySelector('.website-import-preview');
+        if (preview) {
+            preview.remove();
+        }
+    });
+
+    // Prevent this stateful verification page from entering the browser's
+    // back/forward cache. The upload page is always reconstructed from the
+    // next request instead of restoring an old PDF preview.
+    window.addEventListener('unload', function () {});
+
+    var extractButton = document.querySelector('button[name="actionBtn"][value="parseWebsiteOrderReq"]');
+    if (extractButton) {
+        extractButton.addEventListener('click', function () {
+            var preview = document.querySelector('.website-import-preview');
+            if (preview) {
+                preview.remove();
+            }
+        });
+    }
+
+    window.addEventListener('pageshow', function (event) {
+        if (event.persisted) {
+            websiteImportResetPage();
+        }
+    });
+</script>
 </html>

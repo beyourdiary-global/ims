@@ -349,6 +349,7 @@ define('LUCKY_DRAW_REQUEST_LOG', 'lucky_draw_request_log');
 define('MERCHANT', 'merchant');
 define('SUPPLIER_INVOICE', 'supplier_invoice');
 define('SUPPLIER_INVOICE_QR', 'supplier_invoice_qr');
+define('SUPPLIER_PAYMENT', 'supplier_payment');
 define('CURR_BANK_TRANS', 'asset_current_bank_acc_transaction');
 define('INV_TRANS', 'asset_investment_transaction');
 define('INVTR_TRANS', 'asset_inventories_transaction');

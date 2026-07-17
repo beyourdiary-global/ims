@@ -562,6 +562,81 @@ function insertTableEnsureSupplierInvoiceSetup($conn, $cmsConn, $dbFin)
     }
 }
 
+function insertTableEnsureSupplierPaymentSetup($conn, $cmsConn, $dbFin)
+{
+    $supplierPaymentTable = defined('SUPPLIER_PAYMENT') ? SUPPLIER_PAYMENT : 'supplier_payment';
+
+    $createPaymentSql = "CREATE TABLE IF NOT EXISTS `" . $dbFin . "`.`" . $supplierPaymentTable . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `doc_date` DATE NOT NULL,
+        `code` VARCHAR(9) NOT NULL,
+        `bill_no` VARCHAR(100) NOT NULL,
+        `description` TEXT NOT NULL,
+        `quantity` DECIMAL(15,3) NOT NULL DEFAULT 0.000,
+        `amount` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        `add_sst` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        `total` DECIMAL(15,2) NOT NULL DEFAULT 0.00,
+        `remark` TEXT DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        KEY `idx_supplier_payment_doc_date` (`doc_date`),
+        KEY `idx_supplier_payment_code` (`code`),
+        KEY `idx_supplier_payment_bill_no` (`bill_no`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createPaymentSql)) {
+        echo "<p style='color:green;'>Verified table `" . htmlspecialchars($supplierPaymentTable, ENT_QUOTES, 'UTF-8') . "`.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating table `" . htmlspecialchars($supplierPaymentTable, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($conn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+
+    if (!($cmsConn instanceof mysqli)) {
+        return;
+    }
+
+    $pinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (169, 'Supplier Payment', '1,2,3,4,5,6', 'Supplier payment access', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `pins` = VALUES(`pins`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+
+    if ($cmsConn->query($pinGroupSql)) {
+        echo "<p style='color:green;'>Verified pin group 169 for Supplier Payment.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating pin group 169: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    }
+
+    foreach (array(1, 2) as $groupId) {
+        $userGroupResult = $cmsConn->query("SELECT `pins` FROM `user_group` WHERE `id` = " . (int) $groupId . " LIMIT 1");
+        if (!$userGroupResult || $userGroupResult->num_rows === 0) {
+            echo "<p style='color:orange;'>Supplier Payment pin setup skipped `user_group` id " . (int) $groupId . " because the group was not found.</p>";
+            continue;
+        }
+
+        $userGroupRow = $userGroupResult->fetch_assoc();
+        $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+        $updatedPins = addAccessToPinBlock($currentPins, 169, array(1, 2, 3, 4, 5, 6));
+
+        if ($updatedPins !== $currentPins) {
+            $safePins = $cmsConn->real_escape_string($updatedPins);
+            if ($cmsConn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                echo "<p style='color:green;'>Supplier Payment pin setup granted access to `user_group` id " . (int) $groupId . ".</p>";
+            } else {
+                echo "<p style='color:red;'>Supplier Payment pin setup failed updating `user_group` id " . (int) $groupId . ": " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Supplier Payment pin setup verified for `user_group` id " . (int) $groupId . ".</p>";
+        }
+    }
+}
+
 function insertTableEnsureFbAdsWhtSubmissionSetup($conn, $cmsConn, $dbFin)
 {
     $submissionTable = defined('FB_ADS_WHT_SUBMISSION') ? FB_ADS_WHT_SUBMISSION : 'facebook_ads_topup_wht_submission';
@@ -640,10 +715,12 @@ function insertTableEnsureFbAdsWhtSubmissionSetup($conn, $cmsConn, $dbFin)
 $cmsConn = new mysqli($dbhost, $dbUser, $dbpwd, $db_cms, $dbport);
 if ($cmsConn->connect_error) {
     insertTableEnsureSupplierInvoiceSetup($conn, null, $db_fin);
+    insertTableEnsureSupplierPaymentSetup($conn, null, $db_fin);
     insertTableEnsureFbAdsWhtSubmissionSetup($conn, null, $db_fin);
     echo "<p style='color:red;'><strong>Order Report pin setup:</strong> Failed connecting to CMS database `" . htmlspecialchars($db_cms, ENT_QUOTES, 'UTF-8') . "`: " . htmlspecialchars($cmsConn->connect_error, ENT_QUOTES, 'UTF-8') . "</p>";
 } else {
     insertTableEnsureSupplierInvoiceSetup($conn, $cmsConn, $db_fin);
+    insertTableEnsureSupplierPaymentSetup($conn, $cmsConn, $db_fin);
     insertTableEnsureFbAdsWhtSubmissionSetup($conn, $cmsConn, $db_fin);
     insertTableEnsurePackageParentSkuColumns($cmsConn, $db_cms);
     migrationEnsureTableUnicodeInnoDb($cmsConn, $db_cms, PKG);

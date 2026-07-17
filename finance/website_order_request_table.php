@@ -213,6 +213,7 @@ $num = 1;   // numbering
 
 $redirectPage = $SITEURL . '/finance/website_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/website_order_request_table.php';
+$websiteImportUrl = $SITEURL . '/import/website_order_import.php';
 
 $monthInput = input('month');
 $monthFilter = $monthInput === 'All'
@@ -369,7 +370,7 @@ $result = getData('*', $whereSql, $groupBySql, WEB_ORDER_REQ, $finance_connect);
                             <?php endif; ?>
                             <?php if (isActionAllowed("Import", $pinAccess)) : ?>
                                 <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn"
-                                    href="<?= htmlspecialchars((string) ($SITEURL . '/import/website_order_import.php'), ENT_QUOTES, 'UTF-8') ?>">
+                                    href="<?= htmlspecialchars((string) $websiteImportUrl, ENT_QUOTES, 'UTF-8') ?>">
                                     <i class="fa-solid fa-file-import"></i> Import
                                 </a>
                             <?php endif; ?>
