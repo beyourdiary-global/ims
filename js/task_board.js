@@ -6742,6 +6742,19 @@ $(window).on("resize scroll", function () {
   positionTaskBoardFilterMenu();
 });
 
+$(document).on("click", ".task-board-load-more-btn", function (e) {
+  e.preventDefault();
+  loadBoardColumnPage($(this).closest(".task-column"));
+});
+
+$(document).on("scroll", ".task-item-list", function () {
+  var list = this;
+  if (list.scrollTop + list.clientHeight < list.scrollHeight - 80) {
+    return;
+  }
+  loadBoardColumnPage($(list).closest(".task-column"));
+});
+
 $(document).on("click", ".task-board-group-option", function (e) {
   e.preventDefault();
 
@@ -6752,8 +6765,17 @@ $(document).on("click", ".task-board-group-option", function (e) {
     return;
   }
 
-  setBoardGroupBy(nextMode, true);
-  renderBoardGroupingLayout();
+  var renderNextGroup = function () {
+    setBoardGroupBy(nextMode, true);
+    renderBoardGroupingLayout();
+  };
+
+  if (nextMode !== "status" && !boardAllItemsLoaded()) {
+    notify("Loading all board items...");
+    loadAllBoardItems(renderNextGroup);
+  } else {
+    renderNextGroup();
+  }
 
   var dropdownEl = document.getElementById("taskBoardGroupBtn");
   if (dropdownEl && typeof bootstrap !== "undefined" && bootstrap.Dropdown) {
@@ -7254,7 +7276,13 @@ $(window).on("scroll.taskBoardSettings", function () {
   }
 });
 
+var boardInitialDataLoading = false;
+
 function safeRefreshBoardUi() {
+  if (boardInitialDataLoading) {
+    return;
+  }
+
   try {
     captureBoardStatusColumnsFromDom();
     loadBoardGroupFromCookie();
@@ -7296,6 +7324,136 @@ function safeRefreshBoardUi() {
   try {
     syncBoardCardDraggableState();
   } catch (e) {}
+}
+
+var boardColumnLoadInFlight = {};
+
+function boardColumnTotalFromElement($column) {
+  var columnId = Number($column.attr("data-column-id") || 0);
+  if (columnId <= 0) {
+    return 0;
+  }
+
+  return Math.max(
+    Number($column.attr("data-total-item-count") || 0),
+    getBoardColumnTotalCount(columnId),
+  );
+}
+
+function boardAllItemsLoaded() {
+  var allLoaded = true;
+  $app.find('.task-column[data-column-id]').each(function () {
+    var $column = $(this);
+    var total = boardColumnTotalFromElement($column);
+    var loaded = $column.find(".task-item-card").length;
+    if (loaded < total) {
+      allLoaded = false;
+      return false;
+    }
+  });
+  return allLoaded;
+}
+
+function loadBoardColumnPage($column, onComplete) {
+  if (!$column || !$column.length) {
+    if (typeof onComplete === "function") {
+      onComplete(false);
+    }
+    return;
+  }
+
+  var columnId = Number($column.attr("data-column-id") || 0);
+  var $list = $column.find(".task-item-list").first();
+  var $button = $column.find(".task-board-load-more-btn").first();
+  var loaded = $list.find(".task-item-card").length;
+  var total = boardColumnTotalFromElement($column);
+  if (columnId <= 0 || !$list.length || loaded >= total) {
+    if (typeof onComplete === "function") {
+      onComplete(true);
+    }
+    return;
+  }
+
+  if (boardColumnLoadInFlight[columnId]) {
+    return;
+  }
+
+  boardColumnLoadInFlight[columnId] = true;
+  if ($button.length) {
+    $button.prop("disabled", true).text("Loading...");
+  }
+
+  postAction(
+    {
+      task_action: "get_board_items",
+      column_id: columnId,
+      offset: loaded,
+      limit: state.boardPageSize,
+    },
+    function (res) {
+      var items = res && Array.isArray(res.items) ? res.items : [];
+      for (var i = 0; i < items.length; i++) {
+        var item = items[i] || {};
+        var itemId = Number(item.id || 0);
+        if (!itemId || findCardByItemId(itemId).length) {
+          continue;
+        }
+
+        var $card = $(buildTaskCardHtml(item));
+        setCardStatusColumnMeta(
+          $card,
+          columnId,
+          getBoardStatusColumnName(columnId),
+        );
+        $list.append($card);
+      }
+
+      var responseTotal = Number(res && res.total ? res.total : total);
+      $column.attr("data-total-item-count", responseTotal);
+      state.boardItemCounts[String(columnId)] = responseTotal;
+      boardColumnLoadInFlight[columnId] = false;
+      updateAllColumnCounts();
+      applyBoardViewSettingsToAllCards();
+      applyBoardFilters();
+      syncBoardCardDraggableState();
+      if (typeof onComplete === "function") {
+        onComplete(true);
+      }
+    },
+    function () {
+      boardColumnLoadInFlight[columnId] = false;
+      syncBoardLoadMoreControls();
+      if (typeof onComplete === "function") {
+        onComplete(false);
+      }
+    },
+  );
+}
+
+function loadAllBoardItems(onComplete) {
+  var $columns = $app.find('.task-column[data-column-id]').filter(function () {
+    return Number($(this).attr("data-column-id") || 0) > 0;
+  });
+  var index = 0;
+
+  function nextColumn() {
+    if (index >= $columns.length) {
+      if (typeof onComplete === "function") {
+        onComplete(true);
+      }
+      return;
+    }
+
+    var $column = $($columns.get(index));
+    index += 1;
+    if ($column.find(".task-item-card").length < boardColumnTotalFromElement($column)) {
+      loadBoardColumnPage($column, nextColumn);
+    } else {
+      nextColumn();
+    }
+  }
+
+  nextColumn();
 }
 
 function syncBoardCardDraggableState() {
@@ -7449,7 +7607,16 @@ state.projectKey.project_key = normalizeProjectKey(
 );
 $("#taskProjectKeyInput").val(state.projectKey.project_key);
 normalizeStatusLabels(state.statusLabels);
-safeRefreshBoardUi();
+loadBoardGroupFromCookie();
+if (getBoardGroupBy() !== "status" && !boardAllItemsLoaded()) {
+  boardInitialDataLoading = true;
+  loadAllBoardItems(function () {
+    boardInitialDataLoading = false;
+    safeRefreshBoardUi();
+  });
+} else {
+  safeRefreshBoardUi();
+}
 bindTaskBoardTouchSwipeScroll();
 window.setTimeout(safeRefreshBoardUi, 120);
 window.setTimeout(safeRefreshBoardUi, 420);
