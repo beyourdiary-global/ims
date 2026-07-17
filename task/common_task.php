@@ -2468,6 +2468,12 @@ if (!function_exists('taskResolveCurrentProjectId')) {
 if (!function_exists('taskGetProjectList')) {
     function taskGetProjectList($connect)
     {
+        static $cache = null;
+
+        if ($cache !== null) {
+            return $cache;
+        }
+
         $rows = array();
         if (!defined('TASK_PROJECT')) {
             return $rows;
@@ -2496,7 +2502,8 @@ if (!function_exists('taskGetProjectList')) {
             }
         }
 
-        return $rows;
+        $cache = $rows;
+        return $cache;
     }
 }
 
@@ -8405,16 +8412,18 @@ if (!function_exists('taskGetColumns')) {
 }
 
 if (!function_exists('taskGetItemsGroupedByColumn')) {
-    function taskGetItemsGroupedByColumn($connect, $projectId = 0)
+    function taskGetItemsGroupedByColumn($connect, $projectId = 0, $includeDescription = true)
     {
         $grouped = array();
         $allItemIds = array();
         $projectId = (int) $projectId;
+        $includeDescription = (bool) $includeDescription;
         $projectKeySetting = taskGetProjectKeySetting($connect, $projectId);
         $defaultProjectKeyId = isset($projectKeySetting['id']) ? (int) $projectKeySetting['id'] : 0;
         $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
 
-    $sql = "SELECT id,column_id,title,description,description_color_html,work_type_id,assignee_user_id,reporter_user_id,
+    $descriptionFields = $includeDescription ? ',description,description_color_html' : '';
+    $sql = "SELECT id,column_id,title,work_type_id,assignee_user_id,reporter_user_id" . $descriptionFields . ",
                 project_id,
                 priority,start_date,due_date,task_status,create_date,update_date,
                 original_estimate,amendement_date,amendement_time,second_amendement_date,second_amendement_time,
@@ -8472,13 +8481,10 @@ if (!function_exists('taskGetItemsGroupedByColumn')) {
                     'svg_icon' => taskDefaultWorkTypeSvgIcon('Task'),
                 );
 
-                $grouped[$columnId][] = array(
+                $groupedItem = array(
                     'id' => (int) $row['id'],
                     'column_id' => $columnId,
                     'title' => (string) $row['title'],
-                    'description' => isset($row['description_color_html']) && trim((string) $row['description_color_html']) !== ''
-                        ? (string) $row['description_color_html']
-                        : (isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : ''),
                     'sort_order' => isset($row['sort_order']) ? (int) $row['sort_order'] : 0,
                     'project_key_id' => $resolvedProjectKeyId,
                     'project_key' => $resolvedProjectKey,
@@ -8504,6 +8510,12 @@ if (!function_exists('taskGetItemsGroupedByColumn')) {
                     'second_amendement_date' => isset($row['second_amendement_date']) && $row['second_amendement_date'] !== null ? (string) $row['second_amendement_date'] : '',
                     'second_amendement_time_minutes' => taskSqlTimeToMinutes(isset($row['second_amendement_time']) ? $row['second_amendement_time'] : ''),
                 );
+                if ($includeDescription) {
+                    $groupedItem['description'] = isset($row['description_color_html']) && trim((string) $row['description_color_html']) !== ''
+                        ? (string) $row['description_color_html']
+                        : (isset($row['description']) && $row['description'] !== null ? (string) $row['description'] : '');
+                }
+                $grouped[$columnId][] = $groupedItem;
 
                 $allItemIds[] = (int) $row['id'];
             }
@@ -8611,10 +8623,11 @@ if (!function_exists('taskRenderProjectBrowserMenu')) {
                 continue;
             }
 
-            $projectHasSummaryAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 139);
-            $projectHasBoardAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 139);
-            $projectHasSheetsAccess = taskUserCanAccessProjectPageByPin($connect, $projectId, 139);
-            
+            // taskGetProjectList() already filters to projects with task access.
+            $projectHasSummaryAccess = true;
+            $projectHasBoardAccess = true;
+            $projectHasSheetsAccess = true;
+
             $canAccessProjectSettings = taskCanAccessProjectSettings($connect, $projectId);
             $canAccessProjectUserAccess = taskCanAccessProjectUserAccess($connect, $projectId);
             $canManageProjectActions = $canAccessProjectSettings || $canAccessProjectUserAccess;
@@ -8654,11 +8667,6 @@ if (!function_exists('taskRenderProjectBrowserMenu')) {
             echo '  <ul class="task-global-project-submenu' . ($isActiveProject ? ' active' : '') . '" id="' . htmlspecialchars($projectItemPanelId, ENT_QUOTES, 'UTF-8') . '">';
 
             foreach ($menus as $menuKey => $menu) {
-                $pinId = isset($menu['pin_id']) ? (int) $menu['pin_id'] : 0;
-                if ($pinId > 0 && !taskUserCanAccessProjectPageByPin($connect, $projectId, $pinId)) {
-                    continue;
-                }
-
                 $isActive = $isActiveProject && $activeMenu === $menuKey;
                 echo '      <li><a class="' . ($isActive ? 'task-global-link-active' : '') . '" href="' . htmlspecialchars(taskBuildProjectPageUrl($siteUrl, $menu['path'], $projectId), ENT_QUOTES, 'UTF-8') . '">' . htmlspecialchars($menu['label'], ENT_QUOTES, 'UTF-8') . '</a></li>';
             }
