@@ -6772,7 +6772,7 @@ body.task-board-page .task-board-scroll {
 .task-item-child-table-head,
 .task-item-child-list {
   min-width: 100%;
-  width: max-content;
+  width: 100%;
 }
 
 .task-item-child-table-head>span,
@@ -7036,12 +7036,18 @@ body.task-board-page .task-board-scroll {
   padding: 0;
   min-width: 0;
   flex: 1 1 auto;
+  display: -webkit-box;
   text-align: left;
   color: #0c66e4;
   font-size: 0.92rem;
   font-weight: 500;
   white-space: normal;
   overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .task-item-child-title-link:hover,
@@ -7096,11 +7102,18 @@ body.task-board-page .task-board-scroll {
 
 .task-item-child-open-title {
   min-width: 0;
+  flex: 1 1 auto;
+  display: -webkit-box;
   color: #253858;
   font-size: 0.92rem;
   font-weight: 600;
   white-space: normal;
   overflow-wrap: anywhere;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
 }
 
 .task-item-child-title-input {
