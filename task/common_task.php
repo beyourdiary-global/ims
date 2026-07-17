@@ -322,7 +322,7 @@ if (!function_exists('taskSanitizeCommentHtml')) {
         }
 
         $value = str_replace("\0", '', $value);
-        $allowedTags = '<p><br><strong><b><em><i><u><s><strike><sub><sup><ul><ol><li><a><h1><h2><h3><h4><h5><h6><blockquote><span><img>';
+        $allowedTags = '<p><br><strong><b><em><i><u><s><strike><sub><sup><ul><ol><li><a><h1><h2><h3><h4><h5><h6><blockquote><span><img><table><caption><colgroup><col><thead><tbody><tfoot><tr><th><td>';
         $value = strip_tags($value, $allowedTags);
 
         $value = preg_replace('/\son[a-z]+\s*=\s*"[^"]*"/i', '', $value);

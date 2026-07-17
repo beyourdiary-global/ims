@@ -4039,8 +4039,22 @@ body.task-board-page .task-board-scroll {
 .task-item-activity-comment-body p:last-child,
 .task-item-activity-comment-body ul:last-child,
 .task-item-activity-comment-body ol:last-child,
-.task-item-activity-comment-body blockquote:last-child {
+.task-item-activity-comment-body blockquote:last-child,
+.task-item-activity-comment-body table:last-child {
   margin-bottom: 0;
+}
+
+.task-item-activity-comment-body table {
+  width: 100%;
+  display: block;
+  overflow-x: auto;
+  border-collapse: collapse;
+}
+
+.task-item-activity-comment-body td,
+.task-item-activity-comment-body th {
+  border: 1px solid #dfe1e6;
+  padding: 0.35rem 0.45rem;
 }
 
 .task-item-activity-text {

@@ -1867,7 +1867,7 @@
       resize: false,
       autoresize_bottom_margin: 12,
       promotion: false,
-      plugins: "autolink advlist lists link code autoresize",
+      plugins: "autolink advlist lists link table code autoresize",
       toolbar_mode: isCompactMobile ? "scrolling" : "floating",
       contextmenu: false,
       convert_urls: false,
@@ -1921,7 +1921,7 @@
         });
       },
       content_style:
-        "body { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #24364d; } p { margin: 0; padding-bottom: 1em; } p + p { padding-top: 0.25em; } h1, h2, h3, h4 { line-height: 1.35; margin: 0; padding-top: 1.25em; padding-bottom: 0.75em; } body > h1:first-child, body > h2:first-child, body > h3:first-child, body > h4:first-child { padding-top: 0; } ul.task-editor-checklist { list-style: none; margin-left: 0; padding-left: 0; } ul.task-editor-checklist li { list-style: none; display: flex; align-items: flex-start; gap: 0.4rem; } ul.task-editor-checklist li input.task-editor-checkbox { margin-top: 0.28rem; flex: 0 0 auto; cursor: pointer; pointer-events: auto; }",
+        "body { font-family: Segoe UI, Arial, sans-serif; font-size: 14px; line-height: 1.45; color: #24364d; } p { margin: 0; padding-bottom: 1em; } p + p { padding-top: 0.25em; } h1, h2, h3, h4 { line-height: 1.35; margin: 0; padding-top: 1.25em; padding-bottom: 0.75em; } body > h1:first-child, body > h2:first-child, body > h3:first-child, body > h4:first-child { padding-top: 0; } table { width: 100%; border-collapse: collapse; } table td, table th { border: 1px solid #dfe1e6; padding: 0.35rem 0.45rem; } ul.task-editor-checklist { list-style: none; margin-left: 0; padding-left: 0; } ul.task-editor-checklist li { list-style: none; display: flex; align-items: flex-start; gap: 0.4rem; } ul.task-editor-checklist li input.task-editor-checkbox { margin-top: 0.28rem; flex: 0 0 auto; cursor: pointer; pointer-events: auto; }",
       setup: function (editor) {
         activeEditor = editor;
         editor._taskEditorContext = {
@@ -2105,7 +2105,7 @@
           {
             height: 220,
             toolbar:
-              "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo",
+              "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink table undo redo",
           },
         ),
       )
@@ -2138,7 +2138,7 @@
           {
             height: 170,
             toolbar:
-              "blocks bold styles taskListControl forecolor taskSimpleLink undo redo",
+              "blocks bold styles taskListControl forecolor taskSimpleLink table undo redo",
           },
         ),
       )
@@ -2199,7 +2199,7 @@
 
       config.height = 150;
       config.toolbar =
-        "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
+        "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink table undo redo";
 
       window.tinymce
         .init(config)
@@ -2248,7 +2248,7 @@
       }, { isReply: true, commentId: id });
       config.height = 120;
       config.toolbar =
-        "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
+        "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink table undo redo";
 
       window.tinymce
         .init(config)
@@ -2311,7 +2311,7 @@
       }, { isEditComment: true, commentId: id });
       config.height = 140;
       config.toolbar =
-        "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
+        "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink table undo redo";
 
       window.tinymce
         .init(config)
@@ -2371,7 +2371,7 @@
       }, { isReply: true, isEditReply: true, replyId: id });
       config.height = 130;
       config.toolbar =
-        "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink undo redo";
+        "blocks bold styles taskListControl forecolor taskFileUpload taskSimpleLink table undo redo";
 
       window.tinymce
         .init(config)
