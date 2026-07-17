@@ -69,6 +69,33 @@ if (
     $safeUserName = htmlspecialchars((string) USER_NAME, ENT_QUOTES, 'UTF-8');
     $safePageTitle = htmlspecialchars((string) $pageTitle, ENT_QUOTES, 'UTF-8');
 
+    if ($taskAction === 'get_board_items') {
+        $columnId = max(0, (int) post('column_id'));
+        $offset = max(0, (int) post('offset'));
+        $limit = min(100, max(10, (int) post('limit')));
+        if ($columnId <= 0) {
+            taskJsonResponse(array('ok' => 0, 'message' => 'Invalid board status.'));
+        }
+
+        $itemsByColumn = taskGetItemsGroupedByColumn($connect, $currentProjectId, false, $limit, $offset, $columnId);
+        $items = isset($itemsByColumn[$columnId]) && is_array($itemsByColumn[$columnId])
+            ? array_values($itemsByColumn[$columnId])
+            : array();
+        $itemCounts = taskGetItemCountsByColumn($connect, $currentProjectId);
+        $total = isset($itemCounts[$columnId]) ? (int) $itemCounts[$columnId] : 0;
+        $nextOffset = $offset + count($items);
+
+        taskJsonResponse(array(
+            'ok' => 1,
+            'column_id' => $columnId,
+            'items' => $items,
+            'offset' => $offset,
+            'next_offset' => $nextOffset,
+            'total' => $total,
+            'has_more' => $nextOffset < $total ? 1 : 0,
+        ));
+    }
+
     $taskAttachmentVideoExts = array('mp4', 'mov', 'webm', 'avi', 'mkv');
     $taskAttachmentAllowedExts = array('jpg', 'jpeg', 'png', 'gif', 'webp', 'bmp', 'pdf', 'doc', 'docx', 'xls', 'xlsx', 'csv', 'txt', 'zip', 'mp4', 'mov', 'webm', 'avi', 'mkv');
     $taskAttachmentAllowedMimes = array(
@@ -1466,7 +1493,17 @@ $assignees = taskGetAssignees($connect);
 $labels = taskGetLabels($connect);
 $statusLabels = taskGetStatusLabels($connect);
 $columns = taskGetColumns($connect, $currentProjectId);
-$itemsByColumn = taskGetItemsGroupedByColumn($connect, $currentProjectId, false);
+$boardPageSize = 40;
+$boardItemCounts = taskGetItemCountsByColumn($connect, $currentProjectId);
+$itemsByColumn = array();
+foreach ($columns as $boardColumn) {
+    $boardColumnId = isset($boardColumn['id']) ? (int) $boardColumn['id'] : 0;
+    if ($boardColumnId <= 0) {
+        continue;
+    }
+    $boardItems = taskGetItemsGroupedByColumn($connect, $currentProjectId, false, $boardPageSize, 0, $boardColumnId);
+    $itemsByColumn[$boardColumnId] = isset($boardItems[$boardColumnId]) ? $boardItems[$boardColumnId] : array();
+}
 $projectBoardBackground = isset($currentProject['board_background_color']) ? (string) $currentProject['board_background_color'] : '#f4f7fb';
 ?>
 
@@ -1617,7 +1654,8 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
                                     $columnId = (int) $column['id'];
                                     $columnItems = isset($itemsByColumn[$columnId]) ? $itemsByColumn[$columnId] : array();
                                     $canCreateInColumn = $canAdd && ($hasFullProjectAccess || in_array($columnId, $allowedStatusIds, true));
-                                    taskRenderBoardColumn($column, $columnItems, $workTypes, $assignees, $canCreateInColumn, $canEdit, $canDelete, $isProjectOwner);
+                                    $columnTotalItemCount = isset($boardItemCounts[$columnId]) ? (int) $boardItemCounts[$columnId] : count($columnItems);
+                                    taskRenderBoardColumn($column, $columnItems, $workTypes, $assignees, $canCreateInColumn, $canEdit, $canDelete, $isProjectOwner, $columnTotalItemCount, $boardPageSize);
                                 ?>
                             <?php endforeach; ?>
                         </div>
@@ -1746,7 +1784,9 @@ window.taskBoardConfig = {
     labels: <?= json_encode($labels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     linkRelationTypes: <?= json_encode(taskGetLinkRelationTypes(), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
+    columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    boardItemCounts: <?= json_encode($boardItemCounts, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    boardPageSize: <?= (int) $boardPageSize ?>
 };
 </script>
 <script src="../js/task_board_core.js"></script>

@@ -115,6 +115,11 @@ var state = {
     cfg.columnPermissions && typeof cfg.columnPermissions === "object"
       ? cfg.columnPermissions
       : {},
+  boardItemCounts:
+    cfg.boardItemCounts && typeof cfg.boardItemCounts === "object"
+      ? cfg.boardItemCounts
+      : {},
+  boardPageSize: Math.max(10, Number(cfg.boardPageSize || 40)),
 };
 
 function isTouchBoardViewport() {

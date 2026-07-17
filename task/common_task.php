@@ -8411,13 +8411,45 @@ if (!function_exists('taskGetColumns')) {
     }
 }
 
+if (!function_exists('taskGetItemCountsByColumn')) {
+    function taskGetItemCountsByColumn($connect, $projectId = 0)
+    {
+        $counts = array();
+        $projectId = (int) $projectId;
+        if ($projectId <= 0) {
+            return $counts;
+        }
+
+        $sql = "SELECT column_id,COUNT(*) AS item_count
+                FROM " . TASK_ITEM . "
+                WHERE status='A' AND project_id='" . $projectId . "'
+                GROUP BY column_id";
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return $counts;
+        }
+
+        while ($row = $result->fetch_assoc()) {
+            $columnId = isset($row['column_id']) ? (int) $row['column_id'] : 0;
+            if ($columnId > 0) {
+                $counts[$columnId] = isset($row['item_count']) ? (int) $row['item_count'] : 0;
+            }
+        }
+
+        return $counts;
+    }
+}
+
 if (!function_exists('taskGetItemsGroupedByColumn')) {
-    function taskGetItemsGroupedByColumn($connect, $projectId = 0, $includeDescription = true)
+    function taskGetItemsGroupedByColumn($connect, $projectId = 0, $includeDescription = true, $limit = 0, $offset = 0, $columnId = 0)
     {
         $grouped = array();
         $allItemIds = array();
         $projectId = (int) $projectId;
         $includeDescription = (bool) $includeDescription;
+        $limit = max(0, (int) $limit);
+        $offset = max(0, (int) $offset);
+        $columnId = max(0, (int) $columnId);
         $projectKeySetting = taskGetProjectKeySetting($connect, $projectId);
         $defaultProjectKeyId = isset($projectKeySetting['id']) ? (int) $projectKeySetting['id'] : 0;
         $defaultProjectKey = isset($projectKeySetting['project_key']) ? (string) $projectKeySetting['project_key'] : '';
@@ -8433,8 +8465,14 @@ if (!function_exists('taskGetItemsGroupedByColumn')) {
         if ($projectId > 0) {
             $sql .= " AND project_id='" . $projectId . "'";
         }
+        if ($columnId > 0) {
+            $sql .= " AND column_id='" . $columnId . "'";
+        }
         $sql .= "
                 ORDER BY column_id ASC, sort_order ASC, id ASC";
+        if ($limit > 0) {
+            $sql .= " LIMIT " . $offset . "," . $limit;
+        }
 
         $result = mysqli_query($connect, $sql);
         if ($result) {
@@ -8952,14 +8990,16 @@ if (!function_exists('taskRenderComposer')) {
 }
 
 if (!function_exists('taskRenderBoardColumn')) {
-    function taskRenderBoardColumn($column, $items, $workTypes, $assignees, $canAdd = true, $canEdit = true, $canDelete = true, $canManageColumn = false)
+    function taskRenderBoardColumn($column, $items, $workTypes, $assignees, $canAdd = true, $canEdit = true, $canDelete = true, $canManageColumn = false, $totalItemCount = null, $pageSize = 0)
     {
         $columnId = (int) $column['id'];
         $columnName = isset($column['name']) ? (string) $column['name'] : '';
         $columnColor = taskNormalizeHexColor(isset($column['color']) ? $column['color'] : '', '#dfe1e6');
         $itemCount = is_array($items) ? count($items) : 0;
+        $totalItemCount = $totalItemCount === null ? $itemCount : max($itemCount, (int) $totalItemCount);
+        $pageSize = max(0, (int) $pageSize);
 
-        echo '<section class="task-column" data-column-id="' . $columnId . '" data-column-color="' . htmlspecialchars($columnColor, ENT_QUOTES, 'UTF-8') . '" style="--task-column-color:' . htmlspecialchars($columnColor, ENT_QUOTES, 'UTF-8') . ';">';
+        echo '<section class="task-column" data-column-id="' . $columnId . '" data-column-color="' . htmlspecialchars($columnColor, ENT_QUOTES, 'UTF-8') . '" data-total-item-count="' . $totalItemCount . '" data-loaded-item-count="' . $itemCount . '" style="--task-column-color:' . htmlspecialchars($columnColor, ENT_QUOTES, 'UTF-8') . ';">';
         echo '  <div class="task-column-header">';
         echo '      <div class="task-column-title-wrap">';
         echo '          <h5 class="task-column-title">' . htmlspecialchars($columnName, ENT_QUOTES, 'UTF-8') . '</h5>';
@@ -8987,6 +9027,11 @@ if (!function_exists('taskRenderBoardColumn')) {
             taskRenderCard($taskItem, $assignees, $canEdit, $canDelete);
         }
         echo '  </div>';
+
+        if ($pageSize > 0 && $itemCount < $totalItemCount) {
+            $remainingCount = $totalItemCount - $itemCount;
+            echo '  <button class="btn task-board-load-more-btn" type="button" data-column-id="' . $columnId . '" data-offset="' . $itemCount . '" data-limit="' . $pageSize . '">Load more (' . $remainingCount . ' remaining)</button>';
+        }
 
         if ($canAdd && !empty($workTypes)) {
             echo '  <button class="btn task-open-composer-btn" type="button"><span class="task-open-composer-btn-icon">+</span><span class="task-open-composer-btn-text">Create</span></button>';

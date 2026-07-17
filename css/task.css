@@ -1856,6 +1856,23 @@ body.task-board-page .task-board-scroll {
   background-color: rgba(0, 0, 0, 0.05);
 }
 
+.task-board-load-more-btn {
+  width: 100%;
+  margin: 0.1rem 0 0.7rem;
+  border: 1px solid #c5d2e1 !important;
+  background: #f7faff !important;
+  color: #3568a8;
+  font-size: 0.82rem;
+  font-weight: 600;
+  min-height: 36px;
+}
+
+.task-board-load-more-btn:hover,
+.task-board-load-more-btn:focus {
+  background: #eaf3ff !important;
+  color: #244f85;
+}
+
 .task-item-card {
   background: #ffffff;
   border: 1px solid #d7e0ea;

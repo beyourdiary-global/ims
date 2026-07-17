@@ -3908,15 +3908,20 @@ function buildTaskCardHtml(item) {
 function buildColumnHtml(column) {
   var def = defaultWorkType();
   var columnColor = normalizeHexColorValue(column.color || "", "#DFE1E6");
+  var columnId = Number(column.id || 0);
+  var totalItemCount = Number(state.boardItemCounts[String(columnId)] || 0);
   var canCreateInColumn =
     canAdd && state.workTypes.length > 0 && canTargetStatusColumn(column.id);
 
   return (
     '<section class="task-column" data-column-id="' +
-    Number(column.id || 0) +
+    columnId +
     '" data-column-color="' +
     escHtml(columnColor) +
-    '" style="--task-column-color:' +
+    '" data-total-item-count="' +
+    totalItemCount +
+    '" data-loaded-item-count="0"' +
+    ' style="--task-column-color:' +
     escHtml(columnColor) +
     '">' +
     '<div class="task-column-header">' +
@@ -4420,8 +4425,78 @@ function openWorkTypeModal(mode, $context) {
 }
 
 function updateColumnCount($column) {
-  var count = $column.find(".task-item-card").length;
+  var loadedCount = $column.find(".task-item-card").length;
+  var totalCount = Number($column.attr("data-total-item-count"));
+  var count = Number.isFinite(totalCount) && totalCount >= loadedCount
+    ? totalCount
+    : loadedCount;
+  $column.attr("data-loaded-item-count", loadedCount);
   $column.find(".task-column-count").text(count);
+}
+
+function getBoardColumnTotalCount(columnId) {
+  var id = Number(columnId || 0);
+  if (id <= 0) {
+    return 0;
+  }
+
+  var configured = Number(state.boardItemCounts[String(id)] || 0);
+  if (configured > 0) {
+    return configured;
+  }
+
+  return Number(
+    $app
+      .find('.task-column[data-column-id="' + id + '"]')
+      .first()
+      .attr("data-total-item-count") || 0,
+  );
+}
+
+function syncBoardLoadMoreControls() {
+  if (!isBoardGroupedByStatus()) {
+    $app.find(".task-board-load-more-btn").remove();
+    return;
+  }
+
+  $app.find('.task-column[data-column-id]').each(function () {
+    var $column = $(this);
+    var columnId = Number($column.attr("data-column-id") || 0);
+    if (columnId <= 0) {
+      return;
+    }
+
+    var $list = $column.find(".task-item-list").first();
+    var loadedCount = $list.find(".task-item-card").length;
+    var totalCount = getBoardColumnTotalCount(columnId);
+    $column.attr("data-total-item-count", totalCount);
+    $column.attr("data-loaded-item-count", loadedCount);
+
+    var $button = $column.find(".task-board-load-more-btn").first();
+    if (loadedCount >= totalCount || totalCount <= 0) {
+      $button.remove();
+      return;
+    }
+
+    if (!$button.length) {
+      $button = $(
+        '<button class="btn task-board-load-more-btn" type="button"></button>',
+      );
+      var $composer = $column.find(".task-open-composer-btn").first();
+      if ($composer.length) {
+        $composer.before($button);
+      } else {
+        $column.append($button);
+      }
+    }
+
+    $button
+      .attr("data-column-id", columnId)
+      .attr("data-offset", loadedCount)
+      .attr("data-limit", state.boardPageSize)
+      .prop("disabled", false)
+      .text("Load more (" + String(totalCount - loadedCount) + " remaining)");
+  });
 }
 
 function updateColumnInnerScroll($column) {
@@ -4475,6 +4550,7 @@ function updateAllColumnCounts() {
     updateColumnCount($(this));
     updateColumnInnerScroll($(this));
   });
+  syncBoardLoadMoreControls();
 }
 
 function scrollColumnItemListToBottom($column) {
