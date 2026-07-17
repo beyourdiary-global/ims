@@ -5126,7 +5126,6 @@ $(document).on("click", "[data-child-column-action]", function (e) {
     var newIndex = action === "move-first" ? 0 : action === "move-last" ? settings.order.length : action === "move-left" ? Math.max(0, index - 1) : Math.min(settings.order.length, index + 1);
     settings.order.splice(newIndex, 0, key);
   } else if (action === "resize") {
-    var definition = taskChildWorkItemColumnDefinition(key);
     var currentWidth = String(settings.widths[key] || "").replace(/px$/, "") || "";
     var enteredWidth = window.prompt("Enter column width in pixels", currentWidth || "180");
     if (enteredWidth === null) return;
