@@ -2229,6 +2229,7 @@ migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'message_shortcut_id', "A
 migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'next_follow_up_date', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `next_follow_up_date` DATE DEFAULT NULL AFTER `content`", "Verified `" . USER_RECORD_LOG . "` includes `next_follow_up_date`.");
 migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_times', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_times` VARCHAR(255) DEFAULT NULL AFTER `next_follow_up_date`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_times`.");
 migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_day', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_day` VARCHAR(255) DEFAULT NULL AFTER `follow_up_times`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_day`.");
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'is_system_record', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `is_system_record` TINYINT(1) DEFAULT NULL AFTER `updated_at`", "Verified `" . USER_RECORD_LOG . "` includes `is_system_record`.");
 
 $createCustomerFollowUpRoundSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpRoundTable}` (
     `id` INT NOT NULL AUTO_INCREMENT,

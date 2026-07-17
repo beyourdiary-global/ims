@@ -115,6 +115,22 @@ if (!function_exists('urlWithin3Days')) {
     }
 }
 
+if (!function_exists('urlIsUserRecordLogSystemRecord')) {
+    function urlIsUserRecordLogSystemRecord($row, $createdByDisplay = '')
+    {
+        if (is_array($row) && array_key_exists('is_system_record', $row) && $row['is_system_record'] !== null && trim((string) $row['is_system_record']) !== '') {
+            return (int) $row['is_system_record'] === 1;
+        }
+
+        $createdBy = trim((string) $createdByDisplay);
+        if ($createdBy === '' && is_array($row)) {
+            $createdBy = trim((string) (isset($row['created_by']) ? $row['created_by'] : ''));
+        }
+
+        return strcasecmp($createdBy, 'SYSTEM') === 0;
+    }
+}
+
 if (!function_exists('urlGetUserRecordLogTableName')) {
     function urlGetUserRecordLogTableName()
     {
@@ -1177,10 +1193,11 @@ if (!function_exists('urlBuildListHtml')) {
             $updatedAt = isset($row['updated_at']) ? $row['updated_at'] : '';
             $createdBy = urlGetUserName($connect, isset($row['created_by']) ? $row['created_by'] : '');
             $updatedBy = urlGetUserName($connect, isset($row['updated_by']) ? $row['updated_by'] : '');
-            $isSystemRecord = strcasecmp(trim((string) $createdBy), 'SYSTEM') === 0;
+            $isSystemRecord = urlIsUserRecordLogSystemRecord($row, $createdBy);
             $canEdit = urlWithin3Days($createdAt);
             $editBtn = '';
             $deleteBtn = '<button type="button" class="btn btn-sm btn-rounded btn-danger url-delete-btn" data-id="' . $recordId . '" title="Delete User Log">Delete</button>';
+            $systemRecordBtn = '<button type="button" class="btn btn-sm btn-rounded ' . ($isSystemRecord ? 'btn-outline-secondary' : 'btn-outline-primary') . ' url-system-record-btn" data-id="' . $recordId . '" data-system-state="' . ($isSystemRecord ? '0' : '1') . '" title="' . ($isSystemRecord ? 'Unmark System Record' : 'Mark as System Record') . '">' . ($isSystemRecord ? 'Unmark System' : 'Mark as System') . '</button>';
 
             if ($canEdit) {
                 $editBtn = '<button type="button" class="btn btn-sm btn-rounded btn-warning url-edit-btn" data-id="' . $recordId . '">Edit User Log</button>';
@@ -1237,6 +1254,7 @@ if (!function_exists('urlBuildListHtml')) {
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-secondary url-copy-btn" title="Copy User Log">Copy</button>';
             $html .= '      <button type="button" class="btn btn-sm btn-rounded btn-info text-white url-toggle-btn" data-target="url-body-' . $recordId . '">Collapse/Expand</button>';
             $html .= $editBtn;
+            $html .= $systemRecordBtn;
             $html .= $deleteBtn;
             $html .= '    </div>';
             $html .= '  </div>';
@@ -1361,6 +1379,60 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 'effective_page_size' => isset($payload['effective_page_size']) ? (int) $payload['effective_page_size'] : 10,
                 'total_pages' => isset($payload['total_pages']) ? (int) $payload['total_pages'] : 1,
                 'html' => isset($payload['html']) ? $payload['html'] : ''
+            ));
+        }
+
+        if ($urlAction === 'toggle_system_record') {
+            $recordId = (int) post('record_id');
+            $requestedState = trim((string) post('system_state'));
+            $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+            if ($recordId <= 0 || $safeTable === '' || !in_array($requestedState, array('0', '1'), true)) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'Invalid user record log system-record action.'));
+            }
+
+            if (!urlUserRecordLogColumnExists($dbConnect, $safeTable, 'is_system_record')) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'System record action is not ready yet. Please run insert_table.php first.'));
+            }
+
+            $recordResult = getData('*', "id='" . $recordId . "' AND status='A'", 'LIMIT 1', $safeTable, $dbConnect);
+            if (!$recordResult || $recordResult->num_rows === 0) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'User record log was not found.'));
+            }
+
+            $recordRow = $recordResult->fetch_assoc();
+            $recordCustomerId = isset($recordRow[$customerColumn]) ? (int) $recordRow[$customerColumn] : 0;
+            if (!empty($context['customer_only']) && (int) $context['customer_id'] !== $recordCustomerId) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'User record log was not found.'));
+            }
+
+            $oldState = urlIsUserRecordLogSystemRecord($recordRow);
+            $newState = $requestedState === '1';
+            $sql = "UPDATE `" . $safeTable . "` SET `is_system_record`='" . ($newState ? '1' : '0') . "', `updated_by`='" . urlEsc($dbConnect, USER_ID) . "', `updated_at`=NOW() WHERE `id`='" . $recordId . "' AND `status`='A' LIMIT 1";
+            $ok = mysqli_query($dbConnect, $sql);
+            if (!$ok) {
+                urlJsonResponse(array('ok' => 0, 'message' => 'Failed to update system record status.'));
+            }
+
+            $actionText = $newState ? 'marked User Record Log #' . $recordId . ' as a system record.' : 'unmarked User Record Log #' . $recordId . ' as a system record.';
+            audit_log(array(
+                'log_act' => 'Edit',
+                'cdate' => $GLOBALS['cdate'],
+                'ctime' => $GLOBALS['ctime'],
+                'uid' => USER_ID,
+                'cby' => USER_ID,
+                'query_rec' => $sql,
+                'query_table' => $safeTable,
+                'oldval' => $oldState ? '1' : '0',
+                'changes' => $newState ? '1' : '0',
+                'newval' => $newState ? '1' : '0',
+                'act_msg' => USER_NAME . ' ' . $actionText,
+                'page' => $pageTitle,
+                'connect' => $connect,
+            ));
+
+            urlJsonResponse(array(
+                'ok' => 1,
+                'message' => $newState ? 'User record log marked as a system record.' : 'User record log unmarked as a system record.',
             ));
         }
 

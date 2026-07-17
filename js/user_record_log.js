@@ -1269,6 +1269,89 @@
       });
     }
 
+    function executeSystemRecordToggle(recordId, systemState, $button) {
+      hideAlert();
+      if ($button && $button.length) {
+        $button.prop("disabled", true);
+      }
+      setLoading(true);
+
+      $.ajax({
+        url: ajaxUrl,
+        method: "POST",
+        dataType: "json",
+        data: {
+          url_action: "toggle_system_record",
+          record_id: String(recordId),
+          system_state: systemState ? "1" : "0",
+          customer_id: String(customerId || 0),
+          customer_column: customerColumn,
+          return_url: pathReturn,
+        },
+        timeout: 25000,
+      })
+        .done(function (res) {
+          if (!res || !res.ok) {
+            showAlert(
+              "danger",
+              res && res.message
+                ? res.message
+                : "Failed to update system record status.",
+            );
+            return;
+          }
+
+          loadList();
+          showSuccessPopup(
+            res.message ||
+              (systemState
+                ? "User record log marked as a system record."
+                : "User record log unmarked as a system record."),
+          );
+        })
+        .fail(function (xhr) {
+          var extra = "";
+          if (xhr && xhr.responseText) {
+            extra = " " + String(xhr.responseText).substring(0, 120);
+          }
+          showAlert(
+            "danger",
+            "Request failed while updating system record status." + extra,
+          );
+        })
+        .always(function () {
+          if ($button && $button.length) {
+            $button.prop("disabled", false);
+          }
+          setLoading(false);
+        });
+    }
+
+    function toggleSystemRecord(recordId, systemState, $button) {
+      recordId = parseInt(recordId || "0", 10) || 0;
+      if (!recordId) {
+        showAlert("danger", "Invalid user record log.");
+        return;
+      }
+
+      var shouldMark = Boolean(systemState);
+      var confirmationMessage = shouldMark
+        ? "Mark this user record log as a system record?"
+        : "Remove this user record log from system records?";
+      confirmationDialog(
+        "",
+        confirmationMessage,
+        shouldMark ? "Mark System Record" : "Unmark System Record",
+        "",
+        "",
+        "CONFIRM",
+      ).then(function (confirmed) {
+        if (confirmed) {
+          executeSystemRecordToggle(recordId, shouldMark, $button);
+        }
+      });
+    }
+
     $form.off("submit.url").on("submit.url", function (e) {
       e.preventDefault();
       e.stopPropagation();
@@ -1502,6 +1585,12 @@
 
     $list.on("click", ".url-delete-btn", function () {
       deleteRecord($(this).data("id"), $(this));
+    });
+
+    $list.on("click", ".url-system-record-btn", function () {
+      var $button = $(this);
+      var systemState = String($button.data("system-state") || "0") === "1";
+      toggleSystemRecord($button.data("id"), systemState, $button);
     });
 
     $list.on("click", ".url-toggle-btn", function () {
