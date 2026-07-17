@@ -16,6 +16,7 @@ function getImportCardTitleByPinGroupId($connect, $pinGroupId, $fallbackParentTi
 $shopeeAdsPinAccess = checkPinByGroupId($connect, 77);
 $facebookAdsPinAccess = checkPinByGroupId($connect, 50);
 $lazadaOrderPinAccess = checkPinByGroupId($connect, 93);
+$websiteOrderPinAccess = checkPinByGroupId($connect, 92);
 $shopeeOrderPinAccess = array();
 $shopeeOrderParentTitle = '';
 $shopeeOrderFallbackParentTitle = '';
@@ -44,6 +45,7 @@ $shopeeAdsImportTitle = getImportCardTitleByPinGroupId($connect, 77, 'Shopee Ads
 $facebookAdsImportTitle = getImportCardTitleByPinGroupId($connect, 50, 'Facebook Ads Top Up Transaction');
 $shopeeOrderImportTitle = $shopeeOrderParentTitle . ' Import';
 $lazadaOrderImportTitle = getImportCardTitleByPinGroupId($connect, 93, 'Lazada Order Request');
+$websiteOrderImportTitle = getImportCardTitleByPinGroupId($connect, 92, 'Website Order Request');
 $packageImportTitle = getImportCardTitleByPinGroupId($connect, 21, 'Package');
 $supplierInvoiceImportTitle = getImportCardTitleByPinGroupId($connect, 167, 'Supplier Invoice');
 $stockInImportTitle = getImportCardTitleByPinGroupId($connect, 125, 'Stock In');
@@ -64,6 +66,7 @@ $purchaseOrderPinAccess = checkPinByGroupId($connect, 135);
 $canShopeeAdsImport = is_array($shopeeAdsPinAccess) && isActionAllowed('Import', $shopeeAdsPinAccess);
 $canFacebookAdsImport = is_array($facebookAdsPinAccess) && isActionAllowed('Import', $facebookAdsPinAccess);
 $canLazadaOrderImport = is_array($lazadaOrderPinAccess) && isActionAllowed('Import', $lazadaOrderPinAccess);
+$canWebsiteOrderImport = is_array($websiteOrderPinAccess) && isActionAllowed('Import', $websiteOrderPinAccess);
 $canPackageImport = is_array($packagePinAccess) && isActionAllowed('Import', $packagePinAccess);
 $canSupplierInvoiceImport = is_array($supplierInvoicePinAccess) && isActionAllowed('Import', $supplierInvoicePinAccess);
 $canStockInImport = is_array($stockInPinAccess) && isActionAllowed('Import', $stockInPinAccess);
@@ -106,6 +109,14 @@ $shortcutCards = array(
         'importUrl' => $SITEURL . '/import/lazada_order_import.php',
         'backUrl' => $SITEURL . '/finance/lazada_order_req_table.php',
         'backText' => 'Back To Lazada Order Page'
+    ),
+    array(
+        'title' => $websiteOrderImportTitle,
+        'desc' => 'Import Website order PDF into Website order request.',
+        'canImport' => $canWebsiteOrderImport,
+        'importUrl' => $SITEURL . '/import/website_order_import.php',
+        'backUrl' => $SITEURL . '/finance/website_order_request_table.php',
+        'backText' => 'Back To Website Order Page'
     ),
     array(
         'title' => $packageImportTitle,

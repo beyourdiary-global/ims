@@ -256,9 +256,15 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                         <h2><?php echo $pageTitle ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
+                                <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn"
                                     href="<?= $redirectPage . "?act=I" ?>">
                                     <i class="fa-solid fa-plus"></i> Add Request
+                                </a>
+                            <?php endif; ?>
+                            <?php if (isActionAllowed("Import", $pinAccess)) : ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn"
+                                    href="<?= htmlspecialchars((string) ($SITEURL . '/import/website_order_import.php'), ENT_QUOTES, 'UTF-8') ?>">
+                                    <i class="fa-solid fa-file-import"></i> Import
                                 </a>
                             <?php endif; ?>
                         </div>

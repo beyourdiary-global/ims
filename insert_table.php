@@ -322,6 +322,61 @@ function insertTableEnsureLazadaImportPin($cmsConn)
     }
 }
 
+function insertTableEnsureWebsiteOrderImportPin($cmsConn)
+{
+    $pinGroupId = 92;
+    $pinGroupResult = $cmsConn->query("SELECT `pins` FROM `pin_group` WHERE `id` = " . (int) $pinGroupId . " LIMIT 1");
+
+    if ($pinGroupResult && $pinGroupResult->num_rows > 0) {
+        $pinGroupRow = $pinGroupResult->fetch_assoc();
+        $currentPins = isset($pinGroupRow['pins']) ? (string) $pinGroupRow['pins'] : '';
+        $updatedPins = addPinAccessIds($currentPins, array(5));
+        if ($updatedPins !== $currentPins) {
+            $safePins = $cmsConn->real_escape_string($updatedPins);
+            if ($cmsConn->query("UPDATE `pin_group` SET `pins` = '" . $safePins . "', `status` = 'A' WHERE `id` = " . (int) $pinGroupId)) {
+                echo "<p style='color:green;'>Website Order Import pin setup verified Import access for pin group 92.</p>";
+            } else {
+                echo "<p style='color:red;'>Website Order Import pin setup failed updating pin group 92: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+            }
+        } else {
+            echo "<p style='color:green;'>Website Order Import pin setup verified pin group 92 already has Import access.</p>";
+        }
+    } else {
+        $pinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+            (92, 'Website Order Request', '1,2,3,4,5', 'Website order request access with import', '1', CURDATE(), CURTIME(), 'A')";
+        if ($cmsConn->query($pinGroupSql)) {
+            echo "<p style='color:green;'>Website Order Import pin setup created pin group 92 with Import access.</p>";
+        } else {
+            echo "<p style='color:red;'>Website Order Import pin setup failed creating pin group 92: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+        }
+    }
+
+    $userGroupResult = $cmsConn->query("SELECT `id`, `pins` FROM `user_group` ORDER BY `id` ASC");
+    if (!$userGroupResult) {
+        echo "<p style='color:red;'>Website Order Import pin setup failed loading all user groups: " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+    } else {
+        while ($userGroupRow = $userGroupResult->fetch_assoc()) {
+            $groupId = isset($userGroupRow['id']) ? (int) $userGroupRow['id'] : 0;
+            if ($groupId <= 0) {
+                continue;
+            }
+
+            $currentPins = isset($userGroupRow['pins']) ? (string) $userGroupRow['pins'] : '';
+            $updatedPins = addAccessToPinBlock($currentPins, $pinGroupId, array(5));
+            if ($updatedPins !== $currentPins) {
+                $safePins = $cmsConn->real_escape_string($updatedPins);
+                if ($cmsConn->query("UPDATE `user_group` SET `pins` = '" . $safePins . "' WHERE `id` = " . (int) $groupId)) {
+                    echo "<p style='color:green;'>Website Order Import pin setup granted Import access for pin group 92 to `user_group` id " . (int) $groupId . ".</p>";
+                } else {
+                    echo "<p style='color:red;'>Website Order Import pin setup failed updating `user_group` id " . (int) $groupId . ": " . htmlspecialchars($cmsConn->error, ENT_QUOTES, 'UTF-8') . "</p>";
+                }
+            } else {
+                echo "<p style='color:green;'>Website Order Import pin setup verified Import access already exists for pin group 92 to `user_group` id " . (int) $groupId . ".</p>";
+            }
+        }
+    }
+}
+
 function insertTableEnsurePackageParentSkuColumns($cmsConn, $dbCms)
 {
     if (!($cmsConn instanceof mysqli)) {
@@ -592,9 +647,13 @@ if ($cmsConn->connect_error) {
     insertTableEnsureFbAdsWhtSubmissionSetup($conn, $cmsConn, $db_fin);
     insertTableEnsurePackageParentSkuColumns($cmsConn, $db_cms);
     migrationEnsureTableUnicodeInnoDb($cmsConn, $db_cms, PKG);
+    migrationEnsureTableUnicodeInnoDb($cmsConn, $db_cms, WEB_CUST_RCD);
+    migrationEnsureIndex($cmsConn, $db_cms, WEB_CUST_RCD, 'idx_customer_website_name_status', "ALTER TABLE `" . WEB_CUST_RCD . "` ADD INDEX `idx_customer_website_name_status` (`status`, `name`(191))", "Verified `" . WEB_CUST_RCD . "` customer name lookup index.");
+    migrationEnsureIndex($cmsConn, $db_cms, WEB_CUST_RCD, 'idx_customer_website_shipping_name_status', "ALTER TABLE `" . WEB_CUST_RCD . "` ADD INDEX `idx_customer_website_shipping_name_status` (`status`, `ship_rec_name`(191))", "Verified `" . WEB_CUST_RCD . "` shipping name lookup index.");
     insertTableEnsureOrderReportPins($cmsConn);
     insertTableEnsureLuckyDrawPins($cmsConn);
     insertTableEnsureLazadaImportPin($cmsConn);
+    insertTableEnsureWebsiteOrderImportPin($cmsConn);
 }
 
 function indexExists($conn, $dbName, $tblName, $indexName)
@@ -911,6 +970,8 @@ if ($conn->select_db($db_cms)) {
 }
 
 if ($conn->select_db($db_fin)) {
+    migrationEnsureTableUnicodeInnoDb($conn, $db_fin, 'website_order_request');
+
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'received_date', "ALTER TABLE `facebook_order_request` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_fin, 'facebook_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `facebook_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
