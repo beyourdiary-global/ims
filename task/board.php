@@ -1417,14 +1417,43 @@ if ($currentProjectId > 0) {
     taskEnsureDefaultWorkTypes($connect, $currentProjectId, $currentUserId, $cdate, $ctime);
 }
 
-$canAdd = taskIsActionAllowed('add', $pinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'add');
-$canEdit = taskIsActionAllowed('edit', $pinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'edit');
-$canDelete = taskIsActionAllowed('delete', $pinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'delete');
-$isProjectOwner = taskIsProjectOwner($connect, $currentProjectId, $currentUserId);
-$hasFullProjectAccess = taskUserHasFullProjectTaskAccess($connect, $currentProjectId, $currentUserId);
-$allowedWorkTypeIds = taskUserAllowedWorkTypeIds($connect, $currentProjectId, $currentUserId);
-$allowedStatusIds = taskUserAllowedStatusIds($connect, $currentProjectId, $currentUserId);
-$columnPermissions = taskGetProjectColumnAccessMap($connect, $currentProjectId, $currentUserId);
+$isProjectOwner = $currentProjectId > 0
+    && isset($currentProject['owner_user_id'])
+    && (int) $currentProject['owner_user_id'] === (int) $currentUserId;
+$hasFullProjectAccess = $isProjectOwner;
+$projectAccessRecord = array(
+    'work_item_add' => $hasFullProjectAccess ? 1 : 0,
+    'work_item_edit' => $hasFullProjectAccess ? 1 : 0,
+    'work_item_delete' => $hasFullProjectAccess ? 1 : 0,
+    'allowed_work_type_ids' => array(),
+    'allowed_status_ids' => array(),
+);
+if (!$hasFullProjectAccess) {
+    $projectAccessRecord = taskGetProjectUserAccessRecord($connect, $currentProjectId, $currentUserId);
+}
+$allowedWorkTypeIds = isset($projectAccessRecord['allowed_work_type_ids']) && is_array($projectAccessRecord['allowed_work_type_ids'])
+    ? $projectAccessRecord['allowed_work_type_ids']
+    : array();
+$allowedStatusIds = isset($projectAccessRecord['allowed_status_ids']) && is_array($projectAccessRecord['allowed_status_ids'])
+    ? $projectAccessRecord['allowed_status_ids']
+    : array();
+$canAdd = taskIsActionAllowed('add', $pinAccess) && !empty($projectAccessRecord['work_item_add']);
+$canEdit = taskIsActionAllowed('edit', $pinAccess) && !empty($projectAccessRecord['work_item_edit']);
+$canDelete = taskIsActionAllowed('delete', $pinAccess) && !empty($projectAccessRecord['work_item_delete']);
+$columnPermissions = $hasFullProjectAccess
+    ? array_reduce(taskGetProjectAccessFieldOptions(), function ($permissions, $field) {
+        $fieldKey = isset($field['key']) ? (string) $field['key'] : '';
+        if ($fieldKey !== '') {
+            $permissions[$fieldKey] = array(
+                'column_key' => $fieldKey,
+                'add' => 1,
+                'edit' => 1,
+                'delete' => 1,
+            );
+        }
+        return $permissions;
+    }, array())
+    : taskGetProjectColumnAccessMap($connect, $currentProjectId, $currentUserId);
 $workTypes = taskGetWorkTypes($connect, $currentProjectId);
 if (!$hasFullProjectAccess) {
     $workTypes = array_values(array_filter($workTypes, function ($workType) use ($allowedWorkTypeIds) {
@@ -1437,7 +1466,7 @@ $assignees = taskGetAssignees($connect);
 $labels = taskGetLabels($connect);
 $statusLabels = taskGetStatusLabels($connect);
 $columns = taskGetColumns($connect, $currentProjectId);
-$itemsByColumn = taskGetItemsGroupedByColumn($connect, $currentProjectId);
+$itemsByColumn = taskGetItemsGroupedByColumn($connect, $currentProjectId, false);
 $projectBoardBackground = isset($currentProject['board_background_color']) ? (string) $currentProject['board_background_color'] : '#f4f7fb';
 ?>
 

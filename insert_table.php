@@ -4114,6 +4114,7 @@ if ($conn->select_db($db_cms)) {
     migrationEnsureColumn($conn, $db_cms, TASK_ITEM_COMMENT, 'comment_color_html', "ALTER TABLE `" . TASK_ITEM_COMMENT . "` ADD COLUMN `comment_color_html` MEDIUMTEXT DEFAULT NULL AFTER `comment_html`", "Verified `" . TASK_ITEM_COMMENT . "` includes `comment_color_html`.");
     migrationEnsureColumn($conn, $db_cms, TASK_ITEM_COMMENT_REPLY, 'reply_color_html', "ALTER TABLE `" . TASK_ITEM_COMMENT_REPLY . "` ADD COLUMN `reply_color_html` MEDIUMTEXT DEFAULT NULL AFTER `reply_html`", "Verified `" . TASK_ITEM_COMMENT_REPLY . "` includes `reply_color_html`.");
     migrationEnsureIndex($conn, $db_cms, TASK_ITEM, 'idx_task_item_project', "ALTER TABLE `" . TASK_ITEM . "` ADD INDEX `idx_task_item_project` (`project_id`, `column_id`, `sort_order`)", "Verified `" . TASK_ITEM . "` project index.");
+    migrationEnsureIndex($conn, $db_cms, TASK_ITEM, 'idx_task_item_board', "ALTER TABLE `" . TASK_ITEM . "` ADD INDEX `idx_task_item_board` (`project_id`, `status`, `column_id`, `sort_order`, `id`)", "Verified `" . TASK_ITEM . "` board-load index.");
 
     migrationEnsureColumn($conn, $db_cms, TASK_SHEETS, 'project_id', "ALTER TABLE `" . TASK_SHEETS . "` ADD COLUMN `project_id` INT DEFAULT NULL AFTER `id`", "Verified `" . TASK_SHEETS . "` includes `project_id`.");
     migrationEnsureIndex($conn, $db_cms, TASK_SHEETS, 'idx_task_sheets_project_user', "ALTER TABLE `" . TASK_SHEETS . "` ADD INDEX `idx_task_sheets_project_user` (`project_id`, `user_id`, `status`, `sort_order`)", "Verified `" . TASK_SHEETS . "` project index.");
