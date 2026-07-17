@@ -23,18 +23,6 @@ if (!function_exists('supplierPaymentExportNormalizeIds')) {
     }
 }
 
-if (!function_exists('supplierPaymentExportExcelSerial')) {
-    function supplierPaymentExportExcelSerial($dateValue)
-    {
-        $dateValue = trim((string) $dateValue);
-        $date = DateTimeImmutable::createFromFormat('!Y-m-d', $dateValue);
-        if (!$date || $date->format('Y-m-d') !== $dateValue) {
-            return '';
-        }
-        return (string) (new DateTimeImmutable('1899-12-30'))->diff($date)->days;
-    }
-}
-
 if (!function_exists('supplierPaymentExportReplaceCell')) {
     function supplierPaymentExportReplaceCell($rowXml, $rowNumber, $column, $value, $numeric = false)
     {
@@ -64,17 +52,8 @@ if (!function_exists('supplierPaymentExportReplaceCell')) {
 if (!function_exists('supplierPaymentExportTemplatePath')) {
     function supplierPaymentExportTemplatePath()
     {
-        $candidates = array(
-            ROOT . '/excel_template/Invoice Supplier Payment.xlsx',
-            ROOT . '/excel_template/Invoice Supplier Payment.xls',
-            ROOT . '/excel_template/Import Supplier Invoice.xlsx',
-        );
-        foreach ($candidates as $candidate) {
-            if (is_readable($candidate)) {
-                return $candidate;
-            }
-        }
-        return '';
+        $templatePath = ROOT . '/excel_template/Import Supplier Payment.xlsx';
+        return is_readable($templatePath) ? $templatePath : '';
     }
 }
 
@@ -89,22 +68,23 @@ if (!function_exists('supplierPaymentExportBuildWorkbook')) {
         if ($zip->open($outputPath) !== true) {
             return false;
         }
-        $sheetPath = 'xl/worksheets/sheet2.xml';
+        // Import Supplier Payment.xlsx contains the ARAP Payment worksheet in sheet1.
+        $sheetPath = 'xl/worksheets/sheet1.xml';
         $sheetXml = $zip->getFromName($sheetPath);
         if ($sheetXml === false || !preg_match('/<sheetData>.*?<\/sheetData>/s', $sheetXml, $sheetDataMatch)) {
             $zip->close();
             return false;
         }
         $sheetDataXml = $sheetDataMatch[0];
-        if (!preg_match('/<row r="6"[^>]*>.*?<\/row>/s', $sheetDataXml, $templateRowMatch)
-            || !preg_match('/<row r="8"[^>]*>.*?<\/row>/s', $sheetDataXml, $blankRowMatch)
-            || !preg_match('/<row r="9"[^>]*>.*?<\/row>/s', $sheetDataXml, $secondBlankRowMatch)) {
+        if (!preg_match('/<row r="6"[^>]*>.*?<\/row>/s', $sheetDataXml, $templateRowMatch)) {
             $zip->close();
             return false;
         }
 
         $templateRowXml = $templateRowMatch[0];
-        $newSheetDataXml = preg_replace('/<row r="(?:6|7|8|9)"[^>]*>.*?<\/row>/s', '', $sheetDataXml);
+        // Rows 6 and 7 are the two sample payment rows in the supplied template.
+        // Remove both so sample values cannot leak into the exported workbook.
+        $newSheetDataXml = preg_replace('/<row r="(?:6|7)"[^>]*>.*?<\/row>/s', '', $sheetDataXml);
         $rowNumber = 6;
         $generatedRows = '';
         $sequence = 1;
@@ -114,30 +94,25 @@ if (!function_exists('supplierPaymentExportBuildWorkbook')) {
                 $row = str_replace('r="' . $column . '6"', 'r="' . $column . $rowNumber . '"', $row);
             }
             $description = trim((string) ($payment['description'] ?? ''));
-            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'A', (string) $sequence, false);
-            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'C', $payment['code'] ?? '', false);
-            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'D', supplierPaymentExportExcelSerial($payment['doc_date'] ?? ''), true);
-            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'E', $description, false);
-            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'J', '1', true);
-            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'M', '310-000', false);
-            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'N', $description, false);
-            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'S', number_format((float) ($payment['total'] ?? 0), 2, '.', ''), true);
-            foreach (array('B', 'F', 'G', 'H', 'I', 'K', 'L', 'O', 'P', 'Q', 'R') as $blankColumn) {
+            $date = DateTimeImmutable::createFromFormat('!Y-m-d', trim((string) ($payment['doc_date'] ?? '')));
+            $docDate = $date ? $date->format('d/m/Y') : '';
+
+            // ARAP Payment template columns:
+            // A DOCNO, B CODE, C DOCDATE, F DESCRIPTION, G PAYMENTMETHOD,
+            // K CURRENCYRATE, M DOCAMT.
+            foreach (range('A', 'S') as $blankColumn) {
                 $row = supplierPaymentExportReplaceCell($row, $rowNumber, $blankColumn, '', false);
             }
+            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'A', (string) $sequence, false);
+            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'B', $payment['code'] ?? '', false);
+            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'C', $docDate, false);
+            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'F', $description, false);
+            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'G', '310-000', false);
+            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'K', '1', true);
+            $row = supplierPaymentExportReplaceCell($row, $rowNumber, 'M', number_format((float) ($payment['total'] ?? 0), 2, '.', ''), true);
             $generatedRows .= $row;
             $rowNumber++;
             $sequence++;
-        }
-
-        foreach (array($blankRowMatch[0], $secondBlankRowMatch[0]) as $sourceRowXml) {
-            $sourceRowNumber = strpos($sourceRowXml, 'r="8"') !== false ? 8 : 9;
-            $row = str_replace('r="' . $sourceRowNumber . '"', 'r="' . $rowNumber . '"', $sourceRowXml);
-            foreach (range('A', 'S') as $column) {
-                $row = str_replace('r="' . $column . $sourceRowNumber . '"', 'r="' . $column . $rowNumber . '"', $row);
-            }
-            $generatedRows .= $row;
-            $rowNumber++;
         }
 
         $newSheetDataXml = str_replace('</sheetData>', $generatedRows . '</sheetData>', $newSheetDataXml);
