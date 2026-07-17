@@ -937,6 +937,24 @@ body.task-global-sidebar-open #dispTable {
   text-transform: none !important;
 }
 
+.uniform-header-btn {
+  font-size: 18px;
+  width: 180px;
+  height: 38px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  text-transform: none !important;
+  box-shadow: none !important;
+}
+
+.uniform-header-btn:hover,
+.uniform-header-btn:focus,
+.uniform-header-btn:active {
+  box-shadow: none !important;
+}
+
 #action_menu {
   color: #000000 !important;
 }

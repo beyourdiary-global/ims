@@ -214,8 +214,112 @@ $num = 1;   // numbering
 $redirectPage = $SITEURL . '/finance/website_order_request.php';
 $deleteRedirectPage = $SITEURL . '/finance/website_order_request_table.php';
 
-// Fetch all orders from Finance Database
-$result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
+$monthInput = input('month');
+$monthFilter = $monthInput === 'All'
+    ? ''
+    : (($monthInput !== '' && preg_match('/^\d{4}-\d{2}$/', $monthInput)) ? $monthInput : date('Y-m'));
+$statusFilter = input('status');
+$brandFilter = numberInput('brand');
+$pkgFilter = numberInput('pkg');
+$picFilter = numberInput('pic');
+
+$monthGroupInput = input('month_gb');
+$monthGroup = $monthGroupInput === 'All'
+    ? 'All'
+    : (($monthGroupInput !== '' && preg_match('/^\d{4}-\d{2}$/', $monthGroupInput)) ? $monthGroupInput : '');
+$statusGroup = input('status_gb');
+$brandGroup = numberInput('brand_gb');
+$pkgGroup = numberInput('pkg_gb');
+$picGroup = numberInput('pic_gb');
+$statusFilterCode = shopeeOmsNormalizeStatusCode($statusFilter);
+$statusGroupCode = shopeeOmsNormalizeStatusCode($statusGroup);
+
+$whereConditions = array();
+if ($monthFilter !== '') {
+    $whereConditions[] = "DATE_FORMAT(create_date, '%Y-%m') = '" . mysqli_real_escape_string($finance_connect, $monthFilter) . "'";
+}
+if ($statusFilterCode !== '') {
+    $statusCondition = shopeeOmsBuildOrderStatusFilterCondition($finance_connect, 'order_status', $statusFilterCode);
+    if ($statusCondition !== '') {
+        $whereConditions[] = $statusCondition;
+    }
+}
+if ($brandFilter > 0) {
+    $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, (string) $brandFilter) . "', brand) > 0";
+}
+if ($pkgFilter > 0) {
+    $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, (string) $pkgFilter) . "', pkg) > 0";
+}
+if ($picFilter > 0) {
+    $whereConditions[] = "pic = '" . mysqli_real_escape_string($finance_connect, (string) $picFilter) . "'";
+}
+
+$groupByFields = array();
+if ($monthGroup !== '' && $monthGroup !== 'All') {
+    $groupByFields[] = "DATE_FORMAT(create_date, '%Y-%m')";
+}
+if ($statusGroupCode !== '') {
+    $groupByFields[] = 'order_status';
+}
+if ($brandGroup > 0) {
+    $groupByFields[] = 'brand';
+}
+if ($pkgGroup > 0) {
+    $groupByFields[] = 'pkg';
+}
+if ($picGroup > 0) {
+    $groupByFields[] = 'pic';
+}
+
+$whereSql = implode(' AND ', $whereConditions);
+$groupBySql = !empty($groupByFields) ? 'GROUP BY ' . implode(', ', $groupByFields) : '';
+
+$monthSql = "SELECT DISTINCT DATE_FORMAT(create_date, '%Y-%m') AS month_value, DATE_FORMAT(create_date, '%M %Y') AS month_label FROM " . WEB_ORDER_REQ . " ORDER BY month_value DESC";
+$monthResult = mysqli_query($finance_connect, $monthSql);
+$monthOptions = array();
+if ($monthResult) {
+    while ($monthRow = mysqli_fetch_assoc($monthResult)) {
+        $monthOptions[] = $monthRow;
+    }
+}
+
+$statusSql = "SELECT DISTINCT order_status FROM " . WEB_ORDER_REQ . " ORDER BY order_status ASC";
+$statusResult = mysqli_query($finance_connect, $statusSql);
+$statusOptions = array();
+if ($statusResult) {
+    while ($statusRow = mysqli_fetch_assoc($statusResult)) {
+        $statusCode = shopeeOmsNormalizeStatusCode(isset($statusRow['order_status']) ? $statusRow['order_status'] : '');
+        if ($statusCode !== '' && !isset($statusOptions[$statusCode])) {
+            $statusOptions[$statusCode] = getOrderStatusLabel($statusCode);
+        }
+    }
+}
+
+$brandResult = mysqli_query($connect, "SELECT id, name FROM " . BRAND . " ORDER BY name ASC");
+$brandOptions = array();
+if ($brandResult) {
+    while ($brandRow = mysqli_fetch_assoc($brandResult)) {
+        $brandOptions[] = $brandRow;
+    }
+}
+
+$pkgResult = mysqli_query($connect, "SELECT id, name FROM " . PKG . " ORDER BY name ASC");
+$pkgOptions = array();
+if ($pkgResult) {
+    while ($pkgRow = mysqli_fetch_assoc($pkgResult)) {
+        $pkgOptions[] = $pkgRow;
+    }
+}
+
+$picResult = mysqli_query($connect, "SELECT id, name FROM " . USR_USER . " ORDER BY name ASC");
+$picOptions = array();
+if ($picResult) {
+    while ($picRow = mysqli_fetch_assoc($picResult)) {
+        $picOptions[] = $picRow;
+    }
+}
+
+$result = getData('*', $whereSql, $groupBySql, WEB_ORDER_REQ, $finance_connect);
 ?>
 
 <!DOCTYPE html>
@@ -227,6 +331,8 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
 </head>
 
 <script>
+
+    window.onload = autoToggleSections;
 
     $(document).ready(() => {
         createSortingTable('website_order_request_table');
@@ -256,13 +362,154 @@ $result = getData('*', '', '', WEB_ORDER_REQ, $finance_connect);
                         <h2><?php echo $pageTitle ?></h2>
                         <div class="mt-auto mb-auto">
                             <?php if (isActionAllowed("Add", $pinAccess)) : ?>
-                                <a class="btn btn-sm btn-rounded btn-primary" name="addBtn" id="addBtn"
+                                <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="addBtn" id="addBtn"
                                     href="<?= $redirectPage . "?act=I" ?>">
                                     <i class="fa-solid fa-plus"></i> Add Request
                                 </a>
                             <?php endif; ?>
+                            <?php if (isActionAllowed("Import", $pinAccess)) : ?>
+                                <a class="btn btn-sm btn-rounded btn-primary px-3 uniform-header-btn" name="importBtn" id="importBtn"
+                                    href="<?= htmlspecialchars((string) ($SITEURL . '/import/website_order_import.php'), ENT_QUOTES, 'UTF-8') ?>">
+                                    <i class="fa-solid fa-file-import"></i> Import
+                                </a>
+                            <?php endif; ?>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <div class="col-md-12 mb-3">
+                <button class="btn btn-info" type="button" onclick="toggleFilters('filterSection')">Show/Hide Filters</button>
+                <button class="btn btn-primary" type="button" onclick="toggleFilters('groupBySection')">Show/Hide Group By</button>
+            </div>
+
+            <div id="filterSection" class="row mb-3" style="display: none;">
+                <div class="col-md-3">
+                    <label for="monthFilter" class="form-label">Filter by Month</label>
+                    <select id="monthFilter" name="month" class="form-select" onchange="applyFilterOrGroup('month', this)">
+                        <option value="All" <?= ($monthFilter === '') ? 'selected' : '' ?>>All Months</option>
+                        <?php foreach ($monthOptions as $monthRow) {
+                            $monthValue = isset($monthRow['month_value']) ? (string) $monthRow['month_value'] : '';
+                            $monthLabel = isset($monthRow['month_label']) ? (string) $monthRow['month_label'] : $monthValue;
+                            if ($monthValue === '') {
+                                continue;
+                            }
+                            $selected = ($monthFilter === $monthValue) ? 'selected' : '';
+                            echo '<option value="' . htmlspecialchars($monthValue, ENT_QUOTES, 'UTF-8') . '" ' . $selected . '>' . htmlspecialchars($monthLabel, ENT_QUOTES, 'UTF-8') . '</option>';
+                        } ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="statusFilter" class="form-label">Filter by Order Status</label>
+                    <select id="statusFilter" name="status" class="form-select" onchange="applyFilterOrGroup('status', this)">
+                        <option value="">All Statuses</option>
+                        <?php foreach ($statusOptions as $statusCode => $label) {
+                            $selected = ($statusFilterCode === $statusCode) ? 'selected' : '';
+                            echo '<option value="' . htmlspecialchars((string) $statusCode, ENT_QUOTES, 'UTF-8') . '" ' . $selected . '>' . htmlspecialchars((string) $label, ENT_QUOTES, 'UTF-8') . '</option>';
+                        } ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="brandFilter" class="form-label">Filter by Brand</label>
+                    <select id="brandFilter" name="brand" class="form-select" onchange="applyFilterOrGroup('brand', this)">
+                        <option value="">All Brands</option>
+                        <?php foreach ($brandOptions as $brandRow) {
+                            $brandId = isset($brandRow['id']) ? (string) $brandRow['id'] : '';
+                            $selected = ((string) $brandFilter === $brandId) ? 'selected' : '';
+                            echo '<option value="' . htmlspecialchars($brandId, ENT_QUOTES, 'UTF-8') . '" ' . $selected . '>' . htmlspecialchars((string) $brandRow['name'], ENT_QUOTES, 'UTF-8') . '</option>';
+                        } ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="pkgFilter" class="form-label">Filter by Package</label>
+                    <select id="pkgFilter" name="pkg" class="form-select" onchange="applyFilterOrGroup('pkg', this)">
+                        <option value="">All Packages</option>
+                        <?php foreach ($pkgOptions as $pkgRow) {
+                            $pkgId = isset($pkgRow['id']) ? (string) $pkgRow['id'] : '';
+                            $selected = ((string) $pkgFilter === $pkgId) ? 'selected' : '';
+                            echo '<option value="' . htmlspecialchars($pkgId, ENT_QUOTES, 'UTF-8') . '" ' . $selected . '>' . htmlspecialchars((string) $pkgRow['name'], ENT_QUOTES, 'UTF-8') . '</option>';
+                        } ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="picFilter" class="form-label">Filter by Person In Charge</label>
+                    <select id="picFilter" name="pic" class="form-select" onchange="applyFilterOrGroup('pic', this)">
+                        <option value="">All Persons In Charge</option>
+                        <?php foreach ($picOptions as $picRow) {
+                            $picId = isset($picRow['id']) ? (string) $picRow['id'] : '';
+                            $selected = ((string) $picFilter === $picId) ? 'selected' : '';
+                            echo '<option value="' . htmlspecialchars($picId, ENT_QUOTES, 'UTF-8') . '" ' . $selected . '>' . htmlspecialchars((string) $picRow['name'], ENT_QUOTES, 'UTF-8') . '</option>';
+                        } ?>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label d-block invisible">Reset</label>
+                    <a href="<?= htmlspecialchars((string) $_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-danger filter-reset">Reset</a>
+                </div>
+            </div>
+
+            <div id="groupBySection" class="row mb-3" style="display: none;">
+                <div class="col-md-3">
+                    <label for="monthGroupBy" class="form-label">Group by Month</label>
+                    <select id="monthGroupBy" name="month_gb" class="form-select" onchange="applyFilterOrGroup('month_gb', this)">
+                        <option value="All" <?= ($monthGroup === 'All') ? 'selected' : '' ?>>All Months</option>
+                        <?php foreach ($monthOptions as $monthRow) {
+                            $monthValue = isset($monthRow['month_value']) ? (string) $monthRow['month_value'] : '';
+                            $monthLabel = isset($monthRow['month_label']) ? (string) $monthRow['month_label'] : $monthValue;
+                            if ($monthValue === '') {
+                                continue;
+                            }
+                            $selected = ($monthGroup === $monthValue) ? 'selected' : '';
+                            echo '<option value="' . htmlspecialchars($monthValue, ENT_QUOTES, 'UTF-8') . '" ' . $selected . '>' . htmlspecialchars($monthLabel, ENT_QUOTES, 'UTF-8') . '</option>';
+                        } ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="statusGroupBy" class="form-label">Group by Order Status</label>
+                    <select id="statusGroupBy" name="status_gb" class="form-select" onchange="applyFilterOrGroup('status_gb', this)">
+                        <option value="">All Statuses</option>
+                        <?php foreach ($statusOptions as $statusCode => $label) {
+                            $selected = ($statusGroupCode === $statusCode) ? 'selected' : '';
+                            echo '<option value="' . htmlspecialchars((string) $statusCode, ENT_QUOTES, 'UTF-8') . '" ' . $selected . '>' . htmlspecialchars((string) $label, ENT_QUOTES, 'UTF-8') . '</option>';
+                        } ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="brandGroupBy" class="form-label">Group by Brand</label>
+                    <select id="brandGroupBy" name="brand_gb" class="form-select" onchange="applyFilterOrGroup('brand_gb', this)">
+                        <option value="">All Brands</option>
+                        <?php foreach ($brandOptions as $brandRow) {
+                            $brandId = isset($brandRow['id']) ? (string) $brandRow['id'] : '';
+                            $selected = ((string) $brandGroup === $brandId) ? 'selected' : '';
+                            echo '<option value="' . htmlspecialchars($brandId, ENT_QUOTES, 'UTF-8') . '" ' . $selected . '>' . htmlspecialchars((string) $brandRow['name'], ENT_QUOTES, 'UTF-8') . '</option>';
+                        } ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="pkgGroupBy" class="form-label">Group by Package</label>
+                    <select id="pkgGroupBy" name="pkg_gb" class="form-select" onchange="applyFilterOrGroup('pkg_gb', this)">
+                        <option value="">All Packages</option>
+                        <?php foreach ($pkgOptions as $pkgRow) {
+                            $pkgId = isset($pkgRow['id']) ? (string) $pkgRow['id'] : '';
+                            $selected = ((string) $pkgGroup === $pkgId) ? 'selected' : '';
+                            echo '<option value="' . htmlspecialchars($pkgId, ENT_QUOTES, 'UTF-8') . '" ' . $selected . '>' . htmlspecialchars((string) $pkgRow['name'], ENT_QUOTES, 'UTF-8') . '</option>';
+                        } ?>
+                    </select>
+                </div>
+                <div class="col-md-3">
+                    <label for="picGroupBy" class="form-label">Group by Person In Charge</label>
+                    <select id="picGroupBy" name="pic_gb" class="form-select" onchange="applyFilterOrGroup('pic_gb', this)">
+                        <option value="">All Persons In Charge</option>
+                        <?php foreach ($picOptions as $picRow) {
+                            $picId = isset($picRow['id']) ? (string) $picRow['id'] : '';
+                            $selected = ((string) $picGroup === $picId) ? 'selected' : '';
+                            echo '<option value="' . htmlspecialchars($picId, ENT_QUOTES, 'UTF-8') . '" ' . $selected . '>' . htmlspecialchars((string) $picRow['name'], ENT_QUOTES, 'UTF-8') . '</option>';
+                        } ?>
+                    </select>
+                </div>
+                <div class="col-md-2">
+                    <label class="form-label d-block invisible">Reset</label>
+                    <a href="<?= htmlspecialchars((string) $_SERVER['PHP_SELF'], ENT_QUOTES, 'UTF-8') ?>" class="btn btn-outline-danger filter-reset">Reset</a>
                 </div>
             </div>
 
