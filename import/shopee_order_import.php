@@ -2244,6 +2244,13 @@ function normalizeShopeeOrderIdCandidate($value)
         return '';
     }
 
+    // Shopee order IDs use a date-prefixed format. OCR can read the numeric
+    // zero in the alphanumeric suffix as the letter O; keep this correction
+    // scoped to order IDs so SKU and other numeric values remain unchanged.
+    if (preg_match('/^\d{6}T[A-Z0-9]{7,24}$/', $value)) {
+        $value = str_replace('O', '0', $value);
+    }
+
     $length = strlen($value);
     if ($length < 10 || $length > 30) {
         return '';
