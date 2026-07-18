@@ -3023,7 +3023,11 @@ function saveItemCoreFromModal(closeAfterSave) {
     function () {
       var $card = $(itemDetailModalState.cardEl || null);
       if ($card.length) {
-        $card.find(".task-item-title").text(title);
+        if (typeof updateTaskCardTitle === "function") {
+          updateTaskCardTitle($card, title);
+        } else {
+          $card.find(".task-item-title").text(title);
+        }
         $card.attr("data-item-description", description);
       }
 

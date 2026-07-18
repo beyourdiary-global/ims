@@ -2947,6 +2947,35 @@ function renderModalLabelOptions() {
   );
 }
 
+function updateTaskCardTitle($card, title) {
+  if (!$card || !$card.length) {
+    return;
+  }
+
+  var $title = $card.find(".task-item-title").first();
+  if (!$title.length) {
+    return;
+  }
+
+  var $editButton = $title.find(".task-item-edit-btn").first().detach();
+  var $titleText = $title.find(".task-item-title-text").first();
+  if (!$titleText.length) {
+    $titleText = $('<span class="task-item-title-text"></span>');
+  }
+  $titleText.text(String(title || ""));
+  $title.empty().append($titleText);
+
+  if (!$editButton.length && typeof canEdit !== "undefined" && canEdit) {
+    $editButton = $(
+      '<button class="btn task-item-menu-btn task-item-edit-btn" type="button" title="Edit title" aria-label="Edit title"><i class="fa-solid fa-pen" aria-hidden="true"></i></button>',
+    );
+  }
+
+  if ($editButton.length) {
+    $title.append($editButton);
+  }
+}
+
 function updateCardFromDetail(detail) {
   var $card = $(itemDetailModalState.cardEl || null);
   if (!$card.length || !detail || typeof detail !== "object") {
@@ -2991,6 +3020,10 @@ function updateCardFromDetail(detail) {
   var parentDisplay = hasDetailValue("parent_display")
     ? String(detail.parent_display || "").trim()
     : String($card.attr("data-parent-display") || "").trim();
+
+  if (hasDetailValue("title")) {
+    updateTaskCardTitle($card, String(detail.title || "").trim());
+  }
 
   var workTypeId = hasDetailValue("work_type_id")
     ? Number(detail.work_type_id || 0)
@@ -3828,13 +3861,17 @@ function buildTaskCardHtml(item) {
       : "true") +
     '">' +
     '<div class="task-item-head">' +
+    '<div class="task-item-title-actions">' +
     '<h6 class="task-item-title">' +
+    '<span class="task-item-title-text">' +
     escHtml(item.title || "") +
-    "</h6>" +
-    '<div class="dropdown task-item-menu-dropdown" style="display: flex; gap: 2px;">' +
+    '</span>' +
     (canEdit
       ? '<button class="btn task-item-menu-btn task-item-edit-btn" type="button" title="Edit title" aria-label="Edit title"><i class="fa-solid fa-pen"></i></button>'
       : "") +
+    "</h6>" +
+    "</div>" +
+    '<div class="dropdown task-item-menu-dropdown">' +
     (canOpenActions
       ? '<button class="btn task-item-menu-btn task-open-item-actions-btn" type="button" title="Task options" aria-label="Task options"><i class="fa-solid fa-ellipsis"></i></button>'
       : "") +
