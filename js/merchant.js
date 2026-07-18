@@ -44,8 +44,24 @@ function formatMerchantValue(value) {
   return `${prefix}-${suffix}`;
 }
 
+function formatMerchantControlAccountValue(value) {
+  const cleaned = (value || "").toUpperCase().replace(/[^A-Z0-9]/g, "");
+  const prefix = cleaned.slice(0, 3);
+  const suffix = cleaned.slice(3, 6);
+
+  if (prefix === "") {
+    return suffix;
+  }
+
+  if (suffix === "") {
+    return prefix;
+  }
+
+  return `${prefix}-${suffix}`;
+}
+
 $("#mrcht_control_account").on("input", function () {
-  $(this).val(formatMerchantValue($(this).val()));
+  $(this).val(formatMerchantControlAccountValue($(this).val()));
   $(".control-account-err").remove();
 });
 
@@ -63,7 +79,7 @@ $(".submitBtn").on("click", function (event) {
   let contact_chk = 0;
   let control_account_chk = 1;
   let code_chk = 1;
-  const controlAccount = formatMerchantValue($("#mrcht_control_account").val());
+  const controlAccount = formatMerchantControlAccountValue($("#mrcht_control_account").val());
   const code = formatMerchantValue($("#mrcht_code").val());
 
   $("#mrcht_control_account").val(controlAccount);
@@ -130,10 +146,10 @@ $(".submitBtn").on("click", function (event) {
     $(".contact-err").remove();
   }
 
-  if (controlAccount !== "" && !/^\d{3}-[A-Z0-9]{5}$/.test(controlAccount)) {
+  if (controlAccount !== "" && !/^[A-Z0-9]{3}-[A-Z0-9]{3}$/.test(controlAccount)) {
       control_account_chk = 0;
       $("#mrcht_control_account").after(
-        '<span class="error-message control-account-err">Control A/C format must be like 123-ABC01.</span>',
+        '<span class="error-message control-account-err">Control A/C format must be like 000-000.</span>',
       );
   }
 
