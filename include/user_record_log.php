@@ -701,7 +701,7 @@ if (!function_exists('urlBuildUserRecordLogCopyHtml')) {
         $parts[] = '</div>';
 
         if ($summary !== '') {
-            $parts[] = '<div style="margin-top:12px;"><strong>Summary:</strong><div style="margin-top:6px;">' . urlRenderUserRecordLogPlainTextHtml($summary) . '</div></div>';
+            $parts[] = '<div style="margin-top:12px;"><strong>Summary:</strong><div style="margin-top:6px;">' . urlRenderUserRecordLogContentHtml($summary) . '</div></div>';
         }
 
         $parts[] = '<div style="margin-top:12px;"><strong>Content:</strong><div style="margin-top:6px;">' . urlRenderUserRecordLogContentHtml($content) . '</div></div>';
@@ -1262,7 +1262,7 @@ if (!function_exists('urlBuildListHtml')) {
             $html .= '    <div class="url-content-row d-flex justify-content-between align-items-start gap-2 flex-wrap">';
             $html .= '      <div class="mb-0 url-log-content-wrap">';
             if ($summary !== '') {
-                $html .= '      <div class="mb-3"><strong>Summary:</strong><div class="url-log-summary mt-2">' . urlRenderUserRecordLogPlainTextHtml($summary) . '</div></div>';
+                $html .= '      <div class="mb-3"><strong>Summary:</strong><div class="url-log-summary mt-2">' . urlRenderUserRecordLogContentHtml($summary) . '</div></div>';
             }
             $html .= '      <strong>Content:</strong><div class="url-log-content mt-2">' . urlRenderUserRecordLogContentHtml($content) . '</div></div>';
             if ($attachmentPreviewHtml !== '') {
@@ -1514,7 +1514,10 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 urlJsonResponse(array('ok' => 0, 'message' => 'Summary requires a customer record.'));
             }
 
-            $summary = urlNormalizeUserRecordLogPlainText(post('summary'));
+            $summary = urlNormalizeSubmittedUserRecordLogContent((string) post('summary'));
+            if (urlGetUserRecordLogContentPlainText($summary) === '') {
+                $summary = '';
+            }
             $hasSummaryColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'summary');
             if (!$hasSummaryColumn) {
                 if ($urlIsFallback) {
@@ -1576,14 +1579,14 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 if ($urlIsFallback) {
                     urlFallbackResponse('Summary saved successfully.', true, $context['return_url']);
                 }
-                urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.'));
+                urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.', 'summary' => $summary));
             }
 
             if ($summary === '') {
                 if ($urlIsFallback) {
                     urlFallbackResponse('Summary saved successfully.', true, $context['return_url']);
                 }
-                urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.'));
+                urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.', 'summary' => $summary));
             }
 
             $insertColumns = array(
@@ -1661,7 +1664,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             if ($urlIsFallback) {
                 urlFallbackResponse('Summary saved successfully.', true, $context['return_url']);
             }
-            urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.'));
+            urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.', 'summary' => $summary));
         }
 
         if ($urlAction !== 'save') {
@@ -1691,7 +1694,10 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 urlJsonResponse(array('ok' => 0, 'message' => 'Next Follow-Up Date is invalid.'));
             }
         }
-        $summary = urlNormalizeUserRecordLogPlainText(post('summary'));
+        $summary = urlNormalizeSubmittedUserRecordLogContent((string) post('summary'));
+        if (urlGetUserRecordLogContentPlainText($summary) === '') {
+            $summary = '';
+        }
         $messageShortcutId = (int) post('message_shortcut_id');
         $followUpTimes = urlNormalizeUserRecordLogShortText(post('follow_up_times'));
         $followUpDay = urlNormalizeUserRecordLogShortText(post('follow_up_day'));
@@ -2429,6 +2435,10 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     font-size: 0.82rem;
                 }
 
+                .user-record-log-module #url_summary_editor_wrap .tox.tox-tinymce {
+                    min-height: 180px;
+                }
+
                 .user-record-log-module .url-log-summary {
                     white-space: normal;
                     word-break: break-word;
@@ -2758,10 +2768,19 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                 <div class="card-body">
                     <div class="url-summary-wrap">
                         <div class="d-flex justify-content-between align-items-center gap-2 flex-wrap mb-2">
-                            <label class="form-label mb-0" for="url_summary">Summary</label>
-                            <button type="button" class="btn btn-sm btn-rounded btn-outline-primary" id="url_summary_submit_btn">Save Summary</button>
+                            <label class="form-label fw-bold mb-0" for="url_summary">Summary</label>
+                            <div class="d-flex align-items-center gap-2">
+                                <button type="button" class="btn btn-sm btn-rounded btn-outline-primary d-none" id="url_summary_edit_btn">Edit Summary</button>
+                                <button type="button" class="btn btn-sm btn-rounded btn-outline-primary" id="url_summary_submit_btn">Save Summary</button>
+                            </div>
                         </div>
-                        <textarea class="form-control" id="url_summary" rows="4" placeholder="Enter summary"><?php echo htmlspecialchars($currentSummary, ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        <div id="url_summary_editor_wrap">
+                            <textarea class="form-control" id="url_summary" rows="4" placeholder="Enter summary"><?php echo htmlspecialchars($currentSummary, ENT_QUOTES, 'UTF-8'); ?></textarea>
+                        </div>
+                        <div id="url_summary_view_wrap" class="d-none">
+                            <div id="url_summary_view" class="url-log-summary"><?php echo $currentSummary !== '' ? urlRenderUserRecordLogContentHtml($currentSummary) : ''; ?></div>
+                            <div id="url_summary_empty" class="url-summary-note<?php echo $currentSummary === '' ? '' : ' d-none'; ?>">No summary available.</div>
+                        </div>
                     </div>
                 </div>
             </div>

@@ -23,6 +23,11 @@
     var $pagingSummary = $("#url_paging_summary");
     var $recordId = $("#url_record_id");
     var $summary = $("#url_summary");
+    var $summaryEditorWrap = $("#url_summary_editor_wrap");
+    var $summaryViewWrap = $("#url_summary_view_wrap");
+    var $summaryView = $("#url_summary_view");
+    var $summaryEmpty = $("#url_summary_empty");
+    var $summaryEditBtn = $("#url_summary_edit_btn");
     var $summarySubmitBtn = $("#url_summary_submit_btn");
     var $messageShortcutId = $("#url_message_shortcut_id");
     var $messageShortcutLabel = $("#url_message_shortcut_label");
@@ -525,32 +530,33 @@
       return trigger;
     }
 
-    function getEditor() {
+    function getEditor(editorId) {
       if (!window.tinymce || typeof window.tinymce.get !== "function") {
         return null;
       }
-      return window.tinymce.get("url_content");
+      return window.tinymce.get(editorId || "url_content");
     }
 
-    function initEditor() {
+    function initEditor(editorId) {
       if (!window.tinymce || typeof window.tinymce.init !== "function") {
         return;
       }
 
-      var existingEditor = getEditor();
+      editorId = editorId || "url_content";
+      var existingEditor = getEditor(editorId);
       if (existingEditor) {
         return;
       }
 
       window.tinymce.init({
-        selector: "#url_content",
+        selector: "#" + editorId,
         base_url: cfg.siteUrl ? cfg.siteUrl + "/header/tinymce" : undefined,
         license_key: "gpl",
         menubar: false,
         branding: false,
         promotion: false,
         statusbar: false,
-        height: 280,
+        height: editorId === "url_summary" ? 180 : 280,
         resize: true,
         plugins: "lists emoticons autolink paste",
         toolbar:
@@ -601,7 +607,7 @@
     }
 
     function setEditorContent(content) {
-      var editor = getEditor();
+      var editor = getEditor("url_content");
       var html = normalizeUserRecordLogEditorContent(content);
       if (editor) {
         editor.setContent(html);
@@ -612,14 +618,14 @@
     }
 
     function syncEditorToTextarea() {
-      var editor = getEditor();
+      var editor = getEditor("url_content");
       if (editor) {
         editor.save();
       }
     }
 
     function getEditorPlainText() {
-      var editor = getEditor();
+      var editor = getEditor("url_content");
       if (editor) {
         return $.trim(editor.getContent({ format: "text" }) || "");
       }
@@ -627,12 +633,58 @@
     }
 
     function focusEditor() {
-      var editor = getEditor();
+      var editor = getEditor("url_content");
       if (editor) {
         editor.focus();
         return;
       }
       $content.trigger("focus");
+    }
+
+    function setSummaryEditorContent(content) {
+      var editor = getEditor("url_summary");
+      var html = normalizeUserRecordLogEditorContent(content);
+      if (editor) {
+        editor.setContent(html);
+        editor.save();
+        return;
+      }
+      $summary.val(html);
+    }
+
+    function syncSummaryEditorToTextarea() {
+      var editor = getEditor("url_summary");
+      if (editor) {
+        editor.save();
+      }
+    }
+
+    function renderSummaryView(summaryHtml) {
+      var html = String(summaryHtml || "");
+      if (html) {
+        $summaryView.html(html);
+        $summaryEmpty.addClass("d-none");
+      } else {
+        $summaryView.empty();
+        $summaryEmpty.removeClass("d-none");
+      }
+    }
+
+    function setSummaryMode(isEditing) {
+      if (isEditing) {
+        $summaryEditorWrap.removeClass("d-none");
+        $summaryViewWrap.addClass("d-none");
+        $summarySubmitBtn.removeClass("d-none");
+        $summaryEditBtn.addClass("d-none");
+        initEditor("url_summary");
+        return;
+      }
+
+      renderSummaryView(currentSummaryValue);
+      $summaryEditorWrap.addClass("d-none");
+      $summaryViewWrap.removeClass("d-none");
+      $summarySubmitBtn.addClass("d-none");
+      $summaryEditBtn.removeClass("d-none");
     }
 
     function parseAttachmentList(rawValue) {
@@ -858,7 +910,7 @@
       $recordId.val("0");
       $messageShortcutId.val("");
       $messageShortcutLabel.val("");
-      $summary.val(currentSummaryValue);
+      setSummaryEditorContent(currentSummaryValue);
       setEditorContent("");
       $nextFollowUpDate.val("");
       $followUpTimes.val("");
@@ -1111,7 +1163,10 @@
       var saveMode =
         options && options.saveMode ? String(options.saveMode) : "log";
       hideAlert();
-      syncEditorToTextarea();
+      syncSummaryEditorToTextarea();
+      if (saveMode !== "summary") {
+        syncEditorToTextarea();
+      }
 
       if (saveMode === "log" && !getEditorPlainText()) {
         showAlert("danger", "Content is required.");
@@ -1162,11 +1217,16 @@
 
           var successMessage =
             res && res.message ? res.message : "Record saved successfully.";
-          currentSummaryValue = $.trim(String($summary.val() || ""));
+          if (saveMode === "summary" && res && typeof res.summary !== "undefined") {
+            currentSummaryValue = String(res.summary || "");
+          } else {
+            currentSummaryValue = $.trim(String($summary.val() || ""));
+          }
           if (saveMode === "log") {
             resetForm();
           } else {
-            $summary.val(currentSummaryValue);
+            setSummaryEditorContent(currentSummaryValue);
+            setSummaryMode(false);
           }
           loadList();
 
@@ -1371,6 +1431,13 @@
       return false;
     });
 
+    $summaryEditBtn.off("click.url").on("click.url", function (e) {
+      e.preventDefault();
+      setSummaryEditorContent(currentSummaryValue);
+      setSummaryMode(true);
+      return false;
+    });
+
     $cancelEditBtn.on("click", function () {
       resetForm();
       hideAlert();
@@ -1557,7 +1624,7 @@
       var attachments = parseAttachmentList(attachmentsValue);
 
       $recordId.val(id);
-      $summary.val(currentSummaryValue);
+      setSummaryEditorContent(currentSummaryValue);
       if (messageShortcutIdValue && messageShortcutMaps.byId[messageShortcutIdValue]) {
         $messageShortcutId.val(String(messageShortcutIdValue));
         $messageShortcutLabel.val(
@@ -1760,9 +1827,10 @@
     });
 
     clearStoredFieldValues(formFieldIds.concat(filterFieldIds));
-    initEditor();
+    initEditor("url_content");
     resetForm();
     resetFilters();
+    setSummaryMode($.trim(currentSummaryValue) === "");
     loadList();
   });
 })();
