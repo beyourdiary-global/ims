@@ -1867,7 +1867,7 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
                     <div class="card mb-4 shadow-sm">
                         <div class="card-body">
                             <h5 class="card-title mb-3">Step 1: Upload Shopee HTML/PDF/ZIP</h5>
-                            <form method="post" enctype="multipart/form-data">
+                            <form method="post" enctype="multipart/form-data" autocomplete="off">
                                 <div class="row g-3 align-items-end">
                                     <div class="col-12 col-md-8">
                                         <label class="form-label" for="import_file">Shopee Seller Centre HTML, PDF, or ZIP File</label>
@@ -1887,7 +1887,7 @@ function validateShopeeAdsPreview($previewData, &$importErrors, $shopeeAccounts,
                         <div class="card mb-4 shadow-sm">
                             <div class="card-body">
                                 <h5 class="card-title mb-3">Step 2: Preview And Edit Before Insert</h5>
-                                <form method="post">
+                                <form method="post" autocomplete="off">
                                     <input type="hidden" name="source_shop_name" value="<?= htmlspecialchars($previewData['source_shop_name']) ?>">
                                     <input type="hidden" name="source_currency" value="<?= htmlspecialchars($previewData['source_currency']) ?>">
                                     <input type="hidden" name="source_payment_method" value="<?= htmlspecialchars($previewData['source_payment_method']) ?>">

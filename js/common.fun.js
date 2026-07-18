@@ -5065,3 +5065,80 @@ if (document.readyState === "loading") {
 
 window.addEventListener("load", commonInitMobileActionEnhancements);
 window.addEventListener("resize", commonBuildMobileStickyFormActions);
+
+// Import preview forms are rendered again after every file analysis. Some
+// browsers restore form controls from the previous response after that render,
+// which can make the new PDF look like the previous one and submit stale data.
+// Keep the server-rendered values authoritative for every page in /import/.
+function commonIsImportPage() {
+  return /(^|\/)import(?:\/|$)/i.test(window.location.pathname || "");
+}
+
+function commonGetImportPreviewForms() {
+  if (!commonIsImportPage()) {
+    return [];
+  }
+
+  return Array.prototype.filter.call(document.forms, function (form) {
+    return !form.querySelector('input[type="file"][name="import_file"]');
+  });
+}
+
+function commonResetImportPreviewFormsToServerValues() {
+  commonGetImportPreviewForms().forEach(function (form) {
+    form.setAttribute("autocomplete", "off");
+    form.reset();
+  });
+}
+
+function commonHideStaleImportPreviews() {
+  commonGetImportPreviewForms().forEach(function (form) {
+    var previewCard = form.closest(".card");
+    if (previewCard) {
+      previewCard.hidden = true;
+    }
+
+    form.querySelectorAll('button[type="submit"], input[type="submit"]').forEach(function (button) {
+      button.disabled = true;
+      button.title = "Load and analyze the selected file first.";
+    });
+  });
+}
+
+function commonInitImportPreviewFreshness() {
+  if (!commonIsImportPage()) {
+    return;
+  }
+
+  document.querySelectorAll('form input[type="file"][name="import_file"]').forEach(function (input) {
+    var uploadForm = input.form;
+    if (uploadForm) {
+      uploadForm.setAttribute("autocomplete", "off");
+    }
+
+    if (input.dataset.importPreviewFreshnessBound === "1") {
+      return;
+    }
+
+    input.addEventListener("change", function () {
+      if (input.files && input.files.length > 0) {
+        commonHideStaleImportPreviews();
+      }
+    });
+    input.dataset.importPreviewFreshnessBound = "1";
+  });
+
+  commonResetImportPreviewFormsToServerValues();
+}
+
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", commonInitImportPreviewFreshness);
+} else {
+  commonInitImportPreviewFreshness();
+}
+
+window.addEventListener("pageshow", function (event) {
+  if (event.persisted && commonIsImportPage()) {
+    window.location.replace(window.location.pathname + window.location.search + window.location.hash);
+  }
+});

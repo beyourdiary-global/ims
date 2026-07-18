@@ -779,7 +779,7 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                         <div class="card-body">
                             <h5 class="card-title mb-3">Step 1: Upload Facebook Ads PDF Or ZIP</h5>
                             <p class="text-muted mb-3">Upload a single PDF receipt or a ZIP file containing multiple PDF receipts. Only receipts with payment status Paid will be prepared for import.</p>
-                            <form method="post" enctype="multipart/form-data" id="fbUploadForm">
+                            <form method="post" enctype="multipart/form-data" autocomplete="off" id="fbUploadForm">
                                 <div class="row g-3 align-items-end">
                                     <div class="col-12 col-md-8">
                                         <label class="form-label" for="import_file">Facebook Ads Receipt File</label>
@@ -807,7 +807,7 @@ function validateFacebookPreviewRecords($records, &$errors, $metaAccounts, $user
                                     </div>
                                 </div>
 
-                                <form method="post" id="fbPreviewForm">
+                                <form method="post" autocomplete="off" id="fbPreviewForm">
                                     <input type="hidden" name="importWarnings" value="<?= htmlspecialchars(implode("\n", $importWarnings)) ?>">
                                     <input type="hidden" name="fb_import_summary[processed_files]" value="<?= (int) $facebookImportSummary['processed_files'] ?>">
                                     <input type="hidden" name="fb_import_summary[preview_records]" value="<?= (int) $facebookImportSummary['preview_records'] ?>">
