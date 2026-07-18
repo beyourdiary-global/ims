@@ -48,6 +48,7 @@ $lazadaOrderImportTitle = getImportCardTitleByPinGroupId($connect, 93, 'Lazada O
 $websiteOrderImportTitle = getImportCardTitleByPinGroupId($connect, 92, 'Website Order Request');
 $packageImportTitle = getImportCardTitleByPinGroupId($connect, 21, 'Package');
 $supplierInvoiceImportTitle = getImportCardTitleByPinGroupId($connect, 167, 'Supplier Invoice');
+$supplierPaymentImportTitle = getImportCardTitleByPinGroupId($connect, 169, 'Supplier Payment');
 $stockInImportTitle = getImportCardTitleByPinGroupId($connect, 125, 'Stock In');
 $productImportTitle = getImportCardTitleByPinGroupId($connect, 20, 'Product');
 $stockOrderImportTitle = getImportCardTitleByPinGroupId($connect, 126, 'Stock Order Request');
@@ -56,6 +57,7 @@ $companyImportTitle = getImportCardTitleByPinGroupId($connect, 127, 'Company');
 $purchaseOrderImportTitle = getImportCardTitleByPinGroupId($connect, 135, 'Purchase Order');
 $packagePinAccess = checkPinByGroupId($connect, 21);
 $supplierInvoicePinAccess = checkPinByGroupId($connect, 167);
+$supplierPaymentPinAccess = checkPinByGroupId($connect, 169);
 $stockInPinAccess = checkPinByGroupId($connect, 125);
 $productPinAccess = checkPinByGroupId($connect, 20);
 $stockOrderReqPinAccess = checkPinByGroupId($connect, 126);
@@ -69,6 +71,7 @@ $canLazadaOrderImport = is_array($lazadaOrderPinAccess) && isActionAllowed('Impo
 $canWebsiteOrderImport = is_array($websiteOrderPinAccess) && isActionAllowed('Import', $websiteOrderPinAccess);
 $canPackageImport = is_array($packagePinAccess) && isActionAllowed('Import', $packagePinAccess);
 $canSupplierInvoiceImport = is_array($supplierInvoicePinAccess) && isActionAllowed('Import', $supplierInvoicePinAccess);
+$canSupplierPaymentImport = is_array($supplierPaymentPinAccess) && isActionAllowed('Import', $supplierPaymentPinAccess);
 $canStockInImport = is_array($stockInPinAccess) && isActionAllowed('Import', $stockInPinAccess);
 $canProductImport = is_array($productPinAccess) && isActionAllowed('Import', $productPinAccess);
 $canStockOrderReqImport = is_array($stockOrderReqPinAccess) && isActionAllowed('Import', $stockOrderReqPinAccess);
@@ -133,6 +136,14 @@ $shortcutCards = array(
         'importUrl' => $SITEURL . '/import/supplier_invoice_import.php',
         'backUrl' => $SITEURL . '/finance/supplier_invoice_table.php',
         'backText' => 'Back To Supplier Invoice Page'
+    ),
+    array(
+        'title' => $supplierPaymentImportTitle,
+        'desc' => 'Import image-based Supplier Payment PDF data.',
+        'canImport' => $canSupplierPaymentImport,
+        'importUrl' => $SITEURL . '/import/supplier_payment_import.php',
+        'backUrl' => $SITEURL . '/finance/supplier_payment_table.php',
+        'backText' => 'Back To Supplier Payment Page'
     ),
     array(
         'title' => $stockInImportTitle,

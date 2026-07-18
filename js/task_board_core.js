@@ -513,7 +513,6 @@ var boardViewFieldDefaults = {
   labels: true,
   assignee: true,
   priority: true,
-  reporter: true,
   due_date: true,
   created: true,
   updated: true,
@@ -4489,8 +4488,16 @@ function buildCardFieldRowsHtml($card) {
       return;
     }
 
+    var isCompactDateField =
+      fieldKey === "created" ||
+      fieldKey === "updated" ||
+      fieldKey === "start_date" ||
+      fieldKey === "due_date";
+
     html +=
-      '<div class="task-item-field-row" data-view-field="' +
+      '<div class="task-item-field-row' +
+      (isCompactDateField ? " task-item-field-row-date" : "") +
+      '" data-view-field="' +
       escHtml(fieldKey) +
       '">' +
       '<span class="task-item-field-label">' +
@@ -4597,20 +4604,6 @@ function buildCardFieldRowsHtml($card) {
     ">" +
     parentOptionsHtml +
     "</select>",
-    true,
-  );
-
-  var reporterName = String($card.attr("data-reporter-name") || "").trim();
-  appendFieldRow(
-    "reporter",
-    "Reporter",
-    reporterName
-      ? '<span class="task-item-field-reporter"><span class="task-item-field-avatar">' +
-      escHtml(initials(reporterName)) +
-      "</span><span>" +
-      escHtml(reporterName) +
-      "</span></span>"
-      : "",
     true,
   );
 

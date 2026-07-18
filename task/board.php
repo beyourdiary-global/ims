@@ -1618,7 +1618,6 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
                                             'labels' => 'Labels',
                                             'assignee' => 'Assignee',
                                             'priority' => 'Priority',
-                                            'reporter' => 'Reporter',
                                             'due_date' => 'Due date',
                                             'created' => 'Created',
                                             'updated' => 'Updated',

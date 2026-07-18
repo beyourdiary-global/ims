@@ -28,6 +28,24 @@ function normalizeMerchantFormattedValue($value)
     return $prefix . '-' . $suffix;
 }
 
+function normalizeMerchantControlAccountValue($value)
+{
+    $value = strtoupper(trim((string) $value));
+    $value = preg_replace('/[^A-Z0-9]+/', '', $value);
+    $prefix = substr($value, 0, 3);
+    $suffix = substr($value, 3, 3);
+
+    if ($prefix === '') {
+        return $suffix;
+    }
+
+    if ($suffix === '') {
+        return $prefix;
+    }
+
+    return $prefix . '-' . $suffix;
+}
+
 //Current Page Action And Data ID
 $dataId = !empty(input('id')) ? input('id') : post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
@@ -100,7 +118,7 @@ if (post('actionBtn')) {
 
             $currentDataName = postSpaceFilter('currentDataName');
             $mrcht_business_no = postSpaceFilter("mrcht_business_no");
-            $mrcht_control_account = normalizeMerchantFormattedValue(postSpaceFilter('mrcht_control_account'));
+            $mrcht_control_account = normalizeMerchantControlAccountValue(postSpaceFilter('mrcht_control_account'));
             $mrcht_code = normalizeMerchantFormattedValue(postSpaceFilter('mrcht_code'));
             $mrcht_email = postSpaceFilter("mrcht_email");
             $mrcht_contact = postSpaceFilter('mrcht_contact');
@@ -126,8 +144,8 @@ if (post('actionBtn')) {
                 $error = 1;
             }
 
-            if ($mrcht_control_account !== '' && !preg_match('/^\d{3}-[A-Z0-9]{5}$/', $mrcht_control_account)) {
-                $control_account_err = "Control A/C format must be like 123-ABC01.";
+            if ($mrcht_control_account !== '' && !preg_match('/^[A-Z0-9]{3}-[A-Z0-9]{3}$/', $mrcht_control_account)) {
+                $control_account_err = "Control A/C format must be like 000-000.";
                 $error = 1;
             }
 
@@ -402,7 +420,7 @@ $currentMerchantCode = isset($mrcht_code)
                         <div class="row">
                             <div class="col-md-6 mb-3">
                                 <label class="form-label form_lbl" for="mrcht_control_account">Control A/C</label>
-                                <input class="form-control" type="text" name="mrcht_control_account" id="mrcht_control_account" maxlength="9" value="<?php echo htmlspecialchars($currentMerchantControlAccount, ENT_QUOTES, 'UTF-8'); ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off">
+                                <input class="form-control" type="text" name="mrcht_control_account" id="mrcht_control_account" maxlength="7" value="<?php echo htmlspecialchars($currentMerchantControlAccount, ENT_QUOTES, 'UTF-8'); ?>" <?php if ($act == '') echo 'readonly' ?> autocomplete="off">
                                 <?php if (isset($control_account_err)) { ?>
                                     <div id="err_msg">
                                         <span class="mt-n1"><?php echo $control_account_err; ?></span>
