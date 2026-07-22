@@ -2362,7 +2362,7 @@ if (!function_exists('campaignRuleAssignCustomers')) {
 
 
 if (!function_exists('campaignSyncFollowUpTasks')) {
-    function campaignSyncFollowUpTasks($connect, $campaignId)
+    function campaignSyncFollowUpTasks($connect, $campaignId, $selectedCustomerIds = null)
     {
         $campaignId = (int) $campaignId;
         $created = 0;
@@ -2385,12 +2385,25 @@ if (!function_exists('campaignSyncFollowUpTasks')) {
         }
 
         $customerIds = array();
-        $customerResult = mysqli_query($connect, "SELECT `id` FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE `campaign_id`='" . $campaignId . "' AND `status`='A' ORDER BY `id` ASC");
-        if ($customerResult) {
-            while ($row = $customerResult->fetch_assoc()) {
-                $customerId = (int) ($row['id'] ?? 0);
+        $selectedCustomerIdSet = array();
+        if (is_array($selectedCustomerIds)) {
+            foreach ($selectedCustomerIds as $cid) {
+                $customerId = (int) $cid;
                 if ($customerId > 0) {
+                    $selectedCustomerIdSet[$customerId] = true;
                     $customerIds[] = $customerId;
+                }
+            }
+        }
+
+        if (empty($selectedCustomerIdSet)) {
+            $customerResult = mysqli_query($connect, "SELECT `id` FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE `campaign_id`='" . $campaignId . "' AND `status`='A' ORDER BY `id` ASC");
+            if ($customerResult) {
+                while ($row = $customerResult->fetch_assoc()) {
+                    $customerId = (int) ($row['id'] ?? 0);
+                    if ($customerId > 0) {
+                        $customerIds[] = $customerId;
+                    }
                 }
             }
         }
