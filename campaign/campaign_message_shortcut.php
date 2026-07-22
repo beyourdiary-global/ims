@@ -325,11 +325,26 @@ if (post('actionBtn') === 'saveMessage') {
 
         $resequenceCount = campaignMessageResequence($connect, $campaignId);
         $syncSummary = campaignSyncFollowUpTasks($connect, $campaignId, $selectedCustomerIds);
+
+        $logSummary = array('recorded' => 0);
+        if (!empty($selectedCustomerIds) && $followUpDate !== '') {
+            $selectedCustomerRows = array();
+            foreach ($assignedCustomers as $customer) {
+                $custId = isset($customer['customer_id']) ? (int) $customer['customer_id'] : 0;
+                if ($custId > 0 && in_array($custId, $selectedCustomerIds, true)) {
+                    $selectedCustomerRows[] = $customer;
+                }
+            }
+            if (!empty($selectedCustomerRows)) {
+                $logSummary = campaignRecordAssignCustomerLog($connect, $campaignId, $messageId > 0 ? $messageId : (int) $connect->insert_id, $selectedCustomerRows, $followUpDate, $title);
+            }
+        }
+
         campaignAudit(
             $connect,
             $pageTitle,
             $auditAction,
-            $auditText . " Resequenced " . $resequenceCount . " row(s) and synced follow-up tasks (created " . (int) $syncSummary['created'] . ", updated " . (int) $syncSummary['updated'] . ", deactivated " . (int) $syncSummary['deactivated'] . ").",
+            $auditText . " Resequenced " . $resequenceCount . " row(s) and synced follow-up tasks (created " . (int) $syncSummary['created'] . ", updated " . (int) $syncSummary['updated'] . ", deactivated " . (int) $syncSummary['deactivated'] . "). Recorded " . (int) $logSummary['recorded'] . " customer log(s).",
             '',
             CAMPAIGN_MESSAGE
         );

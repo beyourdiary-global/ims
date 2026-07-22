@@ -2673,6 +2673,64 @@ if (!function_exists('campaignApplyFinalCustomerTags')) {
     }
 }
 
+if (!function_exists('campaignRecordAssignCustomerLog')) {
+    function campaignRecordAssignCustomerLog($connect, $campaignId, $messageId, $customerRows, $followUpDate, $messageTitleDisplay = '')
+    {
+        if (!($connect instanceof mysqli) || (int) $campaignId <= 0 || (int) $messageId <= 0) {
+            return array('recorded' => 0);
+        }
+
+        $campaignId = (int) $campaignId;
+        $messageId = (int) $messageId;
+        $followUpDate = trim((string) $followUpDate);
+        $messageTitleDisplay = trim((string) $messageTitleDisplay);
+        $customerRows = is_array($customerRows) ? $customerRows : array();
+        $recorded = 0;
+
+        if (empty($customerRows) || $followUpDate === '') {
+            return array('recorded' => 0);
+        }
+
+        $userRecordLogTable = defined('USER_RECORD_LOG') ? USER_RECORD_LOG : 'user_record_log';
+        if (!campaignTableExists($connect, $userRecordLogTable)) {
+            return array('recorded' => 0);
+        }
+
+        $userId = campaignCurrentUserId();
+        $safeUserId = $connect->real_escape_string((string) $userId);
+        $msgTitle = $messageTitleDisplay !== '' ? $messageTitleDisplay : 'Campaign Message #' . $messageId;
+
+        $logContent = '<strong>Message:</strong> ' . htmlspecialchars($msgTitle, ENT_QUOTES, 'UTF-8') . '<br>'
+                    . '<strong>Follow-Up Date:</strong> ' . htmlspecialchars($followUpDate, ENT_QUOTES, 'UTF-8');
+
+        $safeContent = $connect->real_escape_string($logContent);
+
+        $stmt = $connect->prepare(
+            "INSERT INTO `" . $userRecordLogTable . "` (`shopee_cust_id`, `content`, `created_by`, `created_at`, `updated_by`, `updated_at`, `status`)
+             VALUES (?, ?, ?, NOW(), ?, NOW(), 'A')"
+        );
+
+        if (!$stmt) {
+            return array('recorded' => 0);
+        }
+
+        foreach ($customerRows as $customerRow) {
+            $custId = isset($customerRow['customer_id']) ? (int) $customerRow['customer_id'] : 0;
+            if ($custId <= 0) {
+                continue;
+            }
+
+            $stmt->bind_param('isss', $custId, $safeContent, $safeUserId, $safeUserId);
+            if ($stmt->execute()) {
+                $recorded++;
+            }
+        }
+
+        $stmt->close();
+        return array('recorded' => $recorded);
+    }
+}
+
 if (!function_exists('campaignFinalizeEndedCampaign')) {
     function campaignFinalizeEndedCampaign($connect, $financeConnect, $campaignId)
     {
