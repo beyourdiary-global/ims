@@ -175,7 +175,26 @@ function campaignMessageResequence($connect, $campaignId)
     return $updated;
 }
 
+function campaignMessageFetchAssignedCustomers($connect, $campaignId)
+{
+    $campaignId = (int) $campaignId;
+    $rows = array();
+    if ($campaignId <= 0 || !campaignTableExists($connect, CAMPAIGN_CUSTOMER)) {
+        return $rows;
+    }
+
+    $result = $connect->query("SELECT `id`, `customer_id`, `customer_name`, `platform`, `customer_contact` FROM `" . CAMPAIGN_CUSTOMER . "` WHERE `campaign_id` = " . $campaignId . " AND `status` = 'A' ORDER BY `id` ASC");
+    if ($result) {
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+        }
+    }
+
+    return $rows;
+}
+
 $shortcutOptions = campaignMessageShortcutOptions($connect);
+$assignedCustomers = campaignMessageFetchAssignedCustomers($connect, $campaignId);
 
 $campaignMessageSaveRequested = post('actionBtn') === 'saveMessage';
 $campaignMessageDeleteRequested = false;
@@ -248,6 +267,15 @@ if (post('actionBtn') === 'saveMessage') {
     $followUpDate = trim((string) post('follow_up_date'));
     $remark = campaignMessageNormalizeText(post('remark'), 65535);
 
+    $selectedCustomersStr = trim((string) post('selected_customers'));
+    $selectedCustomerIds = null;
+    if ($selectedCustomersStr !== '') {
+        $selectedCustomerIds = array_filter(array_map('intval', explode(',', $selectedCustomersStr)), function($id) { return $id > 0; });
+        if (empty($selectedCustomerIds)) {
+            $selectedCustomerIds = null;
+        }
+    }
+
 
     $shortcutMeta = campaignMessageResolveShortcut($shortcutOptions, $shortcutId, $title);
     if ($title === '' && isset($shortcutMeta['name'])) {
@@ -296,12 +324,27 @@ if (post('actionBtn') === 'saveMessage') {
         $stmt->close();
 
         $resequenceCount = campaignMessageResequence($connect, $campaignId);
-        $syncSummary = campaignSyncFollowUpTasks($connect, $campaignId);
+        $syncSummary = campaignSyncFollowUpTasks($connect, $campaignId, $selectedCustomerIds);
+
+        $logSummary = array('recorded' => 0);
+        if (!empty($selectedCustomerIds) && $followUpDate !== '') {
+            $selectedCustomerRows = array();
+            foreach ($assignedCustomers as $customer) {
+                $custId = isset($customer['customer_id']) ? (int) $customer['customer_id'] : 0;
+                if ($custId > 0 && in_array($custId, $selectedCustomerIds, true)) {
+                    $selectedCustomerRows[] = $customer;
+                }
+            }
+            if (!empty($selectedCustomerRows)) {
+                $logSummary = campaignRecordAssignCustomerLog($connect, $campaignId, $messageId > 0 ? $messageId : (int) $connect->insert_id, $selectedCustomerRows, $followUpDate, $title);
+            }
+        }
+
         campaignAudit(
             $connect,
             $pageTitle,
             $auditAction,
-            $auditText . " Resequenced " . $resequenceCount . " row(s) and synced follow-up tasks (created " . (int) $syncSummary['created'] . ", updated " . (int) $syncSummary['updated'] . ", deactivated " . (int) $syncSummary['deactivated'] . ").",
+            $auditText . " Resequenced " . $resequenceCount . " row(s) and synced follow-up tasks (created " . (int) $syncSummary['created'] . ", updated " . (int) $syncSummary['updated'] . ", deactivated " . (int) $syncSummary['deactivated'] . "). Recorded " . (int) $logSummary['recorded'] . " customer log(s).",
             '',
             CAMPAIGN_MESSAGE
         );
@@ -519,7 +562,7 @@ $autocompleteConfigs = array(
 </div>
 
 <div class="modal fade" id="campaignMessageModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-lg">
         <div class="modal-content">
             <form method="post" id="campaignMessageModalForm" novalidate>
                 <div class="modal-header">
@@ -532,44 +575,70 @@ $autocompleteConfigs = array(
                     <input type="hidden" name="actionBtn" value="saveMessage">
                     <input type="hidden" name="message_id" id="campaign_message_id" value="0">
 
-                    <div class="arrival-follow-up-summary">
-                        <div class="arrival-follow-up-summary-row">
-                            <span class="arrival-follow-up-summary-label">Campaign: </span>
-                            <span id="campaign_message_modal_campaign_name"><?= campaignH($campaign['campaign_name'] ?? '') ?></span>
+                    <ul class="nav nav-tabs mb-3" id="campaignMessageTabs" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active" id="campaign-message-details-tab" data-bs-toggle="tab" data-bs-target="#campaign-message-details" type="button" role="tab" aria-controls="campaign-message-details" aria-selected="true">Message Details</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link" id="campaign-message-contacts-tab" data-bs-toggle="tab" data-bs-target="#campaign-message-contacts" type="button" role="tab" aria-controls="campaign-message-contacts" aria-selected="false">Assign Contacts</button>
+                        </li>
+                    </ul>
+
+                    <div class="tab-content" id="campaignMessageTabContent">
+                        <div class="tab-pane fade show active" id="campaign-message-details" role="tabpanel" aria-labelledby="campaign-message-details-tab">
+                            <div class="arrival-follow-up-summary">
+                                <div class="arrival-follow-up-summary-row">
+                                    <span class="arrival-follow-up-summary-label">Campaign: </span>
+                                    <span id="campaign_message_modal_campaign_name"><?= campaignH($campaign['campaign_name'] ?? '') ?></span>
+                                </div>
+                                <div class="arrival-follow-up-summary-row">
+                                    <span class="arrival-follow-up-summary-label">Step / Sequence: </span>
+                                    <span id="campaign_message_modal_sequence_text">will auto arrange by follow-up date.</span>
+                                </div>
+                            </div>
+
+                            <div class="mb-3 autocomplete">
+                                <label class="form-label" for="campaign_message_shortcut_text">
+                                    Message Shortcut<span class="customer-follow-up-required-star">*</span>
+                                </label>
+                                <input class="form-control" type="text" id="campaign_message_shortcut_text" name="message_title" value="" autocomplete="off">
+                                <input type="hidden" id="campaign_message_shortcut_id" name="message_shortcut_id" value="0">
+                                <div class="customer-follow-up-field-error" id="campaign_message_shortcut_error">Message Shortcut is required.</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="campaign_message_preview">Message Preview</label>
+                                <textarea class="form-control" id="campaign_message_preview" name="message_preview" rows="4" readonly></textarea>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="campaign_message_follow_up_date">
+                                    Follow-Up Date<span class="customer-follow-up-required-star">*</span>
+                                </label>
+                                <input class="form-control" type="date" id="campaign_message_follow_up_date" name="follow_up_date" value="">
+                                <div class="customer-follow-up-field-error" id="campaign_message_follow_up_date_error">Follow-Up Date is required.</div>
+                            </div>
+
+                            <div class="mb-3">
+                                <label class="form-label" for="campaign_message_remark">Remark</label>
+                                <textarea class="form-control" id="campaign_message_remark" name="remark" rows="3"></textarea>
+                            </div>
                         </div>
-                        <div class="arrival-follow-up-summary-row">
-                            <span class="arrival-follow-up-summary-label">Step / Sequence: </span>
-                            <span id="campaign_message_modal_sequence_text">will auto arrange by follow-up date.</span>
+
+                        <div class="tab-pane fade" id="campaign-message-contacts" role="tabpanel" aria-labelledby="campaign-message-contacts-tab">
+                            <div class="mb-3">
+                                <label class="form-label">Assign Contacts (optional)</label>
+                                <small class="text-muted d-block mb-2">Leave blank to assign to all contacts</small>
+                                <div class="contact-selection-container" id="campaign_message_contacts_container" style="max-height: 300px; overflow-y: auto; border: 1px solid #dee2e6; border-radius: 4px; padding: 10px;">
+                                    <!-- Contacts will be populated here -->
+                                </div>
+                                <input type="hidden" id="campaign_message_selected_customers" name="selected_customers" value="">
+                            </div>
+                            <div class="mt-3">
+                                <button type="button" class="btn btn-sm btn-outline-primary" id="campaign_message_select_all_btn">Select All</button>
+                                <button type="button" class="btn btn-sm btn-outline-secondary" id="campaign_message_deselect_all_btn">Deselect All</button>
+                            </div>
                         </div>
-                    </div>
-
-                    <div class="mb-3 autocomplete">
-                        <label class="form-label" for="campaign_message_shortcut_text">
-                            Message Shortcut<span class="customer-follow-up-required-star">*</span>
-                        </label>
-                        <input class="form-control" type="text" id="campaign_message_shortcut_text" name="message_title" value="" autocomplete="off">
-                        <input type="hidden" id="campaign_message_shortcut_id" name="message_shortcut_id" value="0">
-                        <div class="customer-follow-up-field-error" id="campaign_message_shortcut_error">Message Shortcut is required.</div>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label" for="campaign_message_preview">Message Preview</label>
-                        <textarea class="form-control" id="campaign_message_preview" name="message_preview" rows="4" readonly></textarea>
-                    </div>
-
-                    <div class="mb-3">
-                        <label class="form-label" for="campaign_message_follow_up_date">
-                            Follow-Up Date<span class="customer-follow-up-required-star">*</span>
-                        </label>
-                        <input class="form-control" type="date" id="campaign_message_follow_up_date" name="follow_up_date" value="">
-                        <div class="customer-follow-up-field-error" id="campaign_message_follow_up_date_error">Follow-Up Date is required.</div>
-                    </div>
-
-
-
-                    <div class="mb-3">
-                        <label class="form-label" for="campaign_message_remark">Remark</label>
-                        <textarea class="form-control" id="campaign_message_remark" name="remark" rows="3"></textarea>
                     </div>
                 </div>
                 <div class="modal-footer">
@@ -583,10 +652,19 @@ $autocompleteConfigs = array(
 
 <script>
     var campaignMessageShortcutOptions = <?= campaignJson($shortcutOptions) ?>;
+    var campaignMessageAssignedCustomers = <?= campaignJson($assignedCustomers) ?>;
     var campaignMessageFormSubmitted = false;
+    var campaignMessageSelectedCustomers = new Set();
 
     function campaignMessageGetElement(id) {
         return document.getElementById(id);
+    }
+
+    function campaignH(text) {
+        if (!text) return '';
+        var div = document.createElement('div');
+        div.textContent = String(text);
+        return div.innerHTML;
     }
 
     function campaignMessageSetFieldError(errorId, isVisible) {
@@ -684,6 +762,49 @@ $autocompleteConfigs = array(
         return !shortcutMissing && !followUpDateMissing;
     }
 
+    function renderCampaignMessageContactsList() {
+        var container = campaignMessageGetElement('campaign_message_contacts_container');
+        if (!container) {
+            return;
+        }
+
+        var customers = campaignMessageAssignedCustomers || [];
+        if (customers.length === 0) {
+            container.innerHTML = '<div class="text-muted text-center py-3">No contacts assigned to this campaign</div>';
+            return;
+        }
+
+        var html = '';
+        customers.forEach(function (customer) {
+            var customerId = customer.id;
+            var displayName = customer.customer_name + ' (' + customer.platform + ')';
+            if (customer.customer_id) {
+                displayName += ' - ' + customer.customer_id;
+            }
+            var isChecked = campaignMessageSelectedCustomers.has(String(customerId));
+            html += '<div class="form-check mb-2">' +
+                '<input class="form-check-input campaign-message-customer-checkbox" type="checkbox" value="' + campaignH(String(customerId)) + '" id="customer_' + customerId + '" ' + (isChecked ? 'checked' : '') + '>' +
+                '<label class="form-check-label" for="customer_' + customerId + '">' + campaignH(displayName) + '</label>' +
+                '</div>';
+        });
+
+        container.innerHTML = html;
+
+        document.querySelectorAll('.campaign-message-customer-checkbox').forEach(function (checkbox) {
+            checkbox.addEventListener('change', syncCampaignMessageSelectedCustomers);
+        });
+    }
+
+    function syncCampaignMessageSelectedCustomers() {
+        campaignMessageSelectedCustomers.clear();
+        document.querySelectorAll('.campaign-message-customer-checkbox:checked').forEach(function (checkbox) {
+            campaignMessageSelectedCustomers.add(checkbox.value);
+        });
+
+        var selectedIdsArray = Array.from(campaignMessageSelectedCustomers);
+        campaignMessageGetElement('campaign_message_selected_customers').value = selectedIdsArray.join(',');
+    }
+
     function resetCampaignMessageModal() {
         campaignMessageFormSubmitted = false;
         clearCampaignMessageErrors();
@@ -694,6 +815,9 @@ $autocompleteConfigs = array(
         campaignMessageGetElement('campaign_message_follow_up_date').value = '';
         campaignMessageGetElement('campaign_message_remark').value = '';
         campaignMessageGetElement('campaign_message_modal_sequence_text').textContent = 'Will auto arrange by follow-up date.';
+        campaignMessageSelectedCustomers.clear();
+        campaignMessageGetElement('campaign_message_selected_customers').value = '';
+        renderCampaignMessageContactsList();
     }
 
     function openCampaignMessageModal(mode, data) {
@@ -796,6 +920,26 @@ $autocompleteConfigs = array(
             });
         });
     });
+
+    var selectAllBtn = campaignMessageGetElement('campaign_message_select_all_btn');
+    if (selectAllBtn) {
+        selectAllBtn.addEventListener('click', function () {
+            document.querySelectorAll('.campaign-message-customer-checkbox').forEach(function (checkbox) {
+                checkbox.checked = true;
+            });
+            syncCampaignMessageSelectedCustomers();
+        });
+    }
+
+    var deselectAllBtn = campaignMessageGetElement('campaign_message_deselect_all_btn');
+    if (deselectAllBtn) {
+        deselectAllBtn.addEventListener('click', function () {
+            document.querySelectorAll('.campaign-message-customer-checkbox').forEach(function (checkbox) {
+                checkbox.checked = false;
+            });
+            syncCampaignMessageSelectedCustomers();
+        });
+    }
 
     const page = "Campaign";
     const action = "";

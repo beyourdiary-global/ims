@@ -968,15 +968,23 @@ if (post('actionBtn') === 'assignCustomers' || post('actionBtn') === 'removeCust
 
     if (post('actionBtn') === 'assignCustomers') {
         $selected = post('selected_customers');
+        $assignedCustomerIds = array();
         $count = 0;
         foreach ((array) $selected as $payload) {
             $customer = campaignAssignDecodePayload($payload);
             if (!empty($customer) && campaignAssignUpsertCustomer($connect, $campaignId, $customer)) {
                 $count++;
+                $custId = isset($customer['customer_id']) ? (int) $customer['customer_id'] : 0;
+                if ($custId > 0) {
+                    $assignedCustomerIds[] = $custId;
+                }
             }
         }
         $syncSummary = campaignSyncFollowUpTasks($connect, $campaignId);
         campaignAudit($connect, $pageTitle, 'add', USER_NAME . " assigned " . $count . " campaign customer(s) and synced follow-up tasks (created " . (int) $syncSummary['created'] . ", updated " . (int) $syncSummary['updated'] . ", deactivated " . (int) $syncSummary['deactivated'] . ").", '', CAMPAIGN_CUSTOMER);
+
+        $_SESSION['campaign_assign_customer_ids'] = $assignedCustomerIds;
+        $_SESSION['campaign_assign_count'] = $count;
         campaignSetPopup('Assigned ' . $count . ' customer(s).', $pageUrl, 'ErrMO');
     } else {
         $selectedIds = array_map('intval', (array) post('assigned_customer_ids'));
@@ -1001,6 +1009,72 @@ if (post('actionBtn') === 'assignCustomers' || post('actionBtn') === 'removeCust
     }
 
     echo '<script>location.href = "' . $pageUrl . '";</script>';
+    exit();
+}
+
+if (post('action') === 'assignMessageToCustomers') {
+    if (!$canManage || !campaignVerifyCsrf('assign_customer', post('csrf_token'))) {
+        http_response_code(403);
+        header('Content-Type: application/json');
+        echo json_encode(array('ok' => 0, 'message' => 'Invalid request'));
+        exit();
+    }
+
+    $messageId = (int) post('message_id');
+    $followUpDate = trim((string) post('follow_up_date'));
+
+    if ($messageId <= 0 || $followUpDate === '') {
+        header('Content-Type: application/json');
+        echo json_encode(array('ok' => 0, 'message' => 'Invalid message or follow-up date'));
+        exit();
+    }
+
+    $messageResult = $connect->query("SELECT `message_title` FROM `" . CAMPAIGN_MESSAGE . "` WHERE `id` = " . $messageId . " AND `campaign_id` = " . (int) $campaignId . " AND `status` = 'A' LIMIT 1");
+    if (!$messageResult || $messageResult->num_rows === 0) {
+        header('Content-Type: application/json');
+        echo json_encode(array('ok' => 0, 'message' => 'Message not found'));
+        exit();
+    }
+    $messageRow = $messageResult->fetch_assoc();
+    $messageTitle = isset($messageRow['message_title']) ? trim((string) $messageRow['message_title']) : '';
+
+    $customerResult = $connect->query("SELECT `id`, `customer_id` FROM `" . CAMPAIGN_CUSTOMER . "` WHERE `campaign_id` = " . (int) $campaignId . " AND `status` = 'A' ORDER BY `id` DESC LIMIT 100");
+    $assignedCustomers = array();
+    $assignedCustomerIds = array();
+    if ($customerResult) {
+        while ($row = $customerResult->fetch_assoc()) {
+            $custId = isset($row['customer_id']) ? (int) $row['customer_id'] : 0;
+            if ($custId > 0) {
+                $assignedCustomers[] = $row;
+                $assignedCustomerIds[] = $custId;
+            }
+        }
+    }
+
+    if (empty($assignedCustomerIds)) {
+        header('Content-Type: application/json');
+        echo json_encode(array('ok' => 0, 'message' => 'No customers found to assign'));
+        exit();
+    }
+
+    $syncSummary = campaignSyncFollowUpTasks($connect, $campaignId, $assignedCustomerIds);
+    $logSummary = campaignRecordAssignCustomerLog($connect, $campaignId, $messageId, $assignedCustomers, $followUpDate, $messageTitle);
+
+    campaignAudit(
+        $connect,
+        $pageTitle,
+        'edit',
+        USER_NAME . " assigned " . count($assignedCustomerIds) . " customer(s) to message " . $messageId . " with follow-up date " . $followUpDate . ". Synced follow-up tasks (created " . (int) $syncSummary['created'] . ", updated " . (int) $syncSummary['updated'] . "). Recorded " . (int) $logSummary['recorded'] . " log(s).",
+        '',
+        CAMPAIGN_MESSAGE
+    );
+
+    header('Content-Type: application/json');
+    echo json_encode(array(
+        'ok' => 1,
+        'assigned' => count($assignedCustomerIds),
+        'message' => 'Message assigned successfully'
+    ));
     exit();
 }
 
@@ -1261,17 +1335,29 @@ ksort($platformFilterOptions, SORT_NATURAL | SORT_FLAG_CASE);
         }
     </style>
 </head>
+<?php
+$campaignMessages = array();
+$messageResult = $connect->query("SELECT `id`, `message_title`, `follow_up_date` FROM `" . CAMPAIGN_MESSAGE . "` WHERE `campaign_id` = " . (int) $campaignId . " AND `status` = 'A' ORDER BY `sequence_no` ASC, `id` ASC");
+if ($messageResult) {
+    while ($row = $messageResult->fetch_assoc()) {
+        $campaignMessages[] = $row;
+    }
+}
+
+$assignedCustomerIds = isset($_SESSION['campaign_assign_customer_ids']) ? (array) $_SESSION['campaign_assign_customer_ids'] : array();
+$assignCount = isset($_SESSION['campaign_assign_count']) ? (int) $_SESSION['campaign_assign_count'] : 0;
+$showAssignMessageModal = !empty($assignedCustomerIds) && $assignCount > 0;
+
+if ($showAssignMessageModal) {
+    unset($_SESSION['campaign_assign_customer_ids']);
+    unset($_SESSION['campaign_assign_count']);
+}
+?>
 <script>
-    
-    $(document).ready(function () {
-        createSortingTable('campaign_customer_search_table', {
-            searching: true,
-            order: [[1, 'asc']],
-            columnDefs: [
-                { orderable: false, searchable: false, targets: [0] }
-            ]
-        });
-    });
+    var campaignMessages = <?= json_encode($campaignMessages, JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
+    var showAssignMessageModal = <?= $showAssignMessageModal ? 'true' : 'false' ?>;
+    var assignedCount = <?= (int) $assignCount ?>;
+    var campaignId = <?= (int) $campaignId ?>;
 </script>
 <body class="campaign-assign-page">
         
@@ -1572,7 +1658,109 @@ ksort($platformFilterOptions, SORT_NATURAL | SORT_FLAG_CASE);
         dropdownMenuDispFix();
         datatableAlignment('campaign_customer_search_table');
         setButtonColor();
+
+        if (showAssignMessageModal && campaignMessages.length > 0) {
+            setTimeout(function() {
+                var modal = new bootstrap.Modal(document.getElementById('campaignAssignMessageModal'));
+                modal.show();
+            }, 500);
+        }
+
+        document.addEventListener('DOMContentLoaded', function() {
+            var assignForm = document.getElementById('campaignAssignMessageForm');
+            if (assignForm) {
+                assignForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    var selectedMessageId = document.getElementById('assign_message_id').value;
+                    var followUpDate = document.getElementById('assign_follow_up_date').value;
+
+                    if (!selectedMessageId || !followUpDate) {
+                        alert('Please select message and follow-up date');
+                        return;
+                    }
+
+                    assignForm.style.opacity = '0.5';
+                    assignForm.style.pointerEvents = 'none';
+
+                    fetch(window.location.pathname, {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded',
+                        },
+                        body: 'action=assignMessageToCustomers&campaign_id=' + campaignId +
+                              '&message_id=' + encodeURIComponent(selectedMessageId) +
+                              '&follow_up_date=' + encodeURIComponent(followUpDate) +
+                              '&csrf_token=' + encodeURIComponent(document.getElementById('campaign_assign_csrf').value)
+                    })
+                    .then(response => response.json())
+                    .then(data => {
+                        if (data.ok) {
+                            alert('Message assigned successfully to ' + data.assigned + ' customer(s)');
+                            window.location.href = window.location.pathname + '?campaign_id=' + campaignId;
+                        } else {
+                            alert('Error: ' + (data.message || 'Failed to assign message'));
+                            assignForm.style.opacity = '1';
+                            assignForm.style.pointerEvents = 'auto';
+                        }
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        alert('Error occurred while assigning message');
+                        assignForm.style.opacity = '1';
+                        assignForm.style.pointerEvents = 'auto';
+                    });
+                });
+            }
+        });
     </script>
+
+    <div class="modal fade" id="campaignAssignMessageModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog modal-lg">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title">Assign Message to Customers</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <form method="post" id="campaignAssignMessageForm">
+                    <div class="modal-body">
+                        <p class="mb-3" style="color: #666;">You have assigned <strong id="assignedCountDisplay"></strong> customer(s). Select a message shortcut and follow-up date to assign to them:</p>
+
+                        <div class="mb-3">
+                            <label for="assign_message_id" class="form-label">Message Shortcut <span style="color: #dc3545;">*</span></label>
+                            <select id="assign_message_id" name="message_id" class="form-select" required>
+                                <option value="">-- Select Message --</option>
+                            </select>
+                        </div>
+
+                        <div class="mb-3">
+                            <label for="assign_follow_up_date" class="form-label">Follow-Up Date <span style="color: #dc3545;">*</span></label>
+                            <input type="date" id="assign_follow_up_date" name="follow_up_date" class="form-control" required>
+                        </div>
+
+                        <input type="hidden" id="campaign_assign_csrf" value="<?= campaignH($csrfToken) ?>">
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Skip</button>
+                        <button type="submit" class="btn btn-primary">Assign Message</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        if (showAssignMessageModal) {
+            document.getElementById('assignedCountDisplay').textContent = assignedCount;
+            var messageSelect = document.getElementById('assign_message_id');
+            campaignMessages.forEach(function(msg) {
+                var option = document.createElement('option');
+                option.value = msg.id;
+                option.textContent = (msg.message_title || 'Message #' + msg.id) + ' (Follow-up: ' + msg.follow_up_date + ')';
+                messageSelect.appendChild(option);
+            });
+        }
+    </script>
+
     <?php campaignRenderPopupScript($pageTitle, $pageUrl); ?>
 </body>
 </html>

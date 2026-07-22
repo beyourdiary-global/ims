@@ -2362,7 +2362,7 @@ if (!function_exists('campaignRuleAssignCustomers')) {
 
 
 if (!function_exists('campaignSyncFollowUpTasks')) {
-    function campaignSyncFollowUpTasks($connect, $campaignId)
+    function campaignSyncFollowUpTasks($connect, $campaignId, $selectedCustomerIds = null)
     {
         $campaignId = (int) $campaignId;
         $created = 0;
@@ -2385,12 +2385,25 @@ if (!function_exists('campaignSyncFollowUpTasks')) {
         }
 
         $customerIds = array();
-        $customerResult = mysqli_query($connect, "SELECT `id` FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE `campaign_id`='" . $campaignId . "' AND `status`='A' ORDER BY `id` ASC");
-        if ($customerResult) {
-            while ($row = $customerResult->fetch_assoc()) {
-                $customerId = (int) ($row['id'] ?? 0);
+        $selectedCustomerIdSet = array();
+        if (is_array($selectedCustomerIds)) {
+            foreach ($selectedCustomerIds as $cid) {
+                $customerId = (int) $cid;
                 if ($customerId > 0) {
+                    $selectedCustomerIdSet[$customerId] = true;
                     $customerIds[] = $customerId;
+                }
+            }
+        }
+
+        if (empty($selectedCustomerIdSet)) {
+            $customerResult = mysqli_query($connect, "SELECT `id` FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE `campaign_id`='" . $campaignId . "' AND `status`='A' ORDER BY `id` ASC");
+            if ($customerResult) {
+                while ($row = $customerResult->fetch_assoc()) {
+                    $customerId = (int) ($row['id'] ?? 0);
+                    if ($customerId > 0) {
+                        $customerIds[] = $customerId;
+                    }
                 }
             }
         }
@@ -2657,6 +2670,64 @@ if (!function_exists('campaignApplyFinalCustomerTags')) {
         }
 
         return $summary;
+    }
+}
+
+if (!function_exists('campaignRecordAssignCustomerLog')) {
+    function campaignRecordAssignCustomerLog($connect, $campaignId, $messageId, $customerRows, $followUpDate, $messageTitleDisplay = '')
+    {
+        if (!($connect instanceof mysqli) || (int) $campaignId <= 0 || (int) $messageId <= 0) {
+            return array('recorded' => 0);
+        }
+
+        $campaignId = (int) $campaignId;
+        $messageId = (int) $messageId;
+        $followUpDate = trim((string) $followUpDate);
+        $messageTitleDisplay = trim((string) $messageTitleDisplay);
+        $customerRows = is_array($customerRows) ? $customerRows : array();
+        $recorded = 0;
+
+        if (empty($customerRows) || $followUpDate === '') {
+            return array('recorded' => 0);
+        }
+
+        $userRecordLogTable = defined('USER_RECORD_LOG') ? USER_RECORD_LOG : 'user_record_log';
+        if (!campaignTableExists($connect, $userRecordLogTable)) {
+            return array('recorded' => 0);
+        }
+
+        $userId = campaignCurrentUserId();
+        $safeUserId = $connect->real_escape_string((string) $userId);
+        $msgTitle = $messageTitleDisplay !== '' ? $messageTitleDisplay : 'Campaign Message #' . $messageId;
+
+        $logContent = '<strong>Message:</strong> ' . htmlspecialchars($msgTitle, ENT_QUOTES, 'UTF-8') . '<br>'
+                    . '<strong>Follow-Up Date:</strong> ' . htmlspecialchars($followUpDate, ENT_QUOTES, 'UTF-8');
+
+        $safeContent = $connect->real_escape_string($logContent);
+
+        $stmt = $connect->prepare(
+            "INSERT INTO `" . $userRecordLogTable . "` (`shopee_cust_id`, `content`, `created_by`, `created_at`, `updated_by`, `updated_at`, `status`)
+             VALUES (?, ?, ?, NOW(), ?, NOW(), 'A')"
+        );
+
+        if (!$stmt) {
+            return array('recorded' => 0);
+        }
+
+        foreach ($customerRows as $customerRow) {
+            $custId = isset($customerRow['customer_id']) ? (int) $customerRow['customer_id'] : 0;
+            if ($custId <= 0) {
+                continue;
+            }
+
+            $stmt->bind_param('isss', $custId, $safeContent, $safeUserId, $safeUserId);
+            if ($stmt->execute()) {
+                $recorded++;
+            }
+        }
+
+        $stmt->close();
+        return array('recorded' => $recorded);
     }
 }
 
