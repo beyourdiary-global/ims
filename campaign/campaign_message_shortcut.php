@@ -31,6 +31,10 @@ $csrfToken = campaignCsrfToken('message_shortcut');
 $backUrl = $SITEURL . '/campaign/campaign_table.php';
 $pageUrl = $SITEURL . '/campaign/campaign_message_shortcut.php?campaign_id=' . $campaignId;
 
+$campaignPeriodEndDate = isset($campaign['period_end_date']) ? trim((string) $campaign['period_end_date']) : '';
+$todayDate = date('Y-m-d');
+$campaignIsActive = ($campaignPeriodEndDate === '' || $campaignPeriodEndDate >= $todayDate);
+
 function campaignMessageShortcutOptions($connect)
 {
     $rows = array();
@@ -626,6 +630,11 @@ $autocompleteConfigs = array(
                         </div>
 
                         <div class="tab-pane fade" id="campaign-message-contacts" role="tabpanel" aria-labelledby="campaign-message-contacts-tab">
+                            <?php if (!$campaignIsActive): ?>
+                                <div class="alert alert-warning mb-3" role="alert">
+                                    <i class="fa-solid fa-circle-exclamation"></i> This campaign has ended. Customer assignment is disabled.
+                                </div>
+                            <?php endif; ?>
                             <div class="mb-3">
                                 <label class="form-label">Assign Contacts (optional)</label>
                                 <small class="text-muted d-block mb-2">Leave blank to assign to all contacts</small>
@@ -634,10 +643,12 @@ $autocompleteConfigs = array(
                                 </div>
                                 <input type="hidden" id="campaign_message_selected_customers" name="selected_customers" value="">
                             </div>
-                            <div class="mt-3">
-                                <button type="button" class="btn btn-sm btn-outline-primary" id="campaign_message_select_all_btn">Select All</button>
-                                <button type="button" class="btn btn-sm btn-outline-secondary" id="campaign_message_deselect_all_btn">Deselect All</button>
-                            </div>
+                            <?php if ($campaignIsActive): ?>
+                                <div class="mt-3">
+                                    <button type="button" class="btn btn-sm btn-outline-primary" id="campaign_message_select_all_btn">Select All</button>
+                                    <button type="button" class="btn btn-sm btn-outline-secondary" id="campaign_message_deselect_all_btn">Deselect All</button>
+                                </div>
+                            <?php endif; ?>
                         </div>
                     </div>
                 </div>
@@ -655,6 +666,7 @@ $autocompleteConfigs = array(
     var campaignMessageAssignedCustomers = <?= campaignJson($assignedCustomers) ?>;
     var campaignMessageFormSubmitted = false;
     var campaignMessageSelectedCustomers = new Set();
+    var campaignMessageIsActive = <?= $campaignIsActive ? 'true' : 'false' ?>;
 
     function campaignMessageGetElement(id) {
         return document.getElementById(id);
@@ -782,8 +794,9 @@ $autocompleteConfigs = array(
                 displayName += ' - ' + customer.customer_id;
             }
             var isChecked = campaignMessageSelectedCustomers.has(String(customerId));
+            var isDisabled = !campaignMessageIsActive ? 'disabled' : '';
             html += '<div class="form-check mb-2">' +
-                '<input class="form-check-input campaign-message-customer-checkbox" type="checkbox" value="' + campaignH(String(customerId)) + '" id="customer_' + customerId + '" ' + (isChecked ? 'checked' : '') + '>' +
+                '<input class="form-check-input campaign-message-customer-checkbox" type="checkbox" value="' + campaignH(String(customerId)) + '" id="customer_' + customerId + '" ' + (isChecked ? 'checked' : '') + ' ' + isDisabled + '>' +
                 '<label class="form-check-label" for="customer_' + customerId + '">' + campaignH(displayName) + '</label>' +
                 '</div>';
         });
@@ -838,6 +851,10 @@ $autocompleteConfigs = array(
         } else {
             modalTitle.textContent = 'Add Message';
             submitBtn.textContent = 'Add Message';
+        }
+
+        if (campaignMessageIsActive) {
+            renderCampaignMessageContactsList();
         }
 
         var modalElement = campaignMessageGetElement('campaignMessageModal');

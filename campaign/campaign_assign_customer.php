@@ -29,6 +29,10 @@ $csrfToken = campaignCsrfToken('assign_customer');
 $backUrl = $SITEURL . '/campaign/campaign_table.php';
 $pageUrl = $SITEURL . '/campaign/campaign_assign_customer.php?campaign_id=' . $campaignId;
 
+$campaignPeriodEndDate = isset($campaign['period_end_date']) ? trim((string) $campaign['period_end_date']) : '';
+$todayDate = date('Y-m-d');
+$campaignIsActive = ($campaignPeriodEndDate === '' || $campaignPeriodEndDate >= $todayDate);
+
 if (!function_exists('customerRecordNormalizeFilterValues')) {
     function customerRecordNormalizeFilterValues($values)
     {
@@ -966,6 +970,12 @@ if (post('actionBtn') === 'assignCustomers' || post('actionBtn') === 'removeCust
         exit();
     }
 
+    if (post('actionBtn') === 'assignCustomers' && !$campaignIsActive) {
+        campaignSetPopup('This campaign has ended. Customer assignment is not allowed.', $pageUrl, 'ErrMO');
+        echo '<script>location.href = "' . $pageUrl . '";</script>';
+        exit();
+    }
+
     if (post('actionBtn') === 'assignCustomers') {
         $selected = post('selected_customers');
         $assignedCustomerIds = array();
@@ -1376,6 +1386,13 @@ if ($showAssignMessageModal) {
                             </div>
                         </div>
                     </div>
+                    <?php if (!$campaignIsActive): ?>
+                        <div class="col-12">
+                            <div class="alert alert-warning mt-3 mb-0" role="alert">
+                                <i class="fa-solid fa-circle-exclamation"></i> This campaign has ended. Customer assignment is disabled.
+                            </div>
+                        </div>
+                    <?php endif; ?>
                 </div>
 
                 <div class="col-md-12 mb-3 customer-record-filter-toolbar-row">
@@ -1458,7 +1475,10 @@ if ($showAssignMessageModal) {
                     <div class="campaign-assign-primary-actions">
                         <div class="campaign-assign-section-actions">
                             <?php if ($canManage): ?>
-                                <button class="btn btn-sm btn-rounded btn-primary" type="submit" name="addBtn" id="addBtn">Assign Selected</button>
+                                <button class="btn btn-sm btn-rounded btn-primary" type="submit" name="addBtn" id="addBtn" <?= !$campaignIsActive ? 'disabled' : '' ?>>Assign Selected</button>
+                                <?php if (!$campaignIsActive): ?>
+                                    <small class="text-danger ms-2">This campaign has ended. Customer assignment is disabled.</small>
+                                <?php endif; ?>
                             <?php endif; ?>
                         </div>
                     </div>
