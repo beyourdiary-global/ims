@@ -12381,6 +12381,7 @@ if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
         $productSummaryRows = array();
 
         if (!empty($packageProductDetailsMap)) {
+            $productNameCount = array();
             foreach ($packageProductDetailsMap as $packageId => $productDetails) {
                 $productDetails = trim((string) $productDetails);
                 if ($productDetails !== '') {
@@ -12392,12 +12393,22 @@ if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
                             if ($productName === '') {
                                 $productName = 'Product #' . $productId;
                             }
-                            $productSummary[] = $productName;
+                            if (!isset($productNameCount[$productName])) {
+                                $productNameCount[$productName] = 0;
+                            }
+                            $productNameCount[$productName]++;
                         } else {
-                            $productSummary[] = $productItem;
+                            $productItem = trim((string) $productItem);
+                            if (!isset($productNameCount[$productItem])) {
+                                $productNameCount[$productItem] = 0;
+                            }
+                            $productNameCount[$productItem]++;
                         }
                     }
                 }
+            }
+            foreach ($productNameCount as $productName => $count) {
+                $productSummary[] = $productName . ' x' . $count;
             }
         }
 
