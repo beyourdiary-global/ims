@@ -12386,7 +12386,16 @@ if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
                 if ($productDetails !== '') {
                     $productItems = array_filter(array_map('trim', explode(',', $productDetails)), 'strlen');
                     foreach ($productItems as $productItem) {
-                        $productSummary[] = $productItem;
+                        $productId = (int) $productItem;
+                        if ($productId > 0) {
+                            $productName = isset($productNameMap[$productId]) ? trim((string) $productNameMap[$productId]) : '';
+                            if ($productName === '') {
+                                $productName = 'Product #' . $productId;
+                            }
+                            $productSummary[] = $productName;
+                        } else {
+                            $productSummary[] = $productItem;
+                        }
                     }
                 }
             }
