@@ -205,7 +205,7 @@ $customerTagActivityMap = customerTagGetAssignmentActivityMap($connect, 'faceboo
                                     <?= customerLabelRenderNameCell(isset($row['name']) ? $row['name'] : '', $customerLabelMeta) ?>
                                 </td>
                                 <td scope="row" class="customer-tag-assignment-activity-column"><?= customerTagRenderAssignmentActivity($customerTagActivityRows) ?></td>
-                                <td scope="row"><?= customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows) ?></td>
+                                <td scope="row" class="customer-label-summary-column"><?= customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows) ?></td>
                                 <td scope="row">
                                     <?= htmlspecialchars((string) $row['fb_link'], ENT_QUOTES, 'UTF-8') ?>
                                 </td>
