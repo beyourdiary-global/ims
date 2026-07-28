@@ -1124,11 +1124,11 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
                     <?php if (!empty($linkedChildPackages)) { ?>
                         <div class="form-group mb-3">
                             <label class="form-label">Linked Child SKUs</label>
-                            <div class="form-control" style="min-height: 38px; background-color: #f8f9fa;">
+                            <div class="form-control" style="min-height: auto; background-color: #f8f9fa; display: grid; grid-template-columns: 1fr 1fr; gap: 8px; padding: 12px;">
                                 <?php foreach ($linkedChildPackages as $linkedChildPackage) {
                                     $linkedChildLabel = packageFormatRelationDisplayName($linkedChildPackage);
                                 ?>
-                                    <span class="badge bg-light text-dark border me-1 mb-1"><?php echo htmlspecialchars($linkedChildLabel, ENT_QUOTES, 'UTF-8'); ?></span>
+                                    <div><span class="badge bg-light text-dark border"><?php echo htmlspecialchars($linkedChildLabel, ENT_QUOTES, 'UTF-8'); ?></span></div>
                                 <?php } ?>
                             </div>
                         </div>
