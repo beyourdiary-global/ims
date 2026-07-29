@@ -195,7 +195,7 @@ $('.submitBtn').on('click', () => {
 
 
     if (($('#wcr_country_hidden').val() == '' || $('#wcr_country_hidden').val() == '0' || $('#wcr_country_hidden').val() === null || $('#wcr_country_hidden')
-            .val() === undefined)) {
+            .val() === undefined) && ($('#wcr_country').val() == '' || $('#wcr_country').val() === null)) {
         country_chk = 0;
         $("#wcr_country").after(
             '<span class="error-message wcr-country-err">Country is required!</span>');
@@ -205,7 +205,7 @@ $('.submitBtn').on('click', () => {
     }
 
     if (($('#wcr_brand_hidden').val() == '' || $('#wcr_brand_hidden').val() == '0' || $('#wcr_brand_hidden').val() === null || $('#wcr_brand_hidden')
-            .val() === undefined)) {
+            .val() === undefined) && ($('#wcr_brand').val() == '' || $('#wcr_brand').val() === null)) {
         brand_chk = 0;
         $("#wcr_brand").after(
             '<span class="error-message wcr-brand-err">Brand is required!</span>');
