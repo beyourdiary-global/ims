@@ -6,7 +6,19 @@ if (!isset($_SESSION['usr_id']) || empty($_SESSION['usr_id'])) {
 
 $currentUserId = (int)$_SESSION['usr_id'];
 $currentUserName = isset($_SESSION['usr_name']) ? $_SESSION['usr_name'] : 'User';
-$embedSiteUrl = isset($SITEURL) ? $SITEURL : '';
+
+// Get site URL from various possible sources
+$embedSiteUrl = '';
+if (isset($SITEURL) && !empty($SITEURL)) {
+    $embedSiteUrl = $SITEURL;
+} else if (defined('SITEURL')) {
+    $embedSiteUrl = SITEURL;
+} else {
+    // Fallback: construct from current request
+    $protocol = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+    $host = $_SERVER['HTTP_HOST'] ?? 'localhost';
+    $embedSiteUrl = $protocol . '://' . $host;
+}
 
 // Initialize user status
 if (isset($connect)) {
@@ -327,7 +339,16 @@ if (isset($connect)) {
     const currentUserName = '<?= addslashes($currentUserName) ?>';
     const siteUrl = '<?= $embedSiteUrl ?>';
 
-    if (!siteUrl) return;
+    console.log('[LiveChat] Initializing widget...', {
+        userId: currentUserId,
+        userName: currentUserName,
+        siteUrl: siteUrl
+    });
+
+    if (!siteUrl) {
+        console.error('[LiveChat] siteUrl is empty! Cannot initialize.');
+        return;
+    }
 
     let selectedUserId = null;
     let eventSource = null;
