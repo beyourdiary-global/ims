@@ -1,6 +1,11 @@
 <?php
 // Live Chat Widget - Embed version (to be included in menuHeader.php)
+// DEBUG: Check if this file is being included
+?>
+<!-- DEBUG: widget_embed.php is loaded -->
+<?php
 if (!isset($_SESSION['usr_id']) || empty($_SESSION['usr_id'])) {
+    echo '<!-- DEBUG: User not logged in, widget not rendered -->';
     return; // Don't render if not logged in
 }
 
