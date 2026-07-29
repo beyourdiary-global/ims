@@ -37,6 +37,22 @@ livechatInitUserStatus($connect, $currentUserId);
             font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
         }
 
+        @media (max-width: 1024px) {
+            #livechat-widget {
+                display: none !important;
+            }
+        }
+
+        .livechat-widget-desktop-only {
+            display: none;
+        }
+
+        @media (min-width: 1025px) {
+            .livechat-widget-desktop-only {
+                display: block;
+            }
+        }
+
         #livechat-widget.minimized {
             height: 60px;
             width: 60px;
@@ -302,7 +318,7 @@ livechatInitUserStatus($connect, $currentUserId);
 </head>
 <body>
 
-<div id="livechat-widget" class="minimized">
+<div id="livechat-widget" class="livechat-widget-desktop-only minimized">
     <div class="livechat-header">
         <div>
             <p class="livechat-header-title">💬 Chat</p>
