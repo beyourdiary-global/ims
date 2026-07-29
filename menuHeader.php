@@ -1052,4 +1052,10 @@
     });
 </script>
 
+<?php
+if (isset($_SESSION['usr_id']) && !empty($_SESSION['usr_id'])) {
+    include_once __DIR__ . '/livechat/widget.php';
+}
+?>
+
 </html>
