@@ -182,7 +182,7 @@ $seriesLookupMap = isset($lookupMaps['series']) && is_array($lookupMaps['series'
                                         </td>
                                         <td scope="row"><?= customerLabelRenderNameCell(isset($row['buyer_username']) ? $row['buyer_username'] : '', $customerLabelMeta) ?></td>
                                         <td scope="row" class="customer-tag-assignment-activity-column"><?= customerTagRenderAssignmentActivity($customerTagActivityRows) ?></td>
-                                        <td scope="row"><?= customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows) ?></td>
+                                        <td scope="row" class="customer-label-summary-column"><?= customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows) ?></td>
                                         <td scope="row"><?= htmlspecialchars($picName, ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?= htmlspecialchars($countryName, ENT_QUOTES, 'UTF-8') ?></td>
                                         <td scope="row"><?= htmlspecialchars($brandName, ENT_QUOTES, 'UTF-8') ?></td>

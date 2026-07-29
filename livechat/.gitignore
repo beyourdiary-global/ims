@@ -1,0 +1,6 @@
+# Ignore uploaded files
+uploads/
+
+# Ignore temporary files
+*.tmp
+*.log

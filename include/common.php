@@ -12380,35 +12380,21 @@ if (!function_exists('shopeeOmsBuildOrderProductSummaryBySource')) {
         $productSummary = array();
         $productSummaryRows = array();
 
-        if (!empty($packageProductDetailsMap)) {
-            foreach ($packageProductDetailsMap as $packageId => $productDetails) {
-                $productDetails = trim((string) $productDetails);
-                if ($productDetails !== '') {
-                    $productItems = array_filter(array_map('trim', explode(',', $productDetails)), 'strlen');
-                    foreach ($productItems as $productItem) {
-                        $productSummary[] = $productItem;
-                    }
-                }
+        foreach ($productQtyMap as $productId => $qty) {
+            $productName = isset($productNameMap[$productId]) ? $productNameMap[$productId] : ('Product #' . $productId);
+            $packageNames = isset($productContextMap[$productId]['package_names']) && is_array($productContextMap[$productId]['package_names'])
+                ? array_values(array_keys($productContextMap[$productId]['package_names']))
+                : array();
+            $shortageLabel = $productName;
+            if (!empty($packageNames)) {
+                $shortageLabel = implode(' / ', $packageNames) . ' / ' . $productName;
             }
-        }
 
-        if (empty($productSummary)) {
-            foreach ($productQtyMap as $productId => $qty) {
-                $productName = isset($productNameMap[$productId]) ? $productNameMap[$productId] : ('Product #' . $productId);
-                $packageNames = isset($productContextMap[$productId]['package_names']) && is_array($productContextMap[$productId]['package_names'])
-                    ? array_values(array_keys($productContextMap[$productId]['package_names']))
-                    : array();
-                $shortageLabel = $productName;
-                if (!empty($packageNames)) {
-                    $shortageLabel = implode(' / ', $packageNames) . ' / ' . $productName;
-                }
-
-                $productLabel = $productName . ' x' . (int) $qty . ' boxes';
-                $productSummary[] = $productLabel;
-                $productContextMap[$productId]['product_name'] = $productName;
-                $productContextMap[$productId]['package_names'] = $packageNames;
-                $productContextMap[$productId]['shortage_label'] = $shortageLabel;
-            }
+            $productLabel = $productName . ' x' . (int) $qty . ' boxes';
+            $productSummary[] = $productLabel;
+            $productContextMap[$productId]['product_name'] = $productName;
+            $productContextMap[$productId]['package_names'] = $packageNames;
+            $productContextMap[$productId]['shortage_label'] = $shortageLabel;
         }
 
         foreach ($productSummary as $productLabel) {

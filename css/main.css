@@ -2041,6 +2041,16 @@ td.btn-container.mobile-action-open-left .mobile-action-menu {
   white-space: normal;
 }
 
+.customer-label-summary-column {
+  width: 200px !important;
+  min-width: 200px;
+  max-width: 200px;
+  vertical-align: top;
+  white-space: normal;
+  word-wrap: break-word;
+  overflow-wrap: break-word;
+}
+
 .customer-tag-assignment-activity-list {
   display: flex;
   flex-direction: column;
