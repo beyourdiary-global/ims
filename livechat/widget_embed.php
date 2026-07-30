@@ -391,12 +391,21 @@ if (isset($connect)) {
     function loadUsers() {
         fetch(`${siteUrl}/livechat/api_user_list.php`)
             .then(r => r.json())
-            .then(users => {
-                userList = users || [];
+            .then(data => {
+                console.log('[LiveChat] Users loaded:', data);
+                if (data.success && data.users && Array.isArray(data.users)) {
+                    userList = data.users;
+                } else {
+                    userList = [];
+                    console.warn('[LiveChat] Invalid response format:', data);
+                }
                 renderUserList();
                 loadUserStatusPeriodically();
             })
-            .catch(err => console.error('Failed to load users:', err));
+            .catch(err => {
+                console.error('[LiveChat] Failed to load users:', err);
+                usersContainer.innerHTML = '<div class="livechat-loading">Failed to load</div>';
+            });
     }
 
     function loadUserStatusPeriodically() {
@@ -445,12 +454,16 @@ if (isset($connect)) {
 
         fetch(`${siteUrl}/livechat/api_get_messages.php?user_id=${selectedUserId}&limit=50`)
             .then(r => r.json())
-            .then(messages => {
-                messageCache[selectedUserId] = messages || [];
+            .then(data => {
+                if (data.success && data.messages && Array.isArray(data.messages)) {
+                    messageCache[selectedUserId] = data.messages;
+                } else {
+                    messageCache[selectedUserId] = [];
+                }
                 renderMessages();
                 scrollToBottom();
             })
-            .catch(err => console.error('Failed to load messages:', err));
+            .catch(err => console.error('[LiveChat] Failed to load messages:', err));
     }
 
     function renderMessages() {
