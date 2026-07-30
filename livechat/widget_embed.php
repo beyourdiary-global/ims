@@ -605,6 +605,38 @@ if (isset($connect)) {
         loadUsers();
     });
 
+    // Connect to real-time status updates
+    function connectStatusStream() {
+        const statusEventSource = new EventSource(`${siteUrl}/livechat/api_stream_status.php`);
+
+        statusEventSource.addEventListener('open', () => {
+            console.log('[LiveChat] Status stream connected');
+        });
+
+        statusEventSource.addEventListener('message', (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                console.log('[LiveChat] Status update received:', data);
+
+                if (data.type === 'status_update' && data.status_map) {
+                    // Status changed, reload users immediately
+                    console.log('[LiveChat] Status changed, reloading users');
+                    loadUsers();
+                }
+            } catch (err) {
+                console.error('[LiveChat] Failed to parse status update:', err);
+            }
+        });
+
+        statusEventSource.onerror = (err) => {
+            console.error('[LiveChat] Status stream error:', err);
+            statusEventSource.close();
+            // Reconnect after 5 seconds
+            setTimeout(connectStatusStream, 5000);
+        };
+    }
+
+    connectStatusStream();
     loadUsers();
 })();
 </script>
