@@ -2,14 +2,17 @@
 header('Content-Type: application/json');
 
 session_start();
-include_once __DIR__ . '/../include/connection.php';
-include_once __DIR__ . '/livechat_common.php';
 
+// Check session early to prevent connection.php redirect
 if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
     http_response_code(401);
     echo json_encode(array('success' => false, 'error' => 'Unauthorized'));
     exit;
 }
+
+// Initialize database without triggering connection.php redirect
+require_once dirname(__DIR__) . '/init.php';
+include_once __DIR__ . '/livechat_common.php';
 
 $currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
 

@@ -6,13 +6,14 @@ header('Content-Type: text/event-stream');
 header('Access-Control-Allow-Origin: *');
 
 session_start();
-include_once __DIR__ . '/../include/connection.php';
-include_once __DIR__ . '/livechat_common.php';
 
 if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
     http_response_code(401);
     exit;
 }
+
+require_once dirname(__DIR__) . '/init.php';
+include_once __DIR__ . '/livechat_common.php';
 
 $currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
 
