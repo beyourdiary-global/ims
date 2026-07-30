@@ -306,7 +306,9 @@ if (isset($connect)) {
     <div class="livechat-header">
         <div>
             <p class="livechat-header-title">💬 Chat</p>
-            <p class="livechat-header-subtitle" id="status-subtitle">Connect to start</p>
+            <p class="livechat-header-subtitle" id="status-subtitle">
+                <span id="your-status-indicator">🔴 Offline</span>
+            </p>
         </div>
         <div class="livechat-header-actions">
             <button class="livechat-header-btn" id="minimize-btn" title="Minimize">
@@ -369,6 +371,7 @@ if (isset($connect)) {
     const sendBtn = document.getElementById('send-btn');
     const header = document.querySelector('.livechat-header');
     const statusSubtitle = document.getElementById('status-subtitle');
+    const yourStatusIndicator = document.getElementById('your-status-indicator');
 
     header.addEventListener('click', toggleMinimize);
     minimizeBtn.addEventListener('click', (e) => {
@@ -395,13 +398,27 @@ if (isset($connect)) {
         const formData = new FormData();
         formData.append('is_online', isOnline ? '1' : '0');
 
+        // Update UI immediately
+        yourStatusIndicator.textContent = isOnline ? '🟢 Online' : '🔴 Offline';
+
         fetch(`${siteUrl}/livechat/api_update_status.php`, {
             method: 'POST',
             body: formData
         })
         .then(r => r.json())
-        .then(data => console.log('[LiveChat] Status updated:', data))
-        .catch(err => console.error('[LiveChat] Failed to update status:', err));
+        .then(data => {
+            console.log('[LiveChat] Status updated:', data);
+            // Update UI again with verified status from server
+            if (data.verified_status !== null) {
+                const verifiedOnline = data.verified_status === 1;
+                yourStatusIndicator.textContent = verifiedOnline ? '🟢 Online' : '🔴 Offline';
+            }
+        })
+        .catch(err => {
+            console.error('[LiveChat] Failed to update status:', err);
+            // Show error state
+            yourStatusIndicator.textContent = '❓ Error';
+        });
     }
 
     function loadUsers() {

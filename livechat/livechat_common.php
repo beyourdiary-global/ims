@@ -6,8 +6,11 @@ if (!function_exists('livechatInitUserStatus')) {
         $userId = (int)$userId;
         $result = mysqli_query($connect, "SELECT user_id FROM livechat_user_status WHERE user_id = $userId LIMIT 1");
         if (!$result || $result->num_rows === 0) {
-            // Use INSERT IGNORE to avoid error if record already exists
-            mysqli_query($connect, "INSERT IGNORE INTO livechat_user_status (user_id, is_online, last_seen, last_activity) VALUES ($userId, 0, NOW(), NOW())");
+            // Use REPLACE INTO to ensure record exists with fresh timestamp
+            $insertResult = mysqli_query($connect, "REPLACE INTO livechat_user_status (user_id, is_online, last_seen, last_activity) VALUES ($userId, 0, NOW(), NOW())");
+            if (!$insertResult) {
+                error_log("[LiveChat] Failed to initialize user $userId: " . mysqli_error($connect));
+            }
         }
     }
 }
