@@ -338,9 +338,6 @@ foreach ($picAutocompleteOptions as $picOption) {
                                     <?php if (isActionAllowed("Delete", $pinAccess)): ?>
                                         <button class="btn btn-danger me-1" type="button" onclick='confirmCampaignDelete(<?= campaignJson((string) $campaignId . '|' . (string) $csrfToken) ?>, <?= campaignJson((string) ($row['campaign_name'] ?? '')) ?>)' title="Delete"><i class="fas fa-trash-alt"></i></button>
                                     <?php endif; ?>
-                                    <?php if (!$isEnded): ?>
-                                        <a class="btn campaign-action-users me-1" href="<?= $SITEURL ?>/campaign/campaign_assign_customer.php?campaign_id=<?= $campaignId ?>" title="Assign Customer"><i class="fas fa-users"></i></a>
-                                    <?php endif; ?>
                                     <a class="btn campaign-action-message me-1" href="<?= $SITEURL ?>/campaign/campaign_message_shortcut.php?campaign_id=<?= $campaignId ?>" title="Message Shortcut"><i class="fas fa-envelope"></i></a>
                                     <a class="btn campaign-action-followup me-1" href="<?= $SITEURL ?>/campaign/campaign_follow_up_task.php?campaign_id=<?= $campaignId ?>" title="Follow-Up Task"><i class="fas fa-bell"></i></a>
                                     <a class="btn campaign-action-purchase me-1" href="<?= $SITEURL ?>/campaign/campaign_purchase_tracking.php?campaign_id=<?= $campaignId ?>" title="Purchase Tracking"><i class="fas fa-cart-shopping"></i></a>
