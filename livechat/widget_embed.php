@@ -623,7 +623,9 @@ if (isset($connect)) {
 
     // Connect to real-time status updates
     function connectStatusStream() {
+        console.log('[LiveChat] connectStatusStream called');
         const statusEventSource = new EventSource(`${siteUrl}/livechat/api_stream_status.php`);
+        console.log('[LiveChat] EventSource created');
 
         statusEventSource.addEventListener('open', () => {
             console.log('[LiveChat] Status stream connected');
@@ -652,7 +654,10 @@ if (isset($connect)) {
         };
     }
 
+    console.log('[LiveChat] Before connectStatusStream');
     connectStatusStream();
+    console.log('[LiveChat] After connectStatusStream, before loadUsers');
     loadUsers();
+    console.log('[LiveChat] After loadUsers');
 })();
 </script>
