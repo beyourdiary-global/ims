@@ -423,13 +423,20 @@ if (isset($connect)) {
 
     function loadUsers() {
         console.log('[LiveChat] loadUsers called');
+        console.log('[LiveChat] Fetching from:', `${siteUrl}/livechat/api_user_list.php`);
+
         fetch(`${siteUrl}/livechat/api_user_list.php`)
             .then(r => {
-                console.log('[LiveChat] User list API response status:', r.status);
+                console.log('[LiveChat] User list API response status:', r.status, 'statusText:', r.statusText);
+                if (!r.ok) {
+                    throw new Error(`HTTP ${r.status}: ${r.statusText}`);
+                }
+                const contentType = r.headers.get('content-type');
+                console.log('[LiveChat] Response content-type:', contentType);
                 return r.json();
             })
             .then(data => {
-                console.log('[LiveChat] Users loaded:', data);
+                console.log('[LiveChat] Users loaded, data:', data);
                 if (data.success && data.users && Array.isArray(data.users)) {
                     userList = data.users;
                     console.log('[LiveChat] User list set, count:', userList.length);
@@ -441,8 +448,8 @@ if (isset($connect)) {
                 loadUserStatusPeriodically();
             })
             .catch(err => {
-                console.error('[LiveChat] Failed to load users:', err);
-                usersContainer.innerHTML = '<div class="livechat-loading">Failed to load</div>';
+                console.error('[LiveChat] Failed to load users:', err.message, err);
+                usersContainer.innerHTML = '<div class="livechat-loading">Failed: ' + err.message + '</div>';
             });
     }
 
