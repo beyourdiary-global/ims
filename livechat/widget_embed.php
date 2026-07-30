@@ -32,8 +32,8 @@ if (isset($connect)) {
         position: fixed;
         bottom: 20px;
         right: 20px;
-        width: 400px;
-        height: 600px;
+        width: 380px;
+        height: 550px;
         background: white;
         border-radius: 12px;
         box-shadow: 0 5px 40px rgba(0, 0, 0, 0.16);
@@ -41,6 +41,8 @@ if (isset($connect)) {
         flex-direction: column;
         z-index: 9999;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+        max-width: calc(100vw - 40px);
+        max-height: calc(100vh - 40px);
     }
 
     #livechat-widget.minimized {

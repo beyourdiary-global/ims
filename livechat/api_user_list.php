@@ -5,13 +5,13 @@ session_start();
 include_once __DIR__ . '/../menuHeader.php';
 include_once __DIR__ . '/livechat_common.php';
 
-if (!isset($_SESSION['usr_id']) || empty($_SESSION['usr_id'])) {
+if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
     http_response_code(401);
     echo json_encode(array('success' => false, 'error' => 'Unauthorized'));
     exit;
 }
 
-$currentUserId = (int)$_SESSION['usr_id'];
+$currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
 
 // Get all users except current user
 $query = "
