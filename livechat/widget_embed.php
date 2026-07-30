@@ -422,12 +422,17 @@ if (isset($connect)) {
     }
 
     function loadUsers() {
+        console.log('[LiveChat] loadUsers called');
         fetch(`${siteUrl}/livechat/api_user_list.php`)
-            .then(r => r.json())
+            .then(r => {
+                console.log('[LiveChat] User list API response status:', r.status);
+                return r.json();
+            })
             .then(data => {
                 console.log('[LiveChat] Users loaded:', data);
                 if (data.success && data.users && Array.isArray(data.users)) {
                     userList = data.users;
+                    console.log('[LiveChat] User list set, count:', userList.length);
                 } else {
                     userList = [];
                     console.warn('[LiveChat] Invalid response format:', data);
