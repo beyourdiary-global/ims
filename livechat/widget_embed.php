@@ -391,6 +391,19 @@ if (isset($connect)) {
         widget.classList.toggle('minimized');
     }
 
+    function updateUserStatus(isOnline) {
+        const formData = new FormData();
+        formData.append('is_online', isOnline ? '1' : '0');
+
+        fetch(`${siteUrl}/livechat/api_update_status.php`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => console.log('[LiveChat] Status updated:', data))
+        .catch(err => console.error('[LiveChat] Failed to update status:', err));
+    }
+
     function loadUsers() {
         fetch(`${siteUrl}/livechat/api_user_list.php`)
             .then(r => r.json())
@@ -550,26 +563,17 @@ if (isset($connect)) {
         return div.innerHTML;
     }
 
+    // Mark user as online on page load
+    updateUserStatus(true);
+
     // Monitor page visibility and update online status
     document.addEventListener('visibilitychange', () => {
         const isVisible = document.visibilityState === 'visible';
         console.log('[LiveChat] Page visibility changed:', isVisible ? 'visible' : 'hidden');
-
-        const formData = new FormData();
-        formData.append('is_online', isVisible ? '1' : '0');
-
-        fetch(`${siteUrl}/livechat/api_update_status.php`, {
-            method: 'POST',
-            body: formData
-        })
-        .then(r => r.json())
-        .then(data => {
-            console.log('[LiveChat] Status updated:', data);
-            if (isVisible) {
-                loadUsers();
-            }
-        })
-        .catch(err => console.error('[LiveChat] Failed to update status:', err));
+        updateUserStatus(isVisible);
+        if (isVisible) {
+            loadUsers();
+        }
     });
 
     loadUsers();

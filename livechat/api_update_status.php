@@ -12,13 +12,15 @@ if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
 }
 
 $currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
-$isOnline = isset($_POST['is_online']) ? (bool)$_POST['is_online'] : false;
+$isOnline = isset($_POST['is_online']) ? (int)$_POST['is_online'] : 0;
 
 // Initialize if not exists
 livechatInitUserStatus($connect, $currentUserId);
 
 // Update status
-livechatUpdateUserStatus($connect, $currentUserId, $isOnline ? 1 : 0);
+$updateResult = livechatUpdateUserStatus($connect, $currentUserId, $isOnline);
+
+error_log("[LiveChat] Status update: userId=$currentUserId, isOnline=$isOnline, result=$updateResult");
 
 http_response_code(200);
 echo json_encode(array(
