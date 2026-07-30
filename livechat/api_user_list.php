@@ -13,6 +13,9 @@ if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
 
 $currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
 
+// Mark current user as online
+livechatUpdateUserStatus($connect, $currentUserId, true);
+
 // Get all users except current user
 $query = "
     SELECT u.id, u.name, u.email
