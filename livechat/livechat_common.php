@@ -4,9 +4,10 @@
 if (!function_exists('livechatInitUserStatus')) {
     function livechatInitUserStatus($connect, $userId) {
         $userId = (int)$userId;
-        $result = mysqli_query($connect, "SELECT id FROM livechat_user_status WHERE user_id = $userId LIMIT 1");
+        $result = mysqli_query($connect, "SELECT user_id FROM livechat_user_status WHERE user_id = $userId LIMIT 1");
         if (!$result || $result->num_rows === 0) {
-            mysqli_query($connect, "INSERT INTO livechat_user_status (user_id, is_online, last_seen) VALUES ($userId, 0, NOW())");
+            // Use INSERT IGNORE to avoid error if record already exists
+            mysqli_query($connect, "INSERT IGNORE INTO livechat_user_status (user_id, is_online, last_seen, last_activity) VALUES ($userId, 0, NOW(), NOW())");
         }
     }
 }
