@@ -490,18 +490,29 @@ if (isset($connect)) {
     function loadMessages() {
         if (!selectedUserId) return;
 
+        console.log('[LiveChat] Loading messages for user:', selectedUserId);
         fetch(`${siteUrl}/livechat/api_get_messages.php?user_id=${selectedUserId}&limit=50`)
-            .then(r => r.json())
+            .then(r => {
+                console.log('[LiveChat] Message API response status:', r.status);
+                return r.json();
+            })
             .then(data => {
+                console.log('[LiveChat] Messages loaded:', data);
                 if (data.success && data.messages && Array.isArray(data.messages)) {
                     messageCache[selectedUserId] = data.messages;
+                    console.log('[LiveChat] Cached', data.messages.length, 'messages');
                 } else {
                     messageCache[selectedUserId] = [];
+                    console.warn('[LiveChat] Invalid message response:', data);
                 }
                 renderMessages();
                 scrollToBottom();
             })
-            .catch(err => console.error('[LiveChat] Failed to load messages:', err));
+            .catch(err => {
+                console.error('[LiveChat] Failed to load messages:', err);
+                messageCache[selectedUserId] = [];
+                renderMessages();
+            });
     }
 
     function renderMessages() {
