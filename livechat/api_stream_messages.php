@@ -3,15 +3,15 @@
 
 session_start();
 
-if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
+$userId = isset($_SESSION['userid']) ? (int)$_SESSION['userid'] : (isset($_SESSION['usr_id']) ? (int)$_SESSION['usr_id'] : 0);
+
+if ($userId <= 0) {
     http_response_code(401);
     exit;
 }
 
 require_once dirname(__DIR__) . '/init.php';
 include_once __DIR__ . '/livechat_common.php';
-
-$userId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
 $conversationWith = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
 
 if ($conversationWith <= 0) {

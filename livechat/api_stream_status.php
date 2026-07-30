@@ -5,14 +5,21 @@ header('Cache-Control: no-cache');
 header('Content-Type: text/event-stream');
 header('Access-Control-Allow-Origin: *');
 
+// Start session before any output
 session_start();
 
+// Early session check
 if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
     http_response_code(401);
+    error_log('[LiveChat] Status stream: Unauthorized access');
     exit;
 }
 
-require_once dirname(__DIR__) . '/init.php';
+error_log('[LiveChat] Status stream: Session verified, userId=' . (isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']));
+
+// Initialize database connection
+$_ims_root = dirname(__DIR__);
+require_once $_ims_root . '/init.php';
 include_once __DIR__ . '/livechat_common.php';
 
 $currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);

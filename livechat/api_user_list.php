@@ -3,18 +3,22 @@ header('Content-Type: application/json');
 
 session_start();
 
-// Check session early to prevent connection.php redirect
-if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
+// Get userId from session
+$currentUserId = isset($_SESSION['userid']) ? (int)$_SESSION['userid'] : (isset($_SESSION['usr_id']) ? (int)$_SESSION['usr_id'] : 0);
+
+// Check session early
+if ($currentUserId <= 0) {
     http_response_code(401);
     echo json_encode(array('success' => false, 'error' => 'Unauthorized'));
+    error_log('[LiveChat] api_user_list.php: No valid session');
     exit;
 }
 
-// Initialize database without triggering connection.php redirect
+error_log('[LiveChat] api_user_list.php: Session verified, userId=' . $currentUserId);
+
+// Initialize database
 require_once dirname(__DIR__) . '/init.php';
 include_once __DIR__ . '/livechat_common.php';
-
-$currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
 
 // Initialize and mark current user as online
 livechatInitUserStatus($connect, $currentUserId);
