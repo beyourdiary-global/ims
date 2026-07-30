@@ -423,19 +423,32 @@ if (isset($connect)) {
 
     function loadUsers() {
         console.log('[LiveChat] loadUsers called');
-        console.log('[LiveChat] Fetching from:', `${siteUrl}/livechat/api_user_list.php`);
+        const url = `${siteUrl}/livechat/api_user_list.php`;
+        console.log('[LiveChat] Fetching from:', url);
 
-        fetch(`${siteUrl}/livechat/api_user_list.php`)
+        const controller = new AbortController();
+        const timeoutId = setTimeout(() => {
+            console.log('[LiveChat] Fetch timeout, aborting');
+            controller.abort();
+        }, 10000); // 10 second timeout
+
+        fetch(url, {
+            signal: controller.signal,
+            credentials: 'include' // Important: send cookies with request
+        })
             .then(r => {
+                clearTimeout(timeoutId);
                 console.log('[LiveChat] User list API response status:', r.status, 'statusText:', r.statusText);
                 if (!r.ok) {
                     throw new Error(`HTTP ${r.status}: ${r.statusText}`);
                 }
                 const contentType = r.headers.get('content-type');
                 console.log('[LiveChat] Response content-type:', contentType);
-                return r.json();
+                return r.text();
             })
-            .then(data => {
+            .then(text => {
+                console.log('[LiveChat] Response text length:', text.length, 'first 200 chars:', text.substring(0, 200));
+                const data = JSON.parse(text);
                 console.log('[LiveChat] Users loaded, data:', data);
                 if (data.success && data.users && Array.isArray(data.users)) {
                     userList = data.users;
@@ -448,7 +461,8 @@ if (isset($connect)) {
                 loadUserStatusPeriodically();
             })
             .catch(err => {
-                console.error('[LiveChat] Failed to load users:', err.message, err);
+                clearTimeout(timeoutId);
+                console.error('[LiveChat] Failed to load users:', err.name, err.message);
                 usersContainer.innerHTML = '<div class="livechat-loading">Failed: ' + err.message + '</div>';
             });
     }
