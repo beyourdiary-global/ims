@@ -442,7 +442,8 @@ if (isset($connect)) {
     }
 
     function loadUserStatusPeriodically() {
-        setInterval(loadUsers, 30000);
+        // Refresh user list every 10 seconds to show real-time online status
+        setInterval(loadUsers, 10000);
     }
 
     function renderUserList() {
@@ -592,11 +593,50 @@ if (isset($connect)) {
         const isVisible = document.visibilityState === 'visible';
         console.log('[LiveChat] Page visibility changed:', isVisible ? 'visible' : 'hidden');
         updateUserStatus(isVisible);
+        // Immediately refresh user list when page becomes visible
         if (isVisible) {
             loadUsers();
         }
     });
 
+    // Also listen for page focus to refresh user list
+    window.addEventListener('focus', () => {
+        console.log('[LiveChat] Page focused');
+        loadUsers();
+    });
+
+    // Connect to real-time status updates
+    function connectStatusStream() {
+        const statusEventSource = new EventSource(`${siteUrl}/livechat/api_stream_status.php`);
+
+        statusEventSource.addEventListener('open', () => {
+            console.log('[LiveChat] Status stream connected');
+        });
+
+        statusEventSource.addEventListener('message', (e) => {
+            try {
+                const data = JSON.parse(e.data);
+                console.log('[LiveChat] Status update received:', data);
+
+                if (data.type === 'status_update' && data.status_map) {
+                    // Status changed, reload users immediately
+                    console.log('[LiveChat] Status changed, reloading users');
+                    loadUsers();
+                }
+            } catch (err) {
+                console.error('[LiveChat] Failed to parse status update:', err);
+            }
+        });
+
+        statusEventSource.onerror = (err) => {
+            console.error('[LiveChat] Status stream error:', err);
+            statusEventSource.close();
+            // Reconnect after 5 seconds
+            setTimeout(connectStatusStream, 5000);
+        };
+    }
+
+    connectStatusStream();
     loadUsers();
 })();
 </script>
