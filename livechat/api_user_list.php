@@ -9,8 +9,16 @@ $currentUserId = isset($_SESSION['userid']) ? (int)$_SESSION['userid'] : (isset(
 // Check session early
 if ($currentUserId <= 0) {
     http_response_code(401);
-    echo json_encode(array('success' => false, 'error' => 'Unauthorized'));
-    error_log('[LiveChat] api_user_list.php: No valid session');
+    $debug = array(
+        'session_id' => session_id(),
+        'session_vars' => array_keys($_SESSION),
+        'userid_isset' => isset($_SESSION['userid']),
+        'usr_id_isset' => isset($_SESSION['usr_id']),
+        'userid_value' => isset($_SESSION['userid']) ? $_SESSION['userid'] : null,
+        'usr_id_value' => isset($_SESSION['usr_id']) ? $_SESSION['usr_id'] : null
+    );
+    echo json_encode(array('success' => false, 'error' => 'Unauthorized', 'debug' => $debug));
+    error_log('[LiveChat] api_user_list.php: No valid session - ' . json_encode($debug));
     exit;
 }
 
