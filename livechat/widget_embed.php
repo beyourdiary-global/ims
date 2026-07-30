@@ -32,8 +32,8 @@ if (isset($connect)) {
         position: fixed;
         bottom: 20px;
         right: 20px;
-        width: 380px;
-        height: 550px;
+        width: 360px;
+        height: 500px;
         background: white;
         border-radius: 12px;
         box-shadow: 0 5px 40px rgba(0, 0, 0, 0.16);
@@ -41,8 +41,9 @@ if (isset($connect)) {
         flex-direction: column;
         z-index: 9999;
         font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
-        max-width: calc(100vw - 40px);
-        max-height: calc(100vh - 40px);
+        max-width: 90vw;
+        max-height: 90vh;
+        overflow: hidden;
     }
 
     #livechat-widget.minimized {
@@ -108,20 +109,22 @@ if (isset($connect)) {
     }
 
     .livechat-user-list {
-        width: 120px;
+        width: 100px;
         background: white;
         border-right: 1px solid #e0e0e0;
         overflow-y: auto;
-        padding: 8px 0;
+        padding: 8px 4px;
+        flex-shrink: 0;
     }
 
     .livechat-user-item {
-        padding: 10px 8px;
+        padding: 8px 4px;
         border-bottom: 1px solid #f0f0f0;
         cursor: pointer;
         transition: background 0.2s;
         text-align: center;
-        font-size: 12px;
+        font-size: 11px;
+        word-break: break-word;
     }
 
     .livechat-user-item:hover {
