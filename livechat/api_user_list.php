@@ -13,7 +13,8 @@ if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
 
 $currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
 
-// Mark current user as online
+// Initialize and mark current user as online
+livechatInitUserStatus($connect, $currentUserId);
 livechatUpdateUserStatus($connect, $currentUserId, true);
 
 // Get all users except current user
@@ -32,6 +33,8 @@ if ($result) {
     while ($row = $result->fetch_assoc()) {
         $userId = (int)$row['id'];
         $userIds[] = $userId;
+        // Initialize user status if not exists
+        livechatInitUserStatus($connect, $userId);
         $users[$userId] = array(
             'id' => $userId,
             'name' => $row['name'],
