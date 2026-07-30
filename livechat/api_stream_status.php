@@ -20,9 +20,10 @@ $currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESS
 echo "data: " . json_encode(array('type' => 'connected', 'message' => 'Status stream connected')) . "\n\n";
 flush();
 
-$lastStatusMap = array();
+$lastStatusJson = '';
 $maxInactivity = 300; // 5 minutes
 $startTime = time();
+$checkCount = 0;
 
 while (true) {
     // Check if client disconnected
@@ -30,12 +31,12 @@ while (true) {
         break;
     }
 
-    // Check for timeout
-    if (time() - $startTime > $maxInactivity) {
-        echo "data: " . json_encode(array('type' => 'heartbeat')) . "\n\n";
+    // Send heartbeat every 30 seconds
+    if ($checkCount % 10 === 0) {
+        echo "data: " . json_encode(array('type' => 'heartbeat', 'timestamp' => date('Y-m-d H:i:s'))) . "\n\n";
         flush();
-        $startTime = time();
     }
+    $checkCount++;
 
     // Get all users except current
     $query = "SELECT id, name FROM usr_user WHERE id != $currentUserId ORDER BY name ASC";
@@ -50,16 +51,18 @@ while (true) {
 
     // Get current status map
     $statusMap = livechatGetUserStatus($connect, $currentUserIds);
+    $statusJson = json_encode($statusMap);
 
-    // Check if status changed
-    if ($statusMap !== $lastStatusMap) {
+    // Check if status changed (compare JSON strings)
+    if ($statusJson !== $lastStatusJson) {
         echo "data: " . json_encode(array(
             'type' => 'status_update',
             'status_map' => $statusMap,
             'timestamp' => date('Y-m-d H:i:s')
         )) . "\n\n";
         flush();
-        $lastStatusMap = $statusMap;
+        error_log("[LiveChat] Status changed for user $currentUserId: " . $statusJson);
+        $lastStatusJson = $statusJson;
     }
 
     // Sleep for 3 seconds before checking again
