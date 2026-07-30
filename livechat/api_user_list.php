@@ -2,7 +2,7 @@
 header('Content-Type: application/json');
 
 session_start();
-include_once __DIR__ . '/../menuHeader.php';
+include_once __DIR__ . '/../include/connection.php';
 include_once __DIR__ . '/livechat_common.php';
 
 if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
