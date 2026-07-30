@@ -2,14 +2,15 @@
 header('Content-Type: application/json');
 
 session_start();
-include_once __DIR__ . '/../include/connection.php';
-include_once __DIR__ . '/livechat_common.php';
 
 if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
     http_response_code(401);
     echo json_encode(array('success' => false, 'error' => 'Unauthorized'));
     exit;
 }
+
+require_once dirname(__DIR__) . '/init.php';
+include_once __DIR__ . '/livechat_common.php';
 
 $senderId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
 $recipientId = isset($_POST['recipient_id']) ? (int)$_POST['recipient_id'] : 0;

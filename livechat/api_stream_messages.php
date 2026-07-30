@@ -2,13 +2,14 @@
 // Server-Sent Events endpoint for real-time message streaming
 
 session_start();
-include_once __DIR__ . '/../include/connection.php';
-include_once __DIR__ . '/livechat_common.php';
 
 if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
     http_response_code(401);
     exit;
 }
+
+require_once dirname(__DIR__) . '/init.php';
+include_once __DIR__ . '/livechat_common.php';
 
 $userId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
 $conversationWith = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
