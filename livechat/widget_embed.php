@@ -1,11 +1,11 @@
 <?php
 // Live Chat Widget - Embed version (to be included in menuHeader.php)
-if (!isset($_SESSION['usr_id']) || empty($_SESSION['usr_id'])) {
+if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
     return; // Don't render if not logged in
 }
 
-$currentUserId = (int)$_SESSION['usr_id'];
-$currentUserName = isset($_SESSION['usr_name']) ? $_SESSION['usr_name'] : 'User';
+$currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
+$currentUserName = isset($_SESSION['username']) ? $_SESSION['username'] : (isset($_SESSION['usr_name']) ? $_SESSION['usr_name'] : 'User');
 
 // Get site URL from various possible sources
 $embedSiteUrl = '';
