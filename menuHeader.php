@@ -1054,15 +1054,11 @@
 
 <?php
 // Include Live Chat widget on all pages (embed version)
-if (isset($_SESSION['usr_id']) && !empty($_SESSION['usr_id'])) {
+if ((isset($_SESSION['userid']) && !empty($_SESSION['userid'])) || (isset($_SESSION['usr_id']) && !empty($_SESSION['usr_id']))) {
     $widgetPath = __DIR__ . '/livechat/widget_embed.php';
     if (file_exists($widgetPath)) {
         include_once $widgetPath;
-    } else {
-        echo '<!-- DEBUG: widget_embed.php not found at ' . htmlspecialchars($widgetPath) . ' -->';
     }
-} else {
-    echo '<!-- DEBUG: User not logged in (usr_id not set) -->';
 }
 ?>
 
