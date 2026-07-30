@@ -550,6 +550,28 @@ if (isset($connect)) {
         return div.innerHTML;
     }
 
+    // Monitor page visibility and update online status
+    document.addEventListener('visibilitychange', () => {
+        const isVisible = document.visibilityState === 'visible';
+        console.log('[LiveChat] Page visibility changed:', isVisible ? 'visible' : 'hidden');
+
+        const formData = new FormData();
+        formData.append('is_online', isVisible ? '1' : '0');
+
+        fetch(`${siteUrl}/livechat/api_update_status.php`, {
+            method: 'POST',
+            body: formData
+        })
+        .then(r => r.json())
+        .then(data => {
+            console.log('[LiveChat] Status updated:', data);
+            if (isVisible) {
+                loadUsers();
+            }
+        })
+        .catch(err => console.error('[LiveChat] Failed to update status:', err));
+    });
+
     loadUsers();
 })();
 </script>
