@@ -5,12 +5,12 @@ session_start();
 include_once __DIR__ . '/../menuHeader.php';
 include_once __DIR__ . '/livechat_common.php';
 
-if (!isset($_SESSION['usr_id']) || empty($_SESSION['usr_id'])) {
+if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
     http_response_code(401);
     exit;
 }
 
-$userId = (int)$_SESSION['usr_id'];
+$userId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
 $conversationWith = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
 
 if ($conversationWith <= 0) {
