@@ -442,7 +442,8 @@ if (isset($connect)) {
     }
 
     function loadUserStatusPeriodically() {
-        setInterval(loadUsers, 30000);
+        // Refresh user list every 10 seconds to show real-time online status
+        setInterval(loadUsers, 10000);
     }
 
     function renderUserList() {
@@ -592,9 +593,16 @@ if (isset($connect)) {
         const isVisible = document.visibilityState === 'visible';
         console.log('[LiveChat] Page visibility changed:', isVisible ? 'visible' : 'hidden');
         updateUserStatus(isVisible);
+        // Immediately refresh user list when page becomes visible
         if (isVisible) {
             loadUsers();
         }
+    });
+
+    // Also listen for page focus to refresh user list
+    window.addEventListener('focus', () => {
+        console.log('[LiveChat] Page focused');
+        loadUsers();
     });
 
     loadUsers();
