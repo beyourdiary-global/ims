@@ -429,15 +429,19 @@ if (isset($connect)) {
     }
 
     function renderUserList() {
-        usersContainer.innerHTML = userList.map(user => `
-            <div class="livechat-user-item ${user.id === selectedUserId ? 'active' : ''}" data-user-id="${user.id}">
-                <div class="livechat-user-avatar">
-                    ${user.name.charAt(0).toUpperCase()}
-                    ${user.is_online ? '<span class="livechat-user-badge"></span>' : ''}
+        console.log('[LiveChat] Rendering user list:', userList);
+        usersContainer.innerHTML = userList.map(user => {
+            console.log(`[LiveChat] User ${user.id}: name=${user.name}, is_online=${user.is_online} (type: ${typeof user.is_online})`);
+            return `
+                <div class="livechat-user-item ${user.id === selectedUserId ? 'active' : ''}" data-user-id="${user.id}">
+                    <div class="livechat-user-avatar">
+                        ${user.name.charAt(0).toUpperCase()}
+                        ${user.is_online ? '<span class="livechat-user-badge"></span>' : ''}
+                    </div>
+                    <span class="livechat-user-name">${escapeHtml(user.name)}</span>
                 </div>
-                <span class="livechat-user-name">${escapeHtml(user.name)}</span>
-            </div>
-        `).join('');
+            `;
+        }).join('');
 
         usersContainer.querySelectorAll('.livechat-user-item').forEach(item => {
             item.addEventListener('click', () => {

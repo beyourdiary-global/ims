@@ -48,10 +48,15 @@ if ($result) {
 // Get online status
 $statusMap = livechatGetUserStatus($connect, $userIds);
 
+error_log("[LiveChat] Status map: " . json_encode($statusMap));
+
 foreach ($users as $userId => &$user) {
     if (isset($statusMap[$userId])) {
         $user['is_online'] = (bool)$statusMap[$userId]['is_online'];
         $user['last_seen'] = $statusMap[$userId]['last_seen'];
+        error_log("[LiveChat] User $userId is_online: " . $user['is_online']);
+    } else {
+        error_log("[LiveChat] User $userId not found in status map");
     }
 
     // Get unread messages from this user
@@ -74,6 +79,10 @@ http_response_code(200);
 echo json_encode(array(
     'success' => true,
     'users' => array_values($users),
-    'current_user_id' => $currentUserId
+    'current_user_id' => $currentUserId,
+    'debug' => array(
+        'user_count' => count($users),
+        'status_map' => $statusMap
+    )
 ));
 ?>
