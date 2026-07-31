@@ -1049,24 +1049,37 @@ if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
         $attachment = trim((string) (isset($data['attachment']) ? $data['attachment'] : ''));
         $actorUserId = trim((string) (isset($data['created_by']) ? $data['created_by'] : (defined('USER_ID') ? USER_ID : '')));
 
-        $sql = "INSERT INTO `" . USER_RECORD_LOG . "` (
-                    `" . $customerColumn . "`,
-                    `content`,
-                    `attachment`,
-                    `created_by`,
-                    `created_at`,
-                    `updated_by`,
-                    `updated_at`,
-                    `status`
-                ) VALUES (
-                    " . ($customerId > 0 ? $customerId : 'NULL') . ",
+        $insertColumns = "`" . $customerColumn . "`, `content`, `attachment`, `created_by`, `created_at`, `updated_by`, `updated_at`, `status`";
+        $insertValues = ($customerId > 0 ? $customerId : 'NULL') . ",
                     '" . customerFollowUpEscape($connect, $content) . "',
                     '" . customerFollowUpEscape($connect, $attachment) . "',
                     '" . customerFollowUpEscape($connect, $actorUserId) . "',
                     NOW(),
                     '" . customerFollowUpEscape($connect, $actorUserId) . "',
                     NOW(),
-                    'A'
+                    'A'";
+
+        // The "Summary" box on the customer page always shows the summary column of the
+        // most recently created USER_RECORD_LOG row for this customer. Without carrying the
+        // existing summary forward here, this system-generated log row becomes the newest
+        // row with a blank summary, making an already-saved Summary appear to disappear.
+        if (function_exists('urlUserRecordLogColumnExists') && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'summary')) {
+            $existingSummary = function_exists('urlGetLatestUserRecordLogSummary')
+                ? urlGetLatestUserRecordLogSummary($connect, USER_RECORD_LOG, array(
+                    'customer_id' => $customerId,
+                    'customer_column' => $customerColumn,
+                    'customer_only' => true,
+                ))
+                : '';
+
+            $insertColumns .= ", `summary`";
+            $insertValues .= ",\n                    " . ($existingSummary !== '' ? ("'" . customerFollowUpEscape($connect, $existingSummary) . "'") : 'NULL');
+        }
+
+        $sql = "INSERT INTO `" . USER_RECORD_LOG . "` (
+                    " . $insertColumns . "
+                ) VALUES (
+                    " . $insertValues . "
                 )";
 
         if (!mysqli_query($connect, $sql)) {
