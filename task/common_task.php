@@ -194,7 +194,51 @@ if (!function_exists('taskLogItemHistory')) {
                 VALUES
                 ('" . $safeItemId . "','" . $safeEventType . "','" . $safeFieldName . "','" . $safeFromValue . "','" . $safeToValue . "','" . $safeRemark . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')";
 
-        return mysqli_query($connect, $sql) ? true : false;
+        $inserted = mysqli_query($connect, $sql) ? true : false;
+
+        if ($inserted && function_exists('audit_log')) {
+            audit_log(array(
+                'log_act'     => 'edit',
+                'uid'         => $currentUserId,
+                'cby'         => $currentUserId,
+                'cdate'       => $cdate,
+                'ctime'       => $ctime,
+                'query_rec'   => $itemId,
+                'query_table' => defined('TASK_ITEM') ? TASK_ITEM : 'task_board_item',
+                'page'        => 'Task Board',
+                'connect'     => $connect,
+                'oldval'      => taskNormalizeHistoryValue($fromValue),
+                'changes'     => taskNormalizeHistoryValue($toValue),
+                'act_msg'     => (defined('USER_NAME') ? USER_NAME : $currentUserId) . " " . $remark . " on task item [<b> ID = " . $itemId . "</b> ]" . ($fieldName !== '' ? (" (" . $fieldName . ")") : '') . ".",
+            ));
+        }
+
+        return $inserted;
+    }
+}
+
+if (!function_exists('taskAuditLog')) {
+    function taskAuditLog($connect, $logAct, $table, $recordId, $message, $currentUserId, $cdate, $ctime, $oldVal = '', $newVal = '')
+    {
+        if (!function_exists('audit_log')) {
+            return;
+        }
+
+        audit_log(array(
+            'log_act'     => $logAct,
+            'uid'         => $currentUserId,
+            'cby'         => $currentUserId,
+            'cdate'       => $cdate,
+            'ctime'       => $ctime,
+            'query_rec'   => $recordId,
+            'query_table' => $table,
+            'page'        => 'Task Board',
+            'connect'     => $connect,
+            'oldval'      => $oldVal,
+            'newval'      => $newVal,
+            'changes'     => $newVal,
+            'act_msg'     => (defined('USER_NAME') ? USER_NAME : $currentUserId) . ' ' . $message,
+        ));
     }
 }
 
@@ -2795,6 +2839,8 @@ if (!function_exists('taskSaveProjectKeySetting')) {
                 return array('ok' => 0, 'message' => 'Failed to save project key.');
             }
 
+            taskAuditLog($connect, 'edit', TASK_PROJECT_KEY, $settingId, "updated project key for project [<b> ID = $projectId</b> ] to <b>$normalizedKey</b>.", $currentUserId, $cdate, $ctime, '', $normalizedKey);
+
             return array(
                 'ok' => 1,
                 'message' => 'Project key saved successfully.',
@@ -2811,11 +2857,14 @@ if (!function_exists('taskSaveProjectKeySetting')) {
             return array('ok' => 0, 'message' => 'Failed to save project key.');
         }
 
+        $newSettingId = (int) mysqli_insert_id($connect);
+        taskAuditLog($connect, 'add', TASK_PROJECT_KEY, $newSettingId, "set project key for project [<b> ID = $projectId</b> ] to <b>$normalizedKey</b>.", $currentUserId, $cdate, $ctime, '', $normalizedKey);
+
         return array(
             'ok' => 1,
             'message' => 'Project key saved successfully.',
             'projectKey' => array(
-                'id' => (int) mysqli_insert_id($connect),
+                'id' => $newSettingId,
                 'project_key' => $normalizedKey,
             ),
         );
@@ -2869,6 +2918,8 @@ if (!function_exists('taskCreateProject')) {
             return array('ok' => 0, 'message' => 'Failed to initialize the new project task.');
         }
         mysqli_commit($connect);
+
+        taskAuditLog($connect, 'add', TASK_PROJECT, $projectId, "created project task [<b> ID = $projectId</b> ] <b>" . $projectName . "</b>.", $currentUserId, $cdate, $ctime, '', $projectName);
 
         return array(
             'ok' => 1,
@@ -3247,6 +3298,9 @@ if (!function_exists('taskSaveProjectSettings')) {
         }
 
         mysqli_commit($connect);
+
+        taskAuditLog($connect, 'edit', TASK_PROJECT, $projectId, "updated project settings for project [<b> ID = $projectId</b> ] <b>" . $projectName . "</b> (name, statuses, work types, labels).", $currentUserId, $cdate, $ctime);
+
         return array(
             'ok' => 1,
             'message' => 'Project settings updated successfully.',
@@ -4390,6 +4444,8 @@ if (!function_exists('taskSaveProjectUserAccess')) {
         }
 
         mysqli_commit($connect);
+
+        taskAuditLog($connect, 'edit', 'TASK_PROJECT_ITEM_ACCESS', $projectId, "updated project user access permissions for project [<b> ID = $projectId</b> ].", $currentUserId, $cdate, $ctime);
 
         return array(
             'ok' => 1,
@@ -5597,11 +5653,14 @@ if (!function_exists('taskCreateStatusLabel')) {
             return array('ok' => 0, 'message' => 'Failed to create task status label.');
         }
 
+        $newLabelId = (int) mysqli_insert_id($connect);
+        taskAuditLog($connect, 'add', TASK_STATUS_LABEL, $newLabelId, "created task status label [<b> ID = $newLabelId</b> ] <b>" . $labelName . "</b>.", $currentUserId, $cdate, $ctime, '', $labelName);
+
         return array(
             'ok' => 1,
             'message' => 'Task status label created successfully.',
             'statusLabel' => array(
-                'id' => (int) mysqli_insert_id($connect),
+                'id' => $newLabelId,
                 'name' => $labelName,
                 'color' => $normalizedColor,
             ),
@@ -9079,11 +9138,14 @@ if (!function_exists('taskCreateColumn')) {
             return array('ok' => 0, 'message' => 'Failed to create status.');
         }
 
+        $newColumnId = (int) mysqli_insert_id($connect);
+        taskAuditLog($connect, 'add', TASK_COLUMN, $newColumnId, "created status [<b> ID = $newColumnId</b> ] <b>" . $columnName . "</b> in project [<b> ID = $projectId</b> ].", $currentUserId, $cdate, $ctime, '', $columnName);
+
         return array(
             'ok' => 1,
             'message' => 'Status created successfully.',
             'column' => array(
-                'id' => (int) mysqli_insert_id($connect),
+                'id' => $newColumnId,
                 'name' => $columnName,
                 'color' => '#DFE1E6',
                 'sort_order' => $sortOrder,
@@ -9132,7 +9194,10 @@ if (!function_exists('taskRenameColumn')) {
             return array('ok' => 0, 'message' => 'Failed to rename status.');
         }
 
-        return array('ok' => 1, 'message' => 'Status renamed successfully.', 'column_name' => $columnName, 'old_column_name' => isset($existsRow['name']) ? (string) $existsRow['name'] : '');
+        $oldColumnName = isset($existsRow['name']) ? (string) $existsRow['name'] : '';
+        taskAuditLog($connect, 'edit', TASK_COLUMN, $columnId, "renamed status [<b> ID = $columnId</b> ] from <b>$oldColumnName</b> to <b>$columnName</b>.", $currentUserId, $cdate, $ctime, $oldColumnName, $columnName);
+
+        return array('ok' => 1, 'message' => 'Status renamed successfully.', 'column_name' => $columnName, 'old_column_name' => $oldColumnName);
     }
 }
 
@@ -9217,7 +9282,10 @@ if (!function_exists('taskDeleteColumn')) {
 
         mysqli_commit($connect);
 
-        return array('ok' => 1, 'message' => 'Status deleted successfully.', 'column_name' => isset($existsRow['name']) ? (string) $existsRow['name'] : '');
+        $deletedColumnName = isset($existsRow['name']) ? (string) $existsRow['name'] : '';
+        taskAuditLog($connect, 'delete', TASK_COLUMN, $columnId, "deleted status [<b> ID = $columnId</b> ] <b>$deletedColumnName</b> from project [<b> ID = $projectId</b> ].", $currentUserId, $cdate, $ctime, $deletedColumnName);
+
+        return array('ok' => 1, 'message' => 'Status deleted successfully.', 'column_name' => $deletedColumnName);
     }
 }
 
@@ -9249,6 +9317,9 @@ if (!function_exists('taskCreateWorkType')) {
         if (!mysqli_query($connect, $insertSql)) {
             return array('ok' => 0, 'message' => 'Failed to create work type.');
         }
+
+        $newWorkTypeId = (int) mysqli_insert_id($connect);
+        taskAuditLog($connect, 'add', TASK_WORK_TYPE, $newWorkTypeId, "created work type [<b> ID = $newWorkTypeId</b> ] <b>" . $name . "</b> in project [<b> ID = $projectId</b> ].", $currentUserId, $cdate, $ctime, '', $name);
 
         return array('ok' => 1, 'message' => 'Work type created successfully.');
     }
@@ -9289,6 +9360,8 @@ if (!function_exists('taskUpdateWorkType')) {
         if (!mysqli_query($connect, $updateSql)) {
             return array('ok' => 0, 'message' => 'Failed to update work type.');
         }
+
+        taskAuditLog($connect, 'edit', TASK_WORK_TYPE, $workTypeId, "updated work type [<b> ID = $workTypeId</b> ] to <b>" . $name . "</b>.", $currentUserId, $cdate, $ctime, '', $name);
 
         return array('ok' => 1, 'message' => 'Work type updated successfully.');
     }
@@ -10748,11 +10821,14 @@ if (!function_exists('taskCreateLabel')) {
             return array('ok' => 0, 'message' => 'Failed to create label.');
         }
 
+        $newLabelId = (int) mysqli_insert_id($connect);
+        taskAuditLog($connect, 'add', TASK_LABEL, $newLabelId, "created label [<b> ID = $newLabelId</b> ] <b>" . $labelName . "</b>.", $currentUserId, $cdate, $ctime, '', $labelName);
+
         return array(
             'ok' => 1,
             'message' => 'Label created successfully.',
             'label' => array(
-                'id' => (int) mysqli_insert_id($connect),
+                'id' => $newLabelId,
                 'name' => $labelName,
                 'color' => $normalizedColor,
             ),
@@ -10807,6 +10883,9 @@ if (!function_exists('taskDeleteLabel')) {
         }
 
         mysqli_commit($connect);
+
+        taskAuditLog($connect, 'delete', TASK_LABEL, $labelId, "deleted label [<b> ID = $labelId</b> ].", $currentUserId, $cdate, $ctime);
+
         return array('ok' => 1, 'message' => 'Label deleted successfully.');
     }
 }
@@ -10874,6 +10953,9 @@ if (!function_exists('taskDeleteStatusLabel')) {
         }
 
         mysqli_commit($connect);
+
+        taskAuditLog($connect, 'delete', TASK_STATUS_LABEL, $statusLabelId, "deleted task status label [<b> ID = $statusLabelId</b> ] <b>$statusName</b>.", $currentUserId, $cdate, $ctime, $statusName);
+
         return array('ok' => 1, 'message' => 'Task status label deleted successfully.');
     }
 }

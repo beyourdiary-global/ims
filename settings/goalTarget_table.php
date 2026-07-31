@@ -16,7 +16,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('action') === 'delete') {
     $deleteQuery = "DELETE FROM $tblName WHERE year = ?";
     $stmt = $connect->prepare($deleteQuery);
     $stmt->bind_param('i', $year);
-    if ($stmt->execute()) {
+    $deleteSuccess = $stmt->execute();
+    $stmt->close();
+
+    audit_log([
+        'log_act'     => 'delete',
+        'uid'         => USER_ID,
+        'cby'         => USER_ID,
+        'query_rec'   => $year,
+        'query_table' => $tblName,
+        'page'        => $pageTitle,
+        'connect'     => $connect,
+        'act_msg'     => USER_NAME . ($deleteSuccess ? ' deleted' : ' fail to delete') . " all goal target records for <b>$year</b> from <b><i>$tblName Table</i></b>.",
+    ]);
+
+    if ($deleteSuccess) {
         echo "<script>
                 alert('All records for the year $year have been deleted successfully.');
                 window.location.href = '$deleteRedirectPage';
@@ -27,7 +41,6 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('action') === 'delete') {
                 window.location.href = '$deleteRedirectPage';
               </script>";
     }
-    $stmt->close();
 }
 
 ?>

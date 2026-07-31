@@ -108,6 +108,18 @@ if ($pageMode == 'userChgPassword') {
                             $_SESSION['tempValConfirmBox'] = true;
                             $query = "UPDATE " . USR_USER . " SET password_alt = '" . md5($new_password) . "' WHERE id = '" . $id . "'";
                             mysqli_query($connect, $query);
+
+                            audit_log([
+                                'log_act'     => 'edit',
+                                'uid'         => $id,
+                                'cby'         => $id,
+                                'query_rec'   => $query,
+                                'query_table' => USR_USER,
+                                'page'        => $pageTitle,
+                                'connect'     => $connect,
+                                'changes'     => 'password',
+                                'act_msg'     => USER_NAME . " changed own password [<b> ID = " . $id . "</b> ] in <b><i>" . USR_USER . " Table</i></b>.",
+                            ]);
                         } catch (Exception $e) {
                             $commonErr = $e->getMessage();
                         }
@@ -156,6 +168,18 @@ if ($pageMode == 'userChgPassword') {
                         $query = "UPDATE " . USR_USER . " SET password_alt = '" . md5($new_password) . "' WHERE email = '" . $safeEmail . "'";
                         mysqli_query($connect, $query);
                         $sendEmail = 'rstSendEmail';
+
+                        audit_log([
+                            'log_act'     => 'edit',
+                            'uid'         => isset($row['id']) ? $row['id'] : '',
+                            'cby'         => isset($row['id']) ? $row['id'] : '',
+                            'query_rec'   => $query,
+                            'query_table' => USR_USER,
+                            'page'        => $pageTitle,
+                            'connect'     => $connect,
+                            'changes'     => 'password',
+                            'act_msg'     => $email . " reset own password via email link [<b> Email = " . $email . "</b> ] in <b><i>" . USR_USER . " Table</i></b>.",
+                        ]);
                     } catch (Exception $e) {
                         $commonErr = $e->getMessage();
                     }
