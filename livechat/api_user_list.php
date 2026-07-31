@@ -1,31 +1,29 @@
 <?php
 header('Content-Type: application/json');
 
+// Don't use init.php which changes session.save_path
+// Instead, just start session and connect database directly
 session_start();
 
 // Get userId from session
 $currentUserId = isset($_SESSION['userid']) ? (int)$_SESSION['userid'] : (isset($_SESSION['usr_id']) ? (int)$_SESSION['usr_id'] : 0);
 
-// Check session early
+// Check session
 if ($currentUserId <= 0) {
     http_response_code(401);
-    $debug = array(
-        'session_id' => session_id(),
-        'session_vars' => array_keys($_SESSION),
-        'userid_isset' => isset($_SESSION['userid']),
-        'usr_id_isset' => isset($_SESSION['usr_id']),
-        'userid_value' => isset($_SESSION['userid']) ? $_SESSION['userid'] : null,
-        'usr_id_value' => isset($_SESSION['usr_id']) ? $_SESSION['usr_id'] : null
-    );
-    echo json_encode(array('success' => false, 'error' => 'Unauthorized', 'debug' => $debug));
-    error_log('[LiveChat] api_user_list.php: No valid session - ' . json_encode($debug));
+    echo json_encode(array('success' => false, 'error' => 'Unauthorized'));
     exit;
 }
 
-error_log('[LiveChat] api_user_list.php: Session verified, userId=' . $currentUserId);
+// Connect to database directly (avoiding init.php session issues)
+$connect = @mysqli_connect('127.0.0.1:3306', 'beyourdi_cms', 'Byd1234@Global', 'beyourdi_cms-uat');
+if (!$connect) {
+    http_response_code(500);
+    echo json_encode(array('success' => false, 'error' => 'Database connection failed'));
+    exit;
+}
+mysqli_set_charset($connect, 'utf8mb4');
 
-// Initialize database
-require_once dirname(__DIR__) . '/init.php';
 include_once __DIR__ . '/livechat_common.php';
 
 // Initialize and mark current user as online

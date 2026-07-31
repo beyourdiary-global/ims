@@ -10,7 +10,14 @@ if ($userId <= 0) {
     exit;
 }
 
-require_once dirname(__DIR__) . '/init.php';
+// Direct database connection (avoid init.php session issues)
+$connect = @mysqli_connect('127.0.0.1:3306', 'beyourdi_cms', 'Byd1234@Global', 'beyourdi_cms-uat');
+if (!$connect) {
+    http_response_code(500);
+    exit;
+}
+mysqli_set_charset($connect, 'utf8mb4');
+
 include_once __DIR__ . '/livechat_common.php';
 $conversationWith = isset($_GET['user_id']) ? (int)$_GET['user_id'] : 0;
 

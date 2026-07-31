@@ -11,7 +11,15 @@ if ($currentUserId <= 0) {
     exit;
 }
 
-require_once dirname(__DIR__) . '/init.php';
+// Direct database connection (avoid init.php session issues)
+$connect = @mysqli_connect('127.0.0.1:3306', 'beyourdi_cms', 'Byd1234@Global', 'beyourdi_cms-uat');
+if (!$connect) {
+    http_response_code(500);
+    echo json_encode(array('success' => false, 'error' => 'Database connection failed'));
+    exit;
+}
+mysqli_set_charset($connect, 'utf8mb4');
+
 include_once __DIR__ . '/livechat_common.php';
 $isOnline = isset($_POST['is_online']) ? (int)$_POST['is_online'] : 0;
 

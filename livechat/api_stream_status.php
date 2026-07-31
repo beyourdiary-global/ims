@@ -9,17 +9,20 @@ header('Access-Control-Allow-Origin: *');
 session_start();
 
 // Early session check
-if (!isset($_SESSION['userid']) && !isset($_SESSION['usr_id'])) {
+$currentUserId = isset($_SESSION['userid']) ? (int)$_SESSION['userid'] : (isset($_SESSION['usr_id']) ? (int)$_SESSION['usr_id'] : 0);
+if ($currentUserId <= 0) {
     http_response_code(401);
-    error_log('[LiveChat] Status stream: Unauthorized access');
     exit;
 }
 
-error_log('[LiveChat] Status stream: Session verified, userId=' . (isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']));
+// Direct database connection (avoid init.php session issues)
+$connect = @mysqli_connect('127.0.0.1:3306', 'beyourdi_cms', 'Byd1234@Global', 'beyourdi_cms-uat');
+if (!$connect) {
+    http_response_code(500);
+    exit;
+}
+mysqli_set_charset($connect, 'utf8mb4');
 
-// Initialize database connection
-$_ims_root = dirname(__DIR__);
-require_once $_ims_root . '/init.php';
 include_once __DIR__ . '/livechat_common.php';
 
 $currentUserId = (int)(isset($_SESSION['userid']) ? $_SESSION['userid'] : $_SESSION['usr_id']);
