@@ -50,6 +50,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
+        audit_log([
+            'log_act'     => 'add',
+            'uid'         => USER_ID,
+            'cby'         => USER_ID,
+            'query_rec'   => $year,
+            'query_table' => YEARLYGOAL,
+            'page'        => $pageTitle,
+            'connect'     => $connect,
+            'newval'      => "year=$year",
+            'act_msg'     => USER_NAME . " added yearly goal targets for <b>$year</b> in <b><i>" . YEARLYGOAL . " Table</i></b>.",
+        ]);
+
         $connect->close();
         echo "<script>alert('Goals for the year $year have been added successfully.');</script>";
     } elseif ($action === 'E') {
@@ -82,6 +94,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 echo "<script>alert('Error updating goals for $month: " . $stmt->error . "');</script>";
             }
         }
+
+        audit_log([
+            'log_act'     => 'edit',
+            'uid'         => USER_ID,
+            'cby'         => USER_ID,
+            'query_rec'   => $year,
+            'query_table' => YEARLYGOAL,
+            'page'        => $pageTitle,
+            'connect'     => $connect,
+            'changes'     => "year=$year",
+            'act_msg'     => USER_NAME . " updated yearly goal targets for <b>$year</b> in <b><i>" . YEARLYGOAL . " Table</i></b>.",
+        ]);
 
         $connect->close();
         echo "<script>alert('Goals for the year $year have been updated successfully.');</script>";

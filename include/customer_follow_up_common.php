@@ -1601,6 +1601,28 @@ if (!function_exists('customerFollowUpCreateActionArtifacts')) {
             'remark' => $remark,
         ));
 
+        if (function_exists('audit_log')) {
+            $followUpId = isset($followUpRow['id']) ? (int) $followUpRow['id'] : 0;
+            $actorDisplayName = function_exists('customerFollowUpGetUserDisplayName')
+                ? customerFollowUpGetUserDisplayName($connect, $actorUserId)
+                : $actorUserId;
+
+            audit_log(array(
+                'log_act'     => 'edit',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'cdate'       => $actionDate,
+                'ctime'       => $actionTime,
+                'query_rec'   => $followUpId,
+                'query_table' => CUSTOMER_FOLLOW_UP,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'oldval'      => is_array($oldValue) || is_object($oldValue) ? json_encode($oldValue) : (string) $oldValue,
+                'changes'     => is_array($newValue) || is_object($newValue) ? json_encode($newValue) : (string) $newValue,
+                'act_msg'     => trim($actorDisplayName . ' ' . $actionLabel . ' for follow-up case [<b> ID = ' . $followUpId . '</b> ]' . ($remark !== '' ? (' — ' . $remark) : '') . '.'),
+            ));
+        }
+
         customerFollowUpInsertReadableUserRecordLog($connect, array(
             'platform' => isset($followUpRow['platform']) ? $followUpRow['platform'] : '',
             'customer_id' => isset($followUpRow['customer_id']) ? (int) $followUpRow['customer_id'] : 0,
@@ -1743,7 +1765,22 @@ if (!function_exists('customerFollowUpFindOrCreateTagId')) {
             return 0;
         }
 
-        return (int) mysqli_insert_id($connect);
+        $newTagId = (int) mysqli_insert_id($connect);
+        if ($newTagId > 0 && function_exists('audit_log')) {
+            audit_log(array(
+                'log_act'     => 'add',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'query_rec'   => $newTagId,
+                'query_table' => TAG,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'newval'      => "name=$tagName",
+                'act_msg'     => "Customer follow-up module auto-created tag [<b> ID = " . $newTagId . "</b> ] <b>" . $tagName . "</b>.",
+            ));
+        }
+
+        return $newTagId;
     }
 }
 
@@ -1803,8 +1840,23 @@ if (!function_exists('customerFollowUpAssignTagById')) {
                               `update_time` = CURTIME()
                           WHERE `id` = " . $assignmentId . "
                           LIMIT 1";
+            $updateOk = mysqli_query($connect, $updateSql) ? true : false;
+            if ($updateOk && function_exists('audit_log')) {
+                audit_log(array(
+                    'log_act'     => 'edit',
+                    'uid'         => $actorUserId,
+                    'cby'         => $actorUserId,
+                    'query_rec'   => $assignmentId,
+                    'query_table' => CUS_TAG_ASSIGNMENT,
+                    'page'        => 'Customer Follow-Up',
+                    'connect'     => $connect,
+                    'changes'     => 'status=A',
+                    'act_msg'     => "Customer follow-up module re-assigned tag [<b> ID = " . $tagId . "</b> ] to customer [<b> ID = " . $customerId . "</b> ] on <b>" . $platform . "</b>.",
+                ));
+            }
+
             return array(
-                'success' => mysqli_query($connect, $updateSql) ? true : false,
+                'success' => $updateOk,
                 'already_active' => false,
                 'changed' => true,
             );
@@ -1834,8 +1886,23 @@ if (!function_exists('customerFollowUpAssignTagById')) {
                         'A'
                     )";
 
+        $insertOk = mysqli_query($connect, $insertSql) ? true : false;
+        if ($insertOk && function_exists('audit_log')) {
+            audit_log(array(
+                'log_act'     => 'add',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'query_rec'   => (int) mysqli_insert_id($connect),
+                'query_table' => CUS_TAG_ASSIGNMENT,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'newval'      => "platform=$platform, customer_id=$customerId, tag_id=$tagId",
+                'act_msg'     => "Customer follow-up module assigned tag [<b> ID = " . $tagId . "</b> ] to customer [<b> ID = " . $customerId . "</b> ] on <b>" . $platform . "</b>.",
+            ));
+        }
+
         return array(
-            'success' => mysqli_query($connect, $insertSql) ? true : false,
+            'success' => $insertOk,
             'already_active' => false,
             'changed' => true,
         );
@@ -1864,9 +1931,23 @@ if (!function_exists('customerFollowUpRemoveTagById')) {
                   AND `status` = 'A'";
 
         $result = mysqli_query($connect, $sql);
+        $changed = $result ? mysqli_affected_rows($connect) > 0 : false;
+        if ($changed && function_exists('audit_log')) {
+            audit_log(array(
+                'log_act'     => 'delete',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'query_rec'   => "platform=$platform, customer_id=$customerId, tag_id=$tagId",
+                'query_table' => CUS_TAG_ASSIGNMENT,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'act_msg'     => "Customer follow-up module removed tag [<b> ID = " . $tagId . "</b> ] from customer [<b> ID = " . $customerId . "</b> ] on <b>" . $platform . "</b>.",
+            ));
+        }
+
         return array(
             'success' => $result ? true : false,
-            'changed' => $result ? mysqli_affected_rows($connect) > 0 : false,
+            'changed' => $changed,
         );
     }
 }
@@ -4075,6 +4156,24 @@ if (!function_exists('customerFollowUpStartFromReceivedOrder')) {
         $roundRow = $roundId > 0 ? customerFollowUpFetchRoundById($connect, $roundId) : array();
         if (!empty($followUpRow)) {
             customerFollowUpApplyCustomerTypeTags($connect, $followUpRow, $roundRow, (string) $currentUserId);
+        }
+
+        if (function_exists('audit_log')) {
+            $actorDisplayName = function_exists('customerFollowUpGetUserDisplayName')
+                ? customerFollowUpGetUserDisplayName($connect, $currentUserId)
+                : (string) $currentUserId;
+
+            audit_log(array(
+                'log_act'     => 'add',
+                'uid'         => $currentUserId,
+                'cby'         => $currentUserId,
+                'query_rec'   => $followUpId,
+                'query_table' => CUSTOMER_FOLLOW_UP,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'newval'      => "platform=$platform, order_id=$orderId, customer_type=$customerType",
+                'act_msg'     => $actorDisplayName . " started a customer follow-up case [<b> ID = " . $followUpId . "</b> ] for order <b>" . $orderNo . "</b> (" . $platform . ").",
+            ));
         }
 
         // This helper is used by the Confirm Received follow-up flow and can be reused by other received-order entry points.
