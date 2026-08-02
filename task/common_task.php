@@ -194,7 +194,51 @@ if (!function_exists('taskLogItemHistory')) {
                 VALUES
                 ('" . $safeItemId . "','" . $safeEventType . "','" . $safeFieldName . "','" . $safeFromValue . "','" . $safeToValue . "','" . $safeRemark . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')";
 
-        return mysqli_query($connect, $sql) ? true : false;
+        $inserted = mysqli_query($connect, $sql) ? true : false;
+
+        if ($inserted && function_exists('audit_log')) {
+            audit_log(array(
+                'log_act'     => 'edit',
+                'uid'         => $currentUserId,
+                'cby'         => $currentUserId,
+                'cdate'       => $cdate,
+                'ctime'       => $ctime,
+                'query_rec'   => $itemId,
+                'query_table' => defined('TASK_ITEM') ? TASK_ITEM : 'task_board_item',
+                'page'        => 'Task Board',
+                'connect'     => $connect,
+                'oldval'      => taskNormalizeHistoryValue($fromValue),
+                'changes'     => taskNormalizeHistoryValue($toValue),
+                'act_msg'     => (defined('USER_NAME') ? USER_NAME : $currentUserId) . " " . $remark . " on task item [<b> ID = " . $itemId . "</b> ]" . ($fieldName !== '' ? (" (" . $fieldName . ")") : '') . ".",
+            ));
+        }
+
+        return $inserted;
+    }
+}
+
+if (!function_exists('taskAuditLog')) {
+    function taskAuditLog($connect, $logAct, $table, $recordId, $message, $currentUserId, $cdate, $ctime, $oldVal = '', $newVal = '')
+    {
+        if (!function_exists('audit_log')) {
+            return;
+        }
+
+        audit_log(array(
+            'log_act'     => $logAct,
+            'uid'         => $currentUserId,
+            'cby'         => $currentUserId,
+            'cdate'       => $cdate,
+            'ctime'       => $ctime,
+            'query_rec'   => $recordId,
+            'query_table' => $table,
+            'page'        => 'Task Board',
+            'connect'     => $connect,
+            'oldval'      => $oldVal,
+            'newval'      => $newVal,
+            'changes'     => $newVal,
+            'act_msg'     => (defined('USER_NAME') ? USER_NAME : $currentUserId) . ' ' . $message,
+        ));
     }
 }
 
@@ -2795,6 +2839,8 @@ if (!function_exists('taskSaveProjectKeySetting')) {
                 return array('ok' => 0, 'message' => 'Failed to save project key.');
             }
 
+            taskAuditLog($connect, 'edit', TASK_PROJECT_KEY, $settingId, "updated project key for project [<b> ID = $projectId</b> ] to <b>$normalizedKey</b>.", $currentUserId, $cdate, $ctime, '', $normalizedKey);
+
             return array(
                 'ok' => 1,
                 'message' => 'Project key saved successfully.',
@@ -2811,11 +2857,14 @@ if (!function_exists('taskSaveProjectKeySetting')) {
             return array('ok' => 0, 'message' => 'Failed to save project key.');
         }
 
+        $newSettingId = (int) mysqli_insert_id($connect);
+        taskAuditLog($connect, 'add', TASK_PROJECT_KEY, $newSettingId, "set project key for project [<b> ID = $projectId</b> ] to <b>$normalizedKey</b>.", $currentUserId, $cdate, $ctime, '', $normalizedKey);
+
         return array(
             'ok' => 1,
             'message' => 'Project key saved successfully.',
             'projectKey' => array(
-                'id' => (int) mysqli_insert_id($connect),
+                'id' => $newSettingId,
                 'project_key' => $normalizedKey,
             ),
         );
@@ -2869,6 +2918,8 @@ if (!function_exists('taskCreateProject')) {
             return array('ok' => 0, 'message' => 'Failed to initialize the new project task.');
         }
         mysqli_commit($connect);
+
+        taskAuditLog($connect, 'add', TASK_PROJECT, $projectId, "created project task [<b> ID = $projectId</b> ] <b>" . $projectName . "</b>.", $currentUserId, $cdate, $ctime, '', $projectName);
 
         return array(
             'ok' => 1,
@@ -3247,6 +3298,9 @@ if (!function_exists('taskSaveProjectSettings')) {
         }
 
         mysqli_commit($connect);
+
+        taskAuditLog($connect, 'edit', TASK_PROJECT, $projectId, "updated project settings for project [<b> ID = $projectId</b> ] <b>" . $projectName . "</b> (name, statuses, work types, labels).", $currentUserId, $cdate, $ctime);
+
         return array(
             'ok' => 1,
             'message' => 'Project settings updated successfully.',
@@ -4391,6 +4445,8 @@ if (!function_exists('taskSaveProjectUserAccess')) {
 
         mysqli_commit($connect);
 
+        taskAuditLog($connect, 'edit', 'TASK_PROJECT_ITEM_ACCESS', $projectId, "updated project user access permissions for project [<b> ID = $projectId</b> ].", $currentUserId, $cdate, $ctime);
+
         return array(
             'ok' => 1,
             'message' => 'Project user access updated successfully.',
@@ -4720,13 +4776,30 @@ if (!function_exists('taskGetBulkChildWorkItems')) {
         }
 
         $rows = array();
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+        }
+
+        return taskMapBulkWorkItemRows($connect, $projectId, $rows);
+    }
+}
+
+if (!function_exists('taskMapBulkWorkItemRows')) {
+    function taskMapBulkWorkItemRows($connect, $projectId, $rows)
+    {
+        $projectId = (int) $projectId;
+        $items = array();
+        $rows = is_array($rows) ? $rows : array();
+        if (empty($rows)) {
+            return $items;
+        }
+
         $itemIds = array();
         $columnIds = array();
         $projectKeyIds = array();
         $workTypeIds = array();
         $userIds = array();
-        while ($row = $result->fetch_assoc()) {
-            $rows[] = $row;
+        foreach ($rows as $row) {
             $itemIds[] = isset($row['id']) ? (int) $row['id'] : 0;
             $columnIds[] = isset($row['column_id']) ? (int) $row['column_id'] : 0;
             $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
@@ -4816,6 +4889,38 @@ if (!function_exists('taskGetBulkChildWorkItems')) {
     }
 }
 
+if (!function_exists('taskGetItemsByIds')) {
+    function taskGetItemsByIds($connect, $projectId, $itemIds)
+    {
+        $projectId = (int) $projectId;
+        $itemIds = taskUniquePositiveIntIds($itemIds);
+        if ($projectId <= 0 || empty($itemIds)) {
+            return array();
+        }
+
+        $sql = "SELECT id,project_id,column_id,title,work_type_id,project_key_id,
+                       assignee_user_id,reporter_user_id,priority,original_estimate,
+                       task_status,parent_item_id,time_tracking,remaining_estimate_seconds,
+                       start_date,due_date,amendement_date,amendement_time,
+                       second_amendement_date,second_amendement_time,sort_order
+                FROM " . TASK_ITEM . "
+                WHERE status='A' AND project_id='" . $projectId . "' AND id IN (" . implode(',', $itemIds) . ")
+                ORDER BY sort_order ASC, id ASC";
+
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return array();
+        }
+
+        $rows = array();
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+        }
+
+        return taskMapBulkWorkItemRows($connect, $projectId, $rows);
+    }
+}
+
 if (!function_exists('taskGetBulkChildSelection')) {
     function taskGetBulkChildSelection($connect, $projectId, $parentItemId, $itemIds, $maxItems = 1000)
     {
@@ -4872,6 +4977,50 @@ if (!function_exists('taskGetBulkChildSelection')) {
             'items' => $selectedItems,
             'all_items' => $allItems,
             'parent' => array('id' => $parentItemId, 'project_id' => $projectId, 'work_type_name' => (string) $parentTypeName),
+        );
+    }
+}
+
+if (!function_exists('taskGetProjectItemSelection')) {
+    function taskGetProjectItemSelection($connect, $projectId, $itemIds, $maxItems = 1000)
+    {
+        $projectId = (int) $projectId;
+        $maxItems = max(1, (int) $maxItems);
+        $itemIds = taskUniquePositiveIntIds($itemIds);
+        if ($projectId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid project.', 'items' => array());
+        }
+        if (empty($itemIds)) {
+            return array('ok' => 0, 'message' => 'Select at least one work item.', 'items' => array());
+        }
+        if (count($itemIds) > $maxItems) {
+            return array('ok' => 0, 'message' => 'Bulk changes are limited to ' . $maxItems . ' work items.', 'items' => array());
+        }
+
+        $foundItems = taskGetItemsByIds($connect, $projectId, $itemIds);
+        $itemMap = array();
+        foreach ($foundItems as $item) {
+            $itemMap[(int) $item['id']] = $item;
+        }
+        $selectedItems = array();
+        $missingIds = array();
+        foreach ($itemIds as $itemId) {
+            if (!isset($itemMap[$itemId])) {
+                $missingIds[] = $itemId;
+                continue;
+            }
+            $selectedItems[] = $itemMap[$itemId];
+        }
+        if (!empty($missingIds)) {
+            return array('ok' => 0, 'message' => 'One or more selected work items are no longer active in this project.', 'items' => array(), 'missing_ids' => $missingIds);
+        }
+
+        return array(
+            'ok' => 1,
+            'message' => '',
+            'items' => $selectedItems,
+            'all_items' => $selectedItems,
+            'parent' => null,
         );
     }
 }
@@ -5028,10 +5177,13 @@ if (!function_exists('taskBulkApplyChildOperation')) {
         $operation = strtolower(trim((string) $operation));
         $changes = is_array($changes) ? $changes : array();
         $currentUserId = (int) $currentUserId;
-        $selection = taskGetBulkChildSelection($connect, $projectId, $parentItemId, $itemIds, 1000);
+        $selection = $parentItemId > 0
+            ? taskGetBulkChildSelection($connect, $projectId, $parentItemId, $itemIds, 1000)
+            : taskGetProjectItemSelection($connect, $projectId, $itemIds, 1000);
         if (empty($selection['ok'])) {
             return $selection;
         }
+        $refreshedIds = array_column($selection['items'], 'id');
 
         $editOperation = $operation === 'edit';
         $moveOperation = $operation === 'move';
@@ -5266,16 +5418,18 @@ if (!function_exists('taskBulkApplyChildOperation')) {
             $statusLabelNameMap[(int) $label['id']] = (string) $label['name'];
         }
 
-        $parentLockResult = mysqli_query(
-            $connect,
-            "SELECT id,project_id,status FROM " . TASK_ITEM . " WHERE id='" . $parentItemId . "' FOR UPDATE"
-        );
-        if (!$parentLockResult || $parentLockResult->num_rows === 0) {
-            return $fail('The parent work item is no longer available.');
-        }
-        $parentLockRow = $parentLockResult->fetch_assoc();
-        if ((int) $parentLockRow['project_id'] !== $projectId || (string) $parentLockRow['status'] !== 'A') {
-            return $fail('The parent work item is no longer active in this project.');
+        if ($parentItemId > 0) {
+            $parentLockResult = mysqli_query(
+                $connect,
+                "SELECT id,project_id,status FROM " . TASK_ITEM . " WHERE id='" . $parentItemId . "' FOR UPDATE"
+            );
+            if (!$parentLockResult || $parentLockResult->num_rows === 0) {
+                return $fail('The parent work item is no longer available.');
+            }
+            $parentLockRow = $parentLockResult->fetch_assoc();
+            if ((int) $parentLockRow['project_id'] !== $projectId || (string) $parentLockRow['status'] !== 'A') {
+                return $fail('The parent work item is no longer active in this project.');
+            }
         }
 
         $sourceColumns = array();
@@ -5305,19 +5459,21 @@ if (!function_exists('taskBulkApplyChildOperation')) {
                 return $fail('One or more selected work items are no longer active.');
             }
 
-            $childCheck = mysqli_query(
-                $connect,
-                "SELECT id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND project_id='" . $projectId . "' AND status='A' AND (
-                    parent_item_id='" . $parentItemId . "'
-                    OR id IN (
-                        SELECT r.child_board_item_id
-                        FROM " . TASK_ITEM_RELATION . " r
-                        WHERE r.parent_board_item_id='" . $parentItemId . "' AND r.status='A'
-                    )
-                ) LIMIT 1"
-            );
-            if (!$childCheck || $childCheck->num_rows === 0) {
-                return $fail('One or more selected work items are no longer active children of this parent.');
+            if ($parentItemId > 0) {
+                $childCheck = mysqli_query(
+                    $connect,
+                    "SELECT id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND project_id='" . $projectId . "' AND status='A' AND (
+                        parent_item_id='" . $parentItemId . "'
+                        OR id IN (
+                            SELECT r.child_board_item_id
+                            FROM " . TASK_ITEM_RELATION . " r
+                            WHERE r.parent_board_item_id='" . $parentItemId . "' AND r.status='A'
+                        )
+                    ) LIMIT 1"
+                );
+                if (!$childCheck || $childCheck->num_rows === 0) {
+                    return $fail('One or more selected work items are no longer active children of this parent.');
+                }
             }
 
             $itemLabelIds = $fieldEnabled('labels')
@@ -5546,7 +5702,9 @@ if (!function_exists('taskBulkApplyChildOperation')) {
         return array(
             'ok' => 1,
             'message' => 'Bulk changes applied successfully.',
-            'items' => taskGetBulkChildWorkItems($connect, $projectId, $parentItemId, 0),
+            'items' => $parentItemId > 0
+                ? taskGetBulkChildWorkItems($connect, $projectId, $parentItemId, 0)
+                : taskGetItemsByIds($connect, $projectId, $refreshedIds),
         );
     }
 }
@@ -5597,11 +5755,14 @@ if (!function_exists('taskCreateStatusLabel')) {
             return array('ok' => 0, 'message' => 'Failed to create task status label.');
         }
 
+        $newLabelId = (int) mysqli_insert_id($connect);
+        taskAuditLog($connect, 'add', TASK_STATUS_LABEL, $newLabelId, "created task status label [<b> ID = $newLabelId</b> ] <b>" . $labelName . "</b>.", $currentUserId, $cdate, $ctime, '', $labelName);
+
         return array(
             'ok' => 1,
             'message' => 'Task status label created successfully.',
             'statusLabel' => array(
-                'id' => (int) mysqli_insert_id($connect),
+                'id' => $newLabelId,
                 'name' => $labelName,
                 'color' => $normalizedColor,
             ),
@@ -9079,11 +9240,14 @@ if (!function_exists('taskCreateColumn')) {
             return array('ok' => 0, 'message' => 'Failed to create status.');
         }
 
+        $newColumnId = (int) mysqli_insert_id($connect);
+        taskAuditLog($connect, 'add', TASK_COLUMN, $newColumnId, "created status [<b> ID = $newColumnId</b> ] <b>" . $columnName . "</b> in project [<b> ID = $projectId</b> ].", $currentUserId, $cdate, $ctime, '', $columnName);
+
         return array(
             'ok' => 1,
             'message' => 'Status created successfully.',
             'column' => array(
-                'id' => (int) mysqli_insert_id($connect),
+                'id' => $newColumnId,
                 'name' => $columnName,
                 'color' => '#DFE1E6',
                 'sort_order' => $sortOrder,
@@ -9132,7 +9296,10 @@ if (!function_exists('taskRenameColumn')) {
             return array('ok' => 0, 'message' => 'Failed to rename status.');
         }
 
-        return array('ok' => 1, 'message' => 'Status renamed successfully.', 'column_name' => $columnName, 'old_column_name' => isset($existsRow['name']) ? (string) $existsRow['name'] : '');
+        $oldColumnName = isset($existsRow['name']) ? (string) $existsRow['name'] : '';
+        taskAuditLog($connect, 'edit', TASK_COLUMN, $columnId, "renamed status [<b> ID = $columnId</b> ] from <b>$oldColumnName</b> to <b>$columnName</b>.", $currentUserId, $cdate, $ctime, $oldColumnName, $columnName);
+
+        return array('ok' => 1, 'message' => 'Status renamed successfully.', 'column_name' => $columnName, 'old_column_name' => $oldColumnName);
     }
 }
 
@@ -9217,7 +9384,10 @@ if (!function_exists('taskDeleteColumn')) {
 
         mysqli_commit($connect);
 
-        return array('ok' => 1, 'message' => 'Status deleted successfully.', 'column_name' => isset($existsRow['name']) ? (string) $existsRow['name'] : '');
+        $deletedColumnName = isset($existsRow['name']) ? (string) $existsRow['name'] : '';
+        taskAuditLog($connect, 'delete', TASK_COLUMN, $columnId, "deleted status [<b> ID = $columnId</b> ] <b>$deletedColumnName</b> from project [<b> ID = $projectId</b> ].", $currentUserId, $cdate, $ctime, $deletedColumnName);
+
+        return array('ok' => 1, 'message' => 'Status deleted successfully.', 'column_name' => $deletedColumnName);
     }
 }
 
@@ -9249,6 +9419,9 @@ if (!function_exists('taskCreateWorkType')) {
         if (!mysqli_query($connect, $insertSql)) {
             return array('ok' => 0, 'message' => 'Failed to create work type.');
         }
+
+        $newWorkTypeId = (int) mysqli_insert_id($connect);
+        taskAuditLog($connect, 'add', TASK_WORK_TYPE, $newWorkTypeId, "created work type [<b> ID = $newWorkTypeId</b> ] <b>" . $name . "</b> in project [<b> ID = $projectId</b> ].", $currentUserId, $cdate, $ctime, '', $name);
 
         return array('ok' => 1, 'message' => 'Work type created successfully.');
     }
@@ -9289,6 +9462,8 @@ if (!function_exists('taskUpdateWorkType')) {
         if (!mysqli_query($connect, $updateSql)) {
             return array('ok' => 0, 'message' => 'Failed to update work type.');
         }
+
+        taskAuditLog($connect, 'edit', TASK_WORK_TYPE, $workTypeId, "updated work type [<b> ID = $workTypeId</b> ] to <b>" . $name . "</b>.", $currentUserId, $cdate, $ctime, '', $name);
 
         return array('ok' => 1, 'message' => 'Work type updated successfully.');
     }
@@ -10748,11 +10923,14 @@ if (!function_exists('taskCreateLabel')) {
             return array('ok' => 0, 'message' => 'Failed to create label.');
         }
 
+        $newLabelId = (int) mysqli_insert_id($connect);
+        taskAuditLog($connect, 'add', TASK_LABEL, $newLabelId, "created label [<b> ID = $newLabelId</b> ] <b>" . $labelName . "</b>.", $currentUserId, $cdate, $ctime, '', $labelName);
+
         return array(
             'ok' => 1,
             'message' => 'Label created successfully.',
             'label' => array(
-                'id' => (int) mysqli_insert_id($connect),
+                'id' => $newLabelId,
                 'name' => $labelName,
                 'color' => $normalizedColor,
             ),
@@ -10807,6 +10985,9 @@ if (!function_exists('taskDeleteLabel')) {
         }
 
         mysqli_commit($connect);
+
+        taskAuditLog($connect, 'delete', TASK_LABEL, $labelId, "deleted label [<b> ID = $labelId</b> ].", $currentUserId, $cdate, $ctime);
+
         return array('ok' => 1, 'message' => 'Label deleted successfully.');
     }
 }
@@ -10874,6 +11055,9 @@ if (!function_exists('taskDeleteStatusLabel')) {
         }
 
         mysqli_commit($connect);
+
+        taskAuditLog($connect, 'delete', TASK_STATUS_LABEL, $statusLabelId, "deleted task status label [<b> ID = $statusLabelId</b> ] <b>$statusName</b>.", $currentUserId, $cdate, $ctime, $statusName);
+
         return array('ok' => 1, 'message' => 'Task status label deleted successfully.');
     }
 }

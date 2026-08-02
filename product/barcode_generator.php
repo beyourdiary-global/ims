@@ -114,6 +114,19 @@ if (post('actionBtn')) {
                     $sqlupd = "UPDATE projects SET barcode_next_number = '" . $finalBarcodeNo . "' WHERE id = '1'";
                     mysqli_query($connect, $sqlupd);
 
+                    audit_log([
+                        'log_act'     => 'edit',
+                        'uid'         => USER_ID,
+                        'cby'         => USER_ID,
+                        'query_rec'   => $sqlupd,
+                        'query_table' => 'projects',
+                        'page'        => $pageTitle,
+                        'connect'     => $connect,
+                        'oldval'      => "barcode_next_number=$barcode_next_number",
+                        'changes'     => "barcode_next_number=$finalBarcodeNo",
+                        'act_msg'     => USER_NAME . " generated " . (int) $page_no . " barcode(s) for product [<b> ID = " . $product . "</b> ] and advanced barcode_next_number to <b>$finalBarcodeNo</b>.",
+                    ]);
+
                     echo '<script>
                         window.onload = function() {
                             var header = document.querySelector(".sticky-top");

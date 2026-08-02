@@ -2,6 +2,7 @@
   "use strict";
 
   var config = window.taskBulkEditConfig || {};
+  var mode = config.mode === "project" ? "project" : "parent";
   var state = {
     step: 1,
     parentId: 0,
@@ -83,6 +84,7 @@
   }
 
   function updateUrlStep(step) {
+    if (mode === "project") return;
     var url = new URL(window.location.href);
     url.searchParams.set("project_id", String(config.projectId || 0));
     url.searchParams.set("step", String(step));
@@ -94,7 +96,8 @@
     if (!table) return;
     var tbody = table.querySelector("tbody");
     if (!state.items.length) {
-      tbody.innerHTML = '<tr><td colspan="7" class="task-bulk-empty">This parent has no active child work items.</td></tr>';
+      var emptyText = mode === "project" ? "No work items available." : "This parent has no active child work items.";
+      tbody.innerHTML = '<tr><td colspan="7" class="task-bulk-empty">' + escapeHtml(emptyText) + '</td></tr>';
       updateSelectionUi();
       return;
     }
@@ -136,7 +139,12 @@
 
   function renderParentSummary() {
     var summary = byId("taskBulkParentSummary");
-    if (!summary || !state.parent) return;
+    if (!summary) return;
+    if (mode === "project") {
+      summary.textContent = state.items.length + " work item" + (state.items.length === 1 ? "" : "s") + " selected";
+      return;
+    }
+    if (!state.parent) return;
     summary.innerHTML = "Children of <strong>" + escapeHtml(state.parent.work_item_key || "") + "</strong> " + escapeHtml(state.parent.title || "") + " (" + state.items.length + " available)";
   }
 
@@ -639,16 +647,32 @@
     if (!button || button.disabled) return;
     button.disabled = true;
     button.textContent = "Applying...";
-      postAction({
-      bulk_action: "apply",
-      project_id: config.projectId,
-      parent_item_id: state.parentId,
-      selected_item_ids: state.selectedIds,
-      operation: state.operation,
-      changes_json: JSON.stringify(state.changes),
-    }).then(function () {
-      var returnUrl = String(config.siteUrl || "") + "/task/board.php?project_id=" + encodeURIComponent(config.projectId || 0) + "#task-item-" + encodeURIComponent(state.parentId);
+    var payload = mode === "project"
+      ? {
+        task_action: "sheets_bulk_apply",
+        project_id: config.projectId,
+        parent_item_id: 0,
+        selected_item_ids: state.selectedIds,
+        operation: state.operation,
+        changes_json: JSON.stringify(state.changes),
+      }
+      : {
+        bulk_action: "apply",
+        project_id: config.projectId,
+        parent_item_id: state.parentId,
+        selected_item_ids: state.selectedIds,
+        operation: state.operation,
+        changes_json: JSON.stringify(state.changes),
+      };
+    postAction(payload).then(function (result) {
       clearAlert();
+      if (mode === "project") {
+        button.disabled = false;
+        button.textContent = "Confirm";
+        if (typeof state.onSuccess === "function") state.onSuccess(result);
+        return;
+      }
+      var returnUrl = String(config.siteUrl || "") + "/task/board.php?project_id=" + encodeURIComponent(config.projectId || 0) + "#task-item-" + encodeURIComponent(state.parentId);
       if (typeof window.confirmationDialog === "function") {
         window.confirmationDialog("", "", "Child Work Items", "", returnUrl, "E");
       } else {
@@ -713,10 +737,32 @@
     if (confirmButton) confirmButton.addEventListener("click", applyChanges);
   }
 
+  function resetForNewSelection(items, selectedIds, onSuccess) {
+    state.step = 1;
+    state.parentId = 0;
+    state.parent = null;
+    state.items = Array.isArray(items) ? items : [];
+    state.selectedIds = Array.isArray(selectedIds) ? selectedIds.slice() : [];
+    state.operation = "";
+    state.changes = { fields: {} };
+    state.onSuccess = typeof onSuccess === "function" ? onSuccess : null;
+    clearAlert();
+    renderParentSummary();
+    renderItems();
+    showStep(1);
+  }
+
   document.addEventListener("DOMContentLoaded", function () {
     bindEvents();
+    if (mode === "project") return;
     loadItems();
     var requestedStep = Number(new URL(window.location.href).searchParams.get("step")) || 1;
     if (requestedStep > 1 && requestedStep <= 4) showStep(1);
   });
+
+  if (mode === "project") {
+    window.TaskBulkEdit = {
+      openWithItems: resetForNewSelection,
+    };
+  }
 })();
