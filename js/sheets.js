@@ -2836,6 +2836,19 @@
     openBulkEditModal();
   });
 
+  $(document).on("click", ".sheets-cell-key", function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var $tr = $(this).closest("tr");
+    var itemId = Number($tr.data("item-id")) || 0;
+    if (!itemId) return;
+    var item = allItems.find(function (it) {
+      return Number(it.id || 0) === itemId;
+    });
+    if (!item) return;
+    openItemDetailModal(item);
+  });
+
   /* ───── close dropdowns on outside click ───── */
   $(document).on("click", function (e) {
     if (
