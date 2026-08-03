@@ -856,9 +856,10 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                     <thead>
                                         <tr>
                                             <th width="60"><input type="checkbox" class="check-all-orders"></th>
-                                            <th width="60">S/N</th>
+                                            <th width="40">S/N</th>
                                             <th>Platform</th>
                                             <th>Order ID</th>
+                                            <th>Package</th>
                                             <th>Action</th>
                                             <th>Stock Out Warehouse</th>
                                             <th>Customer</th>
@@ -900,6 +901,10 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                                 }
                                                 $orderViewUrl = shopeeOmsGetOrderSourceViewUrl($rowSourceConfig, (int) $row['id']);
                                                 $orderCode = shopeeOmsGetOrderCodeValue($row, $rowSourceConfig);
+                                                $rowPackageSummaryData = function_exists('shopeeOmsBuildOrderProductSummaryBySource')
+                                                    ? shopeeOmsBuildOrderProductSummaryBySource($connect, $row, $rowPlatform)
+                                                    : array();
+                                                $rowPackageSummary = isset($rowPackageSummaryData['package_summary']) ? trim((string) $rowPackageSummaryData['package_summary']) : '';
                                                 $delayRemarkField = isset($rowSourceConfig['delay_remark_field']) && trim((string) $rowSourceConfig['delay_remark_field']) !== ''
                                                     ? trim((string) $rowSourceConfig['delay_remark_field'])
                                                     : 'delay_remark';
@@ -923,6 +928,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                                             <?= htmlspecialchars($orderCode) ?>
                                                         <?php } ?>
                                                     </td>
+                                                    <td><?= htmlspecialchars($rowPackageSummary !== '' ? $rowPackageSummary : '-') ?></td>
                                                     <td class="shopee-arrival-action-cell">
                                                         <?php if ($statusCode === 'WAERD' && $canAssign) { ?>
                                                             <button
@@ -974,7 +980,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                             <?php } ?>
                                         <?php } else { ?>
                                             <tr>
-                                                <td colspan="11" class="text-center">No WAERD, Waiting Receive, or Postponed orders found.</td>
+                                                <td colspan="12" class="text-center">No WAERD, Waiting Receive, or Postponed orders found.</td>
                                             </tr>
                                         <?php } ?>
                                     </tbody>
@@ -1235,7 +1241,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                 autoWidth: false,
                 order: [],
                 columnDefs: [
-                    { orderable: false, searchable: false, targets: [0, 1, 4, 10] }
+                    { orderable: false, searchable: false, targets: [0, 1, 5, 11] }
                 ]
             });
             datatableAlignment(tableElement.id);

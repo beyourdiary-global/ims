@@ -443,7 +443,11 @@ body.sheets-col-resizing * {
 .sheets-cell-key {
   color: #0c66e4;
   font-weight: 500;
-  cursor: default;
+  cursor: pointer;
+}
+
+.sheets-cell-key:hover {
+  text-decoration: underline;
 }
 
 /* ===== Assignee / Reporter with avatar ===== */

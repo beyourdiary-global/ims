@@ -6,7 +6,12 @@ $pageTitle = 'Sheets';
 $taskParentTitle = 'Project Task';
 $taskPermissionPin = $taskParentPin;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') !== '') {
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['task_action'])
+    && !is_array($_POST['task_action'])
+    && trim((string) $_POST['task_action']) !== ''
+) {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
@@ -274,7 +279,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') !== '') {
             exit;
         }
 
-        $result = taskBulkApplyChildOperation($connect, $currentProjectId, 0, $itemIds, $operation, $changes, $currentUserId, $cdate, $ctime);
+        ob_start();
+        try {
+            $result = taskBulkApplyChildOperation($connect, $currentProjectId, 0, $itemIds, $operation, $changes, $currentUserId, $cdate, $ctime);
+        } catch (Throwable $e) {
+            if ($connect instanceof mysqli && $connect->connect_errno === 0) {
+                @mysqli_rollback($connect);
+            }
+            $result = array('ok' => 0, 'message' => 'The bulk operation failed unexpectedly. No changes were saved.');
+            error_log('sheets_bulk_apply failed: ' . $e->getMessage());
+        }
+        ob_end_clean();
         header('Content-Type: application/json');
         echo json_encode($result);
         exit;
