@@ -73,6 +73,32 @@
   animation: sheets-refresh-spin 0.9s linear infinite;
 }
 
+.sheets-toolbar-btn.sheets-btn-bulk-edit {
+  width: auto;
+  padding: 0 12px;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  border: 1px solid #d0d5dd;
+}
+
+.sheets-toolbar-btn.sheets-btn-bulk-edit i {
+  font-size: 13px;
+}
+
+.sheets-toolbar-btn.sheets-btn-bulk-edit:disabled {
+  color: #a5adba;
+  border-color: #ebecf0;
+  cursor: not-allowed;
+  background: transparent;
+}
+
+.sheets-toolbar-btn.sheets-btn-bulk-edit:not(:disabled):hover {
+  background: #e9f2ff;
+  color: #0c66e4;
+  border-color: #4c9aff;
+}
+
 .sheets-search-wrap {
   position: relative;
   display: flex;
@@ -212,6 +238,25 @@ body.sheets-col-resizing * {
 
 .sheets-table thead th:last-child {
   border-right: none;
+}
+
+.sheets-table thead th.sheets-check-cell,
+.sheets-table tbody td.sheets-check-cell {
+  width: 36px;
+  min-width: 36px;
+  max-width: 36px;
+  padding: 0;
+  text-align: center;
+  vertical-align: middle;
+  overflow: visible;
+}
+
+.sheets-check-cell input[type="checkbox"] {
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  vertical-align: middle;
+  cursor: pointer;
 }
 
 .sheets-th-inner {
