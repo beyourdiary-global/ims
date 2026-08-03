@@ -6,7 +6,12 @@ $pageTitle = 'Sheets';
 $taskParentTitle = 'Project Task';
 $taskPermissionPin = $taskParentPin;
 
-if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') !== '') {
+if (
+    $_SERVER['REQUEST_METHOD'] === 'POST'
+    && isset($_POST['task_action'])
+    && !is_array($_POST['task_action'])
+    && trim((string) $_POST['task_action']) !== ''
+) {
     include_once '../include/connection.php';
     include_once ROOT . '/include/common.php';
     include_once ROOT . '/include/common_variable.php';
