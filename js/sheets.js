@@ -34,6 +34,7 @@
   /* ───── state ───── */
   var allItems = cfg.items || [];
   var displayItems = [];
+  var selectedItemIds = [];
   var sortCol = "";
   var sortDir = ""; // '' | 'asc' | 'desc'
   var activeFilters = {}; // colKey -> { type, values/text/from/to ... }
@@ -900,6 +901,9 @@
     applyFiltersAndSort();
     var $wrap = $("#sheetsTableWrap");
     var html = '<table class="sheets-table"><colgroup>';
+    if (window.TaskBulkEdit) {
+      html += '<col class="sheets-check-col" style="width:36px;">';
+    }
     COLUMNS.forEach(function (c) {
       html +=
         '<col class="' +
@@ -909,6 +913,17 @@
         'px;">';
     });
     html += "</colgroup><thead><tr>";
+    if (window.TaskBulkEdit) {
+      var headerAllChecked =
+        displayItems.length > 0 &&
+        displayItems.every(function (item) {
+          return selectedItemIds.indexOf(Number(item.id)) !== -1;
+        });
+      html +=
+        '<th class="sheets-check-cell"><input type="checkbox" id="sheetsSelectAllCheck"' +
+        (headerAllChecked ? " checked" : "") +
+        "></th>";
+    }
     COLUMNS.forEach(function (c, colIdx) {
       var sortCls = sortCol === c.key ? " sort-active" : "";
       var sortIcon =
@@ -975,7 +990,7 @@
           '<tr class="sheets-group-row" data-group="' +
           esc(gv) +
           '"><td colspan="' +
-          COLUMNS.length +
+          (COLUMNS.length + (window.TaskBulkEdit ? 1 : 0)) +
           '">' +
           '<i class="fa-solid ' +
           icon +
@@ -1004,6 +1019,71 @@
     html += "</tbody></table>";
     $wrap.html(html);
     updateToolbarInfo();
+    updateBulkToolbarState();
+  }
+
+  /* ───── bulk edit selection ───── */
+
+  function pruneSelection() {
+    if (!selectedItemIds.length) return;
+    var existingIds = {};
+    allItems.forEach(function (item) {
+      existingIds[Number(item.id)] = true;
+    });
+    selectedItemIds = selectedItemIds.filter(function (id) {
+      return !!existingIds[id];
+    });
+  }
+
+  function updateBulkToolbarState() {
+    var $btn = $("#sheetsBulkEditBtn");
+    if ($btn.length) {
+      $btn.prop("disabled", selectedItemIds.length === 0);
+    }
+    var $selectAll = $("#sheetsSelectAllCheck");
+    if ($selectAll.length) {
+      var allChecked =
+        displayItems.length > 0 &&
+        displayItems.every(function (item) {
+          return selectedItemIds.indexOf(Number(item.id)) !== -1;
+        });
+      var anyChecked = displayItems.some(function (item) {
+        return selectedItemIds.indexOf(Number(item.id)) !== -1;
+      });
+      $selectAll.prop("checked", allChecked);
+      $selectAll.prop("indeterminate", !allChecked && anyChecked);
+    }
+  }
+
+  function openBulkEditModal() {
+    if (!window.TaskBulkEdit || !selectedItemIds.length) return;
+    var selectedSet = {};
+    selectedItemIds.forEach(function (id) {
+      selectedSet[id] = true;
+    });
+    var itemsForBulkEdit = allItems
+      .filter(function (item) {
+        return !!selectedSet[Number(item.id)];
+      })
+      .map(function (item) {
+        return $.extend({}, item, {
+          status_name: getColumnName(Number(item.column_id)),
+        });
+      });
+
+    var $modalEl = $("#sheetsBulkEditModal");
+    if (!$modalEl.length || typeof bootstrap === "undefined") return;
+    var modalInstance = bootstrap.Modal.getOrCreateInstance($modalEl[0]);
+    window.TaskBulkEdit.openWithItems(
+      itemsForBulkEdit,
+      selectedItemIds.slice(),
+      function () {
+        modalInstance.hide();
+        selectedItemIds = [];
+        refreshData();
+      },
+    );
+    modalInstance.show();
   }
 
   function applyColumnWidth(colKey, px, saveImmediately) {
@@ -1026,7 +1106,8 @@
       return;
     }
 
-    $table.find("colgroup col").eq(colIndex).css("width", width + "px");
+    var colOffset = window.TaskBulkEdit ? 1 : 0;
+    $table.find("colgroup col").eq(colIndex + colOffset).css("width", width + "px");
     if (saveImmediately !== false) {
       saveViewPrefs();
     }
@@ -1056,6 +1137,9 @@
 
   function renderSummaryRow() {
     var html = '<tr class="sheets-summary-row">';
+    if (window.TaskBulkEdit) {
+      html += "<td></td>";
+    }
     COLUMNS.forEach(function (c) {
       if (c.key === "work_item_key") {
         html += "<td>" + displayItems.length + " work items</td>";
@@ -1126,6 +1210,15 @@
 
   function renderRow(item) {
     var html = '<tr data-item-id="' + item.id + '">';
+    if (window.TaskBulkEdit) {
+      var itemChecked = selectedItemIds.indexOf(Number(item.id)) !== -1;
+      html +=
+        '<td class="sheets-check-cell"><input type="checkbox" class="sheets-row-check" data-item-id="' +
+        item.id +
+        '"' +
+        (itemChecked ? " checked" : "") +
+        "></td>";
+    }
     COLUMNS.forEach(function (c) {
       var editCls =
         canEditCellByPermission(item, c.key) && c.editable && c.key !== "work_item_key"
@@ -1290,6 +1383,7 @@
           cfg.itemsByColumn = resp.itemsByColumn || {};
           cfg.items = resp.items || [];
           allItems = flattenItems();
+          pruneSelection();
           saveViewPrefs();
           renderTable();
         }
@@ -2706,6 +2800,41 @@
       item.id;
     window.location.href = boardUrl;
   }
+
+  /* ───── bulk edit selection handlers ───── */
+  $(document).on("change", ".sheets-row-check", function () {
+    var id = Number($(this).data("item-id")) || 0;
+    if ($(this).is(":checked")) {
+      if (selectedItemIds.indexOf(id) === -1) selectedItemIds.push(id);
+    } else {
+      selectedItemIds = selectedItemIds.filter(function (selectedId) {
+        return selectedId !== id;
+      });
+    }
+    updateBulkToolbarState();
+  });
+
+  $(document).on("change", "#sheetsSelectAllCheck", function () {
+    var checked = $(this).is(":checked");
+    var visibleIds = displayItems.map(function (item) {
+      return Number(item.id);
+    });
+    if (checked) {
+      visibleIds.forEach(function (id) {
+        if (selectedItemIds.indexOf(id) === -1) selectedItemIds.push(id);
+      });
+    } else {
+      selectedItemIds = selectedItemIds.filter(function (id) {
+        return visibleIds.indexOf(id) === -1;
+      });
+    }
+    renderTable();
+  });
+
+  $(document).on("click", "#sheetsBulkEditBtn", function (e) {
+    e.preventDefault();
+    openBulkEditModal();
+  });
 
   /* ───── close dropdowns on outside click ───── */
   $(document).on("click", function (e) {

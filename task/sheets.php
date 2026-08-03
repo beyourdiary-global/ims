@@ -253,6 +253,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') !== '') {
         exit;
     }
 
+    if ($taskAction === 'sheets_bulk_apply') {
+        $operation = strtolower(trim((string) post('operation')));
+        $requiredAction = $operation === 'delete' ? 'delete' : 'edit';
+        if (!taskIsActionAllowed($requiredAction, $pinAccess)) {
+            header('Content-Type: application/json');
+            echo json_encode(array('ok' => 0, 'message' => 'You do not have permission to perform this bulk operation.'));
+            exit;
+        }
+
+        $itemIds = filter_has_var(INPUT_POST, 'selected_item_ids') ? $_POST['selected_item_ids'] : array();
+        if (!is_array($itemIds)) {
+            $itemIds = array($itemIds);
+        }
+        $changesJson = post('changes_json') !== '' ? post('changes_json') : '{}';
+        $changes = json_decode($changesJson, true);
+        if (!is_array($changes)) {
+            header('Content-Type: application/json');
+            echo json_encode(array('ok' => 0, 'message' => 'Invalid bulk change details.'));
+            exit;
+        }
+
+        $result = taskBulkApplyChildOperation($connect, $currentProjectId, 0, $itemIds, $operation, $changes, $currentUserId, $cdate, $ctime);
+        header('Content-Type: application/json');
+        echo json_encode($result);
+        exit;
+    }
+
     header('Content-Type: application/json');
     echo json_encode(array('ok' => 0, 'message' => 'Invalid task action.'));
     exit;
@@ -320,6 +347,8 @@ $assignees = taskGetAssignees($connect);
 $labels = taskGetLabels($connect);
 $statusLabels = taskGetStatusLabels($connect);
 $columns = taskGetColumns($connect, $currentProjectId);
+$allColumnsForBulk = $columns;
+$parentOptionsForBulk = taskGetEpicParentOptions($connect, 0, $currentProjectId);
 $allItems = taskGetAllItemsFlat($connect, $currentProjectId);
 $itemsByColumn = taskGetItemsGroupedByColumn($connect, $currentProjectId);
 $sheetsColumns = taskGetSheetsColumns($connect, $currentUserId, $currentProjectId);
@@ -332,6 +361,12 @@ if (!$hasFullProjectAccess) {
         return isset($column['id']) && in_array((int) $column['id'], $allowedStatusIds, true);
     }));
 }
+
+// Work types for the bulk-edit wizard's Move operation: exclude parent/Epic work types,
+// since a work item being bulk-edited (child-level) cannot be retyped as a parent.
+$workTypesForBulk = array_values(array_filter($workTypes, function ($workType) {
+    return !taskIsParentWorkTypeName(isset($workType['name']) ? $workType['name'] : '');
+}));
 
 // Work types for JS (keep svg_icon as file path for <img> rendering)
 $workTypesForJs = array();
@@ -353,6 +388,7 @@ if (empty($_SESSION['csrf_token'])) {
     <link rel="stylesheet" href="../css/main.css">
     <link rel="stylesheet" href="../css/task.css">
     <link rel="stylesheet" href="../css/sheets.css">
+    <link rel="stylesheet" href="../css/task_bulk_edit.css">
 </head>
 <body>
 <div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
@@ -393,6 +429,11 @@ if (empty($_SESSION['csrf_token'])) {
                         </div>
                     </div>
                     <div class="sheets-toolbar-right">
+                        <?php if ($workItemCanEdit || $workItemCanDelete): ?>
+                        <button class="sheets-toolbar-btn sheets-btn-bulk-edit" id="sheetsBulkEditBtn" type="button" title="Bulk Edit" disabled>
+                            <i class="fa-solid fa-list-check"></i> Bulk Edit
+                        </button>
+                        <?php endif; ?>
                         <button class="sheets-toolbar-btn sheets-btn-collapse" title="Collapse/Expand groups">
                             <i class="fa-solid fa-arrows-up-down"></i>
                         </button>
@@ -426,6 +467,9 @@ if (empty($_SESSION['csrf_token'])) {
 </div>
 
 <?php include_once './board_item_detail_modal.php'; ?>
+<?php if ($workItemCanEdit || $workItemCanDelete): ?>
+<?php include_once './sheets_bulk_edit_modal.php'; ?>
+<?php endif; ?>
 <?php taskRenderCreateProjectModal(); ?>
 
 <div id="taskBoardToastHost" class="task-board-toast-host" aria-live="polite" aria-atomic="true"></div>
@@ -485,5 +529,8 @@ window.sheetsConfig = {
 <script src="<?= $SITEURL ?>/header/tinymce/tinymce.min.js"></script>
 <script src="../js/text_editor.js"></script>
 <script src="../js/sheets.js"></script>
+<?php if ($workItemCanEdit || $workItemCanDelete): ?>
+<script src="../js/task_bulk_edit.js"></script>
+<?php endif; ?>
 </body>
 </html>

@@ -4776,13 +4776,30 @@ if (!function_exists('taskGetBulkChildWorkItems')) {
         }
 
         $rows = array();
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+        }
+
+        return taskMapBulkWorkItemRows($connect, $projectId, $rows);
+    }
+}
+
+if (!function_exists('taskMapBulkWorkItemRows')) {
+    function taskMapBulkWorkItemRows($connect, $projectId, $rows)
+    {
+        $projectId = (int) $projectId;
+        $items = array();
+        $rows = is_array($rows) ? $rows : array();
+        if (empty($rows)) {
+            return $items;
+        }
+
         $itemIds = array();
         $columnIds = array();
         $projectKeyIds = array();
         $workTypeIds = array();
         $userIds = array();
-        while ($row = $result->fetch_assoc()) {
-            $rows[] = $row;
+        foreach ($rows as $row) {
             $itemIds[] = isset($row['id']) ? (int) $row['id'] : 0;
             $columnIds[] = isset($row['column_id']) ? (int) $row['column_id'] : 0;
             $projectKeyIds[] = isset($row['project_key_id']) ? (int) $row['project_key_id'] : 0;
@@ -4872,6 +4889,38 @@ if (!function_exists('taskGetBulkChildWorkItems')) {
     }
 }
 
+if (!function_exists('taskGetItemsByIds')) {
+    function taskGetItemsByIds($connect, $projectId, $itemIds)
+    {
+        $projectId = (int) $projectId;
+        $itemIds = taskUniquePositiveIntIds($itemIds);
+        if ($projectId <= 0 || empty($itemIds)) {
+            return array();
+        }
+
+        $sql = "SELECT id,project_id,column_id,title,work_type_id,project_key_id,
+                       assignee_user_id,reporter_user_id,priority,original_estimate,
+                       task_status,parent_item_id,time_tracking,remaining_estimate_seconds,
+                       start_date,due_date,amendement_date,amendement_time,
+                       second_amendement_date,second_amendement_time,sort_order
+                FROM " . TASK_ITEM . "
+                WHERE status='A' AND project_id='" . $projectId . "' AND id IN (" . implode(',', $itemIds) . ")
+                ORDER BY sort_order ASC, id ASC";
+
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return array();
+        }
+
+        $rows = array();
+        while ($row = $result->fetch_assoc()) {
+            $rows[] = $row;
+        }
+
+        return taskMapBulkWorkItemRows($connect, $projectId, $rows);
+    }
+}
+
 if (!function_exists('taskGetBulkChildSelection')) {
     function taskGetBulkChildSelection($connect, $projectId, $parentItemId, $itemIds, $maxItems = 1000)
     {
@@ -4928,6 +4977,50 @@ if (!function_exists('taskGetBulkChildSelection')) {
             'items' => $selectedItems,
             'all_items' => $allItems,
             'parent' => array('id' => $parentItemId, 'project_id' => $projectId, 'work_type_name' => (string) $parentTypeName),
+        );
+    }
+}
+
+if (!function_exists('taskGetProjectItemSelection')) {
+    function taskGetProjectItemSelection($connect, $projectId, $itemIds, $maxItems = 1000)
+    {
+        $projectId = (int) $projectId;
+        $maxItems = max(1, (int) $maxItems);
+        $itemIds = taskUniquePositiveIntIds($itemIds);
+        if ($projectId <= 0) {
+            return array('ok' => 0, 'message' => 'Invalid project.', 'items' => array());
+        }
+        if (empty($itemIds)) {
+            return array('ok' => 0, 'message' => 'Select at least one work item.', 'items' => array());
+        }
+        if (count($itemIds) > $maxItems) {
+            return array('ok' => 0, 'message' => 'Bulk changes are limited to ' . $maxItems . ' work items.', 'items' => array());
+        }
+
+        $foundItems = taskGetItemsByIds($connect, $projectId, $itemIds);
+        $itemMap = array();
+        foreach ($foundItems as $item) {
+            $itemMap[(int) $item['id']] = $item;
+        }
+        $selectedItems = array();
+        $missingIds = array();
+        foreach ($itemIds as $itemId) {
+            if (!isset($itemMap[$itemId])) {
+                $missingIds[] = $itemId;
+                continue;
+            }
+            $selectedItems[] = $itemMap[$itemId];
+        }
+        if (!empty($missingIds)) {
+            return array('ok' => 0, 'message' => 'One or more selected work items are no longer active in this project.', 'items' => array(), 'missing_ids' => $missingIds);
+        }
+
+        return array(
+            'ok' => 1,
+            'message' => '',
+            'items' => $selectedItems,
+            'all_items' => $selectedItems,
+            'parent' => null,
         );
     }
 }
@@ -5084,10 +5177,13 @@ if (!function_exists('taskBulkApplyChildOperation')) {
         $operation = strtolower(trim((string) $operation));
         $changes = is_array($changes) ? $changes : array();
         $currentUserId = (int) $currentUserId;
-        $selection = taskGetBulkChildSelection($connect, $projectId, $parentItemId, $itemIds, 1000);
+        $selection = $parentItemId > 0
+            ? taskGetBulkChildSelection($connect, $projectId, $parentItemId, $itemIds, 1000)
+            : taskGetProjectItemSelection($connect, $projectId, $itemIds, 1000);
         if (empty($selection['ok'])) {
             return $selection;
         }
+        $refreshedIds = array_column($selection['items'], 'id');
 
         $editOperation = $operation === 'edit';
         $moveOperation = $operation === 'move';
@@ -5322,16 +5418,18 @@ if (!function_exists('taskBulkApplyChildOperation')) {
             $statusLabelNameMap[(int) $label['id']] = (string) $label['name'];
         }
 
-        $parentLockResult = mysqli_query(
-            $connect,
-            "SELECT id,project_id,status FROM " . TASK_ITEM . " WHERE id='" . $parentItemId . "' FOR UPDATE"
-        );
-        if (!$parentLockResult || $parentLockResult->num_rows === 0) {
-            return $fail('The parent work item is no longer available.');
-        }
-        $parentLockRow = $parentLockResult->fetch_assoc();
-        if ((int) $parentLockRow['project_id'] !== $projectId || (string) $parentLockRow['status'] !== 'A') {
-            return $fail('The parent work item is no longer active in this project.');
+        if ($parentItemId > 0) {
+            $parentLockResult = mysqli_query(
+                $connect,
+                "SELECT id,project_id,status FROM " . TASK_ITEM . " WHERE id='" . $parentItemId . "' FOR UPDATE"
+            );
+            if (!$parentLockResult || $parentLockResult->num_rows === 0) {
+                return $fail('The parent work item is no longer available.');
+            }
+            $parentLockRow = $parentLockResult->fetch_assoc();
+            if ((int) $parentLockRow['project_id'] !== $projectId || (string) $parentLockRow['status'] !== 'A') {
+                return $fail('The parent work item is no longer active in this project.');
+            }
         }
 
         $sourceColumns = array();
@@ -5361,19 +5459,21 @@ if (!function_exists('taskBulkApplyChildOperation')) {
                 return $fail('One or more selected work items are no longer active.');
             }
 
-            $childCheck = mysqli_query(
-                $connect,
-                "SELECT id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND project_id='" . $projectId . "' AND status='A' AND (
-                    parent_item_id='" . $parentItemId . "'
-                    OR id IN (
-                        SELECT r.child_board_item_id
-                        FROM " . TASK_ITEM_RELATION . " r
-                        WHERE r.parent_board_item_id='" . $parentItemId . "' AND r.status='A'
-                    )
-                ) LIMIT 1"
-            );
-            if (!$childCheck || $childCheck->num_rows === 0) {
-                return $fail('One or more selected work items are no longer active children of this parent.');
+            if ($parentItemId > 0) {
+                $childCheck = mysqli_query(
+                    $connect,
+                    "SELECT id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND project_id='" . $projectId . "' AND status='A' AND (
+                        parent_item_id='" . $parentItemId . "'
+                        OR id IN (
+                            SELECT r.child_board_item_id
+                            FROM " . TASK_ITEM_RELATION . " r
+                            WHERE r.parent_board_item_id='" . $parentItemId . "' AND r.status='A'
+                        )
+                    ) LIMIT 1"
+                );
+                if (!$childCheck || $childCheck->num_rows === 0) {
+                    return $fail('One or more selected work items are no longer active children of this parent.');
+                }
             }
 
             $itemLabelIds = $fieldEnabled('labels')
@@ -5602,7 +5702,9 @@ if (!function_exists('taskBulkApplyChildOperation')) {
         return array(
             'ok' => 1,
             'message' => 'Bulk changes applied successfully.',
-            'items' => taskGetBulkChildWorkItems($connect, $projectId, $parentItemId, 0),
+            'items' => $parentItemId > 0
+                ? taskGetBulkChildWorkItems($connect, $projectId, $parentItemId, 0)
+                : taskGetItemsByIds($connect, $projectId, $refreshedIds),
         );
     }
 }
