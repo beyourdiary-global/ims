@@ -4311,6 +4311,9 @@ function renderBoardGroupingLayout() {
   updateAllColumnCounts();
   refreshEmptyBoardState();
   applyBoardFilters();
+  if (typeof dropdownMenuDispFix === "function") {
+    dropdownMenuDispFix();
+  }
 }
 
 function refreshBoardGroupingLayout() {
