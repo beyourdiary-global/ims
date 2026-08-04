@@ -567,6 +567,7 @@ $menuList = array(
 
 <?php
 $taskCurrentPath = '';
+$isTaskViewMyTaskPage = false;
 $isTaskSummaryPage = false;
 $isTaskBoardPage = false;
 $isTaskSheetsPage = false;
@@ -583,6 +584,7 @@ if ($hasTaskManagementAccess) {
     $taskCurrentPath = isset($_SERVER['REQUEST_URI']) ? (string) parse_url($_SERVER['REQUEST_URI'], PHP_URL_PATH) : '';
 
     if (strpos($taskCurrentPath, '/task/') !== false) {
+        $isTaskViewMyTaskPage = strpos($taskCurrentPath, '/task/view_my_task.php') !== false;
         $isTaskSummaryPage = strpos($taskCurrentPath, '/task/summary.php') !== false;
         $isTaskBoardPage = strpos($taskCurrentPath, '/task/board.php') !== false;
         $isTaskSheetsPage = strpos($taskCurrentPath, '/task/sheets.php') !== false;
@@ -590,7 +592,9 @@ if ($hasTaskManagementAccess) {
         $isTaskProjectUserAccessPage = strpos($taskCurrentPath, '/task/project_user_access.php') !== false;
         $taskCurrentProjectId = taskResolveCurrentProjectId($connect, (int) numberInput('project_id'));
 
-        if ($isTaskSummaryPage) {
+        if ($isTaskViewMyTaskPage) {
+            $taskActiveMenuKey = 'view_my_task';
+        } elseif ($isTaskSummaryPage) {
             $taskActiveMenuKey = 'summary';
         } elseif ($isTaskBoardPage) {
             $taskActiveMenuKey = 'board';
@@ -794,7 +798,7 @@ if ($hasTaskManagementAccess) {
 
         <div class="task-global-project-section">
             <div class="task-global-project-header">
-                <span>Project Task</span>
+                <span><a href="<?= $SITEURL ?>/task/project_dashboard.php" class="task-global-project-dashboard-link">Project Task</a></span>
 
                 <?php if ($canCreateTaskProject): ?>
                     <button type="button"
@@ -870,6 +874,12 @@ if ($hasTaskManagementAccess) {
 
                         <ul class="task-global-project-submenu <?= $isActiveProject ? 'active' : '' ?>"
                             id="<?= $projectItemPanelId ?>">
+                            <?php if ($projectHasSummaryAccess): ?>
+                                    <a class="<?= $isTaskViewMyTaskPage && $isActiveProject ? 'task-global-link-active' : '' ?>"
+                                       href="<?= $SITEURL ?>/task/view_my_task.php?project_id=<?= $pid ?>">
+                                        View My Task
+                                    </a>
+                            <?php endif; ?>
                             <?php if ($projectHasSummaryAccess): ?>
                                     <a class="<?= $isTaskSummaryPage && $isActiveProject ? 'task-global-link-active' : '' ?>"
                                        href="<?= $SITEURL ?>/task/summary.php?project_id=<?= $pid ?>">

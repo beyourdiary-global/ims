@@ -5973,10 +5973,34 @@ body.task-board-page .task-board-scroll {
 }
 
 .task-item-detail-estimate-wrap {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
+  display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 0.55rem;
+}
+
+.task-item-detail-estimate-wrap #taskItemDetailEstimateValueInput {
+  flex: 1 1 40px;
+  min-width: 40px;
+}
+
+.task-item-detail-estimate-wrap #taskItemDetailEstimateUnitInput {
+  flex: 1 1 76px;
+  min-width: 76px;
+}
+
+.task-item-detail-estimate-extra-minutes {
+  flex: 0 0 44px;
+  min-width: 0;
+  padding-left: 0.4rem;
+  padding-right: 0.4rem;
+}
+
+.task-item-detail-estimate-extra-minutes-label {
+  flex: 0 0 auto;
+  font-size: 0.82rem;
+  color: #626f86;
+  white-space: nowrap;
 }
 
 .task-item-detail-side-col .form-control,
@@ -7804,7 +7828,8 @@ body.task-board-page .task-board-scroll {
   }
 
   .task-item-detail-estimate-wrap {
-    grid-template-columns: 1fr;
+    flex-direction: column;
+    align-items: stretch;
   }
 
   .task-item-worklog-display {

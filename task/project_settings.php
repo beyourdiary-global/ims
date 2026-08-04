@@ -60,6 +60,7 @@ if (!function_exists('taskProjectSettingsAuditSnapshot')) {
             'work_types' => taskProjectSettingsRowsById(taskGetWorkTypes($connect, $projectId)),
             'labels' => taskProjectSettingsRowsById(taskGetLabels($connect)),
             'status_labels' => taskProjectSettingsRowsById(taskGetStatusLabels($connect)),
+            'priority_status_ids' => $projectId > 0 ? taskGetProjectPriorityStatusIds($connect, $projectId) : array(),
         );
     }
 }
@@ -555,6 +556,45 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && post('task_action') === 'save_proje
                     $auditChange
                 );
             }
+
+            if ($canEdit) {
+                $oldPriorityStatusIds = isset($oldSettingsAuditSnapshot['priority_status_ids']) ? $oldSettingsAuditSnapshot['priority_status_ids'] : array();
+                $priorityResult = taskSaveProjectPriorityStatuses(
+                    $connect,
+                    $currentProjectId,
+                    (int) post('priority_status_id_1'),
+                    (int) post('priority_status_id_2'),
+                    $currentUserId,
+                    $cdate,
+                    $ctime
+                );
+
+                if (!empty($priorityResult['ok'])) {
+                    $newPriorityStatusIds = array_filter(array(
+                        isset($priorityResult['priority_status_id_1']) ? (int) $priorityResult['priority_status_id_1'] : 0,
+                        isset($priorityResult['priority_status_id_2']) ? (int) $priorityResult['priority_status_id_2'] : 0,
+                    ));
+                    $oldPriorityLabel = !empty($oldPriorityStatusIds) ? implode(', ', $oldPriorityStatusIds) : 'None';
+                    $newPriorityLabel = !empty($newPriorityStatusIds) ? implode(', ', $newPriorityStatusIds) : 'None';
+                    if ($oldPriorityLabel !== $newPriorityLabel) {
+                        taskProjectSettingsWriteAudit(
+                            $connect,
+                            $currentProjectId,
+                            $auditProjectName,
+                            array(
+                                'action' => 'edit',
+                                'table' => TASK_PROJECT,
+                                'record_id' => $currentProjectId,
+                                'field' => 'View My Task Priority Statuses',
+                                'old' => $oldPriorityLabel,
+                                'new' => $newPriorityLabel,
+                            )
+                        );
+                    }
+                } else {
+                    $result = $priorityResult;
+                }
+            }
         }
 
         taskJsonResponse($result);
@@ -568,6 +608,9 @@ $workTypeRows = taskGetWorkTypes($connect, $currentProjectId);
 $labelRows = taskGetLabels($connect);
 $statusLabelRows = taskGetStatusLabels($connect);
 $workTypeIconOptions = taskGetSvgIconOptions();
+$priorityStatusIds = taskGetProjectPriorityStatusIds($connect, $currentProjectId);
+$priorityStatusId1 = isset($priorityStatusIds[0]) ? (int) $priorityStatusIds[0] : 0;
+$priorityStatusId2 = isset($priorityStatusIds[1]) ? (int) $priorityStatusIds[1] : 0;
 ?>
 <!DOCTYPE html>
 <html>
@@ -669,6 +712,25 @@ $workTypeIconOptions = taskGetSvgIconOptions();
                                             <?php endif; ?>
                                         </div>
                                     <?php endforeach; ?>
+                                </div>
+
+                                <div class="task-project-priority-statuses mt-3 pt-3 border-top">
+                                    <label class="form-label task-project-settings-top-label">View My Task &mdash; Priority Statuses</label>
+                                    <p class="text-muted small mb-2">Pick up to 2 statuses to always show at the top of View My Task.</p>
+                                    <div class="d-flex flex-wrap gap-2">
+                                        <select class="form-select" id="priorityStatusId1" name="priority_status_id_1" style="max-width:260px;" <?= $canEdit ? '' : 'disabled' ?>>
+                                            <option value="0">None</option>
+                                            <?php foreach ($statusRows as $status): ?>
+                                                <option value="<?= (int) $status['id'] ?>" <?= $priorityStatusId1 === (int) $status['id'] ? 'selected' : '' ?>><?= htmlspecialchars(isset($status['name']) ? (string) $status['name'] : '', ENT_QUOTES, 'UTF-8') ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                        <select class="form-select" id="priorityStatusId2" name="priority_status_id_2" style="max-width:260px;" <?= $canEdit ? '' : 'disabled' ?>>
+                                            <option value="0">None</option>
+                                            <?php foreach ($statusRows as $status): ?>
+                                                <option value="<?= (int) $status['id'] ?>" <?= $priorityStatusId2 === (int) $status['id'] ? 'selected' : '' ?>><?= htmlspecialchars(isset($status['name']) ? (string) $status['name'] : '', ENT_QUOTES, 'UTF-8') ?></option>
+                                            <?php endforeach; ?>
+                                        </select>
+                                    </div>
                                 </div>
                             </div>
                         </div>
