@@ -8971,6 +8971,11 @@ if (!function_exists('taskRenderProjectBrowserMenu')) {
             'sheets' => array('label' => 'Sheets', 'path' => '/task/sheets.php', 'pin_id' => 139),
         );
 
+        echo '<!-- DEBUG taskRenderProjectBrowserMenu file=' . htmlspecialchars(__FILE__, ENT_QUOTES, 'UTF-8')
+            . ' mtime=' . htmlspecialchars(date('Y-m-d H:i:s', filemtime(__FILE__)), ENT_QUOTES, 'UTF-8')
+            . ' menuKeys=' . htmlspecialchars(implode(',', array_keys($menus)), ENT_QUOTES, 'UTF-8')
+            . ' -->';
+
         $hasTaskNavView = taskIsActionAllowed('view', taskGetProjectCreatorPinAccess($connect));
         if (!$hasTaskNavView) {
             return;
