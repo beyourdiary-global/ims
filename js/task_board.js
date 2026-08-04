@@ -5360,13 +5360,49 @@ $(document).on("click", "#taskItemDetailTitleResetBtn", function () {
   resetItemDetailTitleEdit();
 });
 
+function toggleEstimateExtraMinutesInput() {
+  var isHours =
+    String($("#taskItemDetailEstimateUnitInput").val() || "") === "hours";
+  $("#taskItemDetailEstimateMinutesInput, #taskItemDetailEstimateMinutesLabel").toggleClass(
+    "d-none",
+    !isHours,
+  );
+  if (!isHours) {
+    $("#taskItemDetailEstimateMinutesInput").val(0);
+  }
+}
+
+function mergeEstimateExtraMinutesIntoValue() {
+  if (String($("#taskItemDetailEstimateUnitInput").val() || "") !== "hours") {
+    return;
+  }
+  var extraMinutes = Number($("#taskItemDetailEstimateMinutesInput").val()) || 0;
+  if (extraMinutes <= 0) {
+    return;
+  }
+  var hoursValue = Number($("#taskItemDetailEstimateValueInput").val()) || 0;
+  var totalMinutes = hoursValue * 60 + extraMinutes;
+  $("#taskItemDetailEstimateValueInput").val(totalMinutes);
+  $("#taskItemDetailEstimateUnitInput").val("minutes");
+  toggleEstimateExtraMinutesInput();
+}
+
 $(document).on("input", "#taskItemDetailEstimateValueInput", function () {
   scheduleItemDetailFieldAutosave(350);
 });
 
+$(document).on("change", "#taskItemDetailEstimateUnitInput", function () {
+  toggleEstimateExtraMinutesInput();
+  saveItemDetailsFromModal(false, {
+    autosave: true,
+    suppressNoChangeMessage: true,
+    silentSuccess: true,
+  });
+});
+
 $(document).on(
   "change",
-  "#taskItemDetailEstimateUnitInput, #taskItemDetailAssigneeSelect, #taskItemDetailReporterSelect, #taskItemDetailStartDateInput, #taskItemDetailDueDateInput, #taskItemDetailAmendDateInput, #taskItemDetailAmendTimeInput, #taskItemDetailSecondAmendDateInput, #taskItemDetailSecondAmendTimeInput",
+  "#taskItemDetailAssigneeSelect, #taskItemDetailReporterSelect, #taskItemDetailStartDateInput, #taskItemDetailDueDateInput, #taskItemDetailAmendDateInput, #taskItemDetailAmendTimeInput, #taskItemDetailSecondAmendDateInput, #taskItemDetailSecondAmendTimeInput",
   function () {
     saveItemDetailsFromModal(false, {
       autosave: true,
@@ -5377,6 +5413,25 @@ $(document).on(
 );
 
 $(document).on("blur", "#taskItemDetailEstimateValueInput", function () {
+  saveItemDetailsFromModal(false, {
+    autosave: true,
+    suppressNoChangeMessage: true,
+    silentSuccess: true,
+  });
+});
+
+var estimateExtraMinutesMergeTimer = 0;
+$(document).on("input", "#taskItemDetailEstimateMinutesInput", function () {
+  window.clearTimeout(estimateExtraMinutesMergeTimer);
+  estimateExtraMinutesMergeTimer = window.setTimeout(function () {
+    mergeEstimateExtraMinutesIntoValue();
+    scheduleItemDetailFieldAutosave(0);
+  }, 500);
+});
+
+$(document).on("blur", "#taskItemDetailEstimateMinutesInput", function () {
+  window.clearTimeout(estimateExtraMinutesMergeTimer);
+  mergeEstimateExtraMinutesIntoValue();
   saveItemDetailsFromModal(false, {
     autosave: true,
     suppressNoChangeMessage: true,

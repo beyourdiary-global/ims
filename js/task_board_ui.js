@@ -3165,6 +3165,10 @@ function applyItemDetailToModal(
   $("#taskItemDetailEstimateUnitInput").val(
     String(info.original_estimate_unit || "minutes"),
   );
+  $("#taskItemDetailEstimateMinutesInput").val(0);
+  if (typeof toggleEstimateExtraMinutesInput === "function") {
+    toggleEstimateExtraMinutesInput();
+  }
 
   var statusIds = Array.isArray(info.task_status_label_ids)
     ? info.task_status_label_ids
