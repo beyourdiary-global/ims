@@ -2712,6 +2712,9 @@ if (!function_exists('taskGetMyTaskGroups')) {
             if (empty($itemsByColumn[$columnId])) {
                 continue;
             }
+            if (taskIsDoneColumnName(isset($column['name']) ? $column['name'] : '')) {
+                continue;
+            }
 
             $dateBuckets = array();
             $dateOrder = array();
