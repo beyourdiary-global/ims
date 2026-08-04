@@ -118,6 +118,8 @@ if (empty($_SESSION['csrf_token'])) {
                                 <col>
                                 <col style="width:110px;">
                                 <col style="width:130px;">
+                                <col style="width:150px;">
+                                <col style="width:130px;">
                             </colgroup>
                             <thead>
                                 <tr>
@@ -126,12 +128,14 @@ if (empty($_SESSION['csrf_token'])) {
                                     <th><div class="sheets-th-inner"><span class="sheets-th-label">Summary</span></div></th>
                                     <th><div class="sheets-th-inner"><span class="sheets-th-label">Priority</span></div></th>
                                     <th><div class="sheets-th-inner"><span class="sheets-th-label">Due Date</span></div></th>
+                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Assignee</span></div></th>
+                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Estimate Time</span></div></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 <?php foreach ($myTaskGroups as $group): ?>
                                     <tr class="view-my-task-status-row<?= !empty($group['is_priority']) ? ' is-priority' : '' ?>" data-group-toggle>
-                                        <td colspan="5">
+                                        <td colspan="7">
                                             <i class="fa-solid fa-chevron-down view-my-task-toggle-icon"></i>
                                             <span class="view-my-task-status-dot" style="background:<?= htmlspecialchars((string) $group['color'], ENT_QUOTES, 'UTF-8') ?>"></span>
                                             <span class="view-my-task-status-name"><?= htmlspecialchars((string) $group['name'], ENT_QUOTES, 'UTF-8') ?></span>
@@ -143,7 +147,7 @@ if (empty($_SESSION['csrf_token'])) {
                                     </tr>
                                     <?php foreach ($group['date_groups'] as $dateGroup): ?>
                                         <tr class="view-my-task-date-row" data-group-toggle>
-                                            <td colspan="5">
+                                            <td colspan="7">
                                                 <i class="fa-solid fa-chevron-down view-my-task-toggle-icon"></i>
                                                 <span class="view-my-task-date-label"><?= htmlspecialchars((string) $dateGroup['label'], ENT_QUOTES, 'UTF-8') ?></span>
                                                 <span class="view-my-task-date-count"><?= count($dateGroup['items']) ?></span>
@@ -175,6 +179,8 @@ if (empty($_SESSION['csrf_token'])) {
                                                 <td><?= htmlspecialchars((string) $item['title'], ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) $item['priority'], ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars($dateGroup['due_date'] !== '' ? $dateGroup['due_date'] : '-', ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= htmlspecialchars($item['assignee_name'] !== '' ? $item['assignee_name'] : 'Unassigned', ENT_QUOTES, 'UTF-8') ?></td>
+                                                <td><?= (int) $item['original_estimate_value'] > 0 ? htmlspecialchars($item['original_estimate_value'] . ' ' . $item['original_estimate_unit'], ENT_QUOTES, 'UTF-8') : '-' ?></td>
                                             </tr>
                                         <?php endforeach; ?>
                                     <?php endforeach; ?>

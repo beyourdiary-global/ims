@@ -2899,7 +2899,7 @@ if (!function_exists('taskCanAccessProjectSettings')) {
     function taskCanAccessProjectSettings($connect, $projectId = 0, $requireOwner = false)
     {
         $projectId = (int) $projectId;
-        if ($projectId <= 0) {
+        if ($projectId <= 0 || empty(taskGetProjectById($connect, $projectId))) {
             return false;
         }
 
@@ -3103,6 +3103,38 @@ if (!function_exists('taskCreateProject')) {
             'ok' => 1,
             'message' => 'Project task created successfully.',
             'project' => taskGetProjectById($connect, $projectId),
+        );
+    }
+}
+
+if (!function_exists('taskDeleteProject')) {
+    function taskDeleteProject($connect, $projectId, $currentUserId, $cdate, $ctime)
+    {
+        if (!defined('TASK_PROJECT')) {
+            return array('ok' => 0, 'message' => 'Task project table is not configured. Please run insert_table.php.');
+        }
+
+        $projectId = (int) $projectId;
+        $project = $projectId > 0 ? taskGetProjectById($connect, $projectId) : array();
+        if (empty($project)) {
+            return array('ok' => 0, 'message' => 'Project task not found.');
+        }
+
+        $projectName = isset($project['name']) ? (string) $project['name'] : '';
+        $safeUser = taskEsc($connect, $currentUserId);
+        $safeDate = taskEsc($connect, $cdate);
+        $safeTime = taskEsc($connect, $ctime);
+
+        $deleteSql = "UPDATE " . TASK_PROJECT . " SET status='D', update_by='" . $safeUser . "', update_date='" . $safeDate . "', update_time='" . $safeTime . "' WHERE id='" . $projectId . "' AND status='A'";
+        if (!mysqli_query($connect, $deleteSql)) {
+            return array('ok' => 0, 'message' => 'Failed to delete project task.');
+        }
+
+        taskAuditLog($connect, 'delete', TASK_PROJECT, $projectId, "deleted project task [<b> ID = $projectId</b> ] <b>" . $projectName . "</b>.", $currentUserId, $cdate, $ctime, $projectName, '');
+
+        return array(
+            'ok' => 1,
+            'message' => 'Project task deleted successfully.',
         );
     }
 }
@@ -3952,6 +3984,10 @@ if (!function_exists('taskCanAccessAnyProjectPage')) {
 if (!function_exists('taskUserCanAccessProjectPageByPin')) {
     function taskUserCanAccessProjectPageByPin($connect, $projectId, $pinGroupId, $userId = 0)
     {
+        if ((int) $projectId <= 0 || empty(taskGetProjectById($connect, $projectId))) {
+            return false;
+        }
+
         $projectTaskPinAccess = taskGetProjectCreatorPinAccess($connect);
         if (!taskIsActionAllowed('view', $projectTaskPinAccess)) {
             return false;

@@ -1,0 +1,48 @@
+.project-dashboard-create-row {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+    max-width: 480px;
+    margin-bottom: 20px;
+}
+
+.project-dashboard-create-input {
+    flex: 1 1 auto;
+}
+
+.project-dashboard-create-btn {
+    white-space: nowrap;
+}
+
+.project-dashboard-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(260px, 1fr));
+    gap: 16px;
+}
+
+.project-dashboard-card {
+    overflow: hidden;
+    border-radius: 10px;
+}
+
+.project-dashboard-card-color {
+    height: 8px;
+    width: 100%;
+}
+
+.project-dashboard-card-title {
+    margin-bottom: 4px;
+    word-break: break-word;
+}
+
+.project-dashboard-card-owner {
+    color: #6c757d;
+    font-size: 0.85rem;
+    margin-bottom: 12px;
+}
+
+.project-dashboard-card-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+}
