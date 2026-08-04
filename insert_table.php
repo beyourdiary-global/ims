@@ -3525,6 +3525,23 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . TASK_PROJECT . "`: " . $conn->error . "</p>";
     }
 
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_PROJECT,
+        'priority_status_id_1',
+        "ALTER TABLE `" . TASK_PROJECT . "` ADD COLUMN `priority_status_id_1` INT DEFAULT NULL AFTER `board_background_color`",
+        "Verified `" . TASK_PROJECT . "` includes `priority_status_id_1`."
+    );
+    migrationEnsureColumn(
+        $conn,
+        $db_cms,
+        TASK_PROJECT,
+        'priority_status_id_2',
+        "ALTER TABLE `" . TASK_PROJECT . "` ADD COLUMN `priority_status_id_2` INT DEFAULT NULL AFTER `priority_status_id_1`",
+        "Verified `" . TASK_PROJECT . "` includes `priority_status_id_2`."
+    );
+
     $createTaskStatusSql = "CREATE TABLE IF NOT EXISTS `" . TASK_COLUMN . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `project_id` INT DEFAULT NULL,

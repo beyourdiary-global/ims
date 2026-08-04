@@ -255,6 +255,8 @@
                                         <option value="days">days</option>
                                         <option value="weeks">weeks</option>
                                     </select>
+                                    <input id="taskItemDetailEstimateMinutesInput" class="form-control form-control-sm task-item-detail-estimate-extra-minutes d-none" type="number" min="0" max="59" step="1" placeholder="0">
+                                    <span id="taskItemDetailEstimateMinutesLabel" class="task-item-detail-estimate-extra-minutes-label d-none">minutes</span>
                                 </div>
                             </div>
 

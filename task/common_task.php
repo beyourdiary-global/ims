@@ -2579,6 +2579,184 @@ if (!function_exists('taskGetProjectById')) {
     }
 }
 
+if (!function_exists('taskGetProjectPriorityStatusIds')) {
+    function taskGetProjectPriorityStatusIds($connect, $projectId)
+    {
+        $projectId = (int) $projectId;
+        if ($projectId <= 0 || !defined('TASK_PROJECT')) {
+            return array();
+        }
+
+        $result = mysqli_query($connect, "SELECT priority_status_id_1,priority_status_id_2 FROM " . TASK_PROJECT . " WHERE id='" . $projectId . "' AND status='A' LIMIT 1");
+        if (!$result || $result->num_rows === 0) {
+            return array();
+        }
+
+        $row = $result->fetch_assoc();
+        $candidateIds = array(
+            isset($row['priority_status_id_1']) ? (int) $row['priority_status_id_1'] : 0,
+            isset($row['priority_status_id_2']) ? (int) $row['priority_status_id_2'] : 0,
+        );
+
+        $activeColumnIds = array();
+        foreach (taskGetColumns($connect, $projectId) as $column) {
+            $activeColumnIds[(int) $column['id']] = true;
+        }
+
+        $priorityIds = array();
+        foreach ($candidateIds as $candidateId) {
+            if ($candidateId > 0 && isset($activeColumnIds[$candidateId])) {
+                $priorityIds[] = $candidateId;
+            }
+        }
+
+        return $priorityIds;
+    }
+}
+
+if (!function_exists('taskSaveProjectPriorityStatuses')) {
+    function taskSaveProjectPriorityStatuses($connect, $projectId, $statusId1, $statusId2, $currentUserId, $cdate, $ctime)
+    {
+        $projectId = (int) $projectId;
+        $statusId1 = (int) $statusId1;
+        $statusId2 = (int) $statusId2;
+        if ($projectId <= 0 || !defined('TASK_PROJECT')) {
+            return array('ok' => 0, 'message' => 'Invalid project.');
+        }
+
+        $activeColumnIds = array();
+        foreach (taskGetColumns($connect, $projectId) as $column) {
+            $activeColumnIds[(int) $column['id']] = true;
+        }
+
+        if ($statusId1 > 0 && !isset($activeColumnIds[$statusId1])) {
+            return array('ok' => 0, 'message' => 'Selected priority status is not available in this project.');
+        }
+        if ($statusId2 > 0 && !isset($activeColumnIds[$statusId2])) {
+            return array('ok' => 0, 'message' => 'Selected priority status is not available in this project.');
+        }
+
+        $safeUser = taskEsc($connect, $currentUserId);
+        $safeDate = taskEsc($connect, $cdate);
+        $safeTime = taskEsc($connect, $ctime);
+        $sql = "UPDATE " . TASK_PROJECT . " SET
+                priority_status_id_1=" . ($statusId1 > 0 ? "'" . $statusId1 . "'" : 'NULL') . ",
+                priority_status_id_2=" . ($statusId2 > 0 ? "'" . $statusId2 . "'" : 'NULL') . ",
+                update_by='" . $safeUser . "',
+                update_date='" . $safeDate . "',
+                update_time='" . $safeTime . "'
+                WHERE id='" . $projectId . "'";
+
+        if (!mysqli_query($connect, $sql)) {
+            return array('ok' => 0, 'message' => 'Failed to save priority statuses.');
+        }
+
+        return array(
+            'ok' => 1,
+            'message' => 'Priority statuses saved.',
+            'priority_status_id_1' => $statusId1,
+            'priority_status_id_2' => $statusId2,
+        );
+    }
+}
+
+if (!function_exists('taskGetMyTaskGroups')) {
+    function taskGetMyTaskGroups($connect, $projectId, $currentUserId)
+    {
+        $projectId = (int) $projectId;
+        $currentUserId = (int) $currentUserId;
+        if ($projectId <= 0 || $currentUserId <= 0) {
+            return array();
+        }
+
+        $myItems = array_values(array_filter(
+            taskGetAllItemsFlat($connect, $projectId),
+            function ($item) use ($currentUserId) {
+                return isset($item['assignee_user_id']) && (int) $item['assignee_user_id'] === $currentUserId;
+            }
+        ));
+
+        $columns = taskGetColumns($connect, $projectId);
+        $priorityIds = taskGetProjectPriorityStatusIds($connect, $projectId);
+        $priorityIndex = array_flip($priorityIds);
+
+        $itemsByColumn = array();
+        foreach ($myItems as $item) {
+            $columnId = (int) $item['column_id'];
+            if (!isset($itemsByColumn[$columnId])) {
+                $itemsByColumn[$columnId] = array();
+            }
+            $itemsByColumn[$columnId][] = $item;
+        }
+
+        $orderedColumns = array();
+        foreach ($priorityIds as $priorityColumnId) {
+            foreach ($columns as $column) {
+                if ((int) $column['id'] === $priorityColumnId) {
+                    $orderedColumns[] = $column;
+                    break;
+                }
+            }
+        }
+        foreach ($columns as $column) {
+            $columnId = (int) $column['id'];
+            if (isset($priorityIndex[$columnId])) {
+                continue;
+            }
+            $orderedColumns[] = $column;
+        }
+
+        $groups = array();
+        foreach ($orderedColumns as $column) {
+            $columnId = (int) $column['id'];
+            if (empty($itemsByColumn[$columnId])) {
+                continue;
+            }
+            if (taskIsDoneColumnName(isset($column['name']) ? $column['name'] : '')) {
+                continue;
+            }
+
+            $dateBuckets = array();
+            $dateOrder = array();
+            foreach ($itemsByColumn[$columnId] as $item) {
+                $dueDate = isset($item['due_date']) ? trim((string) $item['due_date']) : '';
+                if (!isset($dateBuckets[$dueDate])) {
+                    $dateBuckets[$dueDate] = array();
+                    $dateOrder[] = $dueDate;
+                }
+                $dateBuckets[$dueDate][] = $item;
+            }
+
+            $datedKeys = array_values(array_filter($dateOrder, function ($dueDate) { return $dueDate !== ''; }));
+            sort($datedKeys);
+            $orderedDateKeys = $datedKeys;
+            if (in_array('', $dateOrder, true)) {
+                $orderedDateKeys[] = '';
+            }
+
+            $dateGroups = array();
+            foreach ($orderedDateKeys as $dueDate) {
+                $dateGroups[] = array(
+                    'due_date' => $dueDate,
+                    'label' => $dueDate !== '' ? $dueDate : 'No Due Date',
+                    'items' => $dateBuckets[$dueDate],
+                );
+            }
+
+            $groups[] = array(
+                'column_id' => $columnId,
+                'name' => (string) $column['name'],
+                'color' => (string) $column['color'],
+                'is_priority' => isset($priorityIndex[$columnId]),
+                'item_count' => count($itemsByColumn[$columnId]),
+                'date_groups' => $dateGroups,
+            );
+        }
+
+        return $groups;
+    }
+}
+
 if (!function_exists('taskEnsureProjectDefaults')) {
     function taskEnsureProjectDefaults($connect, $projectId, $currentUserId, $cdate, $ctime)
     {
@@ -8783,6 +8961,7 @@ if (!function_exists('taskRenderProjectBrowserMenu')) {
         $actionIdPrefix = isset($options['action_panel_id_prefix']) ? (string) $options['action_panel_id_prefix'] : 'taskProjectActions';
 
         $menus = array(
+            'view_my_task' => array('label' => 'View My Task', 'path' => '/task/view_my_task.php', 'pin_id' => 139),
             'summary' => array('label' => 'Summary', 'path' => '/task/summary.php', 'pin_id' => 139),
             'board' => array('label' => 'Board', 'path' => '/task/board.php', 'pin_id' => 139),
             'sheets' => array('label' => 'Sheets', 'path' => '/task/sheets.php', 'pin_id' => 139),
@@ -8902,6 +9081,7 @@ if (!function_exists('taskRenderMobileMenuDropdown')) {
     function taskRenderMobileMenuDropdown($siteUrl, $activeMenu, $currentProjectId = 0)
     {
         $menus = array(
+            'view_my_task' => array('label' => 'View My Task', 'path' => '/task/view_my_task.php'),
             'summary' => array('label' => 'Summary', 'path' => '/task/summary.php'),
             'board' => array('label' => 'Board', 'path' => '/task/board.php'),
             'sheets' => array('label' => 'Sheets', 'path' => '/task/sheets.php'),
