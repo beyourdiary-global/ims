@@ -1,5 +1,9 @@
 <?php
 
+if (function_exists('opcache_reset')) {
+    opcache_reset();
+}
+
 if (defined('ROOT')) {
     include_once ROOT . '/include/system_alert_common.php';
 }
