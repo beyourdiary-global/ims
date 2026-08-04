@@ -328,6 +328,13 @@
         });
     }
 
+    ['priorityStatusId1', 'priorityStatusId2'].forEach(function (id) {
+        var select = document.getElementById(id);
+        if (select) {
+            select.addEventListener('change', saveSettings);
+        }
+    });
+
     var addStatusBtn = document.getElementById('addProjectStatusRowBtn');
     if (addStatusBtn) {
         addStatusBtn.addEventListener('click', function () {
