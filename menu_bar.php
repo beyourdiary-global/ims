@@ -798,7 +798,7 @@ if ($hasTaskManagementAccess) {
 
         <div class="task-global-project-section">
             <div class="task-global-project-header">
-                <span>Project Task</span>
+                <span><a href="<?= $SITEURL ?>/task/project_dashboard.php" class="task-global-project-dashboard-link">Project Task</a></span>
 
                 <?php if ($canCreateTaskProject): ?>
                     <button type="button"
