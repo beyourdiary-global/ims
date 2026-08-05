@@ -751,7 +751,17 @@ include_once '../menuHeader.php';
         const labelColorError = document.getElementById('labelColorError');
         const packageSelect = document.querySelector('select[name="package_id"]');
         const usedLabelColors = new Set(<?= json_encode(array_values(array_unique($usedLabelColors)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>.map((value) => String(value || '').toLowerCase()));
-        if (!prizeType || !physicalFields) return;
+        console.log('[prizes.php] script loaded. prizeForm:', prizeForm, 'actionBtn:', actionBtn, 'prizeType el:', prizeType, 'physicalFields el:', physicalFields, 'usedLabelColors:', Array.from(usedLabelColors));
+        if (!prizeType || !physicalFields) {
+            console.log('[prizes.php] BAILING OUT EARLY: prizeType or physicalFields element missing from DOM. No submit handlers attached!');
+            return;
+        }
+
+        if (prizeForm) {
+            prizeForm.addEventListener('submit', () => {
+                console.log('[prizes.php] form submit EVENT FIRED (this only logs if nothing called preventDefault before this listener ran).');
+            }, { capture: true });
+        }
 
         const clearLabelColorError = () => {
             if (!labelColorError) {
@@ -778,6 +788,7 @@ include_once '../menuHeader.php';
             }
 
             const normalizedColor = String(labelColorInput.value || '').trim().toLowerCase();
+            console.log('[prizes.php] validateUniqueLabelColor: current color =', normalizedColor, ', usedLabelColors =', Array.from(usedLabelColors), ', isDuplicate =', usedLabelColors.has(normalizedColor));
             if (normalizedColor !== '' && usedLabelColors.has(normalizedColor)) {
                 setLabelColorError('Prize Label Color cannot be duplicated.');
                 return false;
@@ -810,7 +821,9 @@ include_once '../menuHeader.php';
         }
 
         const blockSubmitOnDuplicateColor = (event) => {
+            console.log('[prizes.php] blockSubmitOnDuplicateColor triggered by event type:', event.type);
             if (!validateUniqueLabelColor()) {
+                console.log('[prizes.php] BLOCKED here: duplicate label color. preventDefault() called.');
                 event.preventDefault();
                 if (typeof showNotification === 'function') {
                     showNotification('Prize Label Color cannot be duplicated. Please pick a different color.', 'error');
@@ -821,6 +834,7 @@ include_once '../menuHeader.php';
                 }
                 return false;
             }
+            console.log('[prizes.php] color check passed, not blocking here.');
             return true;
         };
 
