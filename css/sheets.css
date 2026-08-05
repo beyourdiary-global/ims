@@ -99,6 +99,22 @@
   border-color: #4c9aff;
 }
 
+.sheets-toolbar-btn.sheets-btn-reset-filter {
+  width: auto;
+  padding: 0 10px;
+  gap: 6px;
+  font-size: 13px;
+  font-weight: 500;
+  color: #0c66e4;
+  background: #e9f2ff;
+  border: 1px solid #4c9aff;
+}
+
+.sheets-toolbar-btn.sheets-btn-reset-filter:hover {
+  background: #d5e8ff;
+  color: #0747a6;
+}
+
 .sheets-search-wrap {
   position: relative;
   display: flex;
@@ -314,6 +330,28 @@ body.sheets-col-resizing * {
 .sheets-th-btn.btn-more,
 .sheets-th-btn.btn-more i {
   color: #626f86 !important;
+}
+
+.sheets-th-btn.btn-filter.filter-active {
+  color: #0c66e4;
+  background: #e9f2ff;
+}
+
+.sheets-th-btn.btn-filter.filter-active:hover {
+  background: #d5e8ff;
+}
+
+/* Keep the filter icon visible (not only on hover) once a column has an active filter */
+.sheets-table thead th.has-active-filter {
+  background: #f4f9ff;
+}
+
+.sheets-table thead th.has-active-filter .sheets-th-actions {
+  display: flex;
+}
+
+.sheets-table thead th.has-active-filter .sheets-th-btn.btn-filter {
+  opacity: 1;
 }
 
 .sheets-th-btn.btn-more:hover,
