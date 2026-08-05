@@ -206,6 +206,15 @@ if (!function_exists('luckyDrawPrizeGenerateNextUniqueColor')) {
             }
         }
 
+        for ($hue = 0; $hue < 360; $hue += 5) {
+            $candidateColor = luckyDrawPrizeSanitizeHexColor(
+                luckyDrawPrizeHslToHex($hue, 0.70, 0.50)
+            );
+            if (!in_array($candidateColor, $normalizedExistingColors, true)) {
+                return $candidateColor;
+            }
+        }
+
         return luckyDrawPrizeSanitizeHexColor(
             luckyDrawPrizeHslToHex($baseHue + 180, max(0.60, $baseSaturation), min(0.58, max(0.44, $baseLightness)))
         );
@@ -573,7 +582,11 @@ include_once '../menuHeader.php';
 
         <div id="formContainer" class="container d-flex justify-content-center">
             <div class="col-12 col-md-10 formWidthAdjust">
-
+                <?php if (!empty($flash['message'])) { ?>
+                    <div class="alert alert-<?= htmlspecialchars((string) ($flash['type'] ?? 'info'), ENT_QUOTES, 'UTF-8') ?>">
+                        <?= htmlspecialchars((string) $flash['message'], ENT_QUOTES, 'UTF-8') ?>
+                    </div>
+                <?php } ?>
 
                     <form method="post" enctype="multipart/form-data" id="luckyDrawPrizeForm" novalidate>
                         <input type="hidden" name="form_mode" value="<?= htmlspecialchars($mode, ENT_QUOTES, 'UTF-8') ?>">
@@ -761,23 +774,27 @@ include_once '../menuHeader.php';
             labelColorInput.addEventListener('change', validateUniqueLabelColor);
         }
 
-        if (prizeForm) {
-            prizeForm.addEventListener('submit', (event) => {
-                if (!validateUniqueLabelColor()) {
-                    event.preventDefault();
-                    if (labelColorInput) {
-                        labelColorInput.focus();
-                    }
+        const blockSubmitOnDuplicateColor = (event) => {
+            if (!validateUniqueLabelColor()) {
+                event.preventDefault();
+                if (typeof showNotification === 'function') {
+                    showNotification('Prize Label Color cannot be duplicated. Please pick a different color.', 'error');
                 }
-            });
+                if (labelColorInput) {
+                    labelColorInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    labelColorInput.focus();
+                }
+                return false;
+            }
+            return true;
+        };
+
+        if (prizeForm) {
+            prizeForm.addEventListener('submit', blockSubmitOnDuplicateColor);
         }
 
         if (actionBtn) {
-            actionBtn.addEventListener('click', (event) => {
-                if (!validateUniqueLabelColor()) {
-                    event.preventDefault();
-                }
-            });
+            actionBtn.addEventListener('click', blockSubmitOnDuplicateColor);
         }
 
         prizeType.addEventListener('change', sync);
