@@ -620,13 +620,6 @@ include_once '../menuHeader.php';
     <link rel="stylesheet" href="<?= $SITEURL ?>/css/main.css">
 </head>
 <body>
-    <script>
-        console.log('%c[prizes.php] DEBUG BUILD MARKER 2026-08-05-B -- if you do not see this exact string, the server is still running an OLD deployment.', 'background:#222;color:#0f0;font-weight:bold;padding:2px 6px;');
-        console.log('[prizes.php] PHP-side state this page load -> formError:', <?= json_encode($formError, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>, ', mode:', <?= json_encode($mode, JSON_UNESCAPED_UNICODE) ?>, ', REQUEST_METHOD:', <?= json_encode($_SERVER['REQUEST_METHOD'] ?? '', JSON_UNESCAPED_UNICODE) ?>, ', full URL:', window.location.href);
-    </script>
-    <div style="background:#111;color:#0f0;font-family:monospace;font-size:12px;padding:6px 10px;">
-        DEBUG BUILD 2026-08-05-B | REQUEST_METHOD=<?= htmlspecialchars($_SERVER['REQUEST_METHOD'] ?? '', ENT_QUOTES, 'UTF-8') ?> | formError=<?= htmlspecialchars($formError !== '' ? $formError : '(empty)', ENT_QUOTES, 'UTF-8') ?>
-    </div>
     <div class="page-load-cover">
         <div class="d-flex flex-column my-3 ms-3">
             <p>
@@ -776,17 +769,7 @@ include_once '../menuHeader.php';
         const labelColorError = document.getElementById('labelColorError');
         const packageSelect = document.querySelector('select[name="package_id"]');
         const usedLabelColors = new Set(<?= json_encode(array_values(array_unique($usedLabelColors)), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) ?>.map((value) => String(value || '').toLowerCase()));
-        console.log('[prizes.php] script loaded. prizeForm:', prizeForm, 'actionBtn:', actionBtn, 'prizeType el:', prizeType, 'physicalFields el:', physicalFields, 'usedLabelColors:', Array.from(usedLabelColors));
-        if (!prizeType || !physicalFields) {
-            console.log('[prizes.php] BAILING OUT EARLY: prizeType or physicalFields element missing from DOM. No submit handlers attached!');
-            return;
-        }
-
-        if (prizeForm) {
-            prizeForm.addEventListener('submit', () => {
-                console.log('[prizes.php] form submit EVENT FIRED (this only logs if nothing called preventDefault before this listener ran).');
-            }, { capture: true });
-        }
+        if (!prizeType || !physicalFields) return;
 
         const clearLabelColorError = () => {
             if (!labelColorError) {
@@ -813,7 +796,6 @@ include_once '../menuHeader.php';
             }
 
             const normalizedColor = String(labelColorInput.value || '').trim().toLowerCase();
-            console.log('[prizes.php] validateUniqueLabelColor: current color =', normalizedColor, ', usedLabelColors =', Array.from(usedLabelColors), ', isDuplicate =', usedLabelColors.has(normalizedColor));
             if (normalizedColor !== '' && usedLabelColors.has(normalizedColor)) {
                 setLabelColorError('Prize Label Color cannot be duplicated.');
                 return false;
@@ -846,9 +828,7 @@ include_once '../menuHeader.php';
         }
 
         const blockSubmitOnDuplicateColor = (event) => {
-            console.log('[prizes.php] blockSubmitOnDuplicateColor triggered by event type:', event.type);
             if (!validateUniqueLabelColor()) {
-                console.log('[prizes.php] BLOCKED here: duplicate label color. preventDefault() called.');
                 event.preventDefault();
                 if (typeof showNotification === 'function') {
                     showNotification('Prize Label Color cannot be duplicated. Please pick a different color.', 'error');
@@ -859,7 +839,6 @@ include_once '../menuHeader.php';
                 }
                 return false;
             }
-            console.log('[prizes.php] color check passed, not blocking here.');
             return true;
         };
 

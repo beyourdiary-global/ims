@@ -3611,13 +3611,10 @@ document.addEventListener("DOMContentLoaded", function () {
   });
   if (actionBtn) {
     actionBtn.addEventListener("click", function (event) {
-      console.log("[common.fun.js] actionBtn clicked, running validateForm()...");
       if (!validateForm()) {
-        console.log("[common.fun.js] validateForm() FAILED -> preventDefault(), submission blocked here.");
         event.preventDefault();
         displayPreviousData();
       } else {
-        console.log("[common.fun.js] validateForm() passed, allowing submit.");
         // Save form data to localStorage when validation passes
         saveFormDataToLocalStorage();
       }
@@ -3692,21 +3689,8 @@ document.addEventListener("DOMContentLoaded", function () {
       "input[required], select[required]",
     );
 
-    console.log(
-      "[validateForm] checking required inputs:",
-      Array.prototype.map.call(requiredInputs, function (el) {
-        return {
-          id: el.id,
-          name: el.name,
-          value: el.value,
-          visible: !!(el.offsetWidth || el.offsetHeight || el.getClientRects().length),
-        };
-      }),
-    );
-
     requiredInputs.forEach(function (input) {
       if (String(input.value == null ? "" : input.value).trim() === "") {
-        console.log("[validateForm] BLOCKED by empty required field:", input.id || input.name);
         let labelNode = null;
         let labels = document.querySelectorAll("label");
 
