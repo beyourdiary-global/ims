@@ -476,7 +476,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
             LIMIT 1";
         $updateResult = mysqli_query($connect, $sql);
         if (!$updateResult) {
-            luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams('E', $prizeId), 'danger', 'Unable to update this Lucky Draw prize.');
+            $formError = 'Unable to update this Lucky Draw prize. DB error: ' . mysqli_error($connect);
+            $mode = $saveMode;
+            $isAdd = false;
+            $isEdit = true;
+            $isView = false;
+            $editingPrize = array_merge($editingPrize, $submittedFormValues);
+            goto renderPrizeForm;
         }
     } else {
         $sql = "INSERT INTO `" . LUCKY_DRAW_PRIZE . "`
@@ -485,7 +491,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
             ('" . $safePrizeName . "', '" . $safePrizeType . "', " . ($voucherCode !== '' ? ("'" . $safeVoucherCode . "'") : 'NULL') . ", " . ($prizeType === 'physical' && $prizeImagePath !== '' ? ("'" . mysqli_real_escape_string($connect, $prizeImagePath) . "'") : 'NULL') . ", " . number_format($weight, 4, '.', '') . ", " . $totalStock . ", 0, 0, " . $displayOrder . ", '" . $safeIsEnabled . "', '" . $safeLabelColor . "', " . ($physicalFields['package_id'] > 0 ? $physicalFields['package_id'] : 'NULL') . ", " . ($physicalFields['country_id'] > 0 ? $physicalFields['country_id'] : 'NULL') . ", " . ($physicalFields['brand_id'] > 0 ? $physicalFields['brand_id'] : 'NULL') . ", " . ($physicalFields['series_id'] > 0 ? $physicalFields['series_id'] : 'NULL') . ", " . ($physicalFields['fb_page_id'] > 0 ? $physicalFields['fb_page_id'] : 'NULL') . ", " . ($physicalFields['channel_id'] > 0 ? $physicalFields['channel_id'] : 'NULL') . ", " . ($physicalFields['pay_method_id'] > 0 ? $physicalFields['pay_method_id'] : 'NULL') . ", " . ($stockOutWarehouseId > 0 ? $stockOutWarehouseId : 'NULL') . ", " . ($physicalFields['sales_pic_user_id'] > 0 ? $physicalFields['sales_pic_user_id'] : 'NULL') . ", " . number_format($price, 2, '.', '') . ", '" . $safeRemark . "', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
         $insertResult = mysqli_query($connect, $sql);
         if (!$insertResult) {
-            luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams('I'), 'danger', 'Unable to add this Lucky Draw prize.');
+            $formError = 'Unable to add this Lucky Draw prize. DB error: ' . mysqli_error($connect);
+            $mode = $saveMode;
+            $isAdd = true;
+            $isEdit = false;
+            $isView = false;
+            $editingPrize = array_merge($editingPrize, $submittedFormValues);
+            goto renderPrizeForm;
         }
         $prizeId = (int) mysqli_insert_id($connect);
         if ($prizeId > 0) {
@@ -495,7 +507,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
                   AND status = 'A'
                 LIMIT 1");
         } else {
-            luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams('I'), 'danger', 'Unable to add this Lucky Draw prize.');
+            $formError = 'Unable to add this Lucky Draw prize (no insert id returned).';
+            $mode = $saveMode;
+            $isAdd = true;
+            $isEdit = false;
+            $isView = false;
+            $editingPrize = array_merge($editingPrize, $submittedFormValues);
+            goto renderPrizeForm;
         }
     }
 
