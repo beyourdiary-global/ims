@@ -264,6 +264,23 @@ function campaignFollowUpResolveSourceCustomerForTag($connect, $financeConnect, 
     return array('platform' => $platform, 'customer_id' => 0);
 }
 
+function campaignFollowUpBuildCustomerProfileUrl($connect, $financeConnect, $task)
+{
+    if (!function_exists('customerDailyReportGetCustomerMeta')) {
+        return '';
+    }
+
+    $sourceCustomer = campaignFollowUpResolveSourceCustomerForTag($connect, $financeConnect, $task);
+    $sourcePlatform = trim((string) ($sourceCustomer['platform'] ?? ''));
+    $sourceCustomerId = (int) ($sourceCustomer['customer_id'] ?? 0);
+    if ($sourcePlatform === '' || $sourceCustomerId <= 0) {
+        return '';
+    }
+
+    $customerMeta = customerDailyReportGetCustomerMeta($connect, $financeConnect, $sourcePlatform, $sourceCustomerId);
+    return trim((string) ($customerMeta['record_url'] ?? ''));
+}
+
 function campaignFollowUpAssignCampaignTagToCustomer($connect, $financeConnect, $task, $tagName, $pageTitle)
 {
     if (!function_exists('customerTagAssignToCustomer')) {
@@ -644,6 +661,11 @@ if ($stmt) {
             isset($finance_connect) ? $finance_connect : $connect,
             $row
         );
+        $row['customer_profile_url'] = campaignFollowUpBuildCustomerProfileUrl(
+            $connect,
+            isset($finance_connect) ? $finance_connect : $connect,
+            $row
+        );
         $taskRows[] = $row;
     }
     $stmt->close();
@@ -996,7 +1018,7 @@ if ($stmt) {
                                 <button class="btn btn-danger me-1" type="button" title="Delete" onclick="<?= campaignH($deleteOnClick) ?>"><i class="fas fa-trash-alt"></i></button>
                             <?php endif; ?>
                         </td>
-                        <td><?= campaignH($displayCustomerName) ?></td>
+                        <td><?php $customerProfileUrl = trim((string) ($row['customer_profile_url'] ?? '')); ?><?php if ($customerProfileUrl !== ''): ?><a href="<?= campaignH($customerProfileUrl) ?>" target="_blank" rel="noopener noreferrer"><?= campaignH($displayCustomerName) ?></a><?php else: ?><?= campaignH($displayCustomerName) ?><?php endif; ?></td>
                         <td><?= campaignH($row['platform'] ?? '') ?></td>
                         <td><?= campaignH($row['message_title'] ?? '') ?></td>
                         <td><?= campaignH($row['follow_up_date'] ?? '') ?></td>
