@@ -6,6 +6,7 @@ include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 include_once ROOT . '/include/campaign_common.php';
 include_once ROOT . '/include/customer_tag.php';
+include_once ROOT . '/include/customer_follow_up_common.php';
 
 $campaignId = (int) input('campaign_id');
 if ($campaignId <= 0) {
@@ -281,12 +282,12 @@ function campaignFollowUpAssignCampaignTagToCustomer($connect, $financeConnect, 
     $sourcePlatform = trim((string) ($sourceCustomer['platform'] ?? ''));
     $sourceCustomerId = (int) ($sourceCustomer['customer_id'] ?? 0);
     if ($sourcePlatform === '' || $sourceCustomerId <= 0) {
-        return array('success' => false, 'message' => 'Unable to locate the source customer record for campaign tag assignment.', 'tag_row' => $tagResult['tag_row']);
+        return array('success' => false, 'message' => 'Unable to locate the source customer record for campaign tag assignment.', 'tag_row' => $tagResult['tag_row'], 'source_platform' => $sourcePlatform, 'source_customer_id' => $sourceCustomerId);
     }
 
     $assignResult = customerTagAssignToCustomer($connect, $sourcePlatform, $sourceCustomerId, (int) $tagResult['tag_id']);
     if (empty($assignResult['success'])) {
-        return array('success' => false, 'message' => 'Unable to assign campaign tag to customer.', 'tag_row' => $tagResult['tag_row']);
+        return array('success' => false, 'message' => 'Unable to assign campaign tag to customer.', 'tag_row' => $tagResult['tag_row'], 'source_platform' => $sourcePlatform, 'source_customer_id' => $sourceCustomerId);
     }
 
     $customerDisplayName = campaignFollowUpResolveCustomerDisplay($connect, $financeConnect, $task);
@@ -299,7 +300,7 @@ function campaignFollowUpAssignCampaignTagToCustomer($connect, $financeConnect, 
         customerTagGetAssignmentTable()
     );
 
-    return array('success' => true, 'message' => '', 'tag_row' => $tagResult['tag_row']);
+    return array('success' => true, 'message' => '', 'tag_row' => $tagResult['tag_row'], 'source_platform' => $sourcePlatform, 'source_customer_id' => $sourceCustomerId);
 }
 
 function campaignFollowUpRenderLabelBadges($labelName)
@@ -527,6 +528,25 @@ if ($followUpSaveRequested) {
             $stmt->bind_param('ssssssssi', $screenshotPath, $remark, $status, $labelPreview, $completedBy, $completedDate, $completedTime, $userId, $taskId);
             $stmt->execute();
             $stmt->close();
+
+            // Merge this completed follow-up into the customer's own User Record Log so it
+            // shows up alongside their other interaction history, not just inside the
+            // campaign module. Uses the same platform-customer id already resolved for
+            // tagging above.
+            if (function_exists('customerFollowUpInsertReadableUserRecordLog')) {
+                $recordLogContent = 'Campaign follow-up completed for campaign "' . (string) ($task['campaign_name'] ?? '') . '" (message: ' . (string) ($task['message_title'] ?? '') . ').';
+                if ($remark !== '') {
+                    $recordLogContent .= ' Remark: ' . $remark;
+                }
+
+                customerFollowUpInsertReadableUserRecordLog($connect, array(
+                    'platform' => (string) ($campaignTagResult['source_platform'] ?? ''),
+                    'customer_id' => (int) ($campaignTagResult['source_customer_id'] ?? 0),
+                    'content' => $recordLogContent,
+                    'attachment' => $screenshotPath,
+                    'created_by' => $userId,
+                ));
+            }
 
             $connect->commit();
 
