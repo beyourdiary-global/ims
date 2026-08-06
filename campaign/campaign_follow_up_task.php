@@ -552,14 +552,17 @@ if ($followUpSaveRequested) {
             // campaign module. Uses the same platform-customer id already resolved for
             // tagging above.
             if (function_exists('customerFollowUpInsertReadableUserRecordLog')) {
-                $recordLogContent = 'Campaign follow-up completed for campaign "' . (string) ($task['campaign_name'] ?? '') . '" (message: ' . (string) ($task['message_preview'] ?? '') . ').';
+                $recordLogLines = array();
+                $recordLogLines[] = 'Campaign follow-up completed for campaign "' . (string) ($task['campaign_name'] ?? '') . '".';
+                $recordLogLines[] = 'Message: ' . (string) ($task['message_preview'] ?? '');
                 $tagNameForLog = trim((string) ($campaignTagResult['tag_row']['name'] ?? $labelPreview));
                 if ($tagNameForLog !== '') {
-                    $recordLogContent .= ' Tag added: ' . $tagNameForLog . '.';
+                    $recordLogLines[] = 'Tag added: ' . $tagNameForLog . '.';
                 }
                 if ($remark !== '') {
-                    $recordLogContent .= ' Remark: ' . $remark;
+                    $recordLogLines[] = 'Remark: ' . $remark;
                 }
+                $recordLogContent = implode("\n", $recordLogLines);
 
                 customerFollowUpInsertReadableUserRecordLog($connect, array(
                     'platform' => (string) ($campaignTagResult['source_platform'] ?? ''),
