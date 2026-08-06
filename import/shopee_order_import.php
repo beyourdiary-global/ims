@@ -2113,6 +2113,7 @@ function normalizeShopeeSkuOcrComparisonKey($value)
     return strtr($value, array(
         '5' => 'S',
         '0' => 'O',
+        '1' => 'T',
     ));
 }
 
@@ -2244,11 +2245,16 @@ function normalizeShopeeOrderIdCandidate($value)
         return '';
     }
 
-    // Shopee order IDs use a date-prefixed format. OCR can read the numeric
-    // zero in the alphanumeric suffix as the letter O; keep this correction
-    // scoped to order IDs so SKU and other numeric values remain unchanged.
-    if (preg_match('/^\d{6}T[A-Z0-9]{7,24}$/', $value)) {
-        $value = str_replace('O', '0', $value);
+    // Shopee order IDs start with a 6-digit date prefix (YYMMDD). OCR commonly
+    // misreads digits in that prefix as similar-looking letters (0<->O, 1<->T,
+    // 5<->S). Since the prefix is known to be all-digit, the correction can be
+    // applied safely there; the free-form suffix is left untouched so real
+    // letters (which can legitimately be O/T/S) are not corrupted.
+    if (strlen($value) >= 6) {
+        $datePrefix = strtr(substr($value, 0, 6), array('O' => '0', 'T' => '1', 'S' => '5'));
+        if (preg_match('/^\d{6}$/', $datePrefix)) {
+            $value = $datePrefix . substr($value, 6);
+        }
     }
 
     $length = strlen($value);
@@ -2384,17 +2390,11 @@ function extractShopeeOrderId($cleanText, $html, $pdfSourceText = '', $rawPdfCon
 {
     $orderId = '';
 
-    // Embedded PDF links are generated from the actual order identifier and
-    // are more reliable than OCR/text-layer output for ambiguous glyphs.
-    if ((string) $rawPdfContent !== '') {
-        $orderId = extractShopeeOrderIdFromPdfBinary($rawPdfContent);
-    }
-
-    if ($orderId === '' && (string) $html !== '') {
-        $orderId = extractShopeeOrderIdFromHtml((string) $html);
-    }
-
-    if ($orderId === '' && (string) $pdfSourceText !== '') {
+    // The labeled "Order ID" field on the order page/PDF is the authoritative
+    // value. Links embedded in the PDF (e.g. tracking/parcel links) can carry
+    // a different identifier, so they are only used as a last-resort fallback
+    // when the labeled Order ID cannot be found at all.
+    if ((string) $pdfSourceText !== '') {
         $orderId = extractPdfFieldByLabels($pdfSourceText, ['Order ID', 'Order SN', 'Order No', 'Order Number']);
         $orderId = normalizeShopeeOrderIdCandidate($orderId);
 
@@ -2403,8 +2403,16 @@ function extractShopeeOrderId($cleanText, $html, $pdfSourceText = '', $rawPdfCon
         }
     }
 
+    if ($orderId === '' && (string) $html !== '') {
+        $orderId = extractShopeeOrderIdFromHtml((string) $html);
+    }
+
     if ($orderId === '') {
         $orderId = extractShopeeOrderIdFromText((string) $cleanText);
+    }
+
+    if ($orderId === '' && (string) $rawPdfContent !== '') {
+        $orderId = extractShopeeOrderIdFromPdfBinary($rawPdfContent);
     }
 
     if ($orderId === '' && (string) $html !== '') {
@@ -5428,57 +5436,74 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                 return Promise.resolve('');
             }
 
+            var ocrWorker = null;
+
             return readFileAsArrayBuffer(file).then(function (buffer) {
                 return pdfjsLib.getDocument({
                     data: new Uint8Array(buffer)
                 }).promise;
             }).then(function (pdfDoc) {
-                var pageTexts = [];
-                var sequence = Promise.resolve();
+                // Reuse a single Tesseract worker across every page instead of
+                // spinning one up (and downloading/loading language data) per
+                // page — this is the main cost on multi-page order PDFs.
+                return Tesseract.createWorker('eng').then(function (createdWorker) {
+                    ocrWorker = createdWorker;
 
-                for (var pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
-                    (function (currentPageNumber) {
-                        sequence = sequence.then(function () {
-                            return pdfDoc.getPage(currentPageNumber).then(function (page) {
-                                // Slightly sharper raster improves OCR accuracy on small SKU text without changing the normal text-layer path.
-                                var viewport = page.getViewport({ scale: 3.0 });
-                                var canvas = document.createElement('canvas');
-                                var context = canvas.getContext('2d');
-                                canvas.width = viewport.width;
-                                canvas.height = viewport.height;
+                    var pageTexts = [];
+                    var sequence = Promise.resolve();
 
-                                if (!context) {
-                                    pageTexts.push('');
-                                    return;
-                                }
+                    for (var pageNumber = 1; pageNumber <= pdfDoc.numPages; pageNumber++) {
+                        (function (currentPageNumber) {
+                            sequence = sequence.then(function () {
+                                return pdfDoc.getPage(currentPageNumber).then(function (page) {
+                                    // Slightly sharper raster improves OCR accuracy on small SKU text without changing the normal text-layer path.
+                                    var viewport = page.getViewport({ scale: 3.0 });
+                                    var canvas = document.createElement('canvas');
+                                    var context = canvas.getContext('2d');
+                                    canvas.width = viewport.width;
+                                    canvas.height = viewport.height;
 
-                                return page.render({
-                                    canvasContext: context,
-                                    viewport: viewport
-                                }).promise.then(function () {
-                                    return Tesseract.recognize(canvas, 'eng').then(function (result) {
-                                        pageTexts.push(
-                                            result && result.data && result.data.text
-                                                ? String(result.data.text).trim()
-                                                : ''
-                                        );
+                                    if (!context) {
+                                        pageTexts.push('');
+                                        return;
+                                    }
+
+                                    return page.render({
+                                        canvasContext: context,
+                                        viewport: viewport
+                                    }).promise.then(function () {
+                                        return ocrWorker.recognize(canvas).then(function (result) {
+                                            pageTexts.push(
+                                                result && result.data && result.data.text
+                                                    ? String(result.data.text).trim()
+                                                    : ''
+                                            );
+                                        }).catch(function () {
+                                            pageTexts.push('');
+                                        });
                                     }).catch(function () {
                                         pageTexts.push('');
                                     });
                                 }).catch(function () {
                                     pageTexts.push('');
                                 });
-                            }).catch(function () {
-                                pageTexts.push('');
                             });
-                        });
-                    })(pageNumber);
-                }
+                        })(pageNumber);
+                    }
 
-                return sequence.then(function () {
-                    return pageTexts.join('\n').trim();
+                    return sequence.then(function () {
+                        return pageTexts.join('\n').trim();
+                    });
                 });
+            }).then(function (text) {
+                if (ocrWorker) {
+                    ocrWorker.terminate();
+                }
+                return text;
             }).catch(function () {
+                if (ocrWorker) {
+                    ocrWorker.terminate();
+                }
                 return '';
             });
         }
