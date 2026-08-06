@@ -784,8 +784,9 @@ if ($stmt) {
         .campaign-follow-up-image-lightbox-viewport img {
             transform-origin: center center;
             transition: transform 0.12s ease-out;
-            max-width: none;
-            max-height: none;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
         }
 
         .campaign-follow-up-image-lightbox-toolbar {
