@@ -75,6 +75,7 @@ function campaignFollowUpFetchTask($connect, $taskId)
             cc.`customer_name`,
             cc.`platform`,
             cm.`message_title`,
+            cm.`message_preview`,
             u.`name` AS pic_name,
             u.`username` AS pic_username
         FROM `" . CAMPAIGN_FOLLOW_UP . "` cf
@@ -261,6 +262,23 @@ function campaignFollowUpResolveSourceCustomerForTag($connect, $financeConnect, 
     }
 
     return array('platform' => $platform, 'customer_id' => 0);
+}
+
+function campaignFollowUpBuildCustomerProfileUrl($connect, $financeConnect, $task)
+{
+    if (!function_exists('customerDailyReportGetCustomerMeta')) {
+        return '';
+    }
+
+    $sourceCustomer = campaignFollowUpResolveSourceCustomerForTag($connect, $financeConnect, $task);
+    $sourcePlatform = trim((string) ($sourceCustomer['platform'] ?? ''));
+    $sourceCustomerId = (int) ($sourceCustomer['customer_id'] ?? 0);
+    if ($sourcePlatform === '' || $sourceCustomerId <= 0) {
+        return '';
+    }
+
+    $customerMeta = customerDailyReportGetCustomerMeta($connect, $financeConnect, $sourcePlatform, $sourceCustomerId);
+    return trim((string) ($customerMeta['record_url'] ?? ''));
 }
 
 function campaignFollowUpAssignCampaignTagToCustomer($connect, $financeConnect, $task, $tagName, $pageTitle)
@@ -534,7 +552,11 @@ if ($followUpSaveRequested) {
             // campaign module. Uses the same platform-customer id already resolved for
             // tagging above.
             if (function_exists('customerFollowUpInsertReadableUserRecordLog')) {
-                $recordLogContent = 'Campaign follow-up completed for campaign "' . (string) ($task['campaign_name'] ?? '') . '" (message: ' . (string) ($task['message_title'] ?? '') . ').';
+                $recordLogContent = 'Campaign follow-up completed for campaign "' . (string) ($task['campaign_name'] ?? '') . '" (message: ' . (string) ($task['message_preview'] ?? '') . ').';
+                $tagNameForLog = trim((string) ($campaignTagResult['tag_row']['name'] ?? $labelPreview));
+                if ($tagNameForLog !== '') {
+                    $recordLogContent .= ' Tag added: ' . $tagNameForLog . '.';
+                }
                 if ($remark !== '') {
                     $recordLogContent .= ' Remark: ' . $remark;
                 }
@@ -639,6 +661,11 @@ if ($stmt) {
             isset($finance_connect) ? $finance_connect : $connect,
             $row
         );
+        $row['customer_profile_url'] = campaignFollowUpBuildCustomerProfileUrl(
+            $connect,
+            isset($finance_connect) ? $finance_connect : $connect,
+            $row
+        );
         $taskRows[] = $row;
     }
     $stmt->close();
@@ -718,6 +745,67 @@ if ($stmt) {
             margin: 0 auto;
             border-radius: 0.375rem;
             object-fit: contain;
+            cursor: zoom-in;
+        }
+
+        .campaign-follow-up-page .arrival-follow-up-preview-resize-note {
+            font-size: 0.78rem;
+            color: #6c757d;
+            text-align: center;
+            margin-top: 0.35rem;
+        }
+
+        .campaign-follow-up-image-lightbox {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.82);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .campaign-follow-up-image-lightbox.is-open {
+            display: flex;
+        }
+
+        .campaign-follow-up-image-lightbox-viewport {
+            width: 90vw;
+            height: 82vh;
+            overflow: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .campaign-follow-up-image-lightbox-viewport img {
+            transform-origin: center center;
+            transition: transform 0.12s ease-out;
+            max-width: none;
+            max-height: none;
+        }
+
+        .campaign-follow-up-image-lightbox-toolbar {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .campaign-follow-up-image-lightbox-toolbar button {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .campaign-follow-up-image-lightbox-toolbar button:hover {
+            background: rgba(255, 255, 255, 0.3);
         }
 
         .campaign-follow-up-page .arrival-follow-up-preview-note {
@@ -930,7 +1018,7 @@ if ($stmt) {
                                 <button class="btn btn-danger me-1" type="button" title="Delete" onclick="<?= campaignH($deleteOnClick) ?>"><i class="fas fa-trash-alt"></i></button>
                             <?php endif; ?>
                         </td>
-                        <td><?= campaignH($displayCustomerName) ?></td>
+                        <td><?php $customerProfileUrl = trim((string) ($row['customer_profile_url'] ?? '')); ?><?php if ($customerProfileUrl !== ''): ?><a href="<?= campaignH($customerProfileUrl) ?>" target="_blank" rel="noopener noreferrer"><?= campaignH($displayCustomerName) ?></a><?php else: ?><?= campaignH($displayCustomerName) ?><?php endif; ?></td>
                         <td><?= campaignH($row['platform'] ?? '') ?></td>
                         <td><?= campaignH($row['message_title'] ?? '') ?></td>
                         <td><?= campaignH($row['follow_up_date'] ?? '') ?></td>
@@ -998,8 +1086,9 @@ if ($stmt) {
                         <div class="customer-follow-up-field-error" id="campaign_follow_up_attachment_error">Screenshot / Attachment is required.</div>
                         <div class="arrival-follow-up-preview" id="campaign_follow_up_attachment_preview_wrap">
                             <a id="campaign_follow_up_existing_attachment_link" class="arrival-follow-up-preview-link d-none" href="#" target="_blank" rel="noopener noreferrer"></a>
-                            <img id="campaign_follow_up_attachment_preview_img" alt="Follow-Up Attachment Preview">
+                            <img id="campaign_follow_up_attachment_preview_img" alt="Follow-Up Attachment Preview" title="Click to zoom in">
                             <div class="arrival-follow-up-preview-note d-none" id="campaign_follow_up_attachment_preview_note"></div>
+                            <div class="arrival-follow-up-preview-resize-note d-none" id="campaign_follow_up_attachment_resize_note"></div>
                         </div>
                     </div>
 
@@ -1015,6 +1104,17 @@ if ($stmt) {
                 </div>
             </form>
         </div>
+    </div>
+</div>
+
+<div class="campaign-follow-up-image-lightbox" id="campaign_follow_up_image_lightbox">
+    <div class="campaign-follow-up-image-lightbox-toolbar">
+        <button type="button" id="campaign_follow_up_lightbox_zoom_out" title="Zoom out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+        <button type="button" id="campaign_follow_up_lightbox_zoom_in" title="Zoom in"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+        <button type="button" id="campaign_follow_up_lightbox_close" title="Close"><i class="fa-solid fa-xmark"></i></button>
+    </div>
+    <div class="campaign-follow-up-image-lightbox-viewport">
+        <img id="campaign_follow_up_lightbox_img" alt="Follow-Up Attachment (zoomed)">
     </div>
 </div>
 
@@ -1055,15 +1155,127 @@ if ($stmt) {
         return true;
     }
 
-    function bindCampaignFollowUpAttachmentPreview(inputId, wrapId, imageId, noteId, existingLinkId) {
+    var CAMPAIGN_FOLLOW_UP_RESIZE_THRESHOLD_BYTES = 1.5 * 1024 * 1024;
+    var CAMPAIGN_FOLLOW_UP_RESIZE_MAX_DIMENSION = 1920;
+    var CAMPAIGN_FOLLOW_UP_RESIZE_QUALITY = 0.82;
+
+    // Large screenshots can silently exceed the server's post_max_size/upload_max_filesize
+    // limits, which makes PHP drop $_FILES entirely -- the save then fails with a
+    // confusing "Screenshot / Attachment is required" error even though a file was
+    // clearly chosen. Downscaling oversized images client-side before they're
+    // submitted avoids that failure mode without needing the user to manually resize
+    // anything themselves.
+    function campaignFollowUpResizeImageIfNeeded(file) {
+        return new Promise(function (resolve) {
+            if (!file || file.type.indexOf('image/') !== 0 || file.type === 'image/gif' || file.size <= CAMPAIGN_FOLLOW_UP_RESIZE_THRESHOLD_BYTES) {
+                resolve({ file: file, resized: false });
+                return;
+            }
+
+            var objectUrl = URL.createObjectURL(file);
+            var img = new Image();
+
+            img.onload = function () {
+                var width = img.naturalWidth;
+                var height = img.naturalHeight;
+                var scale = Math.min(1, CAMPAIGN_FOLLOW_UP_RESIZE_MAX_DIMENSION / Math.max(width, height));
+                var targetWidth = Math.max(1, Math.round(width * scale));
+                var targetHeight = Math.max(1, Math.round(height * scale));
+
+                var canvas = document.createElement('canvas');
+                canvas.width = targetWidth;
+                canvas.height = targetHeight;
+                var ctx = canvas.getContext('2d');
+                ctx.drawImage(img, 0, 0, targetWidth, targetHeight);
+                URL.revokeObjectURL(objectUrl);
+
+                canvas.toBlob(function (blob) {
+                    if (!blob || blob.size >= file.size) {
+                        resolve({ file: file, resized: false });
+                        return;
+                    }
+
+                    var resizedFile;
+                    try {
+                        resizedFile = new File([blob], file.name, { type: 'image/jpeg', lastModified: Date.now() });
+                    } catch (e) {
+                        resizedFile = blob;
+                    }
+                    resolve({ file: resizedFile, resized: true });
+                }, 'image/jpeg', CAMPAIGN_FOLLOW_UP_RESIZE_QUALITY);
+            };
+            img.onerror = function () {
+                URL.revokeObjectURL(objectUrl);
+                resolve({ file: file, resized: false });
+            };
+            img.src = objectUrl;
+        });
+    }
+
+    function campaignFollowUpFormatFileSize(bytes) {
+        if (bytes >= 1024 * 1024) {
+            return (bytes / (1024 * 1024)).toFixed(1) + ' MB';
+        }
+        return Math.round(bytes / 1024) + ' KB';
+    }
+
+    var campaignFollowUpLightbox = document.getElementById('campaign_follow_up_image_lightbox');
+    var campaignFollowUpLightboxImg = document.getElementById('campaign_follow_up_lightbox_img');
+    var campaignFollowUpLightboxZoom = 1;
+
+    function campaignFollowUpSetLightboxZoom(zoom) {
+        campaignFollowUpLightboxZoom = Math.min(4, Math.max(0.5, zoom));
+        if (campaignFollowUpLightboxImg) {
+            campaignFollowUpLightboxImg.style.transform = 'scale(' + campaignFollowUpLightboxZoom + ')';
+        }
+    }
+
+    function campaignFollowUpOpenLightbox(src) {
+        if (!src || !campaignFollowUpLightbox || !campaignFollowUpLightboxImg) {
+            return;
+        }
+        campaignFollowUpLightboxImg.src = src;
+        campaignFollowUpSetLightboxZoom(1);
+        campaignFollowUpLightbox.classList.add('is-open');
+    }
+
+    function campaignFollowUpCloseLightbox() {
+        if (campaignFollowUpLightbox) {
+            campaignFollowUpLightbox.classList.remove('is-open');
+        }
+    }
+
+    if (campaignFollowUpLightbox) {
+        document.getElementById('campaign_follow_up_lightbox_close').addEventListener('click', campaignFollowUpCloseLightbox);
+        document.getElementById('campaign_follow_up_lightbox_zoom_in').addEventListener('click', function () {
+            campaignFollowUpSetLightboxZoom(campaignFollowUpLightboxZoom + 0.25);
+        });
+        document.getElementById('campaign_follow_up_lightbox_zoom_out').addEventListener('click', function () {
+            campaignFollowUpSetLightboxZoom(campaignFollowUpLightboxZoom - 0.25);
+        });
+        campaignFollowUpLightbox.addEventListener('click', function (event) {
+            if (event.target === campaignFollowUpLightbox) {
+                campaignFollowUpCloseLightbox();
+            }
+        });
+    }
+
+    function bindCampaignFollowUpAttachmentPreview(inputId, wrapId, imageId, noteId, existingLinkId, resizeNoteId) {
         var fileInput = document.getElementById(inputId);
         var previewWrap = document.getElementById(wrapId);
         var previewImage = document.getElementById(imageId);
         var previewNote = document.getElementById(noteId);
         var existingLink = existingLinkId ? document.getElementById(existingLinkId) : null;
+        var resizeNote = resizeNoteId ? document.getElementById(resizeNoteId) : null;
         if (!fileInput || !previewWrap || !previewImage || !previewNote) {
             return null;
         }
+
+        previewImage.addEventListener('click', function () {
+            if (previewImage.src) {
+                campaignFollowUpOpenLightbox(previewImage.src);
+            }
+        });
 
         var currentObjectUrl = null;
         var getExistingAttachment = function () {
@@ -1139,13 +1351,33 @@ if ($stmt) {
 
             clearExistingLink();
 
+            if (resizeNote) {
+                resizeNote.textContent = '';
+                resizeNote.classList.add('d-none');
+            }
+
             if (file.type.indexOf('image/') === 0) {
-                currentObjectUrl = URL.createObjectURL(file);
-                previewImage.src = currentObjectUrl;
-                previewImage.style.display = 'block';
-                previewNote.textContent = '';
-                previewNote.classList.add('d-none');
-                previewWrap.style.display = 'block';
+                var originalSize = file.size;
+                campaignFollowUpResizeImageIfNeeded(file).then(function (result) {
+                    if (result.resized) {
+                        var dt = new DataTransfer();
+                        dt.items.add(result.file);
+                        fileInput.files = dt.files;
+                        if (resizeNote) {
+                            resizeNote.textContent = 'Image was too large and was automatically resized (' +
+                                campaignFollowUpFormatFileSize(originalSize) + ' → ' +
+                                campaignFollowUpFormatFileSize(result.file.size) + ').';
+                            resizeNote.classList.remove('d-none');
+                        }
+                    }
+
+                    currentObjectUrl = URL.createObjectURL(result.file);
+                    previewImage.src = currentObjectUrl;
+                    previewImage.style.display = 'block';
+                    previewNote.textContent = '';
+                    previewNote.classList.add('d-none');
+                    previewWrap.style.display = 'block';
+                });
                 return;
             }
 
@@ -1185,7 +1417,8 @@ if ($stmt) {
         'campaign_follow_up_attachment_preview_wrap',
         'campaign_follow_up_attachment_preview_img',
         'campaign_follow_up_attachment_preview_note',
-        'campaign_follow_up_existing_attachment_link'
+        'campaign_follow_up_existing_attachment_link',
+        'campaign_follow_up_attachment_resize_note'
     );
 
     var attachmentField = document.getElementById('campaign_follow_up_attachment');
@@ -1241,6 +1474,11 @@ if ($stmt) {
             screenshotField.required = !isViewMode && !existingAttachmentPath;
 
             clearCampaignFollowUpRequiredErrors();
+            var resizeNoteEl = document.getElementById('campaign_follow_up_attachment_resize_note');
+            if (resizeNoteEl) {
+                resizeNoteEl.textContent = '';
+                resizeNoteEl.classList.add('d-none');
+            }
             if (campaignFollowUpAttachmentPreviewHelper) {
                 campaignFollowUpAttachmentPreviewHelper.clearPreview();
                 campaignFollowUpAttachmentPreviewHelper.showExistingAttachment();
