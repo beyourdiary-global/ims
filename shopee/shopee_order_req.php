@@ -2694,6 +2694,53 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                         </div>
                     </div>
                 </div>
+                <?php
+                $sorStockOutPhotoPaths = array();
+                if ($act !== 'I' && $currentOrderStatusValue === 'WAERD') {
+                    $sorStockOutOrderCode = isset($row['orderID']) ? trim((string) $row['orderID']) : '';
+                    if ($sorStockOutOrderCode !== '') {
+                        $sorStockOutSql = "SELECT `attachment` FROM `stock_in_order`
+                            WHERE `status`='A'
+                              AND COALESCE(NULLIF(TRIM(`stock_type`), ''), 'Stock In') = 'Stock Out'
+                              AND `order_number` = '" . mysqli_real_escape_string($finance_connect, $sorStockOutOrderCode) . "'
+                            ORDER BY `id` ASC";
+                        $sorStockOutResult = mysqli_query($finance_connect, $sorStockOutSql);
+                        if ($sorStockOutResult) {
+                            while ($sorStockOutRow = mysqli_fetch_assoc($sorStockOutResult)) {
+                                foreach (siAttachmentDecodeList((string) ($sorStockOutRow['attachment'] ?? '')) as $sorStockOutAttachPath) {
+                                    $sorStockOutPhotoPaths[] = $sorStockOutAttachPath;
+                                }
+                            }
+                        }
+                    }
+                    $sorStockOutPhotoPaths = array_values(array_unique($sorStockOutPhotoPaths));
+                }
+                ?>
+                <?php if ($act !== 'I' && $currentOrderStatusValue === 'WAERD') { ?>
+                <div class="form-group mb-4">
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <h3>Stock Out Photos</h3>
+                            <?php if (!empty($sorStockOutPhotoPaths)) { ?>
+                                <div class="sor-stock-out-photo-grid">
+                                    <?php foreach ($sorStockOutPhotoPaths as $sorStockOutPhotoPath) { ?>
+                                        <?php
+                                        $sorStockOutPhotoExt = strtolower(pathinfo((string) $sorStockOutPhotoPath, PATHINFO_EXTENSION));
+                                        if (!in_array($sorStockOutPhotoExt, array('png', 'jpg', 'jpeg', 'webp'), true)) {
+                                            continue;
+                                        }
+                                        $sorStockOutPhotoUrl = rtrim((string) $SITEURL, '/') . '/' . ltrim((string) $sorStockOutPhotoPath, '/');
+                                        ?>
+                                        <img src="<?= htmlspecialchars($sorStockOutPhotoUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Stock Out Photo" title="Click to zoom in" onclick="sorOpenStockOutLightbox(this.src)">
+                                    <?php } ?>
+                                </div>
+                            <?php } else { ?>
+                                <div class="alert alert-light border">No stock out attachment found for this order.</div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                </div>
+                <?php } ?>
                 <div class="form-group">
                     <div class="row">
                         <div class="col-md-6 mb-3">
@@ -3183,53 +3230,6 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     </div>
                 </div>
                 <?php }} ?>
-                <?php
-                $sorStockOutPhotoPaths = array();
-                if ($act !== 'I' && $currentOrderStatusValue === 'WAERD') {
-                    $sorStockOutOrderCode = isset($row['orderID']) ? trim((string) $row['orderID']) : '';
-                    if ($sorStockOutOrderCode !== '') {
-                        $sorStockOutSql = "SELECT `attachment` FROM `stock_in_order`
-                            WHERE `status`='A'
-                              AND COALESCE(NULLIF(TRIM(`stock_type`), ''), 'Stock In') = 'Stock Out'
-                              AND `order_number` = '" . mysqli_real_escape_string($finance_connect, $sorStockOutOrderCode) . "'
-                            ORDER BY `id` ASC";
-                        $sorStockOutResult = mysqli_query($finance_connect, $sorStockOutSql);
-                        if ($sorStockOutResult) {
-                            while ($sorStockOutRow = mysqli_fetch_assoc($sorStockOutResult)) {
-                                foreach (siAttachmentDecodeList((string) ($sorStockOutRow['attachment'] ?? '')) as $sorStockOutAttachPath) {
-                                    $sorStockOutPhotoPaths[] = $sorStockOutAttachPath;
-                                }
-                            }
-                        }
-                    }
-                    $sorStockOutPhotoPaths = array_values(array_unique($sorStockOutPhotoPaths));
-                }
-                ?>
-                <?php if ($act !== 'I' && $currentOrderStatusValue === 'WAERD') { ?>
-                <div class="form-group mb-4">
-                    <div class="row">
-                        <div class="col-12 mb-3">
-                            <h3>Stock Out Photos</h3>
-                            <?php if (!empty($sorStockOutPhotoPaths)) { ?>
-                                <div class="sor-stock-out-photo-grid">
-                                    <?php foreach ($sorStockOutPhotoPaths as $sorStockOutPhotoPath) { ?>
-                                        <?php
-                                        $sorStockOutPhotoExt = strtolower(pathinfo((string) $sorStockOutPhotoPath, PATHINFO_EXTENSION));
-                                        if (!in_array($sorStockOutPhotoExt, array('png', 'jpg', 'jpeg', 'webp'), true)) {
-                                            continue;
-                                        }
-                                        $sorStockOutPhotoUrl = rtrim((string) $SITEURL, '/') . '/' . ltrim((string) $sorStockOutPhotoPath, '/');
-                                        ?>
-                                        <img src="<?= htmlspecialchars($sorStockOutPhotoUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Stock Out Photo" title="Click to zoom in" onclick="sorOpenStockOutLightbox(this.src)">
-                                    <?php } ?>
-                                </div>
-                            <?php } else { ?>
-                                <div class="alert alert-light border">No stock out attachment found for this order.</div>
-                            <?php } ?>
-                        </div>
-                    </div>
-                </div>
-                <?php } ?>
                 <?php if ($act !== 'I' && (!empty($transitionHistoryRows) || !empty($editHistoryRows))) { ?>
                 <div class="form-group mb-4">
                     <div class="row">
