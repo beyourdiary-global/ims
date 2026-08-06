@@ -2106,6 +2106,75 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             }
         }
 
+        .sor-stock-out-photo-grid {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .sor-stock-out-photo-grid img {
+            width: 120px;
+            height: 120px;
+            object-fit: cover;
+            border-radius: 6px;
+            border: 1px solid #dee2e6;
+            cursor: zoom-in;
+        }
+
+        .sor-stock-out-image-lightbox {
+            display: none;
+            position: fixed;
+            inset: 0;
+            background: rgba(0, 0, 0, 0.82);
+            z-index: 2000;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sor-stock-out-image-lightbox.is-open {
+            display: flex;
+        }
+
+        .sor-stock-out-image-lightbox-viewport {
+            width: 90vw;
+            height: 82vh;
+            overflow: auto;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .sor-stock-out-image-lightbox-viewport img {
+            transform-origin: center center;
+            transition: transform 0.12s ease-out;
+            max-width: 100%;
+            max-height: 100%;
+            object-fit: contain;
+        }
+
+        .sor-stock-out-image-lightbox-toolbar {
+            position: absolute;
+            top: 16px;
+            right: 16px;
+            display: flex;
+            gap: 8px;
+        }
+
+        .sor-stock-out-image-lightbox-toolbar button {
+            width: 36px;
+            height: 36px;
+            border-radius: 50%;
+            border: none;
+            background: rgba(255, 255, 255, 0.15);
+            color: #fff;
+            font-size: 16px;
+            cursor: pointer;
+        }
+
+        .sor-stock-out-image-lightbox-toolbar button:hover {
+            background: rgba(255, 255, 255, 0.3);
+        }
+
     </style>
 </head>
 
@@ -3114,6 +3183,53 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     </div>
                 </div>
                 <?php }} ?>
+                <?php
+                $sorStockOutPhotoPaths = array();
+                if ($act !== 'I' && $currentOrderStatusValue === 'WAERD') {
+                    $sorStockOutOrderCode = isset($row['orderID']) ? trim((string) $row['orderID']) : '';
+                    if ($sorStockOutOrderCode !== '') {
+                        $sorStockOutSql = "SELECT `attachment` FROM `stock_in_order`
+                            WHERE `status`='A'
+                              AND COALESCE(NULLIF(TRIM(`stock_type`), ''), 'Stock In') = 'Stock Out'
+                              AND `order_number` = '" . mysqli_real_escape_string($finance_connect, $sorStockOutOrderCode) . "'
+                            ORDER BY `id` ASC";
+                        $sorStockOutResult = mysqli_query($finance_connect, $sorStockOutSql);
+                        if ($sorStockOutResult) {
+                            while ($sorStockOutRow = mysqli_fetch_assoc($sorStockOutResult)) {
+                                foreach (siAttachmentDecodeList((string) ($sorStockOutRow['attachment'] ?? '')) as $sorStockOutAttachPath) {
+                                    $sorStockOutPhotoPaths[] = $sorStockOutAttachPath;
+                                }
+                            }
+                        }
+                    }
+                    $sorStockOutPhotoPaths = array_values(array_unique($sorStockOutPhotoPaths));
+                }
+                ?>
+                <?php if ($act !== 'I' && $currentOrderStatusValue === 'WAERD') { ?>
+                <div class="form-group mb-4">
+                    <div class="row">
+                        <div class="col-12 mb-3">
+                            <h3>Stock Out Photos</h3>
+                            <?php if (!empty($sorStockOutPhotoPaths)) { ?>
+                                <div class="sor-stock-out-photo-grid">
+                                    <?php foreach ($sorStockOutPhotoPaths as $sorStockOutPhotoPath) { ?>
+                                        <?php
+                                        $sorStockOutPhotoExt = strtolower(pathinfo((string) $sorStockOutPhotoPath, PATHINFO_EXTENSION));
+                                        if (!in_array($sorStockOutPhotoExt, array('png', 'jpg', 'jpeg', 'webp'), true)) {
+                                            continue;
+                                        }
+                                        $sorStockOutPhotoUrl = rtrim((string) $SITEURL, '/') . '/' . ltrim((string) $sorStockOutPhotoPath, '/');
+                                        ?>
+                                        <img src="<?= htmlspecialchars($sorStockOutPhotoUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Stock Out Photo" title="Click to zoom in" onclick="sorOpenStockOutLightbox(this.src)">
+                                    <?php } ?>
+                                </div>
+                            <?php } else { ?>
+                                <div class="alert alert-light border">No stock out attachment found for this order.</div>
+                            <?php } ?>
+                        </div>
+                    </div>
+                </div>
+                <?php } ?>
                 <?php if ($act !== 'I' && (!empty($transitionHistoryRows) || !empty($editHistoryRows))) { ?>
                 <div class="form-group mb-4">
                     <div class="row">
@@ -3409,8 +3525,18 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             </form>
         </div>
     </div>
+    <div class="sor-stock-out-image-lightbox" id="sor_stock_out_image_lightbox">
+        <div class="sor-stock-out-image-lightbox-toolbar">
+            <button type="button" id="sor_stock_out_lightbox_zoom_out" title="Zoom out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>
+            <button type="button" id="sor_stock_out_lightbox_zoom_in" title="Zoom in"><i class="fa-solid fa-magnifying-glass-plus"></i></button>
+            <button type="button" id="sor_stock_out_lightbox_close" title="Close"><i class="fa-solid fa-xmark"></i></button>
+        </div>
+        <div class="sor-stock-out-image-lightbox-viewport">
+            <img id="sor_stock_out_lightbox_img" alt="Stock Out Photo (zoomed)">
+        </div>
+    </div>
     <?php
-    
+
     /*
         oufei 20231014
         common.fun.js
@@ -3430,6 +3556,47 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
     }
     ?>
     <script>
+        var sorStockOutLightbox = document.getElementById('sor_stock_out_image_lightbox');
+        var sorStockOutLightboxImg = document.getElementById('sor_stock_out_lightbox_img');
+        var sorStockOutLightboxZoom = 1;
+
+        function sorSetStockOutLightboxZoom(zoom) {
+            sorStockOutLightboxZoom = Math.min(4, Math.max(0.5, zoom));
+            if (sorStockOutLightboxImg) {
+                sorStockOutLightboxImg.style.transform = 'scale(' + sorStockOutLightboxZoom + ')';
+            }
+        }
+
+        function sorOpenStockOutLightbox(src) {
+            if (!src || !sorStockOutLightbox || !sorStockOutLightboxImg) {
+                return;
+            }
+            sorStockOutLightboxImg.src = src;
+            sorSetStockOutLightboxZoom(1);
+            sorStockOutLightbox.classList.add('is-open');
+        }
+
+        function sorCloseStockOutLightbox() {
+            if (sorStockOutLightbox) {
+                sorStockOutLightbox.classList.remove('is-open');
+            }
+        }
+
+        if (sorStockOutLightbox) {
+            document.getElementById('sor_stock_out_lightbox_close').addEventListener('click', sorCloseStockOutLightbox);
+            document.getElementById('sor_stock_out_lightbox_zoom_in').addEventListener('click', function () {
+                sorSetStockOutLightboxZoom(sorStockOutLightboxZoom + 0.25);
+            });
+            document.getElementById('sor_stock_out_lightbox_zoom_out').addEventListener('click', function () {
+                sorSetStockOutLightboxZoom(sorStockOutLightboxZoom - 0.25);
+            });
+            sorStockOutLightbox.addEventListener('click', function (event) {
+                if (event.target === sorStockOutLightbox) {
+                    sorCloseStockOutLightbox();
+                }
+            });
+        }
+
         function ensureShopeeOrderReqActionPopup() {
             var popupElement = document.getElementById('shopeeOrderReqActionPopup');
             if (popupElement) {
