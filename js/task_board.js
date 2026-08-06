@@ -2,6 +2,9 @@ var taskItemActionModalState = {
   itemId: 0,
 };
 
+var linkSearchRequestSeq = 0;
+var childCreateSearchRequestSeq = 0;
+
 $app.on("click", ".task-open-composer-btn", function () {
   var $column = $(this).closest(".task-column");
   openComposerForColumn($column);
@@ -4285,22 +4288,54 @@ function searchChildWorkItems(keyword) {
     return;
   }
 
-  itemDetailModalState.childCreateSearchResults = localSearchChildWorkItems(
-    parentItemId,
-    requestKeyword,
-  );
-  var selectedItemId = Number(itemDetailModalState.childCreateSelectedItemId || 0);
-  if (selectedItemId > 0) {
-    var hasSelected = itemDetailModalState.childCreateSearchResults.some(function (
-      item,
-    ) {
-      return Number(item && item.id ? item.id : 0) === selectedItemId;
-    });
-    if (!hasSelected) {
-      itemDetailModalState.childCreateSelectedItemId = 0;
-    }
+  if (typeof window.postAction !== "function") {
+    itemDetailModalState.childCreateSearchResults = localSearchChildWorkItems(
+      parentItemId,
+      requestKeyword,
+    );
+    renderChildCreatePanel();
+    return;
   }
-  renderChildCreatePanel();
+
+  var requestSeq = ++childCreateSearchRequestSeq;
+  window.postAction(
+    {
+      task_action: "search_child_work_items",
+      parent_item_id: parentItemId,
+      keyword: requestKeyword,
+    },
+    function (res) {
+      if (requestSeq !== childCreateSearchRequestSeq) {
+        return;
+      }
+      itemDetailModalState.childCreateSearchResults = Array.isArray(
+        res && res.items,
+      )
+        ? res.items
+        : [];
+      var selectedItemId = Number(
+        itemDetailModalState.childCreateSelectedItemId || 0,
+      );
+      if (selectedItemId > 0) {
+        var hasSelected = itemDetailModalState.childCreateSearchResults.some(
+          function (item) {
+            return Number(item && item.id ? item.id : 0) === selectedItemId;
+          },
+        );
+        if (!hasSelected) {
+          itemDetailModalState.childCreateSelectedItemId = 0;
+        }
+      }
+      renderChildCreatePanel();
+    },
+    function () {
+      if (requestSeq !== childCreateSearchRequestSeq) {
+        return;
+      }
+      itemDetailModalState.childCreateSearchResults = [];
+      renderChildCreatePanel();
+    },
+  );
 }
 
 function queueChildWorkItemSearch() {
@@ -4429,20 +4464,51 @@ function searchLinkedWorkItems(keyword) {
     return;
   }
 
-  itemDetailModalState.linkSearchResults = localSearchLinkedWorkItems(
-    itemId,
-    requestKeyword,
-  );
-  var selectedItemId = Number(itemDetailModalState.linkSelectedItemId || 0);
-  if (selectedItemId > 0) {
-    var hasSelected = itemDetailModalState.linkSearchResults.some(function (item) {
-      return Number(item && item.id ? item.id : 0) === selectedItemId;
-    });
-    if (!hasSelected) {
-      itemDetailModalState.linkSelectedItemId = 0;
-    }
+  if (typeof window.postAction !== "function") {
+    itemDetailModalState.linkSearchResults = localSearchLinkedWorkItems(
+      itemId,
+      requestKeyword,
+    );
+    renderLinkedWorkItemsSection();
+    return;
   }
-  renderLinkedWorkItemsSection();
+
+  var requestSeq = ++linkSearchRequestSeq;
+  window.postAction(
+    {
+      task_action: "search_link_work_items",
+      item_id: itemId,
+      keyword: requestKeyword,
+      relation_type: String(itemDetailModalState.linkRelationType || "").trim(),
+    },
+    function (res) {
+      if (requestSeq !== linkSearchRequestSeq) {
+        return;
+      }
+      itemDetailModalState.linkSearchResults = Array.isArray(res && res.items)
+        ? res.items
+        : [];
+      var selectedItemId = Number(itemDetailModalState.linkSelectedItemId || 0);
+      if (selectedItemId > 0) {
+        var hasSelected = itemDetailModalState.linkSearchResults.some(function (
+          item,
+        ) {
+          return Number(item && item.id ? item.id : 0) === selectedItemId;
+        });
+        if (!hasSelected) {
+          itemDetailModalState.linkSelectedItemId = 0;
+        }
+      }
+      renderLinkedWorkItemsSection();
+    },
+    function () {
+      if (requestSeq !== linkSearchRequestSeq) {
+        return;
+      }
+      itemDetailModalState.linkSearchResults = [];
+      renderLinkedWorkItemsSection();
+    },
+  );
 }
 
 function queueLinkedWorkItemSearch() {
