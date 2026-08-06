@@ -2668,7 +2668,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             <?php } ?>
                             <?php if ($act !== 'I' && $currentOrderStatusValue === 'WAERD') { ?>
                                 <div class="mt-3">
-                                    <label class="form-label form_lbl">Stock Out Photos</label>
+                                    <label class="form-label form_lbl">Stock Out Record</label>
                                     <?php if (!empty($sorStockOutPhotoPaths)) { ?>
                                         <div class="sor-stock-out-photo-grid">
                                             <?php foreach ($sorStockOutPhotoPaths as $sorStockOutPhotoPath) { ?>
