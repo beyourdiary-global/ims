@@ -4368,10 +4368,7 @@ if (!function_exists('customerFollowUpResolveCustomerIdFromOrder')) {
             return (int) $customerRow['id'];
         }
 
-        $platformConfig = function_exists('customerLabelGetPlatformConfig') ? customerLabelGetPlatformConfig($platform) : array();
-        $orderCustomerField = isset($platformConfig['order_customer_field']) ? trim((string) $platformConfig['order_customer_field']) : '';
-        $orderCustomerValue = $orderCustomerField !== '' && isset($orderRow[$orderCustomerField]) ? trim((string) $orderRow[$orderCustomerField]) : '';
-        return ctype_digit($orderCustomerValue) ? (int) $orderCustomerValue : 0;
+        return 0;
     }
 }
 

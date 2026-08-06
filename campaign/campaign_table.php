@@ -130,21 +130,52 @@ if ($filterPic > 0) {
 }
 
 $campaignRows = array();
+// NOTE: each fan-out table (PIC/CUSTOMER/FOLLOW_UP/PURCHASE_RECORD) is aggregated
+// per campaign_id in its own subquery before joining. Joining all four raw tables
+// directly to `c` and then GROUP BY c.id (the previous approach) forces MySQL to
+// build the full cross-product of matching rows across all four tables per
+// campaign before it can COUNT(DISTINCT ...) them apart -- for a campaign with a
+// few hundred customers, follow-ups, and purchase records this is a combinatorial
+// explosion of intermediate rows, and is the main reason this page loads slowly.
 $campaignSql = "SELECT
         c.*,
-        GROUP_CONCAT(DISTINCT COALESCE(NULLIF(u.`name`, ''), NULLIF(u.`username`, ''), cp.`user_id`) ORDER BY u.`name` SEPARATOR ', ') AS pic_names,
-        COUNT(DISTINCT cc.`id`) AS total_participants,
-        COUNT(DISTINCT cf.`id`) AS total_follow_up,
-        COUNT(DISTINCT CASE WHEN cf.`follow_up_status` = 'Completed' THEN cf.`id` END) AS completed_follow_up,
-        COUNT(DISTINCT cpr.`campaign_customer_id`) AS purchased_customers
+        pic.pic_names AS pic_names,
+        COALESCE(cust.total_participants, 0) AS total_participants,
+        COALESCE(fu.total_follow_up, 0) AS total_follow_up,
+        COALESCE(fu.completed_follow_up, 0) AS completed_follow_up,
+        COALESCE(pur.purchased_customers, 0) AS purchased_customers
     FROM `" . CAMPAIGN . "` c
-    LEFT JOIN `" . CAMPAIGN_PIC . "` cp ON cp.`campaign_id` = c.`id` AND cp.`status` = 'A'
-    LEFT JOIN `" . USR_USER . "` u ON u.`id` = cp.`user_id`
-    LEFT JOIN `" . CAMPAIGN_CUSTOMER . "` cc ON cc.`campaign_id` = c.`id` AND cc.`status` = 'A'
-    LEFT JOIN `" . CAMPAIGN_FOLLOW_UP . "` cf ON cf.`campaign_id` = c.`id` AND cf.`status` = 'A'
-    LEFT JOIN `" . CAMPAIGN_PURCHASE_RECORD . "` cpr ON cpr.`campaign_id` = c.`id` AND cpr.`status` = 'A'
+    LEFT JOIN (
+        SELECT
+            cp.`campaign_id`,
+            GROUP_CONCAT(DISTINCT COALESCE(NULLIF(u.`name`, ''), NULLIF(u.`username`, ''), cp.`user_id`) ORDER BY u.`name` SEPARATOR ', ') AS pic_names
+        FROM `" . CAMPAIGN_PIC . "` cp
+        LEFT JOIN `" . USR_USER . "` u ON u.`id` = cp.`user_id`
+        WHERE cp.`status` = 'A'
+        GROUP BY cp.`campaign_id`
+    ) pic ON pic.`campaign_id` = c.`id`
+    LEFT JOIN (
+        SELECT `campaign_id`, COUNT(*) AS total_participants
+        FROM `" . CAMPAIGN_CUSTOMER . "`
+        WHERE `status` = 'A'
+        GROUP BY `campaign_id`
+    ) cust ON cust.`campaign_id` = c.`id`
+    LEFT JOIN (
+        SELECT
+            `campaign_id`,
+            COUNT(*) AS total_follow_up,
+            COUNT(CASE WHEN `follow_up_status` = 'Completed' THEN 1 END) AS completed_follow_up
+        FROM `" . CAMPAIGN_FOLLOW_UP . "`
+        WHERE `status` = 'A'
+        GROUP BY `campaign_id`
+    ) fu ON fu.`campaign_id` = c.`id`
+    LEFT JOIN (
+        SELECT `campaign_id`, COUNT(DISTINCT `campaign_customer_id`) AS purchased_customers
+        FROM `" . CAMPAIGN_PURCHASE_RECORD . "`
+        WHERE `status` = 'A'
+        GROUP BY `campaign_id`
+    ) pur ON pur.`campaign_id` = c.`id`
     WHERE " . implode(' AND ', $where) . "
-    GROUP BY c.`id`
     ORDER BY c.`id` DESC";
 
 $campaignStmt = $connect->prepare($campaignSql);

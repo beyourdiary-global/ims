@@ -442,6 +442,9 @@ if (empty($_SESSION['csrf_token'])) {
                                 <?php endforeach; ?>
                             </select>
                         </div>
+                        <button class="sheets-toolbar-btn sheets-btn-reset-filter" id="sheetsResetFilterBtn" type="button" title="Reset all column filters" style="display:none;">
+                            <i class="fa-solid fa-filter-circle-xmark"></i> Reset Filter
+                        </button>
                     </div>
                     <div class="sheets-toolbar-right">
                         <?php if ($workItemCanEdit || $workItemCanDelete): ?>

@@ -206,6 +206,15 @@ if (!function_exists('luckyDrawPrizeGenerateNextUniqueColor')) {
             }
         }
 
+        for ($hue = 0; $hue < 360; $hue += 5) {
+            $candidateColor = luckyDrawPrizeSanitizeHexColor(
+                luckyDrawPrizeHslToHex($hue, 0.70, 0.50)
+            );
+            if (!in_array($candidateColor, $normalizedExistingColors, true)) {
+                return $candidateColor;
+            }
+        }
+
         return luckyDrawPrizeSanitizeHexColor(
             luckyDrawPrizeHslToHex($baseHue + 180, max(0.60, $baseSaturation), min(0.58, max(0.44, $baseLightness)))
         );
@@ -273,6 +282,9 @@ if ($isView && !empty($editingPrize)) {
     ));
 }
 
+$formError = '';
+$submittedFormValues = array();
+
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') {
     $prizeId = (int) post('prize_id');
     $isEditSave = $prizeId > 0;
@@ -294,29 +306,54 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
     $price = max(0, luckyDrawNormalizePositiveFloat(post('price'), 0));
     $labelColor = luckyDrawPrizeSanitizeHexColor(post('label_color') !== '' ? post('label_color') : '#4a11c9');
     $remark = luckyDrawSafePublicText(post('remark'), 1000);
+    $postedPackageId = (int) post('package_id');
+    $postedStockOutWarehouseId = (int) post('stock_out_warehouse_id');
+
+    // Re-render the same form (with whatever the user typed preserved) instead of
+    // redirecting through session-based flash on validation failure -- a redirect
+    // depends on the session surviving the round trip, and if it doesn't the user
+    // just sees a blank form with zero explanation of what went wrong.
+    $submittedFormValues = array(
+        'id' => $prizeId,
+        'prize_name' => $prizeName,
+        'prize_type' => $prizeType,
+        'voucher_code' => $voucherCode,
+        'weight' => $rawWeightInput !== '' ? $rawWeightInput : $weight,
+        'display_order' => $displayOrder,
+        'total_stock' => $totalStock,
+        'price' => $rawPriceInput !== '' ? $rawPriceInput : $price,
+        'is_enabled' => $isEnabled,
+        'label_color' => $labelColor,
+        'package_id' => $postedPackageId,
+        'stock_out_warehouse_id' => $postedStockOutWarehouseId,
+        'remark' => $remark,
+    );
 
     if ($prizeName === '') {
-        luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams($saveMode, $prizeId), 'danger', 'Prize name is required.');
+        $formError = 'Prize name is required.';
+    } elseif ($rawWeightInput === '' || !is_numeric($rawWeightInput) || (float) $rawWeightInput < 0) {
+        $formError = 'Weight must be numeric and 0 or greater.';
+    } elseif ($rawPriceInput === '') {
+        $formError = 'Price is required.';
+    } elseif ($prizeType === 'voucher' && $voucherCode === '') {
+        $formError = 'Voucher code is required for voucher prizes.';
+    } elseif ($prizeType === 'physical' && $postedPackageId <= 0) {
+        $formError = 'Package is required for physical prizes.';
+    } elseif (luckyDrawPrizeColorExists($connect, $labelColor, $prizeId)) {
+        $formError = 'Prize label color cannot be duplicated.';
     }
 
-    if ($rawWeightInput === '' || !is_numeric($rawWeightInput) || (float) $rawWeightInput < 0) {
-        luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams($saveMode, $prizeId), 'danger', 'Weight must be numeric and 0 or greater.');
-    }
-
-    if ($rawPriceInput === '') {
-        luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams($saveMode, $prizeId), 'danger', 'Price is required.');
-    }
-
-    if ($prizeType === 'voucher' && $voucherCode === '') {
-        luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams($saveMode, $prizeId), 'danger', 'Voucher code is required for voucher prizes.');
-    }
-
-    if (luckyDrawPrizeColorExists($connect, $labelColor, $prizeId)) {
-        luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams($saveMode, $prizeId), 'danger', 'Prize label color cannot be duplicated.');
+    if ($formError !== '') {
+        $mode = $saveMode;
+        $isAdd = $mode === 'I';
+        $isEdit = $mode === 'E';
+        $isView = false;
+        $editingPrize = array_merge($editingPrize, $submittedFormValues);
+        goto renderPrizeForm;
     }
 
     $physicalFields = array(
-        'package_id' => $prizeType === 'physical' ? (int) post('package_id') : 0,
+        'package_id' => $prizeType === 'physical' ? $postedPackageId : 0,
         'country_id' => 0,
         'brand_id' => 0,
         'series_id' => 0,
@@ -325,18 +362,20 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
         'pay_method_id' => 0,
         'sales_pic_user_id' => 0,
     );
-    $stockOutWarehouseId = $prizeType === 'physical' ? (int) post('stock_out_warehouse_id') : 0;
-
-    if ($prizeType === 'physical' && $physicalFields['package_id'] <= 0) {
-        luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams($saveMode, $prizeId), 'danger', 'Package is required for physical prizes.');
-    }
+    $stockOutWarehouseId = $prizeType === 'physical' ? $postedStockOutWarehouseId : 0;
 
     $prizeImagePath = '';
     $hasNewPrizeImage = false;
     if ($prizeType === 'physical' && isset($_FILES['prize_image']) && is_array($_FILES['prize_image']) && (int) $_FILES['prize_image']['error'] === UPLOAD_ERR_OK) {
         $uploadResult = luckyDrawStorePrizeImageUpload($_FILES['prize_image']);
         if (empty($uploadResult['success'])) {
-            luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams($saveMode, $prizeId), 'danger', isset($uploadResult['message']) ? (string) $uploadResult['message'] : 'Unable to upload the prize image.');
+            $formError = isset($uploadResult['message']) ? (string) $uploadResult['message'] : 'Unable to upload the prize image.';
+            $mode = $saveMode;
+            $isAdd = $mode === 'I';
+            $isEdit = $mode === 'E';
+            $isView = false;
+            $editingPrize = array_merge($editingPrize, $submittedFormValues);
+            goto renderPrizeForm;
         }
         $prizeImagePath = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
         $hasNewPrizeImage = $prizeImagePath !== '';
@@ -437,7 +476,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
             LIMIT 1";
         $updateResult = mysqli_query($connect, $sql);
         if (!$updateResult) {
-            luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams('E', $prizeId), 'danger', 'Unable to update this Lucky Draw prize.');
+            $formError = 'Unable to update this Lucky Draw prize. DB error: ' . mysqli_error($connect);
+            $mode = $saveMode;
+            $isAdd = false;
+            $isEdit = true;
+            $isView = false;
+            $editingPrize = array_merge($editingPrize, $submittedFormValues);
+            goto renderPrizeForm;
         }
     } else {
         $sql = "INSERT INTO `" . LUCKY_DRAW_PRIZE . "`
@@ -446,7 +491,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
             ('" . $safePrizeName . "', '" . $safePrizeType . "', " . ($voucherCode !== '' ? ("'" . $safeVoucherCode . "'") : 'NULL') . ", " . ($prizeType === 'physical' && $prizeImagePath !== '' ? ("'" . mysqli_real_escape_string($connect, $prizeImagePath) . "'") : 'NULL') . ", " . number_format($weight, 4, '.', '') . ", " . $totalStock . ", 0, 0, " . $displayOrder . ", '" . $safeIsEnabled . "', '" . $safeLabelColor . "', " . ($physicalFields['package_id'] > 0 ? $physicalFields['package_id'] : 'NULL') . ", " . ($physicalFields['country_id'] > 0 ? $physicalFields['country_id'] : 'NULL') . ", " . ($physicalFields['brand_id'] > 0 ? $physicalFields['brand_id'] : 'NULL') . ", " . ($physicalFields['series_id'] > 0 ? $physicalFields['series_id'] : 'NULL') . ", " . ($physicalFields['fb_page_id'] > 0 ? $physicalFields['fb_page_id'] : 'NULL') . ", " . ($physicalFields['channel_id'] > 0 ? $physicalFields['channel_id'] : 'NULL') . ", " . ($physicalFields['pay_method_id'] > 0 ? $physicalFields['pay_method_id'] : 'NULL') . ", " . ($stockOutWarehouseId > 0 ? $stockOutWarehouseId : 'NULL') . ", " . ($physicalFields['sales_pic_user_id'] > 0 ? $physicalFields['sales_pic_user_id'] : 'NULL') . ", " . number_format($price, 2, '.', '') . ", '" . $safeRemark . "', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
         $insertResult = mysqli_query($connect, $sql);
         if (!$insertResult) {
-            luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams('I'), 'danger', 'Unable to add this Lucky Draw prize.');
+            $formError = 'Unable to add this Lucky Draw prize. DB error: ' . mysqli_error($connect);
+            $mode = $saveMode;
+            $isAdd = true;
+            $isEdit = false;
+            $isView = false;
+            $editingPrize = array_merge($editingPrize, $submittedFormValues);
+            goto renderPrizeForm;
         }
         $prizeId = (int) mysqli_insert_id($connect);
         if ($prizeId > 0) {
@@ -456,7 +507,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
                   AND status = 'A'
                 LIMIT 1");
         } else {
-            luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, luckyDrawPrizeCrudParams('I'), 'danger', 'Unable to add this Lucky Draw prize.');
+            $formError = 'Unable to add this Lucky Draw prize (no insert id returned).';
+            $mode = $saveMode;
+            $isAdd = true;
+            $isEdit = false;
+            $isView = false;
+            $editingPrize = array_merge($editingPrize, $submittedFormValues);
+            goto renderPrizeForm;
         }
     }
 
@@ -473,6 +530,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
     ));
 }
 
+renderPrizeForm:
 $countryOptions = luckyDrawAdminOptionRows($connect, COUNTRIES, 'nicename');
 $brandOptions = luckyDrawAdminOptionRows($connect, BRAND, 'name');
 $seriesOptions = luckyDrawAdminOptionRows($connect, BRD_SERIES, 'name');
@@ -573,7 +631,15 @@ include_once '../menuHeader.php';
 
         <div id="formContainer" class="container d-flex justify-content-center">
             <div class="col-12 col-md-10 formWidthAdjust">
-
+                <?php if ($formError !== '') { ?>
+                    <div class="alert alert-danger">
+                        <?= htmlspecialchars($formError, ENT_QUOTES, 'UTF-8') ?>
+                    </div>
+                <?php } elseif (!empty($flash['message'])) { ?>
+                    <div class="alert alert-<?= htmlspecialchars((string) ($flash['type'] ?? 'info'), ENT_QUOTES, 'UTF-8') ?>">
+                        <?= htmlspecialchars((string) $flash['message'], ENT_QUOTES, 'UTF-8') ?>
+                    </div>
+                <?php } ?>
 
                     <form method="post" enctype="multipart/form-data" id="luckyDrawPrizeForm" novalidate>
                         <input type="hidden" name="form_mode" value="<?= htmlspecialchars($mode, ENT_QUOTES, 'UTF-8') ?>">
@@ -681,7 +747,7 @@ include_once '../menuHeader.php';
 
                         <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                             <?php if (!$isView) { ?>
-                                <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" name="save_prize" id="actionBtn"><?= $isAdd ? 'Add Prize' : 'Edit Prize' ?></button>
+                                <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" name="save_prize" value="1" id="actionBtn"><?= $isAdd ? 'Add Prize' : 'Edit Prize' ?></button>
                             <?php } ?>
                             <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" type="button" id="backBtn" onclick='location.href=<?= json_encode(siteUrlPath(ROUTE_LUCKY_DRAW_ADMIN_PRIZES_TABLE)) ?>'>Back</button>
                         </div>
@@ -761,23 +827,27 @@ include_once '../menuHeader.php';
             labelColorInput.addEventListener('change', validateUniqueLabelColor);
         }
 
-        if (prizeForm) {
-            prizeForm.addEventListener('submit', (event) => {
-                if (!validateUniqueLabelColor()) {
-                    event.preventDefault();
-                    if (labelColorInput) {
-                        labelColorInput.focus();
-                    }
+        const blockSubmitOnDuplicateColor = (event) => {
+            if (!validateUniqueLabelColor()) {
+                event.preventDefault();
+                if (typeof showNotification === 'function') {
+                    showNotification('Prize Label Color cannot be duplicated. Please pick a different color.', 'error');
                 }
-            });
+                if (labelColorInput) {
+                    labelColorInput.scrollIntoView({ behavior: 'smooth', block: 'center' });
+                    labelColorInput.focus();
+                }
+                return false;
+            }
+            return true;
+        };
+
+        if (prizeForm) {
+            prizeForm.addEventListener('submit', blockSubmitOnDuplicateColor);
         }
 
         if (actionBtn) {
-            actionBtn.addEventListener('click', (event) => {
-                if (!validateUniqueLabelColor()) {
-                    event.preventDefault();
-                }
-            });
+            actionBtn.addEventListener('click', blockSubmitOnDuplicateColor);
         }
 
         prizeType.addEventListener('change', sync);

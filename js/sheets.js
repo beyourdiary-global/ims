@@ -932,12 +932,15 @@
             ? "fa-arrow-up-short-wide"
             : "fa-arrow-down-wide-short"
           : "fa-sort";
-      var filterActive = activeFilters[c.key] ? ' style="color:#0c66e4"' : "";
+      var filterIsActive = !!activeFilters[c.key];
+      var filterActiveCls = filterIsActive ? " filter-active" : "";
       html +=
         '<th data-col="' +
         c.key +
         '" data-col-idx="' +
         colIdx +
+        '" class="' +
+        (filterIsActive ? "has-active-filter" : "") +
         '"><div class="sheets-th-inner">' +
         '<span class="sheets-th-label">' +
         esc(c.label) +
@@ -950,11 +953,13 @@
         '" title="Sort"><i class="fa-solid ' +
         sortIcon +
         '"></i></button>' +
-        '<button class="sheets-th-btn btn-filter" data-col="' +
+        '<button class="sheets-th-btn btn-filter' +
+        filterActiveCls +
+        '" data-col="' +
         c.key +
-        '" title="Filter"' +
-        filterActive +
-        '><i class="fa-solid fa-filter"></i></button>' +
+        '" title="' +
+        (filterIsActive ? "Filter (active)" : "Filter") +
+        '"><i class="fa-solid fa-filter"></i></button>' +
         '<button class="sheets-th-btn btn-more" data-col="' +
         c.key +
         '" data-col-idx="' +
@@ -1020,6 +1025,21 @@
     $wrap.html(html);
     updateToolbarInfo();
     updateBulkToolbarState();
+    updateResetFilterBtnState();
+  }
+
+  function updateResetFilterBtnState() {
+    var $btn = $("#sheetsResetFilterBtn");
+    if (!$btn.length) return;
+    var count = Object.keys(activeFilters).length;
+    if (count > 0) {
+      $btn
+        .show()
+        .attr("title", "Clear " + count + " active column filter" + (count > 1 ? "s" : ""))
+        .html('<i class="fa-solid fa-filter-circle-xmark"></i> Reset Filter (' + count + ")");
+    } else {
+      $btn.hide();
+    }
   }
 
   /* ───── bulk edit selection ───── */
@@ -1645,6 +1665,14 @@
     var $popup = $(this).closest(".sheets-filter-popup");
     var colKey = $popup.find(".btn-apply").data("col");
     delete activeFilters[colKey];
+    closeAllPopups();
+    saveViewPrefs();
+    renderTable();
+  });
+
+  $(document).on("click", "#sheetsResetFilterBtn", function (e) {
+    e.preventDefault();
+    activeFilters = {};
     closeAllPopups();
     saveViewPrefs();
     renderTable();
