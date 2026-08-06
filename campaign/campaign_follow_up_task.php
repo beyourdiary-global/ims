@@ -75,6 +75,7 @@ function campaignFollowUpFetchTask($connect, $taskId)
             cc.`customer_name`,
             cc.`platform`,
             cm.`message_title`,
+            cm.`message_preview`,
             u.`name` AS pic_name,
             u.`username` AS pic_username
         FROM `" . CAMPAIGN_FOLLOW_UP . "` cf
@@ -534,7 +535,11 @@ if ($followUpSaveRequested) {
             // campaign module. Uses the same platform-customer id already resolved for
             // tagging above.
             if (function_exists('customerFollowUpInsertReadableUserRecordLog')) {
-                $recordLogContent = 'Campaign follow-up completed for campaign "' . (string) ($task['campaign_name'] ?? '') . '" (message: ' . (string) ($task['message_title'] ?? '') . ').';
+                $recordLogContent = 'Campaign follow-up completed for campaign "' . (string) ($task['campaign_name'] ?? '') . '" (message: ' . (string) ($task['message_preview'] ?? '') . ').';
+                $tagNameForLog = trim((string) ($campaignTagResult['tag_row']['name'] ?? $labelPreview));
+                if ($tagNameForLog !== '') {
+                    $recordLogContent .= ' Tag added: ' . $tagNameForLog . '.';
+                }
                 if ($remark !== '') {
                     $recordLogContent .= ' Remark: ' . $remark;
                 }
