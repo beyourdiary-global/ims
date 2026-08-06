@@ -4652,6 +4652,14 @@ if ($conn->select_db($db_cms)) {
 
     migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_unique_order', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD UNIQUE KEY `idx_campaign_purchase_unique_order` (`campaign_id`,`campaign_customer_id`,`platform`,`order_id`,`order_no`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` duplicate prevention index.");
 
+    // Composite (status, campaign_id) indexes so the campaign_table.php per-campaign
+    // aggregate subqueries (WHERE status='A' GROUP BY campaign_id) can be satisfied
+    // with an index range scan instead of a full table scan + filesort.
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PIC, 'idx_campaign_pic_status_campaign', "ALTER TABLE `" . CAMPAIGN_PIC . "` ADD INDEX `idx_campaign_pic_status_campaign` (`status`, `campaign_id`)", "Verified `" . CAMPAIGN_PIC . "` status/campaign index.");
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_CUSTOMER, 'idx_campaign_customer_status_campaign', "ALTER TABLE `" . CAMPAIGN_CUSTOMER . "` ADD INDEX `idx_campaign_customer_status_campaign` (`status`, `campaign_id`)", "Verified `" . CAMPAIGN_CUSTOMER . "` status/campaign index.");
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_FOLLOW_UP, 'idx_campaign_follow_up_status_campaign', "ALTER TABLE `" . CAMPAIGN_FOLLOW_UP . "` ADD INDEX `idx_campaign_follow_up_status_campaign` (`status`, `campaign_id`)", "Verified `" . CAMPAIGN_FOLLOW_UP . "` status/campaign index.");
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_status_campaign', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD INDEX `idx_campaign_purchase_status_campaign` (`status`, `campaign_id`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` status/campaign index.");
+
 
     $createCampaignRuleSettingSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_RULE_SETTING . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
