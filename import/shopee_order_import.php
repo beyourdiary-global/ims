@@ -2269,6 +2269,19 @@ function normalizeShopeeOrderIdCandidate($value)
     return $value;
 }
 
+function shopeeOrderIdHasAmbiguousOcrChars($orderId)
+{
+    $orderId = strtoupper(trim((string) $orderId));
+    if (strlen($orderId) <= 6) {
+        return false;
+    }
+
+    // The date prefix (first 6 chars) is already corrected, but the free-form
+    // suffix can legitimately contain O/T/S as real letters, so we can't
+    // safely auto-correct it — just flag it for manual review instead.
+    return preg_match('/[1T0OS5]/', substr($orderId, 6)) === 1;
+}
+
 function extractShopeeOrderIdFromText($text)
 {
     $text = (string) $text;
@@ -4544,6 +4557,9 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                             <input class="form-control" type="text" id="order_id" name="order_id" value="<?= htmlspecialchars($previewData['order_id']) ?>" required>
                                             <?php if ($orderIdFieldError !== '') { ?>
                                                 <small class="text-danger fw-bold"><i class="fa-solid fa-circle-exclamation"></i> <?= htmlspecialchars($orderIdFieldError) ?></small>
+                                            <?php } ?>
+                                            <?php if (shopeeOrderIdHasAmbiguousOcrChars($previewData['order_id'])) { ?>
+                                                <div class="text-warning fw-bold mb-1" style="font-size:12px;"><i class="fa-solid fa-triangle-exclamation"></i> Contains characters OCR commonly misreads (1/T, 0/O, 5/S). Please double-check against the original screenshot before saving.</div>
                                             <?php } ?>
                                         </div>
                                         <div class="col-12 col-md-4">
