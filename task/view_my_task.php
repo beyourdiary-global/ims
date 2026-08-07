@@ -78,6 +78,19 @@ if (empty($_SESSION['csrf_token'])) {
     <link rel="stylesheet" href="../css/view_my_task.css?v=<?= (int) @filemtime(__DIR__ . '/../css/view_my_task.css') ?>">
 </head>
 <body>
+<?php
+$sorDebugJsPath = __DIR__ . '/../js/view_my_task.js';
+$sorDebugJsMtime = @filemtime($sorDebugJsPath);
+$sorDebugPhpMtime = @filemtime(__FILE__);
+$sorDebugJsUrl = rtrim((string) $SITEURL, '/') . '/js/view_my_task.js?v=' . (int) $sorDebugJsMtime;
+?>
+<div style="background:#ff0000;color:#fff;padding:14px;font-size:14px;font-family:monospace;word-break:break-all;">
+    DEBUG BUILD MARKER 2026-08-07 |
+    server time: <?= htmlspecialchars(date('Y-m-d H:i:s'), ENT_QUOTES, 'UTF-8') ?> |
+    this PHP file (<?= htmlspecialchars(__FILE__, ENT_QUOTES, 'UTF-8') ?>) last modified: <?= $sorDebugPhpMtime ? htmlspecialchars(date('Y-m-d H:i:s', $sorDebugPhpMtime), ENT_QUOTES, 'UTF-8') : 'UNKNOWN' ?> |
+    view_my_task.js resolved path (<?= htmlspecialchars($sorDebugJsPath, ENT_QUOTES, 'UTF-8') ?>) found on disk: <?= $sorDebugJsMtime ? 'YES, last modified ' . htmlspecialchars(date('Y-m-d H:i:s', $sorDebugJsMtime), ENT_QUOTES, 'UTF-8') : 'NO - FILE NOT FOUND' ?> |
+    JS URL being requested: <a style="color:#fff;text-decoration:underline;" href="<?= htmlspecialchars($sorDebugJsUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank"><?= htmlspecialchars($sorDebugJsUrl, ENT_QUOTES, 'UTF-8') ?></a>
+</div>
 <div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
     <div id="taskBoardApp" class="d-none" aria-hidden="true"></div>
     <div class="col-12 col-md-11">
