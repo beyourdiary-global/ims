@@ -1,10 +1,37 @@
 (function () {
   "use strict";
 
-  console.log("[view_my_task.js] script loaded and running, jQuery version:", (window.jQuery && window.jQuery.fn && window.jQuery.fn.jquery) || "jQuery NOT FOUND");
-  console.log("[view_my_task.js] openItemDetailModal available:", typeof window.openItemDetailModal);
-  console.log("[view_my_task.js] bootstrap available:", typeof window.bootstrap);
-  console.log("[view_my_task.js] rows found on load:", $(".view-my-task-item-row").length, "key cells found:", $(".sheets-cell-key").length, "filter buttons found:", $(".btn-filter").length);
+  var debugLogLines = [];
+  function debugLog() {
+    var parts = [];
+    for (var i = 0; i < arguments.length; i++) {
+      var arg = arguments[i];
+      if (typeof arg === "object" && arg !== null) {
+        try {
+          parts.push(JSON.stringify(arg));
+        } catch (e) {
+          parts.push(String(arg));
+        }
+      } else {
+        parts.push(String(arg));
+      }
+    }
+    var line = "[" + new Date().toISOString().slice(11, 19) + "] " + parts.join(" ");
+    debugLogLines.push(line);
+    if (window.console && typeof window.console.log === "function") {
+      window.console.log.apply(window.console, arguments);
+    }
+    var $panel = $("#viewMyTaskOnScreenDebugLog");
+    if ($panel.length) {
+      $panel.text(debugLogLines.join("\n"));
+      $panel.scrollTop($panel.get(0).scrollHeight);
+    }
+  }
+
+  debugLog("[view_my_task.js] script loaded and running, jQuery version:", (window.jQuery && window.jQuery.fn && window.jQuery.fn.jquery) || "jQuery NOT FOUND");
+  debugLog("[view_my_task.js] openItemDetailModal available:", typeof window.openItemDetailModal);
+  debugLog("[view_my_task.js] bootstrap available:", typeof window.bootstrap);
+  debugLog("[view_my_task.js] rows found on load:", $(".view-my-task-item-row").length, "key cells found:", $(".sheets-cell-key").length, "filter buttons found:", $(".btn-filter").length);
 
   function esc(value) {
     return String(value === null || value === undefined ? "" : value)
@@ -53,11 +80,11 @@
   }
 
   $(document).on("click", ".view-my-task-item-row .sheets-cell-key", function (e) {
-    console.log("[view_my_task.js] key clicked", this);
+    debugLog("[view_my_task.js] key clicked, tag:", this.tagName, "class:", this.className);
     e.preventDefault();
     e.stopPropagation();
     if (typeof window.openItemDetailModal !== "function") {
-      console.log("[view_my_task.js] openItemDetailModal is NOT a function, aborting");
+      debugLog("[view_my_task.js] openItemDetailModal is NOT a function, aborting");
       if (typeof window.notify === "function") {
         window.notify("Unable to open item: openItemDetailModal is not available on this page.");
       }
@@ -65,17 +92,19 @@
     }
     var $row = $(this).closest("tr.view-my-task-item-row");
     if (!$row.length) {
+      debugLog("[view_my_task.js] could not find parent .view-my-task-item-row for the clicked key");
       if (typeof window.notify === "function") {
         window.notify("Unable to open item: could not find the row for this key.");
       }
       return;
     }
-    console.log("[view_my_task.js] calling openItemDetailModal with card", buildCardMock($row).get(0));
+    debugLog("[view_my_task.js] found row, item id:", $row.attr("data-item-id"), "- calling openItemDetailModal now");
     try {
       window.openItemDetailModal(buildCardMock($row));
-      console.log("[view_my_task.js] openItemDetailModal returned without throwing");
+      debugLog("[view_my_task.js] openItemDetailModal returned without throwing");
     } catch (error) {
       var errMessage = error && error.message ? error.message : String(error);
+      debugLog("[view_my_task.js] openItemDetailModal THREW an error:", errMessage);
       if (typeof window.notify === "function") {
         window.notify("Unable to open item: " + errMessage);
       }
@@ -86,7 +115,7 @@
   });
 
   $(document).on("click", "[data-group-toggle]", function () {
-    console.log("[view_my_task.js] group toggle clicked", this);
+    debugLog("[view_my_task.js] group toggle clicked");
     var $row = $(this);
     var collapsing = !$row.hasClass("is-collapsed");
     $row.toggleClass("is-collapsed", collapsing);
@@ -245,20 +274,20 @@
   }
 
   $(document).on("click", ".btn-filter", function (e) {
-    console.log("[view_my_task.js] filter button clicked, data-filter-col =", $(this).attr("data-filter-col"));
+    debugLog("[view_my_task.js] filter button clicked, data-filter-col =", $(this).attr("data-filter-col"));
     e.stopPropagation();
     closeAllViewMyTaskFilterPopups();
     var colKey = $(this).attr("data-filter-col");
     if (!colKey) {
-      console.log("[view_my_task.js] no data-filter-col found on clicked element, aborting");
+      debugLog("[view_my_task.js] no data-filter-col found on clicked element, aborting");
       return;
     }
     var $th = $(this).closest("th");
-    console.log("[view_my_task.js] closest th found:", $th.length, "unique values for", colKey, ":", getViewMyTaskUniqueValues(colKey));
+    debugLog("[view_my_task.js] closest th found:", $th.length, "unique values for", colKey, ":", getViewMyTaskUniqueValues(colKey));
     var $popup = buildViewMyTaskFilterPopup(colKey);
     $th.append($popup);
     $popup.addClass("show");
-    console.log("[view_my_task.js] popup appended, visible:", $popup.is(":visible"));
+    debugLog("[view_my_task.js] popup appended, visible:", $popup.is(":visible"));
   });
 
   $(document).on("click", function (e) {
@@ -266,7 +295,7 @@
       ".view-my-task-filter-popup, .btn-filter",
     ).length;
     if (!insidePopupOrButton) {
-      console.log("[view_my_task.js] document click outside popup/button, closing popups. target:", e.target);
+      debugLog("[view_my_task.js] document click outside popup/button, closing popups. target tag:", e.target.tagName);
       closeAllViewMyTaskFilterPopups();
     }
   });

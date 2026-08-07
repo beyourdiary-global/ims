@@ -91,6 +91,7 @@ $sorDebugJsUrl = rtrim((string) $SITEURL, '/') . '/js/view_my_task.js?v=' . (int
     view_my_task.js resolved path (<?= htmlspecialchars($sorDebugJsPath, ENT_QUOTES, 'UTF-8') ?>) found on disk: <?= $sorDebugJsMtime ? 'YES, last modified ' . htmlspecialchars(date('Y-m-d H:i:s', $sorDebugJsMtime), ENT_QUOTES, 'UTF-8') : 'NO - FILE NOT FOUND' ?> |
     JS URL being requested: <a style="color:#fff;text-decoration:underline;" href="<?= htmlspecialchars($sorDebugJsUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank"><?= htmlspecialchars($sorDebugJsUrl, ENT_QUOTES, 'UTF-8') ?></a>
 </div>
+<div id="viewMyTaskOnScreenDebugLog" style="background:#111;color:#0f0;padding:10px;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;">(on-screen debug log will appear here once the page script runs)</div>
 <div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
     <div id="taskBoardApp" class="d-none" aria-hidden="true"></div>
     <div class="col-12 col-md-11">
