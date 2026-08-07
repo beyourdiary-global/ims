@@ -251,11 +251,27 @@ window.taskBoardConfig = {
     columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
+<script>
+(function () {
+    var el = document.getElementById('viewMyTaskInlineTestLog');
+    if (el) {
+        el.textContent += ' || BOTTOM INLINE SCRIPT (right before task_board_core.js) RAN at ' + new Date().toString();
+    }
+})();
+</script>
 <script src="../js/task_board_core.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_core.js') ?>"></script>
 <script src="../js/task_board_ui.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_ui.js') ?>"></script>
 <script src="../js/task_board.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board.js') ?>"></script>
 <script src="<?= $SITEURL ?>/header/tinymce/tinymce.min.js"></script>
 <script src="../js/text_editor.js"></script>
 <script src="../js/view_my_task.js?v=<?= (int) @filemtime(__DIR__ . '/../js/view_my_task.js') ?>"></script>
+<script>
+(function () {
+    var el = document.getElementById('viewMyTaskInlineTestLog');
+    if (el) {
+        el.textContent += ' || AFTER-view_my_task.js INLINE SCRIPT RAN at ' + new Date().toString();
+    }
+})();
+</script>
 </body>
 </html>
