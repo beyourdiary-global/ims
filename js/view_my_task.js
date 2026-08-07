@@ -51,13 +51,29 @@
     e.preventDefault();
     e.stopPropagation();
     if (typeof window.openItemDetailModal !== "function") {
+      if (typeof window.notify === "function") {
+        window.notify("Unable to open item: openItemDetailModal is not available on this page.");
+      }
       return;
     }
     var $row = $(this).closest("tr.view-my-task-item-row");
     if (!$row.length) {
+      if (typeof window.notify === "function") {
+        window.notify("Unable to open item: could not find the row for this key.");
+      }
       return;
     }
-    window.openItemDetailModal(buildCardMock($row));
+    try {
+      window.openItemDetailModal(buildCardMock($row));
+    } catch (error) {
+      var errMessage = error && error.message ? error.message : String(error);
+      if (typeof window.notify === "function") {
+        window.notify("Unable to open item: " + errMessage);
+      }
+      if (window.console && typeof window.console.error === "function") {
+        window.console.error("[view_my_task] openItemDetailModal failed:", error);
+      }
+    }
   });
 
   $(document).on("click", "[data-group-toggle]", function () {
