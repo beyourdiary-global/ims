@@ -108,6 +108,14 @@ if (empty($_SESSION['csrf_token'])) {
                 <?php else: ?>
                     <div class="view-my-task-toolbar">
                         <span class="view-my-task-count"><?= (int) $totalMyTaskCount ?> work item<?= $totalMyTaskCount === 1 ? '' : 's' ?> assigned to you</span>
+                        <div class="view-my-task-toolbar-right">
+                            <button class="sheets-toolbar-btn sheets-btn-reset-filter" id="viewMyTaskResetFilterBtn" type="button" title="Reset all column filters" style="display:none;">
+                                <i class="fa-solid fa-filter-circle-xmark"></i> Reset Filter
+                            </button>
+                            <button class="sheets-toolbar-btn" id="viewMyTaskRefreshBtn" type="button" title="Refresh">
+                                <i class="fa-solid fa-arrows-rotate"></i>
+                            </button>
+                        </div>
                     </div>
 
                     <div class="sheets-table-wrap view-my-task-wrap">
@@ -124,11 +132,11 @@ if (empty($_SESSION['csrf_token'])) {
                             <thead>
                                 <tr>
                                     <th><div class="sheets-th-inner"><span class="sheets-th-label">Key</span></div></th>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Type</span></div></th>
+                                    <th data-filter-col="type"><div class="sheets-th-inner"><span class="sheets-th-label">Type</span><span class="sheets-th-actions"><button class="sheets-th-btn btn-filter" data-filter-col="type" title="Filter"><i class="fa-solid fa-filter"></i></button></span></div></th>
                                     <th><div class="sheets-th-inner"><span class="sheets-th-label">Summary</span></div></th>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Priority</span></div></th>
+                                    <th data-filter-col="priority"><div class="sheets-th-inner"><span class="sheets-th-label">Priority</span><span class="sheets-th-actions"><button class="sheets-th-btn btn-filter" data-filter-col="priority" title="Filter"><i class="fa-solid fa-filter"></i></button></span></div></th>
                                     <th><div class="sheets-th-inner"><span class="sheets-th-label">Due Date</span></div></th>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Assignee</span></div></th>
+                                    <th data-filter-col="assignee"><div class="sheets-th-inner"><span class="sheets-th-label">Assignee</span><span class="sheets-th-actions"><button class="sheets-th-btn btn-filter" data-filter-col="assignee" title="Filter"><i class="fa-solid fa-filter"></i></button></span></div></th>
                                     <th><div class="sheets-th-inner"><span class="sheets-th-label">Estimate Time</span></div></th>
                                 </tr>
                             </thead>
