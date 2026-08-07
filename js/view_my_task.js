@@ -100,6 +100,7 @@
     type: "data-work-type-name",
     priority: "data-priority",
     assignee: "data-assignee-name",
+    dueDate: "data-due-date",
   };
 
   var activeViewMyTaskFilters = {};

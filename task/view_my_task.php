@@ -75,7 +75,7 @@ if (empty($_SESSION['csrf_token'])) {
     <link rel="stylesheet" href="../css/main.css">
     <link rel="stylesheet" href="../css/task.css">
     <link rel="stylesheet" href="../css/sheets.css">
-    <link rel="stylesheet" href="../css/view_my_task.css">
+    <link rel="stylesheet" href="../css/view_my_task.css?v=<?= (int) @filemtime(__DIR__ . '/../css/view_my_task.css') ?>">
 </head>
 <body>
 <div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
@@ -135,7 +135,7 @@ if (empty($_SESSION['csrf_token'])) {
                                     <th data-filter-col="type"><div class="sheets-th-inner"><span class="sheets-th-label">Type</span><span class="sheets-th-actions"><button class="sheets-th-btn btn-filter" data-filter-col="type" title="Filter"><i class="fa-solid fa-filter"></i></button></span></div></th>
                                     <th><div class="sheets-th-inner"><span class="sheets-th-label">Summary</span></div></th>
                                     <th data-filter-col="priority"><div class="sheets-th-inner"><span class="sheets-th-label">Priority</span><span class="sheets-th-actions"><button class="sheets-th-btn btn-filter" data-filter-col="priority" title="Filter"><i class="fa-solid fa-filter"></i></button></span></div></th>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Due Date</span></div></th>
+                                    <th data-filter-col="dueDate"><div class="sheets-th-inner"><span class="sheets-th-label">Due Date</span><span class="sheets-th-actions"><button class="sheets-th-btn btn-filter" data-filter-col="dueDate" title="Filter"><i class="fa-solid fa-filter"></i></button></span></div></th>
                                     <th data-filter-col="assignee"><div class="sheets-th-inner"><span class="sheets-th-label">Assignee</span><span class="sheets-th-actions"><button class="sheets-th-btn btn-filter" data-filter-col="assignee" title="Filter"><i class="fa-solid fa-filter"></i></button></span></div></th>
                                     <th><div class="sheets-th-inner"><span class="sheets-th-label">Estimate Time</span></div></th>
                                 </tr>
@@ -174,7 +174,8 @@ if (empty($_SESSION['csrf_token'])) {
                                                 data-assignee-name="<?= htmlspecialchars((string) $item['assignee_name'], ENT_QUOTES, 'UTF-8') ?>"
                                                 data-reporter-user-id="<?= (int) $item['reporter_user_id'] ?>"
                                                 data-reporter-name="<?= htmlspecialchars((string) $item['reporter_name'], ENT_QUOTES, 'UTF-8') ?>"
-                                                data-parent-item-id="<?= (int) $item['parent_item_id'] ?>">
+                                                data-parent-item-id="<?= (int) $item['parent_item_id'] ?>"
+                                                data-due-date="<?= htmlspecialchars($dateGroup['due_date'] !== '' ? $dateGroup['due_date'] : '-', ENT_QUOTES, 'UTF-8') ?>">
                                                 <td><span class="sheets-cell-key"><?= htmlspecialchars((string) $item['work_item_key'], ENT_QUOTES, 'UTF-8') ?></span></td>
                                                 <td>
                                                     <div class="sheets-cell-type">
@@ -229,11 +230,11 @@ window.taskBoardConfig = {
     columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
-<script src="../js/task_board_core.js"></script>
-<script src="../js/task_board_ui.js"></script>
-<script src="../js/task_board.js"></script>
+<script src="../js/task_board_core.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_core.js') ?>"></script>
+<script src="../js/task_board_ui.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_ui.js') ?>"></script>
+<script src="../js/task_board.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board.js') ?>"></script>
 <script src="<?= $SITEURL ?>/header/tinymce/tinymce.min.js"></script>
 <script src="../js/text_editor.js"></script>
-<script src="../js/view_my_task.js"></script>
+<script src="../js/view_my_task.js?v=<?= (int) @filemtime(__DIR__ . '/../js/view_my_task.js') ?>"></script>
 </body>
 </html>
