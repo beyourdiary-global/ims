@@ -8,6 +8,7 @@ $taskPermissionPin = $taskParentPin;
 
 include_once '../menuHeader.php';
 include_once './common_task.php';
+include_once './board_item_history.php';
 $pageTitle = 'View My Task';
 $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
