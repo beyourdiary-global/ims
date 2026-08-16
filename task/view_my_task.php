@@ -79,27 +79,6 @@ if (empty($_SESSION['csrf_token'])) {
     <link rel="stylesheet" href="../css/view_my_task.css?v=<?= (int) @filemtime(__DIR__ . '/../css/view_my_task.css') ?>">
 </head>
 <body>
-<?php
-$sorDebugJsPath = __DIR__ . '/../js/view_my_task.js';
-$sorDebugJsMtime = @filemtime($sorDebugJsPath);
-$sorDebugPhpMtime = @filemtime(__FILE__);
-$sorDebugJsUrl = rtrim((string) $SITEURL, '/') . '/js/view_my_task.js?v=' . (int) $sorDebugJsMtime;
-?>
-<div style="background:#ff0000;color:#fff;padding:14px;font-size:14px;font-family:monospace;word-break:break-all;">
-    DEBUG BUILD MARKER 2026-08-07 |
-    server time: <?= htmlspecialchars(date('Y-m-d H:i:s'), ENT_QUOTES, 'UTF-8') ?> |
-    this PHP file (<?= htmlspecialchars(__FILE__, ENT_QUOTES, 'UTF-8') ?>) last modified: <?= $sorDebugPhpMtime ? htmlspecialchars(date('Y-m-d H:i:s', $sorDebugPhpMtime), ENT_QUOTES, 'UTF-8') : 'UNKNOWN' ?> |
-    view_my_task.js resolved path (<?= htmlspecialchars($sorDebugJsPath, ENT_QUOTES, 'UTF-8') ?>) found on disk: <?= $sorDebugJsMtime ? 'YES, last modified ' . htmlspecialchars(date('Y-m-d H:i:s', $sorDebugJsMtime), ENT_QUOTES, 'UTF-8') : 'NO - FILE NOT FOUND' ?> |
-    JS URL being requested: <a style="color:#fff;text-decoration:underline;" href="<?= htmlspecialchars($sorDebugJsUrl, ENT_QUOTES, 'UTF-8') ?>" target="_blank"><?= htmlspecialchars($sorDebugJsUrl, ENT_QUOTES, 'UTF-8') ?></a>
-</div>
-<div id="viewMyTaskOnScreenDebugLog" style="background:#111;color:#0f0;padding:10px;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;max-height:260px;overflow:auto;">(on-screen debug log will appear here once the page script runs)</div>
-<div id="viewMyTaskInlineTestLog" style="background:#003366;color:#fff;padding:10px;font-size:12px;font-family:monospace;white-space:pre-wrap;word-break:break-all;">(inline vanilla-JS test has not run yet - if you see this text, plain inline &lt;script&gt; tags are not executing on this page at all)</div>
-<script>
-document.getElementById('viewMyTaskInlineTestLog').textContent =
-    'INLINE SCRIPT RAN at ' + new Date().toString() +
-    ' | jQuery loaded: ' + (typeof window.jQuery !== 'undefined' ? window.jQuery.fn.jquery : 'NOT LOADED') +
-    ' | document.readyState: ' + document.readyState;
-</script>
 <div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
     <div id="taskBoardApp" class="d-none" aria-hidden="true"></div>
     <div class="col-12 col-md-11">
@@ -252,27 +231,11 @@ window.taskBoardConfig = {
     columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
-<script>
-(function () {
-    var el = document.getElementById('viewMyTaskInlineTestLog');
-    if (el) {
-        el.textContent += ' || BOTTOM INLINE SCRIPT (right before task_board_core.js) RAN at ' + new Date().toString();
-    }
-})();
-</script>
 <script src="../js/task_board_core.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_core.js') ?>"></script>
 <script src="../js/task_board_ui.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_ui.js') ?>"></script>
 <script src="../js/task_board.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board.js') ?>"></script>
 <script src="<?= $SITEURL ?>/header/tinymce/tinymce.min.js"></script>
 <script src="../js/text_editor.js"></script>
 <script src="../js/view_my_task.js?v=<?= (int) @filemtime(__DIR__ . '/../js/view_my_task.js') ?>"></script>
-<script>
-(function () {
-    var el = document.getElementById('viewMyTaskInlineTestLog');
-    if (el) {
-        el.textContent += ' || AFTER-view_my_task.js INLINE SCRIPT RAN at ' + new Date().toString();
-    }
-})();
-</script>
 </body>
 </html>
