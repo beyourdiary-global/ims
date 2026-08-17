@@ -33,7 +33,7 @@ $csrfToken = campaignCsrfToken('campaign_report');
 $pageUrl = $SITEURL . '/campaign/campaign_report.php?campaign_id=' . (int) $campaignId;
 $backUrl = $SITEURL . '/campaign/campaign.php?id=' . (int) $campaignId;
 
-function campaignReportBuildData($connect, $campaignId)
+function campaignReportBuildData($connect, $campaignId, $campaign = array())
 {
     $data = array(
         'metrics' => array(
@@ -57,7 +57,14 @@ function campaignReportBuildData($connect, $campaignId)
         $data['metrics']['participants'] = (int) ($participantRow['cnt'] ?? 0);
     }
 
-    $purchaseSql = "SELECT `campaign_customer_id`, `customer_type`, SUM(IFNULL(`order_amount`,0)) AS sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' GROUP BY `campaign_customer_id`, `customer_type`";
+    $periodStart = campaignDateValue($campaign['period_start_date'] ?? '');
+    $periodEnd = campaignDateValue($campaign['period_end_date'] ?? '');
+    $periodWhere = '';
+    if ($periodStart !== '' && $periodEnd !== '') {
+        $periodWhere = " AND DATE(`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
+    }
+
+    $purchaseSql = "SELECT `campaign_customer_id`, `customer_type`, SUM(IFNULL(`order_amount`,0)) AS sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $periodWhere . " GROUP BY `campaign_customer_id`, `customer_type`";
     $purchaseResult = mysqli_query($connect, $purchaseSql);
     $purchasedCustomerIds = array();
     if ($purchaseResult) {
@@ -107,7 +114,7 @@ function campaignReportBuildData($connect, $campaignId)
     }
 
     $packageMap = array();
-    $packageSql = "SELECT `package_text`, `order_detail`, `order_amount` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'";
+    $packageSql = "SELECT `package_text`, `order_detail`, `order_amount` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $periodWhere;
     $packageResult = mysqli_query($connect, $packageSql);
     if ($packageResult) {
         while ($packageRow = $packageResult->fetch_assoc()) {
@@ -148,7 +155,7 @@ if (post('actionBtn') === 'refreshReport') {
     exit();
 }
 
-$reportData = campaignReportBuildData($connect, $campaignId);
+$reportData = campaignReportBuildData($connect, $campaignId, $campaign);
 $metrics = $reportData['metrics'];
 
 if (input('export') === '1') {

@@ -969,12 +969,22 @@ if (!function_exists('campaignPurchaseBuildCustomerMatchParts')) {
 if (!function_exists('campaignPurchaseRowStatusWhere')) {
     function campaignPurchaseRowStatusWhere($conn, $table, $config)
     {
+        $conditions = array();
+
         $rowStatusCol = campaignGetFirstExistingColumn($conn, $table, isset($config['row_status_cols']) ? $config['row_status_cols'] : array('status'));
-        if ($rowStatusCol === '') {
-            return '1=1';
+        if ($rowStatusCol !== '') {
+            $conditions[] = "IFNULL(" . campaignPurchaseQuoteColumn($rowStatusCol) . ", 'A') <> 'D'";
         }
 
-        return "IFNULL(" . campaignPurchaseQuoteColumn($rowStatusCol) . ", 'A') <> 'D'";
+        // Returned / closed-returned orders (order_status 'R'/'CR', shared across all
+        // platform order tables via shopeeOmsStatusDefinitions) never count as a valid
+        // campaign purchase or as proof of a prior purchase for repeat-customer detection.
+        $orderStatusCol = campaignGetFirstExistingColumn($conn, $table, isset($config['order_status_cols']) ? $config['order_status_cols'] : array());
+        if ($orderStatusCol !== '') {
+            $conditions[] = "UPPER(TRIM(IFNULL(" . campaignPurchaseQuoteColumn($orderStatusCol) . ", ''))) NOT IN ('R', 'CR')";
+        }
+
+        return !empty($conditions) ? implode(' AND ', $conditions) : '1=1';
     }
 }
 
@@ -1254,6 +1264,23 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             $summary['notes'][] = 'Campaign purchase tables are not ready. Please run insert_table.php.';
             return $summary;
         }
+
+        // Drop any previously-stored purchase rows that no longer fall inside the
+        // campaign's current period (e.g. the period dates were edited after an
+        // earlier refresh), or that were recorded before returned/closed-returned
+        // orders started being excluded, so the report never sums stale rows.
+        $safePeriodStart = $connect->real_escape_string($periodStart);
+        $safePeriodEnd = $connect->real_escape_string($periodEnd);
+        mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+            SET `status`='D', `update_by`='" . $connect->real_escape_string((string) campaignCurrentUserId()) . "', `update_date`=CURDATE(), `update_time`=CURTIME()
+            WHERE `campaign_id`='" . (int) $campaignId . "'
+              AND `status`='A'
+              AND (
+                `order_date` IS NULL
+                OR DATE(`order_date`) < '" . $safePeriodStart . "'
+                OR DATE(`order_date`) > '" . $safePeriodEnd . "'
+                OR UPPER(TRIM(IFNULL(`order_status`, ''))) IN ('R', 'CR')
+              )");
 
         $customers = array();
         $customerSql = "SELECT * FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' ORDER BY `id` ASC";
