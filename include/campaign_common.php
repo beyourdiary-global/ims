@@ -845,13 +845,15 @@ if (!function_exists('campaignPurchaseColumnIsNumeric')) {
 if (!function_exists('campaignPurchaseCleanMatchValues')) {
     function campaignPurchaseCleanMatchValues($values)
     {
-        // Reject blank/placeholder values ("0", "-", "NA", single characters, etc.) -
-        // these are common defaults for missing data and matching orders on them would
-        // pull in every other customer that also has no real id/name/contact on file.
+        // Reject blank/placeholder values ("0", "-", "--", etc.) - these are common
+        // defaults for missing data and matching orders on them would pull in every
+        // other customer that also has no real id/name/contact on file. This must NOT
+        // reject short-but-real values (a legitimate numeric customer_id can be just
+        // 1-2 digits), so only reject strings made up entirely of 0/-/. characters.
         $clean = array();
         foreach ((array) $values as $value) {
             $value = trim(preg_replace('/\s+/', ' ', (string) $value));
-            if ($value === '' || mb_strlen($value) < 3 || preg_match('/^[0\-\.]+$/', $value)) {
+            if ($value === '' || preg_match('/^[0\-\.]+$/', $value)) {
                 continue;
             }
             $clean[$value] = $value;
