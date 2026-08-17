@@ -377,16 +377,22 @@ $readonlyAttr = $isView ? 'readonly' : '';
                                     <button class="campaign-filter-toggle" type="button" id="campaignPackageToggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" <?= $isView ? 'disabled' : '' ?>>
                                         <span id="campaignPackageToggleLabel">All Packages (No Restriction)</span>
                                     </button>
-                                    <div class="dropdown-menu" aria-labelledby="campaignPackageToggle">
-                                        <?php if (empty($packageOptions)): ?>
-                                            <div class="px-2 py-1 text-muted">No packages found.</div>
-                                        <?php endif; ?>
-                                        <?php foreach ($packageOptions as $packageOption): ?>
-                                            <div class="form-check">
-                                                <input class="form-check-input campaign-package-checkbox" type="checkbox" name="package_ids[]" value="<?= (int) $packageOption['id'] ?>" id="campaign_package_<?= (int) $packageOption['id'] ?>" <?= in_array((int) $packageOption['id'], $selectedPackageIds, true) ? 'checked' : '' ?> <?= $isView ? 'disabled' : '' ?>>
-                                                <label class="form-check-label" for="campaign_package_<?= (int) $packageOption['id'] ?>"><?= campaignH($packageOption['name']) ?></label>
-                                            </div>
-                                        <?php endforeach; ?>
+                                    <div class="dropdown-menu" aria-labelledby="campaignPackageToggle" style="min-width: 300px;">
+                                        <div class="px-2 py-1">
+                                            <input type="text" class="form-control form-control-sm campaign-package-search" placeholder="Search packages..." <?= $isView ? 'disabled' : '' ?>>
+                                        </div>
+                                        <div class="dropdown-divider"></div>
+                                        <div class="campaign-package-list" style="max-height: 300px; overflow-y: auto;">
+                                            <?php if (empty($packageOptions)): ?>
+                                                <div class="px-2 py-1 text-muted">No packages found.</div>
+                                            <?php endif; ?>
+                                            <?php foreach ($packageOptions as $packageOption): ?>
+                                                <div class="form-check px-2 py-1 campaign-package-item" data-package-name="<?= campaignH(strtolower($packageOption['name'])) ?>">
+                                                    <input class="form-check-input campaign-package-checkbox" type="checkbox" name="package_ids[]" value="<?= (int) $packageOption['id'] ?>" id="campaign_package_<?= (int) $packageOption['id'] ?>" <?= in_array((int) $packageOption['id'], $selectedPackageIds, true) ? 'checked' : '' ?> <?= $isView ? 'disabled' : '' ?>>
+                                                    <label class="form-check-label" for="campaign_package_<?= (int) $packageOption['id'] ?>"><?= campaignH($packageOption['name']) ?></label>
+                                                </div>
+                                            <?php endforeach; ?>
+                                        </div>
                                     </div>
                                 </div>
                                 <div class="form-text">Leave empty to count purchases of any package in the Campaign Report. Selecting one or more packages limits the report to only those packages' purchases.</div>
@@ -422,7 +428,10 @@ $readonlyAttr = $isView ? 'readonly' : '';
 
         (function () {
             var toggleLabel = document.getElementById('campaignPackageToggleLabel');
+            var searchInput = document.querySelector('.campaign-package-search');
             var checkboxes = document.querySelectorAll('.campaign-package-checkbox');
+            var packageItems = document.querySelectorAll('.campaign-package-item');
+
             if (!toggleLabel || !checkboxes.length) {
                 return;
             }
@@ -434,9 +443,24 @@ $readonlyAttr = $isView ? 'readonly' : '';
                     : 'All Packages (No Restriction)';
             }
 
+            function filterPackages() {
+                if (!searchInput) return;
+                var searchText = searchInput.value.toLowerCase().trim();
+                packageItems.forEach(function (item) {
+                    var packageName = item.getAttribute('data-package-name');
+                    var matches = searchText === '' || packageName.indexOf(searchText) !== -1;
+                    item.style.display = matches ? '' : 'none';
+                });
+            }
+
             checkboxes.forEach(function (checkbox) {
                 checkbox.addEventListener('change', updatePackageToggleLabel);
             });
+
+            if (searchInput) {
+                searchInput.addEventListener('input', filterPackages);
+            }
+
             updatePackageToggleLabel();
         })();
     </script>
