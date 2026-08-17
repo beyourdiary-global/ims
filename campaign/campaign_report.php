@@ -57,9 +57,14 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array())
             'return_customer_amount' => 0,
             'new_customer_sales' => 0,
             'return_customer_sales' => 0,
+            'avg_spend_per_customer' => 0,
         ),
         'follow_up_rows' => array(),
         'package_rows' => array(),
+        'customer_rows' => array(),
+        'platform_rows' => array(),
+        'trend_rows' => array(),
+        'repeat_distribution' => array('1' => 0, '2' => 0, '3+' => 0),
         'has_data' => false,
     );
 
@@ -72,8 +77,10 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array())
     $periodStart = campaignDateValue($campaign['period_start_date'] ?? '');
     $periodEnd = campaignDateValue($campaign['period_end_date'] ?? '');
     $periodWhere = '';
+    $periodWhereCpr = '';
     if ($periodStart !== '' && $periodEnd !== '') {
         $periodWhere = " AND DATE(`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
+        $periodWhereCpr = " AND DATE(cpr.`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(cpr.`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
     }
 
     $purchaseSql = "SELECT `campaign_customer_id`, `customer_type`, SUM(IFNULL(`order_amount`,0)) AS sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $periodWhere . " GROUP BY `campaign_customer_id`, `customer_type`";
@@ -100,6 +107,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array())
 
     $data['metrics']['purchased_customers'] = count($purchasedCustomerIds);
     $data['metrics']['purchase_rate'] = $data['metrics']['participants'] > 0 ? round(($data['metrics']['purchased_customers'] / $data['metrics']['participants']) * 100, 2) : 0;
+    $data['metrics']['avg_spend_per_customer'] = $data['metrics']['purchased_customers'] > 0 ? round($data['metrics']['total_sales'] / $data['metrics']['purchased_customers'], 2) : 0;
 
     $followSql = "SELECT
             cm.`message_title`,
@@ -147,7 +155,73 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array())
             $packageMap[$packageText]['purchase_sales'] += $amount;
         }
     }
-    $data['package_rows'] = array_values($packageMap);
+    $packageRows = array_values($packageMap);
+    usort($packageRows, function ($a, $b) {
+        return $b['purchase_sales'] <=> $a['purchase_sales'];
+    });
+    $data['package_rows'] = $packageRows;
+
+    $platformSql = "SELECT `platform`, COUNT(*) AS order_count, COUNT(DISTINCT `campaign_customer_id`) AS customer_count, SUM(IFNULL(`order_amount`,0)) AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $periodWhere . " GROUP BY `platform` ORDER BY total_sales DESC";
+    $platformResult = mysqli_query($connect, $platformSql);
+    if ($platformResult) {
+        while ($platformRow = $platformResult->fetch_assoc()) {
+            $platformName = trim((string) ($platformRow['platform'] ?? ''));
+            if ($platformName === '') {
+                $platformName = 'Unknown';
+            }
+            $data['platform_rows'][] = array(
+                'platform' => $platformName,
+                'order_count' => (int) ($platformRow['order_count'] ?? 0),
+                'customer_count' => (int) ($platformRow['customer_count'] ?? 0),
+                'total_sales' => is_numeric($platformRow['total_sales'] ?? null) ? (float) $platformRow['total_sales'] : 0,
+            );
+        }
+    }
+
+    $trendSql = "SELECT DATE(`order_date`) AS order_day, COUNT(*) AS order_count, SUM(IFNULL(`order_amount`,0)) AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' AND `order_date` IS NOT NULL" . $periodWhere . " GROUP BY DATE(`order_date`) ORDER BY order_day ASC";
+    $trendResult = mysqli_query($connect, $trendSql);
+    if ($trendResult) {
+        while ($trendRow = $trendResult->fetch_assoc()) {
+            $data['trend_rows'][] = array(
+                'date' => (string) ($trendRow['order_day'] ?? ''),
+                'order_count' => (int) ($trendRow['order_count'] ?? 0),
+                'total_sales' => is_numeric($trendRow['total_sales'] ?? null) ? (float) $trendRow['total_sales'] : 0,
+            );
+        }
+    }
+
+    $customerSql = "SELECT cc.`id`, cc.`customer_name`, cc.`customer_contact`, cc.`platform`,
+            COUNT(cpr.`id`) AS order_count,
+            SUM(IFNULL(cpr.`order_amount`,0)) AS total_amount,
+            MAX(cpr.`order_date`) AS last_order_date
+        FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " cc
+        LEFT JOIN " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " cpr ON cpr.`campaign_customer_id`=cc.`id` AND cpr.`campaign_id`=cc.`campaign_id` AND cpr.`status`='A'" . $periodWhereCpr . "
+        WHERE cc.`campaign_id`='" . (int) $campaignId . "' AND cc.`status`='A'
+        GROUP BY cc.`id`
+        ORDER BY total_amount DESC, cc.`customer_name` ASC";
+    $customerResult = mysqli_query($connect, $customerSql);
+    if ($customerResult) {
+        while ($customerRow = $customerResult->fetch_assoc()) {
+            $orderCount = (int) ($customerRow['order_count'] ?? 0);
+            $data['customer_rows'][] = array(
+                'customer_name' => trim((string) ($customerRow['customer_name'] ?? '')),
+                'customer_contact' => trim((string) ($customerRow['customer_contact'] ?? '')),
+                'platform' => trim((string) ($customerRow['platform'] ?? '')),
+                'order_count' => $orderCount,
+                'total_amount' => is_numeric($customerRow['total_amount'] ?? null) ? (float) $customerRow['total_amount'] : 0,
+                'last_order_date' => (string) ($customerRow['last_order_date'] ?? ''),
+                'purchased' => $orderCount > 0,
+            );
+
+            if ($orderCount === 1) {
+                $data['repeat_distribution']['1']++;
+            } elseif ($orderCount === 2) {
+                $data['repeat_distribution']['2']++;
+            } elseif ($orderCount >= 3) {
+                $data['repeat_distribution']['3+']++;
+            }
+        }
+    }
 
     $data['has_data'] = $data['metrics']['participants'] > 0 || !empty($data['follow_up_rows']) || !empty($data['package_rows']);
     return $data;
@@ -206,6 +280,7 @@ if (input('export') === '1') {
     fputcsv($output, array('Return Customer Amount', $metrics['return_customer_amount']));
     fputcsv($output, array('New Customer Sales', number_format((float) $metrics['new_customer_sales'], 2, '.', '')));
     fputcsv($output, array('Return Customer Sales', number_format((float) $metrics['return_customer_sales'], 2, '.', '')));
+    fputcsv($output, array('Avg. Spend per Purchasing Customer', number_format((float) $metrics['avg_spend_per_customer'], 2, '.', '')));
     fputcsv($output, array());
     fputcsv($output, array('Message Shortcut', 'Total Assigned', 'Followed Up', 'Follow-Up Rate'));
     foreach ($reportData['follow_up_rows'] as $row) {
@@ -215,6 +290,26 @@ if (input('export') === '1') {
     fputcsv($output, array('Package', 'Purchase Amount', 'Purchase Sales'));
     foreach ($reportData['package_rows'] as $row) {
         fputcsv($output, array($row['package'], $row['purchase_amount'], number_format((float) $row['purchase_sales'], 2, '.', '')));
+    }
+    fputcsv($output, array());
+    fputcsv($output, array('Platform', 'Order Count', 'Customer Count', 'Total Sales'));
+    foreach ($reportData['platform_rows'] as $row) {
+        fputcsv($output, array($row['platform'], $row['order_count'], $row['customer_count'], number_format((float) $row['total_sales'], 2, '.', '')));
+    }
+    fputcsv($output, array());
+    fputcsv($output, array('Date', 'Order Count', 'Total Sales'));
+    foreach ($reportData['trend_rows'] as $row) {
+        fputcsv($output, array($row['date'], $row['order_count'], number_format((float) $row['total_sales'], 2, '.', '')));
+    }
+    fputcsv($output, array());
+    fputcsv($output, array('Repeat Purchase Count', 'Customers'));
+    foreach ($reportData['repeat_distribution'] as $bucket => $count) {
+        fputcsv($output, array($bucket . ' order(s)', $count));
+    }
+    fputcsv($output, array());
+    fputcsv($output, array('Customer Name', 'Contact', 'Platform', 'Order Count', 'Total Amount', 'Last Order Date', 'Purchased'));
+    foreach ($reportData['customer_rows'] as $row) {
+        fputcsv($output, array($row['customer_name'], $row['customer_contact'], $row['platform'], $row['order_count'], number_format((float) $row['total_amount'], 2, '.', ''), $row['last_order_date'], $row['purchased'] ? 'Yes' : 'No'));
     }
     fclose($output);
     exit();
@@ -234,7 +329,13 @@ if (input('export') === '1') {
             createSortingTable('campaign_report_follow_up_table', { searching: false, order: [[0, 'asc']] });
         }
         if ($('#campaign_report_package_table').length) {
-            createSortingTable('campaign_report_package_table', { searching: false, order: [[0, 'asc']] });
+            createSortingTable('campaign_report_package_table', { searching: false, order: [] });
+        }
+        if ($('#campaign_report_platform_table').length) {
+            createSortingTable('campaign_report_platform_table', { searching: false, order: [] });
+        }
+        if ($('#campaign_report_customer_table').length) {
+            createSortingTable('campaign_report_customer_table', { searching: true, order: [[4, 'desc']] });
         }
     });
 </script>
@@ -296,6 +397,7 @@ if (input('export') === '1') {
                         'Return Customer Amount' => $metrics['return_customer_amount'],
                         'New Customer Sales' => number_format((float) $metrics['new_customer_sales'], 2),
                         'Return Customer Sales' => number_format((float) $metrics['return_customer_sales'], 2),
+                        'Avg. Spend per Purchasing Customer' => number_format((float) $metrics['avg_spend_per_customer'], 2),
                     );
                     ?>
                     <?php foreach ($metricCards as $label => $value): ?>
@@ -308,6 +410,77 @@ if (input('export') === '1') {
                             </div>
                         </div>
                     <?php endforeach; ?>
+                </div>
+
+                <?php if (!empty($reportData['trend_rows'])): ?>
+                    <div class="card mb-4">
+                        <div class="card-header bg-white"><strong>Sales Trend</strong></div>
+                        <div class="card-body">
+                            <canvas id="campaign_report_trend_chart" height="90"></canvas>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
+                <div class="row g-3 mb-4">
+                    <?php if (!empty($reportData['platform_rows'])): ?>
+                        <div class="col-lg-7">
+                            <div class="card h-100">
+                                <div class="card-header bg-white"><strong>Platform / Channel Breakdown</strong></div>
+                                <div class="card-body table-responsive">
+                                    <table id="campaign_report_platform_table" class="table table-striped w-100">
+                                        <thead>
+                                            <tr>
+                                                <th>Platform</th>
+                                                <th>Order Count</th>
+                                                <th>Customer Count</th>
+                                                <th>Total Sales</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            <?php foreach ($reportData['platform_rows'] as $row): ?>
+                                                <tr>
+                                                    <td><?= campaignH($row['platform']) ?></td>
+                                                    <td><?= (int) $row['order_count'] ?></td>
+                                                    <td><?= (int) $row['customer_count'] ?></td>
+                                                    <td><?= number_format((float) $row['total_sales'], 2) ?></td>
+                                                </tr>
+                                            <?php endforeach; ?>
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="col-lg-5">
+                        <div class="card h-100">
+                            <div class="card-header bg-white"><strong>Customer Repeat Purchase Distribution</strong></div>
+                            <div class="card-body table-responsive">
+                                <table class="table table-striped w-100">
+                                    <thead>
+                                        <tr>
+                                            <th>Orders in Period</th>
+                                            <th>Customers</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        <tr>
+                                            <td>1 order</td>
+                                            <td><?= (int) $reportData['repeat_distribution']['1'] ?></td>
+                                        </tr>
+                                        <tr>
+                                            <td>2 orders</td>
+                                            <td><?= (int) $reportData['repeat_distribution']['2'] ?></td>
+                                        </tr>
+                                        <tr>
+                                            <td>3+ orders</td>
+                                            <td><?= (int) $reportData['repeat_distribution']['3+'] ?></td>
+                                        </tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
                 <?php if (!empty($reportData['follow_up_rows'])): ?>
@@ -340,7 +513,7 @@ if (input('export') === '1') {
 
                 <?php if (!empty($reportData['package_rows'])): ?>
                     <div class="card mb-4">
-                        <div class="card-header bg-white"><strong>Each Package Purchase</strong></div>
+                        <div class="card-header bg-white"><strong>Each Package Purchase</strong> <span class="text-muted small">(ranked by sales, highest first)</span></div>
                         <div class="card-body table-responsive">
                             <table id="campaign_report_package_table" class="table table-striped w-100">
                                 <thead>
@@ -351,11 +524,56 @@ if (input('export') === '1') {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($reportData['package_rows'] as $row): ?>
+                                    <?php foreach ($reportData['package_rows'] as $packageIndex => $row): ?>
                                         <tr>
-                                            <td><?= campaignH($row['package']) ?></td>
+                                            <td>
+                                                <?= campaignH($row['package']) ?>
+                                                <?php if ($packageIndex === 0): ?>
+                                                    <span class="badge bg-success ms-1">Top Package</span>
+                                                <?php endif; ?>
+                                            </td>
                                             <td><?= (int) $row['purchase_amount'] ?></td>
                                             <td><?= number_format((float) $row['purchase_sales'], 2) ?></td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                <?php endif; ?>
+
+                <?php if (!empty($reportData['customer_rows'])): ?>
+                    <div class="card mb-4">
+                        <div class="card-header bg-white"><strong>Customer Detail List</strong></div>
+                        <div class="card-body table-responsive">
+                            <table id="campaign_report_customer_table" class="table table-striped w-100">
+                                <thead>
+                                    <tr>
+                                        <th>Customer Name</th>
+                                        <th>Contact</th>
+                                        <th>Platform</th>
+                                        <th>Order Count</th>
+                                        <th>Total Amount</th>
+                                        <th>Last Order Date</th>
+                                        <th>Purchased</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <?php foreach ($reportData['customer_rows'] as $row): ?>
+                                        <tr>
+                                            <td><?= campaignH($row['customer_name']) ?></td>
+                                            <td><?= campaignH($row['customer_contact']) ?></td>
+                                            <td><?= campaignH($row['platform']) ?></td>
+                                            <td><?= (int) $row['order_count'] ?></td>
+                                            <td><?= number_format((float) $row['total_amount'], 2) ?></td>
+                                            <td><?= campaignH($row['last_order_date']) ?></td>
+                                            <td>
+                                                <?php if ($row['purchased']): ?>
+                                                    <span class="badge bg-success">Yes</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-secondary">No</span>
+                                                <?php endif; ?>
+                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
@@ -369,12 +587,64 @@ if (input('export') === '1') {
         </div>
     </div>
 
+    <?php if (!empty($reportData['trend_rows'])): ?>
+        <script src="<?= campaignH(CHART_JS_LOCAL_PATH) ?>"></script>
+    <?php endif; ?>
     <script>
         checkCurrentPage('<?= campaignH($pageTitle) ?>', 'View');
         dropdownMenuDispFix();
         datatableAlignment('campaign_report_follow_up_table');
         datatableAlignment('campaign_report_package_table');
+        datatableAlignment('campaign_report_platform_table');
+        datatableAlignment('campaign_report_customer_table');
         setButtonColor();
+
+        <?php if (!empty($reportData['trend_rows'])): ?>
+            (function () {
+                var trendCanvas = document.getElementById('campaign_report_trend_chart');
+                if (!trendCanvas || typeof Chart === 'undefined') {
+                    return;
+                }
+                var trendLabels = <?= json_encode(array_column($reportData['trend_rows'], 'date')) ?>;
+                var trendSales = <?= json_encode(array_map(function ($row) {
+                    return round((float) $row['total_sales'], 2);
+                }, $reportData['trend_rows'])) ?>;
+                var trendOrders = <?= json_encode(array_column($reportData['trend_rows'], 'order_count')) ?>;
+                new Chart(trendCanvas.getContext('2d'), {
+                    type: 'bar',
+                    data: {
+                        labels: trendLabels,
+                        datasets: [
+                            {
+                                type: 'line',
+                                label: 'Total Sales',
+                                data: trendSales,
+                                borderColor: '#0d6efd',
+                                backgroundColor: '#0d6efd',
+                                yAxisID: 'ySales',
+                                tension: 0.25,
+                                fill: false,
+                            },
+                            {
+                                type: 'bar',
+                                label: 'Order Count',
+                                data: trendOrders,
+                                backgroundColor: 'rgba(25, 135, 84, 0.5)',
+                                yAxisID: 'yOrders',
+                            },
+                        ],
+                    },
+                    options: {
+                        responsive: true,
+                        interaction: { mode: 'index', intersect: false },
+                        scales: {
+                            ySales: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: 'Sales' } },
+                            yOrders: { type: 'linear', position: 'right', beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Orders' }, grid: { drawOnChartArea: false } },
+                        },
+                    },
+                });
+            })();
+        <?php endif; ?>
     </script>
     <?php campaignRenderPopupScript($pageTitle, $pageUrl); ?>
 </body>
