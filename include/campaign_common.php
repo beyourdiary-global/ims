@@ -1335,6 +1335,8 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                 $summary['customers_purchased']++;
             }
 
+            $confirmedRecordIds = array();
+
             foreach ($orders as $order) {
                 $summary['orders_found']++;
                 $safeOrderId = $connect->real_escape_string((string) ($order['order_id'] ?? ''));
@@ -1361,6 +1363,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                             $summary['records_updated']++;
                         }
                     }
+                    $confirmedRecordIds[] = $existingRecordId;
                     continue;
                 }
 
@@ -1371,9 +1374,25 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                     $insertStmt->bind_param('iisssssdssss', $campaignId, $campaignCustomerId, $platform, $orderId, $orderNo, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId);
                     if ($insertStmt->execute()) {
                         $summary['records_inserted']++;
+                        $newRecordId = (int) $connect->insert_id;
+                        if ($newRecordId > 0) {
+                            $confirmedRecordIds[] = $newRecordId;
+                        }
                     }
                 }
             }
+
+            // Reconcile: any purchase record still stored for this campaign customer
+            // that this run did NOT re-confirm is stale (e.g. it was only ever a
+            // false-positive match from a since-fixed matching rule, or the order fell
+            // out of the period). Retire it instead of leaving it to inflate the report.
+            $confirmedIdsSql = !empty($confirmedRecordIds) ? implode(',', array_map('intval', $confirmedRecordIds)) : '0';
+            mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+                SET `status`='D', `update_by`='" . $connect->real_escape_string((string) $userId) . "', `update_date`=CURDATE(), `update_time`=CURTIME()
+                WHERE `campaign_id`='" . (int) $campaignId . "'
+                  AND `campaign_customer_id`='" . $campaignCustomerId . "'
+                  AND `status`='A'
+                  AND `id` NOT IN (" . $confirmedIdsSql . ")");
 
             $updateStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_CUSTOMER) . " SET `purchase_status`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=? AND `campaign_id`=?");
             if ($updateStmt) {
