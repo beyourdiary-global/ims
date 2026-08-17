@@ -4644,6 +4644,7 @@ if ($conn->select_db($db_cms)) {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `campaign_id` INT NOT NULL,
         `campaign_customer_id` INT NOT NULL,
+        `package_id` INT DEFAULT NULL,
         `platform` VARCHAR(30),
         `order_id` VARCHAR(100),
         `order_no` VARCHAR(150),
@@ -4662,7 +4663,8 @@ if ($conn->select_db($db_cms)) {
         `status` CHAR(1) DEFAULT 'A',
         KEY `idx_campaign_purchase_campaign_id` (`campaign_id`),
         KEY `idx_campaign_purchase_customer_id` (`campaign_customer_id`),
-        KEY `idx_campaign_purchase_platform` (`platform`)
+        KEY `idx_campaign_purchase_platform` (`platform`),
+        KEY `idx_campaign_purchase_package_id` (`package_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
     if ($conn->query($createCampaignPurchaseRecordSql)) {
@@ -4681,6 +4683,9 @@ if ($conn->select_db($db_cms)) {
     migrationEnsureIndex($conn, $db_cms, CAMPAIGN_FOLLOW_UP, 'idx_campaign_follow_up_status_campaign', "ALTER TABLE `" . CAMPAIGN_FOLLOW_UP . "` ADD INDEX `idx_campaign_follow_up_status_campaign` (`status`, `campaign_id`)", "Verified `" . CAMPAIGN_FOLLOW_UP . "` status/campaign index.");
     migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_status_campaign', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD INDEX `idx_campaign_purchase_status_campaign` (`status`, `campaign_id`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` status/campaign index.");
 
+    migrationEnsureColumn($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'package_id', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD COLUMN `package_id` INT DEFAULT NULL", "Added `package_id` column to `" . CAMPAIGN_PURCHASE_RECORD . "`.");
+
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_package_id', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD INDEX `idx_campaign_purchase_package_id` (`package_id`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` package_id index.");
 
     $createCampaignRuleSettingSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_RULE_SETTING . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,

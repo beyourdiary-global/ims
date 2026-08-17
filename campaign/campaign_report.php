@@ -45,7 +45,7 @@ if (!empty($reportPackageIds) && defined('PKG') && campaignTableExists($connect,
     }
 }
 
-function campaignReportBuildData($connect, $campaignId, $campaign = array())
+function campaignReportBuildData($connect, $campaignId, $campaign = array(), $packageIds = array())
 {
     $data = array(
         'metrics' => array(
@@ -83,7 +83,13 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array())
         $periodWhereCpr = " AND DATE(cpr.`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(cpr.`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
     }
 
-    $purchaseSql = "SELECT `campaign_customer_id`, `customer_type`, SUM(IFNULL(`order_amount`,0)) AS sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $periodWhere . " GROUP BY `campaign_customer_id`, `customer_type`";
+    $packageFilter = '';
+    if (!empty($packageIds)) {
+        $safePackageIds = array_map('intval', $packageIds);
+        $packageFilter = " AND `package_id` IN (" . implode(',', $safePackageIds) . ")";
+    }
+
+    $purchaseSql = "SELECT `campaign_customer_id`, `customer_type`, SUM(IFNULL(`order_amount`,0)) AS sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere . " GROUP BY `campaign_customer_id`, `customer_type`";
     $purchaseResult = mysqli_query($connect, $purchaseSql);
     $purchasedCustomerIds = array();
     if ($purchaseResult) {
@@ -134,7 +140,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array())
     }
 
     $packageMap = array();
-    $packageSql = "SELECT `package_text`, `order_detail`, `order_amount` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $periodWhere;
+    $packageSql = "SELECT `package_text`, `order_detail`, `order_amount` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere;
     $packageResult = mysqli_query($connect, $packageSql);
     if ($packageResult) {
         while ($packageRow = $packageResult->fetch_assoc()) {
@@ -161,7 +167,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array())
     });
     $data['package_rows'] = $packageRows;
 
-    $platformSql = "SELECT `platform`, COUNT(*) AS order_count, COUNT(DISTINCT `campaign_customer_id`) AS customer_count, SUM(IFNULL(`order_amount`,0)) AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $periodWhere . " GROUP BY `platform` ORDER BY total_sales DESC";
+    $platformSql = "SELECT `platform`, COUNT(*) AS order_count, COUNT(DISTINCT `campaign_customer_id`) AS customer_count, SUM(IFNULL(`order_amount`,0)) AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere . " GROUP BY `platform` ORDER BY total_sales DESC";
     $platformResult = mysqli_query($connect, $platformSql);
     if ($platformResult) {
         while ($platformRow = $platformResult->fetch_assoc()) {
@@ -178,7 +184,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array())
         }
     }
 
-    $trendSql = "SELECT DATE(`order_date`) AS order_day, COUNT(*) AS order_count, SUM(IFNULL(`order_amount`,0)) AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' AND `order_date` IS NOT NULL" . $periodWhere . " GROUP BY DATE(`order_date`) ORDER BY order_day ASC";
+    $trendSql = "SELECT DATE(`order_date`) AS order_day, COUNT(*) AS order_count, SUM(IFNULL(`order_amount`,0)) AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' AND `order_date` IS NOT NULL" . $packageFilter . $periodWhere . " GROUP BY DATE(`order_date`) ORDER BY order_day ASC";
     $trendResult = mysqli_query($connect, $trendSql);
     if ($trendResult) {
         while ($trendRow = $trendResult->fetch_assoc()) {
@@ -195,15 +201,36 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array())
             SUM(IFNULL(cpr.`order_amount`,0)) AS total_amount,
             MAX(cpr.`order_date`) AS last_order_date
         FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " cc
-        LEFT JOIN " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " cpr ON cpr.`campaign_customer_id`=cc.`id` AND cpr.`campaign_id`=cc.`campaign_id` AND cpr.`status`='A'" . $periodWhereCpr . "
+        LEFT JOIN " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " cpr ON cpr.`campaign_customer_id`=cc.`id` AND cpr.`campaign_id`=cc.`campaign_id` AND cpr.`status`='A'" . (empty($packageIds) ? '' : " AND cpr.`package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhereCpr . "
         WHERE cc.`campaign_id`='" . (int) $campaignId . "' AND cc.`status`='A'
         GROUP BY cc.`id`
         ORDER BY total_amount DESC, cc.`customer_name` ASC";
     $customerResult = mysqli_query($connect, $customerSql);
     if ($customerResult) {
         while ($customerRow = $customerResult->fetch_assoc()) {
+            $customerId = (int) ($customerRow['id'] ?? 0);
             $orderCount = (int) ($customerRow['order_count'] ?? 0);
+
+            $orders = array();
+            if ($customerId > 0 && $orderCount > 0) {
+                $orderDetailSql = "SELECT `id`, `order_no`, `package_text`, `order_amount`, `order_date`, `order_status`, `platform` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_customer_id`='" . $customerId . "' AND `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . (empty($packageIds) ? '' : " AND `package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhere . " ORDER BY `order_date` DESC";
+                $orderDetailResult = mysqli_query($connect, $orderDetailSql);
+                if ($orderDetailResult) {
+                    while ($orderDetailRow = $orderDetailResult->fetch_assoc()) {
+                        $orders[] = array(
+                            'order_no' => trim((string) ($orderDetailRow['order_no'] ?? '')),
+                            'package_text' => campaignPurchaseResolvePackageDisplayName($connect, trim((string) ($orderDetailRow['package_text'] ?? ''))),
+                            'order_amount' => is_numeric($orderDetailRow['order_amount'] ?? null) ? (float) $orderDetailRow['order_amount'] : 0,
+                            'order_date' => (string) ($orderDetailRow['order_date'] ?? ''),
+                            'order_status' => trim((string) ($orderDetailRow['order_status'] ?? '')),
+                            'platform' => trim((string) ($orderDetailRow['platform'] ?? '')),
+                        );
+                    }
+                }
+            }
+
             $data['customer_rows'][] = array(
+                'customer_id' => $customerId,
                 'customer_name' => trim((string) ($customerRow['customer_name'] ?? '')),
                 'customer_contact' => trim((string) ($customerRow['customer_contact'] ?? '')),
                 'platform' => trim((string) ($customerRow['platform'] ?? '')),
@@ -211,6 +238,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array())
                 'total_amount' => is_numeric($customerRow['total_amount'] ?? null) ? (float) $customerRow['total_amount'] : 0,
                 'last_order_date' => (string) ($customerRow['last_order_date'] ?? ''),
                 'purchased' => $orderCount > 0,
+                'orders' => $orders,
             );
 
             if ($orderCount === 1) {
@@ -257,7 +285,7 @@ if (post('actionBtn') === 'refreshReport') {
     exit();
 }
 
-$reportData = campaignReportBuildData($connect, $campaignId, $campaign);
+$reportData = campaignReportBuildData($connect, $campaignId, $campaign, $reportPackageIds);
 $metrics = $reportData['metrics'];
 
 if (input('export') === '1') {
@@ -560,8 +588,16 @@ if (input('export') === '1') {
                                 </thead>
                                 <tbody>
                                     <?php foreach ($reportData['customer_rows'] as $row): ?>
-                                        <tr>
-                                            <td><?= campaignH($row['customer_name']) ?></td>
+                                        <tr data-customer-orders="<?= campaignH(json_encode($row['orders'] ?? array())) ?>">
+                                            <td>
+                                                <?php if ($row['order_count'] > 0): ?>
+                                                    <a href="javascript:void(0)" class="campaign-customer-detail-link" data-customer-id="<?= (int) $row['customer_id'] ?>" data-customer-name="<?= campaignH($row['customer_name']) ?>" style="color: inherit; text-decoration: none; cursor: pointer;">
+                                                        <?= campaignH($row['customer_name']) ?>
+                                                    </a>
+                                                <?php else: ?>
+                                                    <?= campaignH($row['customer_name']) ?>
+                                                <?php endif; ?>
+                                            </td>
                                             <td><?= campaignH($row['customer_contact']) ?></td>
                                             <td><?= campaignH($row['platform']) ?></td>
                                             <td><?= (int) $row['order_count'] ?></td>
@@ -578,6 +614,36 @@ if (input('export') === '1') {
                                     <?php endforeach; ?>
                                 </tbody>
                             </table>
+                        </div>
+                    </div>
+
+                    <!-- Customer Detail Modal -->
+                    <div class="modal fade" id="customerDetailModal" tabindex="-1">
+                        <div class="modal-dialog modal-lg">
+                            <div class="modal-content">
+                                <div class="modal-header">
+                                    <h5 class="modal-title">Order Details - <span id="modalCustomerName"></span></h5>
+                                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                                </div>
+                                <div class="modal-body">
+                                    <div class="table-responsive">
+                                        <table class="table table-sm table-striped" id="customerOrderTable">
+                                            <thead>
+                                                <tr>
+                                                    <th>Order No</th>
+                                                    <th>Package</th>
+                                                    <th>Amount</th>
+                                                    <th>Order Date</th>
+                                                    <th>Status</th>
+                                                    <th>Platform</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody id="customerOrderTableBody">
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 <?php endif; ?>
@@ -598,6 +664,38 @@ if (input('export') === '1') {
         datatableAlignment('campaign_report_platform_table');
         datatableAlignment('campaign_report_customer_table');
         setButtonColor();
+
+        document.querySelectorAll('.campaign-customer-detail-link').forEach(function (link) {
+            link.addEventListener('click', function (e) {
+                e.preventDefault();
+                var customerName = this.getAttribute('data-customer-name');
+                var row = this.closest('tr');
+                var ordersJson = row.getAttribute('data-customer-orders');
+                var orders = [];
+                try {
+                    orders = JSON.parse(ordersJson || '[]');
+                } catch (err) {
+                    console.error('Failed to parse orders JSON', err);
+                }
+                document.getElementById('modalCustomerName').textContent = customerName;
+                var tbody = document.getElementById('customerOrderTableBody');
+                tbody.innerHTML = '';
+                if (orders.length > 0) {
+                    orders.forEach(function (order) {
+                        var row = document.createElement('tr');
+                        row.innerHTML = '<td>' + (order.order_no || '') + '</td>' +
+                            '<td>' + (order.package_text || '') + '</td>' +
+                            '<td>' + (parseFloat(order.order_amount || 0).toFixed(2)) + '</td>' +
+                            '<td>' + (order.order_date || '') + '</td>' +
+                            '<td>' + (order.order_status || '') + '</td>' +
+                            '<td>' + (order.platform || '') + '</td>';
+                        tbody.appendChild(row);
+                    });
+                }
+                var modal = new bootstrap.Modal(document.getElementById('customerDetailModal'));
+                modal.show();
+            });
+        });
 
         <?php if (!empty($reportData['trend_rows'])): ?>
             (function () {

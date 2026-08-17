@@ -1296,11 +1296,17 @@ if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
             $detailText = $detailCol !== '' ? campaignNormalizeTextValue($row[$detailCol] ?? '', 65535) : '';
             $packageText = $packageCol !== '' ? campaignNormalizeTextValue($row[$packageCol] ?? '', 65535) : '';
 
+            $orderPackageIds = campaignPurchaseExtractPackageIds($packageText);
+            $packageId = null;
+
             if (!empty($campaignPackageIds)) {
-                $orderPackageIds = campaignPurchaseExtractPackageIds($packageText);
                 if (empty($orderPackageIds) || empty(array_intersect($orderPackageIds, $campaignPackageIds))) {
                     continue;
                 }
+                $matchingIds = array_intersect($orderPackageIds, $campaignPackageIds);
+                $packageId = !empty($matchingIds) ? reset($matchingIds) : null;
+            } elseif (!empty($orderPackageIds)) {
+                $packageId = reset($orderPackageIds);
             }
 
             $orders[] = array(
@@ -1312,6 +1318,7 @@ if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
                 'order_amount' => $amount,
                 'order_date' => $orderDateTime,
                 'package_text' => $packageText !== '' ? $packageText : $detailText,
+                'package_id' => $packageId,
             );
         }
 
@@ -1420,8 +1427,8 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             }
         }
 
-        $insertStmt = $connect->prepare("INSERT INTO " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " (`campaign_id`,`campaign_customer_id`,`platform`,`order_id`,`order_no`,`order_detail`,`order_status`,`order_amount`,`order_date`,`package_text`,`customer_type`,`create_by`,`create_date`,`create_time`,`status`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURDATE(),CURTIME(),'A')");
-        $updateRecordStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " SET `order_detail`=?, `order_status`=?, `order_amount`=?, `order_date`=?, `package_text`=?, `customer_type`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
+        $insertStmt = $connect->prepare("INSERT INTO " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " (`campaign_id`,`campaign_customer_id`,`package_id`,`platform`,`order_id`,`order_no`,`order_detail`,`order_status`,`order_amount`,`order_date`,`package_text`,`customer_type`,`create_by`,`create_date`,`create_time`,`status`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURDATE(),CURTIME(),'A')");
+        $updateRecordStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " SET `package_id`=?, `order_detail`=?, `order_status`=?, `order_amount`=?, `order_date`=?, `package_text`=?, `customer_type`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
         $userId = campaignCurrentUserId();
 
         foreach ($customers as $customerRow) {
@@ -1470,10 +1477,11 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                 $orderAmount = (float) ($order['order_amount'] ?? 0);
                 $orderDate = trim((string) ($order['order_date'] ?? ''));
                 $packageText = campaignNormalizeTextValue($order['package_text'] ?? '', 65535);
+                $packageId = isset($order['package_id']) && $order['package_id'] !== null ? (int) $order['package_id'] : null;
 
                 if ($existingRecordId > 0) {
                     if ($updateRecordStmt) {
-                        $updateRecordStmt->bind_param('ssdssssi', $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId, $existingRecordId);
+                        $updateRecordStmt->bind_param('isdssssi', $packageId, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId, $existingRecordId);
                         if ($updateRecordStmt->execute()) {
                             $summary['records_updated']++;
                         }
@@ -1486,7 +1494,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                     $platform = (string) ($order['platform'] ?? ($customerRow['platform'] ?? ''));
                     $orderId = (string) ($order['order_id'] ?? '');
                     $orderNo = (string) ($order['order_no'] ?? '');
-                    $insertStmt->bind_param('iisssssdssss', $campaignId, $campaignCustomerId, $platform, $orderId, $orderNo, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId);
+                    $insertStmt->bind_param('iiisssssdssss', $campaignId, $campaignCustomerId, $packageId, $platform, $orderId, $orderNo, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId);
                     if ($insertStmt->execute()) {
                         $summary['records_inserted']++;
                         $newRecordId = (int) $connect->insert_id;
