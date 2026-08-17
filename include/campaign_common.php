@@ -1527,7 +1527,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
 
                 if ($existingRecordId > 0) {
                     if ($updateRecordStmt) {
-                        $updateRecordStmt->bind_param('isdssssi', $packageId, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId, $existingRecordId);
+                        $updateRecordStmt->bind_param('isdsdssi', $packageId, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId, $existingRecordId);
                         if ($updateRecordStmt->execute()) {
                             $summary['records_updated']++;
                         }
