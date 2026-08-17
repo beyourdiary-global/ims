@@ -1367,6 +1367,52 @@ if (!function_exists('campaignPurchaseHasValidOrderBefore')) {
     }
 }
 
+if (!function_exists('campaignBackfillPackageIds')) {
+    function campaignBackfillPackageIds($connect, $campaignId)
+    {
+        if (!defined('CAMPAIGN_PURCHASE_RECORD') || !campaignTableExists($connect, CAMPAIGN_PURCHASE_RECORD)) {
+            return;
+        }
+
+        $campaignPackageIds = campaignFetchCampaignPackageIds($connect, (int) $campaignId);
+        if (empty($campaignPackageIds)) {
+            return;
+        }
+
+        $nullPackageSql = "SELECT `id`, `package_text` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' AND `package_id` IS NULL";
+        $nullPackageResult = mysqli_query($connect, $nullPackageSql);
+        if (!$nullPackageResult) {
+            return;
+        }
+
+        $updateStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " SET `package_id`=? WHERE `id`=?");
+        if (!$updateStmt) {
+            return;
+        }
+
+        while ($row = $nullPackageResult->fetch_assoc()) {
+            $recordId = (int) ($row['id'] ?? 0);
+            $packageText = trim((string) ($row['package_text'] ?? ''));
+
+            if ($recordId <= 0 || $packageText === '') {
+                continue;
+            }
+
+            $orderPackageIds = campaignPurchaseExtractPackageIds($packageText);
+            $matchingIds = array_intersect($orderPackageIds, $campaignPackageIds);
+            $packageId = !empty($matchingIds) ? reset($matchingIds) : null;
+
+            if ($packageId !== null) {
+                $packageIdInt = (int) $packageId;
+                $updateStmt->bind_param('ii', $packageIdInt, $recordId);
+                $updateStmt->execute();
+            }
+        }
+
+        $updateStmt->close();
+    }
+}
+
 if (!function_exists('campaignRunPurchaseCheck')) {
     function campaignRunPurchaseCheck($connect, $financeConnect, $campaignId, $fromDate = '', $toDate = '')
     {
@@ -1540,6 +1586,8 @@ if (!function_exists('campaignRunPurchaseCheck')) {
         if ($updateRecordStmt) {
             $updateRecordStmt->close();
         }
+
+        campaignBackfillPackageIds($connect, $campaignId);
 
         return $summary;
     }
