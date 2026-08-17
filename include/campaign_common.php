@@ -712,11 +712,17 @@ if (!function_exists('campaignPurchasePlatformConfigs')) {
                 'order_no_cols' => array('orderID', 'order_id', 'order_no'),
                 // Shopee order table normally stores buyer as shopee_customer_info.id, so customer_lookup is required.
                 'customer_cols' => array('buyer_username', 'buyer', 'customer_id', 'cust_id', 'customer_name'),
+                // 'name'/'customer_name' are intentionally excluded here: they are free-text
+                // display names, not unique per person, and this lookup has no result cap
+                // per candidate value - matching on name can resolve to many unrelated
+                // shopee_customer_info rows and pull all of their order history into this
+                // one campaign customer's purchase total. buyer_username and contact_no
+                // are the only fields specific enough to identify a single account.
                 'customer_lookup' => array(
                     'conn' => $financeConnect,
                     'table' => defined('SHOPEE_CUST_INFO') ? SHOPEE_CUST_INFO : 'shopee_customer_info',
                     'id_col' => 'id',
-                    'match_cols' => array('buyer_username', 'contact_no', 'name', 'customer_name'),
+                    'match_cols' => array('buyer_username', 'contact_no'),
                 ),
                 'date_cols' => array('date', 'order_date', 'create_date'),
                 'time_cols' => array('time', 'create_time'),
@@ -909,7 +915,9 @@ if (!function_exists('campaignPurchaseLookupCustomerIds')) {
         }
 
         $statusSql = campaignColumnExists($lookupConn, $lookupTable, 'status') ? " AND IFNULL(`status`, 'A') <> 'D'" : '';
-        $sql = "SELECT " . campaignPurchaseQuoteColumn($lookupIdCol) . " AS lookup_id FROM " . campaignTableName($lookupTable) . " WHERE (" . implode(' OR ', $whereParts) . ")" . $statusSql . " LIMIT 200";
+        // Ask for one more row than the ambiguity cap below so we can tell "found a
+        // handful of exact matches" apart from "this value isn't actually unique".
+        $sql = "SELECT " . campaignPurchaseQuoteColumn($lookupIdCol) . " AS lookup_id FROM " . campaignTableName($lookupTable) . " WHERE (" . implode(' OR ', $whereParts) . ")" . $statusSql . " LIMIT 6";
         $result = mysqli_query($lookupConn, $sql);
         if ($result) {
             while ($row = $result->fetch_assoc()) {
@@ -918,6 +926,15 @@ if (!function_exists('campaignPurchaseLookupCustomerIds')) {
                     $ids[$lookupId] = $lookupId;
                 }
             }
+        }
+
+        // A single campaign customer should resolve to a small, specific set of
+        // accounts. If a match value turned out to be non-unique (e.g. a shared
+        // placeholder that slipped through, or duplicate customer records) and hit
+        // more than a handful of rows, trust none of them rather than risk merging
+        // a stranger's entire order history into this customer's purchase total.
+        if (count($ids) > 5) {
+            return array();
         }
 
         return array_values($ids);
