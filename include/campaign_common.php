@@ -1059,6 +1059,98 @@ if (!function_exists('campaignPurchaseResolvePackageDisplayName')) {
     }
 }
 
+if (!function_exists('campaignPurchaseExtractPackageIds')) {
+    function campaignPurchaseExtractPackageIds($packageValue)
+    {
+        $packageValue = trim((string) $packageValue);
+        if ($packageValue === '') {
+            return array();
+        }
+
+        $ids = array();
+        foreach (explode(',', $packageValue) as $part) {
+            $part = trim($part);
+            if ($part !== '' && ctype_digit($part)) {
+                $ids[(int) $part] = (int) $part;
+            }
+        }
+
+        return array_values($ids);
+    }
+}
+
+if (!function_exists('campaignFetchCampaignPackageIds')) {
+    function campaignFetchCampaignPackageIds($connect, $campaignId)
+    {
+        $packageIds = array();
+        if (!defined('CAMPAIGN_PACKAGE') || !campaignTableExists($connect, CAMPAIGN_PACKAGE)) {
+            return $packageIds;
+        }
+
+        $stmt = $connect->prepare("SELECT `package_id` FROM `" . CAMPAIGN_PACKAGE . "` WHERE `campaign_id` = ? AND `status` = 'A' ORDER BY `id` ASC");
+        if (!$stmt) {
+            return $packageIds;
+        }
+
+        $campaignId = (int) $campaignId;
+        $stmt->bind_param('i', $campaignId);
+        $stmt->execute();
+        $result = $stmt->get_result();
+        while ($result && ($row = $result->fetch_assoc())) {
+            $packageId = (int) ($row['package_id'] ?? 0);
+            if ($packageId > 0) {
+                $packageIds[$packageId] = $packageId;
+            }
+        }
+        $stmt->close();
+
+        return array_values($packageIds);
+    }
+}
+
+if (!function_exists('campaignReplaceCampaignPackageRows')) {
+    function campaignReplaceCampaignPackageRows($connect, $campaignId, $packageIds)
+    {
+        // If the migration hasn't been run yet, there's nowhere to store the
+        // selection - treat that as a no-op rather than failing the whole campaign
+        // save (this runs inside a transaction alongside the main campaign save).
+        if (!defined('CAMPAIGN_PACKAGE') || !campaignTableExists($connect, CAMPAIGN_PACKAGE)) {
+            return true;
+        }
+
+        $campaignId = (int) $campaignId;
+        $safeUserId = $connect->real_escape_string((string) campaignCurrentUserId());
+        if (!$connect->query("UPDATE `" . CAMPAIGN_PACKAGE . "` SET `status` = 'D', `update_by` = '" . $safeUserId . "', `update_date` = CURDATE(), `update_time` = CURTIME() WHERE `campaign_id` = " . $campaignId . " AND `status` = 'A'")) {
+            return false;
+        }
+
+        $packageIds = array_values(array_unique(array_filter(array_map('intval', (array) $packageIds), function ($value) {
+            return $value > 0;
+        })));
+
+        if (empty($packageIds)) {
+            return true;
+        }
+
+        $stmt = $connect->prepare("INSERT INTO `" . CAMPAIGN_PACKAGE . "` (`campaign_id`, `package_id`, `create_by`, `create_date`, `create_time`, `status`) VALUES (?, ?, ?, CURDATE(), CURTIME(), 'A')");
+        if (!$stmt) {
+            return false;
+        }
+
+        $createBy = (string) campaignCurrentUserId();
+        foreach ($packageIds as $packageId) {
+            $stmt->bind_param('iis', $campaignId, $packageId, $createBy);
+            if (!$stmt->execute()) {
+                $stmt->close();
+                return false;
+            }
+        }
+
+        $stmt->close();
+        return true;
+    }
+}
+
 if (!function_exists('campaignPurchaseResolveOrderStatusDisplayName')) {
     function campaignPurchaseResolveOrderStatusDisplayName($statusCode)
     {
@@ -1145,6 +1237,13 @@ if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
             return $orders;
         }
 
+        // If the campaign has specific packages selected, only orders for those
+        // packages should count toward this campaign's purchases/sales - otherwise a
+        // customer's unrelated purchases in the same date window get counted too. An
+        // empty selection means "no package restriction" (existing campaigns keep
+        // their old behavior of counting every purchase in the period).
+        $campaignPackageIds = campaignFetchCampaignPackageIds($connect, (int) ($campaign['id'] ?? 0));
+
         $safeFromDate = $orderConn->real_escape_string(campaignDateValue($fromDate));
         $safeToDate = $orderConn->real_escape_string(campaignDateValue($toDate));
         if ($safeFromDate === '') {
@@ -1197,6 +1296,13 @@ if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
             $detailText = $detailCol !== '' ? campaignNormalizeTextValue($row[$detailCol] ?? '', 65535) : '';
             $packageText = $packageCol !== '' ? campaignNormalizeTextValue($row[$packageCol] ?? '', 65535) : '';
 
+            if (!empty($campaignPackageIds)) {
+                $orderPackageIds = campaignPurchaseExtractPackageIds($packageText);
+                if (empty($orderPackageIds) || empty(array_intersect($orderPackageIds, $campaignPackageIds))) {
+                    continue;
+                }
+            }
+
             $orders[] = array(
                 'platform' => $platform,
                 'order_id' => $orderId,
@@ -1207,6 +1313,10 @@ if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
                 'order_date' => $orderDateTime,
                 'package_text' => $packageText !== '' ? $packageText : $detailText,
             );
+        }
+
+        if (empty($orders) && !empty($campaignPackageIds)) {
+            $reasonOut = 'no_orders_for_selected_packages';
         }
 
         return $orders;

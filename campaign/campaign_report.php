@@ -33,6 +33,18 @@ $csrfToken = campaignCsrfToken('campaign_report');
 $pageUrl = $SITEURL . '/campaign/campaign_report.php?campaign_id=' . (int) $campaignId;
 $backUrl = $SITEURL . '/campaign/campaign.php?id=' . (int) $campaignId;
 
+$reportPackageIds = campaignFetchCampaignPackageIds($connect, $campaignId);
+$reportPackageNames = array();
+if (!empty($reportPackageIds) && defined('PKG') && campaignTableExists($connect, PKG)) {
+    $safePackageIds = array_map('intval', $reportPackageIds);
+    $packageNameResult = mysqli_query($connect, "SELECT `name` FROM `" . PKG . "` WHERE `id` IN (" . implode(',', $safePackageIds) . ") ORDER BY `name` ASC");
+    if ($packageNameResult) {
+        while ($packageNameRow = $packageNameResult->fetch_assoc()) {
+            $reportPackageNames[] = trim((string) ($packageNameRow['name'] ?? ''));
+        }
+    }
+}
+
 function campaignReportBuildData($connect, $campaignId, $campaign = array())
 {
     $data = array(
@@ -244,6 +256,15 @@ if (input('export') === '1') {
                 <div>
                     <h1>Campaign Report</h1>
                     <?php campaignRenderBadge($campaign); ?>
+                    <?php if (!empty($reportPackageNames)): ?>
+                        <div class="text-muted small mt-1">
+                            Scoped to package(s): <?= campaignH(implode(', ', $reportPackageNames)) ?>
+                        </div>
+                    <?php else: ?>
+                        <div class="text-muted small mt-1">
+                            Not scoped to a specific package - counts purchases of any package. Set Package(s) on the campaign to narrow this down.
+                        </div>
+                    <?php endif; ?>
                 </div>
                 <div class="d-flex gap-2 mt-2">
                     <a class="btn btn-sm btn-rounded btn-outline-primary" href="<?= campaignH($pageUrl . '&export=1') ?>">

@@ -173,6 +173,21 @@ foreach ($userRows as $userRow) {
         break;
     }
 }
+
+$packageOptions = array();
+if (defined('PKG') && campaignTableExists($connect, PKG)) {
+    $packageResult = mysqli_query($connect, "SELECT `id`, `name` FROM `" . PKG . "` WHERE `status` = 'A' ORDER BY `name` ASC");
+    if ($packageResult) {
+        while ($packageRow = $packageResult->fetch_assoc()) {
+            $packageOptions[] = array(
+                'id' => (int) ($packageRow['id'] ?? 0),
+                'name' => trim((string) ($packageRow['name'] ?? '')),
+            );
+        }
+    }
+}
+$selectedPackageIds = $isAdd ? array() : campaignFetchCampaignPackageIds($connect, $dataId);
+
 $errors = array();
 $formValues = array(
     'campaign_name' => isset($row['campaign_name']) ? $row['campaign_name'] : '',
@@ -189,6 +204,9 @@ if (post('actionBtn') === 'saveCampaign') {
     $formValues['description'] = trim((string) post('description'));
     $selectedPicName = trim((string) post('pic_user_search'));
     $selectedPicId = campaignNormalizePicId(post('pic_user_id'));
+    $selectedPackageIds = array_values(array_unique(array_filter(array_map('intval', (array) post('package_ids') ?: array()), function ($value) {
+        return $value > 0;
+    })));
 
     if (!hash_equals($csrfToken, $postedToken)) {
         $errors[] = 'Invalid security token. Please try again.';
@@ -255,6 +273,10 @@ if (post('actionBtn') === 'saveCampaign') {
 
             if (!$saveSuccess || $dataId <= 0 || !campaignReplacePicRows($connect, $dataId, array($selectedPicId))) {
                 throw new Exception('Unable to save Campaign PIC rows.');
+            }
+
+            if (!campaignReplaceCampaignPackageRows($connect, $dataId, $selectedPackageIds)) {
+                throw new Exception('Unable to save Campaign Package rows.');
             }
 
             $connect->commit();
@@ -349,6 +371,26 @@ $readonlyAttr = $isView ? 'readonly' : '';
                                     <input type="hidden" name="pic_user_id" id="pic_user_id" value="<?= (int) $selectedPicId ?>">
                                 </div>
                             </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label form_lbl">Package(s)</label>
+                                <div class="dropdown campaign-filter-dropdown">
+                                    <button class="campaign-filter-toggle" type="button" id="campaignPackageToggle" data-bs-toggle="dropdown" data-bs-auto-close="outside" aria-expanded="false" <?= $isView ? 'disabled' : '' ?>>
+                                        <span id="campaignPackageToggleLabel">All Packages (No Restriction)</span>
+                                    </button>
+                                    <div class="dropdown-menu" aria-labelledby="campaignPackageToggle">
+                                        <?php if (empty($packageOptions)): ?>
+                                            <div class="px-2 py-1 text-muted">No packages found.</div>
+                                        <?php endif; ?>
+                                        <?php foreach ($packageOptions as $packageOption): ?>
+                                            <div class="form-check">
+                                                <input class="form-check-input campaign-package-checkbox" type="checkbox" name="package_ids[]" value="<?= (int) $packageOption['id'] ?>" id="campaign_package_<?= (int) $packageOption['id'] ?>" <?= in_array((int) $packageOption['id'], $selectedPackageIds, true) ? 'checked' : '' ?> <?= $isView ? 'disabled' : '' ?>>
+                                                <label class="form-check-label" for="campaign_package_<?= (int) $packageOption['id'] ?>"><?= campaignH($packageOption['name']) ?></label>
+                                            </div>
+                                        <?php endforeach; ?>
+                                    </div>
+                                </div>
+                                <div class="form-text">Leave empty to count purchases of any package in the Campaign Report. Selecting one or more packages limits the report to only those packages' purchases.</div>
+                            </div>
                         </div>
                     </div>
 
@@ -377,6 +419,26 @@ $readonlyAttr = $isView ? 'readonly' : '';
         centerAlignment("formContainer");
         setButtonColor();
         preloader(300, action);
+
+        (function () {
+            var toggleLabel = document.getElementById('campaignPackageToggleLabel');
+            var checkboxes = document.querySelectorAll('.campaign-package-checkbox');
+            if (!toggleLabel || !checkboxes.length) {
+                return;
+            }
+
+            function updatePackageToggleLabel() {
+                var checkedCount = document.querySelectorAll('.campaign-package-checkbox:checked').length;
+                toggleLabel.textContent = checkedCount > 0
+                    ? checkedCount + ' package(s) selected'
+                    : 'All Packages (No Restriction)';
+            }
+
+            checkboxes.forEach(function (checkbox) {
+                checkbox.addEventListener('change', updatePackageToggleLabel);
+            });
+            updatePackageToggleLabel();
+        })();
     </script>
     <?php
     campaignRenderAutocompleteScript(array(

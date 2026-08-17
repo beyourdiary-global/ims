@@ -308,6 +308,7 @@ define('CUSTOMER_FOLLOW_UP_ACTION_LOG', 'customer_follow_up_action_log');
 define('CUSTOMER_FOLLOW_UP_NOTIFICATION', 'customer_follow_up_notification');
 define('CAMPAIGN', 'campaign');
 define('CAMPAIGN_PIC', 'campaign_pic');
+define('CAMPAIGN_PACKAGE', 'campaign_package');
 define('CAMPAIGN_CUSTOMER', 'campaign_customer');
 define('CAMPAIGN_MESSAGE', 'campaign_message');
 define('CAMPAIGN_FOLLOW_UP', 'campaign_follow_up');

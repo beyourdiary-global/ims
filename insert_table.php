@@ -4524,6 +4524,27 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_PIC . "`: " . $conn->error . "</p>";
     }
 
+    $createCampaignPackageSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_PACKAGE . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `package_id` INT NOT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_package_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_package_package_id` (`package_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignPackageSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_PACKAGE . "` for Campaign Package.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_PACKAGE . "`: " . $conn->error . "</p>";
+    }
+
     $createCampaignCustomerSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_CUSTOMER . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `campaign_id` INT NOT NULL,
