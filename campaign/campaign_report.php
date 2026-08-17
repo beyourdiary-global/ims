@@ -229,6 +229,20 @@ if (input('export') === '1') {
                     <h1>Campaign Report</h1>
                     <?php campaignRenderBadge($campaign); ?>
                 </div>
+                <div class="d-flex gap-2 mt-2">
+                    <a class="btn btn-sm btn-rounded btn-outline-primary" href="<?= campaignH($pageUrl . '&export=1') ?>">
+                        <i class="fa-solid fa-file-export"></i> Export CSV
+                    </a>
+                    <?php if ($canRefresh): ?>
+                        <form method="post" action="<?= campaignH($pageUrl) ?>" class="d-inline">
+                            <input type="hidden" name="campaign_id" value="<?= (int) $campaignId ?>">
+                            <input type="hidden" name="csrf_token" value="<?= campaignH($csrfToken) ?>">
+                            <button class="btn btn-sm btn-rounded btn-primary" type="submit" name="actionBtn" value="refreshReport">
+                                <i class="fa-solid fa-arrows-rotate"></i> Refresh Report
+                            </button>
+                        </form>
+                    <?php endif; ?>
+                </div>
             </div>
 
             <?php if (!$reportData['has_data']): ?>
