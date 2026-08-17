@@ -1122,18 +1122,25 @@ if (!function_exists('campaignPurchaseResolveOrderStatusDisplayName')) {
 }
 
 if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
-    function campaignPurchaseFetchOrdersForCustomer($connect, $financeConnect, $campaign, $campaignCustomer, $fromDate, $toDate)
+    function campaignPurchaseFetchOrdersForCustomer($connect, $financeConnect, $campaign, $campaignCustomer, $fromDate, $toDate, &$reasonOut = null)
     {
         $orders = array();
+        $reasonOut = '';
         $platform = trim((string) ($campaignCustomer['platform'] ?? ''));
         $config = campaignPurchaseResolveConfig($connect, $financeConnect, $platform);
         if (empty($config) || empty($config['conn']) || empty($config['table'])) {
+            $reasonOut = 'no_platform_config:' . $platform;
             return $orders;
         }
 
         $orderConn = $config['conn'];
         $table = (string) $config['table'];
-        if (!($orderConn instanceof mysqli) || !campaignTableExists($orderConn, $table)) {
+        if (!($orderConn instanceof mysqli)) {
+            $reasonOut = 'no_order_connection';
+            return $orders;
+        }
+        if (!campaignTableExists($orderConn, $table)) {
+            $reasonOut = 'order_table_missing:' . $table;
             return $orders;
         }
 
@@ -1146,11 +1153,13 @@ if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
         $detailCol = campaignGetFirstExistingColumn($orderConn, $table, $config['detail_cols']);
 
         if ($dateCol === '') {
+            $reasonOut = 'no_date_column:' . $table;
             return $orders;
         }
 
         $matchParts = campaignPurchaseBuildCustomerMatchParts($orderConn, $table, $config, $campaignCustomer);
         if (empty($matchParts)) {
+            $reasonOut = 'no_match_parts';
             return $orders;
         }
 
@@ -1181,7 +1190,11 @@ if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
         $sql = "SELECT " . implode(',', $selectColumns) . " FROM " . campaignTableName($table) . " WHERE " . implode(' AND ', $where) . " ORDER BY DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") ASC, `id` ASC LIMIT 500";
         $result = mysqli_query($orderConn, $sql);
         if (!$result) {
+            $reasonOut = 'query_failed:' . mysqli_error($orderConn);
             return $orders;
+        }
+        if ($result->num_rows === 0) {
+            $reasonOut = 'query_ran_zero_rows:' . count($matchParts) . '_match_parts';
         }
 
         while ($row = $result->fetch_assoc()) {
@@ -1266,6 +1279,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             'customers_purchased' => 0,
             'customers_not_purchased' => 0,
             'notes' => array(),
+            'skip_reasons' => array(),
         );
 
         $campaign = campaignFetchCampaign($connect, $campaignId);
@@ -1325,13 +1339,21 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                 continue;
             }
 
-            $orders = campaignPurchaseFetchOrdersForCustomer($connect, $financeConnect, $campaign, $customerRow, $periodStart, $periodEnd);
+            $fetchReason = '';
+            $orders = campaignPurchaseFetchOrdersForCustomer($connect, $financeConnect, $campaign, $customerRow, $periodStart, $periodEnd, $fetchReason);
             $hasOldOrder = campaignPurchaseHasValidOrderBefore($connect, $financeConnect, $campaign, $customerRow, $periodStart);
             $customerType = $hasOldOrder ? 'Return Customer' : 'New Customer';
             $purchaseStatus = empty($orders) ? 'Not Purchased' : 'Purchased';
 
             if (empty($orders)) {
                 $summary['customers_not_purchased']++;
+                if ($fetchReason !== '') {
+                    $reasonKey = explode(':', $fetchReason)[0];
+                    if (!isset($summary['skip_reasons'][$reasonKey])) {
+                        $summary['skip_reasons'][$reasonKey] = 0;
+                    }
+                    $summary['skip_reasons'][$reasonKey]++;
+                }
             } else {
                 $summary['customers_purchased']++;
             }

@@ -159,6 +159,13 @@ if (post('actionBtn') === 'refreshReport') {
         (int) $summary['records_inserted'],
         (int) $summary['records_updated']
     );
+    if (!empty($summary['skip_reasons']) && is_array($summary['skip_reasons'])) {
+        $reasonParts = array();
+        foreach ($summary['skip_reasons'] as $reasonKey => $reasonCount) {
+            $reasonParts[] = $reasonKey . '=' . $reasonCount;
+        }
+        $refreshSummaryMessage .= ' Not-purchased breakdown: ' . implode(', ', $reasonParts) . '.';
+    }
     campaignSetPopup($refreshSummaryMessage, $pageUrl, 'ErrMO');
     echo '<script>location.href = "' . $pageUrl . '";</script>';
     exit();
