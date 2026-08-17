@@ -150,7 +150,16 @@ if (post('actionBtn') === 'refreshReport') {
 
     $summary = campaignRunPurchaseCheck($connect, $finance_connect, $campaignId);
     campaignAudit($connect, $pageTitle, 'edit', USER_NAME . ' refreshed Campaign Report. Purchase records inserted: ' . (int) $summary['records_inserted'] . '.', '', CAMPAIGN_PURCHASE_RECORD);
-    campaignSetPopup('Campaign Report refreshed successfully.', $pageUrl, 'ErrMO');
+    $refreshSummaryMessage = sprintf(
+        'Campaign Report refreshed. Checked %d customer(s), %d purchased / %d not purchased, %d order(s) found (%d new, %d updated).',
+        (int) $summary['checked_customers'],
+        (int) $summary['customers_purchased'],
+        (int) $summary['customers_not_purchased'],
+        (int) $summary['orders_found'],
+        (int) $summary['records_inserted'],
+        (int) $summary['records_updated']
+    );
+    campaignSetPopup($refreshSummaryMessage, $pageUrl, 'ErrMO');
     echo '<script>location.href = "' . $pageUrl . '";</script>';
     exit();
 }

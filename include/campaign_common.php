@@ -712,17 +712,16 @@ if (!function_exists('campaignPurchasePlatformConfigs')) {
                 'order_no_cols' => array('orderID', 'order_id', 'order_no'),
                 // Shopee order table normally stores buyer as shopee_customer_info.id, so customer_lookup is required.
                 'customer_cols' => array('buyer_username', 'buyer', 'customer_id', 'cust_id', 'customer_name'),
-                // 'name'/'customer_name' are intentionally excluded here: they are free-text
-                // display names, not unique per person, and this lookup has no result cap
-                // per candidate value - matching on name can resolve to many unrelated
-                // shopee_customer_info rows and pull all of their order history into this
-                // one campaign customer's purchase total. buyer_username and contact_no
-                // are the only fields specific enough to identify a single account.
+                // name/customer_name are free-text and not unique per person, but for many
+                // manually-assigned campaign customers a name may be the only identifier on
+                // file, so it stays in the lookup - campaignPurchaseLookupCustomerIds() caps
+                // and discards any match that resolves to more than a handful of accounts,
+                // which is what actually guards against the fan-out (see that function).
                 'customer_lookup' => array(
                     'conn' => $financeConnect,
                     'table' => defined('SHOPEE_CUST_INFO') ? SHOPEE_CUST_INFO : 'shopee_customer_info',
                     'id_col' => 'id',
-                    'match_cols' => array('buyer_username', 'contact_no'),
+                    'match_cols' => array('buyer_username', 'contact_no', 'name', 'customer_name'),
                 ),
                 'date_cols' => array('date', 'order_date', 'create_date'),
                 'time_cols' => array('time', 'create_time'),
@@ -1388,13 +1387,22 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             // that this run did NOT re-confirm is stale (e.g. it was only ever a
             // false-positive match from a since-fixed matching rule, or the order fell
             // out of the period). Retire it instead of leaving it to inflate the report.
-            $confirmedIdsSql = !empty($confirmedRecordIds) ? implode(',', array_map('intval', $confirmedRecordIds)) : '0';
-            mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
-                SET `status`='D', `update_by`='" . $connect->real_escape_string((string) $userId) . "', `update_date`=CURDATE(), `update_time`=CURTIME()
-                WHERE `campaign_id`='" . (int) $campaignId . "'
-                  AND `campaign_customer_id`='" . $campaignCustomerId . "'
-                  AND `status`='A'
-                  AND `id` NOT IN (" . $confirmedIdsSql . ")");
+            //
+            // Only do this when the current run actually found at least one order for
+            // this customer. If it found none, that's ambiguous - it could genuinely be
+            // "no purchase this period", or it could be a lookup/config problem - and
+            // wiping previously-confirmed records on an ambiguous empty result risks
+            // silently destroying real data. Leave existing records untouched in that
+            // case; a later refresh that does find matches will still clean them up.
+            if (!empty($confirmedRecordIds)) {
+                $confirmedIdsSql = implode(',', array_map('intval', $confirmedRecordIds));
+                mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+                    SET `status`='D', `update_by`='" . $connect->real_escape_string((string) $userId) . "', `update_date`=CURDATE(), `update_time`=CURTIME()
+                    WHERE `campaign_id`='" . (int) $campaignId . "'
+                      AND `campaign_customer_id`='" . $campaignCustomerId . "'
+                      AND `status`='A'
+                      AND `id` NOT IN (" . $confirmedIdsSql . ")");
+            }
 
             $updateStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_CUSTOMER) . " SET `purchase_status`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=? AND `campaign_id`=?");
             if ($updateStmt) {
