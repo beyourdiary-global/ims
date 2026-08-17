@@ -839,10 +839,13 @@ if (!function_exists('campaignPurchaseColumnIsNumeric')) {
 if (!function_exists('campaignPurchaseCleanMatchValues')) {
     function campaignPurchaseCleanMatchValues($values)
     {
+        // Reject blank/placeholder values ("0", "-", "NA", single characters, etc.) -
+        // these are common defaults for missing data and matching orders on them would
+        // pull in every other customer that also has no real id/name/contact on file.
         $clean = array();
         foreach ((array) $values as $value) {
             $value = trim(preg_replace('/\s+/', ' ', (string) $value));
-            if ($value === '') {
+            if ($value === '' || mb_strlen($value) < 3 || preg_match('/^[0\-\.]+$/', $value)) {
                 continue;
             }
             $clean[$value] = $value;
@@ -855,11 +858,13 @@ if (!function_exists('campaignPurchaseCleanMatchValues')) {
 if (!function_exists('campaignPurchaseBaseCustomerMatchValues')) {
     function campaignPurchaseBaseCustomerMatchValues($campaignCustomer)
     {
+        // customer_label is a comma-separated list of tag/segment names (e.g. "VIP,
+        // Repeat Buyer"), not a customer identifier - it must never be used to match
+        // orders, or unrelated customers sharing a label/tag get their orders merged in.
         $values = array(
             $campaignCustomer['customer_id'] ?? '',
             $campaignCustomer['customer_name'] ?? '',
             $campaignCustomer['customer_contact'] ?? '',
-            $campaignCustomer['customer_label'] ?? '',
         );
 
         return campaignPurchaseCleanMatchValues($values);
