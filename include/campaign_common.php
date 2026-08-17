@@ -844,15 +844,10 @@ if (!function_exists('campaignPurchaseColumnIsNumeric')) {
 if (!function_exists('campaignPurchaseCleanMatchValues')) {
     function campaignPurchaseCleanMatchValues($values)
     {
-        // Reject blank/placeholder values ("0", "-", "--", etc.) - these are common
-        // defaults for missing data and matching orders on them would pull in every
-        // other customer that also has no real id/name/contact on file. This must NOT
-        // reject short-but-real values (a legitimate numeric customer_id can be just
-        // 1-2 digits), so only reject strings made up entirely of 0/-/. characters.
         $clean = array();
         foreach ((array) $values as $value) {
             $value = trim(preg_replace('/\s+/', ' ', (string) $value));
-            if ($value === '' || preg_match('/^[0\-\.]+$/', $value)) {
+            if ($value === '') {
                 continue;
             }
             $clean[$value] = $value;
@@ -865,13 +860,11 @@ if (!function_exists('campaignPurchaseCleanMatchValues')) {
 if (!function_exists('campaignPurchaseBaseCustomerMatchValues')) {
     function campaignPurchaseBaseCustomerMatchValues($campaignCustomer)
     {
-        // customer_label is a comma-separated list of tag/segment names (e.g. "VIP,
-        // Repeat Buyer"), not a customer identifier - it must never be used to match
-        // orders, or unrelated customers sharing a label/tag get their orders merged in.
         $values = array(
             $campaignCustomer['customer_id'] ?? '',
             $campaignCustomer['customer_name'] ?? '',
             $campaignCustomer['customer_contact'] ?? '',
+            $campaignCustomer['customer_label'] ?? '',
         );
 
         return campaignPurchaseCleanMatchValues($values);
@@ -916,9 +909,7 @@ if (!function_exists('campaignPurchaseLookupCustomerIds')) {
         }
 
         $statusSql = campaignColumnExists($lookupConn, $lookupTable, 'status') ? " AND IFNULL(`status`, 'A') <> 'D'" : '';
-        // Ask for one more row than the ambiguity cap below so we can tell "found a
-        // handful of exact matches" apart from "this value isn't actually unique".
-        $sql = "SELECT " . campaignPurchaseQuoteColumn($lookupIdCol) . " AS lookup_id FROM " . campaignTableName($lookupTable) . " WHERE (" . implode(' OR ', $whereParts) . ")" . $statusSql . " LIMIT 6";
+        $sql = "SELECT " . campaignPurchaseQuoteColumn($lookupIdCol) . " AS lookup_id FROM " . campaignTableName($lookupTable) . " WHERE (" . implode(' OR ', $whereParts) . ")" . $statusSql . " LIMIT 200";
         $result = mysqli_query($lookupConn, $sql);
         if ($result) {
             while ($row = $result->fetch_assoc()) {
@@ -927,15 +918,6 @@ if (!function_exists('campaignPurchaseLookupCustomerIds')) {
                     $ids[$lookupId] = $lookupId;
                 }
             }
-        }
-
-        // A single campaign customer should resolve to a small, specific set of
-        // accounts. If a match value turned out to be non-unique (e.g. a shared
-        // placeholder that slipped through, or duplicate customer records) and hit
-        // more than a handful of rows, trust none of them rather than risk merging
-        // a stranger's entire order history into this customer's purchase total.
-        if (count($ids) > 5) {
-            return array();
         }
 
         return array_values($ids);
