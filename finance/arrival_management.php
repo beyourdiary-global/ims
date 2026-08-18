@@ -1408,66 +1408,68 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                 clearSingleArrivalFollowUpFieldError(fieldId);
             });
         });
-        document.querySelectorAll('.confirm-receive-btn').forEach(function (button) {
-            button.addEventListener('click', function () {
-                console.log('DEBUG: confirm-receive-btn clicked');
-                var blockMessage = button.getAttribute('data-block-message') || '';
-                if (blockMessage) {
-                    console.log('DEBUG: blocked with message:', blockMessage);
-                    showNotification(blockMessage, 'warning');
-                    return;
-                }
+        // Use event delegation to handle buttons even after DataTable redraws
+        document.addEventListener('click', function (event) {
+            var button = event.target.closest('.confirm-receive-btn');
+            if (!button) return;
 
-                console.log('DEBUG: setting up modal data...');
-                document.getElementById('arrival_follow_up_platform').value = button.getAttribute('data-platform') || '';
-                document.getElementById('arrival_follow_up_order_id').value = button.getAttribute('data-order-id') || '';
-                document.getElementById('arrival_follow_up_platform_section').value = <?= json_encode($activePlatform) ?>;
-                document.getElementById('arrivalFollowUpModalTitle').textContent = 'Customer Follow-Up - ' + (button.getAttribute('data-order-code') || '');
-                document.getElementById('arrival_follow_up_order_code_text').textContent = button.getAttribute('data-order-code') || '-';
-                document.getElementById('arrival_follow_up_customer_text').textContent = button.getAttribute('data-customer-username') || button.getAttribute('data-customer-name') || '-';
-                document.getElementById('arrival_follow_up_package_text').textContent = button.getAttribute('data-package-name') || '-';
-                document.getElementById('arrival_follow_up_received_date_text').textContent = button.getAttribute('data-received-date') || '';
-                document.getElementById('arrival_follow_up_customer_type_text').textContent =
-                    (button.getAttribute('data-customer-type') || 'new') === 'return'
-                        ? 'Return Customer (' + (button.getAttribute('data-purchase-count') || '0') + ' previous purchase)'
-                        : 'New Customer';
-                document.getElementById('arrival_follow_up_attachment').value = '';
-                document.getElementById('arrival_follow_up_message_shortcut_id').value = '';
-                document.getElementById('arrival_follow_up_next_date').value = '';
-                document.getElementById('arrival_follow_up_next_date').max = button.getAttribute('data-max-date') || '';
-                document.getElementById('arrival_follow_up_rule_hint').textContent = button.getAttribute('data-rule-label') || '';
+            console.log('DEBUG: confirm-receive-btn clicked via delegation');
+            var blockMessage = button.getAttribute('data-block-message') || '';
+            if (blockMessage) {
+                console.log('DEBUG: blocked with message:', blockMessage);
+                showNotification(blockMessage, 'warning');
+                return;
+            }
 
-                arrivalFollowUpFormSubmitted = false;
-                clearArrivalFollowUpRequiredErrors();
+            console.log('DEBUG: setting up modal data...');
+            document.getElementById('arrival_follow_up_platform').value = button.getAttribute('data-platform') || '';
+            document.getElementById('arrival_follow_up_order_id').value = button.getAttribute('data-order-id') || '';
+            document.getElementById('arrival_follow_up_platform_section').value = <?= json_encode($activePlatform) ?>;
+            document.getElementById('arrivalFollowUpModalTitle').textContent = 'Customer Follow-Up - ' + (button.getAttribute('data-order-code') || '');
+            document.getElementById('arrival_follow_up_order_code_text').textContent = button.getAttribute('data-order-code') || '-';
+            document.getElementById('arrival_follow_up_customer_text').textContent = button.getAttribute('data-customer-username') || button.getAttribute('data-customer-name') || '-';
+            document.getElementById('arrival_follow_up_package_text').textContent = button.getAttribute('data-package-name') || '-';
+            document.getElementById('arrival_follow_up_received_date_text').textContent = button.getAttribute('data-received-date') || '';
+            document.getElementById('arrival_follow_up_customer_type_text').textContent =
+                (button.getAttribute('data-customer-type') || 'new') === 'return'
+                    ? 'Return Customer (' + (button.getAttribute('data-purchase-count') || '0') + ' previous purchase)'
+                    : 'New Customer';
+            document.getElementById('arrival_follow_up_attachment').value = '';
+            document.getElementById('arrival_follow_up_message_shortcut_id').value = '';
+            document.getElementById('arrival_follow_up_next_date').value = '';
+            document.getElementById('arrival_follow_up_next_date').max = button.getAttribute('data-max-date') || '';
+            document.getElementById('arrival_follow_up_rule_hint').textContent = button.getAttribute('data-rule-label') || '';
 
-                var contactNo = button.getAttribute('data-contact-no') || '';
-                var contactDisplayWrap = document.getElementById('arrival_follow_up_contact_display_wrap');
-                var contactDisplayText = document.getElementById('arrival_follow_up_contact_display_text');
-                var contactInputWrap = document.getElementById('arrival_follow_up_contact_input_wrap');
-                var contactInput = document.getElementById('arrival_follow_up_contact_no');
-                contactInput.value = contactNo;
-                if (contactNo) {
-                    contactDisplayText.textContent = contactNo;
-                    contactDisplayWrap.classList.remove('d-none');
-                    contactInputWrap.classList.add('d-none');
-                } else {
-                    contactDisplayWrap.classList.add('d-none');
-                    contactInputWrap.classList.remove('d-none');
-                }
+            arrivalFollowUpFormSubmitted = false;
+            clearArrivalFollowUpRequiredErrors();
 
-                if (typeof clearArrivalFollowUpAttachmentPreview === 'function') {
-                    clearArrivalFollowUpAttachmentPreview();
-                }
+            var contactNo = button.getAttribute('data-contact-no') || '';
+            var contactDisplayWrap = document.getElementById('arrival_follow_up_contact_display_wrap');
+            var contactDisplayText = document.getElementById('arrival_follow_up_contact_display_text');
+            var contactInputWrap = document.getElementById('arrival_follow_up_contact_input_wrap');
+            var contactInput = document.getElementById('arrival_follow_up_contact_no');
+            contactInput.value = contactNo;
+            if (contactNo) {
+                contactDisplayText.textContent = contactNo;
+                contactDisplayWrap.classList.remove('d-none');
+                contactInputWrap.classList.add('d-none');
+            } else {
+                contactDisplayWrap.classList.add('d-none');
+                contactInputWrap.classList.remove('d-none');
+            }
 
-                console.log('DEBUG: attempting to show modal. arrivalFollowUpModal:', !!arrivalFollowUpModal);
-                if (arrivalFollowUpModal) {
-                    arrivalFollowUpModal.show();
-                } else {
-                    console.error('ERROR: arrivalFollowUpModal is null or undefined');
-                }
-            });
+            if (typeof clearArrivalFollowUpAttachmentPreview === 'function') {
+                clearArrivalFollowUpAttachmentPreview();
+            }
+
+            console.log('DEBUG: attempting to show modal. arrivalFollowUpModal:', !!arrivalFollowUpModal);
+            if (arrivalFollowUpModal) {
+                arrivalFollowUpModal.show();
+            } else {
+                console.error('ERROR: arrivalFollowUpModal is null or undefined');
+            }
         });
-        console.log('DEBUG: Found ' + document.querySelectorAll('.confirm-receive-btn').length + ' confirm-receive-btn buttons');
+        console.log('DEBUG: Event delegation attached for confirm-receive-btn');
 
         var arrivalFollowUpContactEditBtn = document.getElementById('arrival_follow_up_contact_edit_btn');
         if (arrivalFollowUpContactEditBtn) {
@@ -1478,32 +1480,34 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
             });
         }
 
-        document.querySelectorAll('.save-delay-btn').forEach(function (button) {
-            button.addEventListener('click', function () {
-                console.log('DEBUG: save-delay-btn clicked');
-                var platformKey = button.getAttribute('data-platform') || '';
-                var orderId = button.getAttribute('data-order-id') || '';
-                console.log('DEBUG: platformKey=' + platformKey + ', orderId=' + orderId);
-                var remarkField = document.querySelector('.delay-remark-field[data-platform="' + platformKey + '"][data-order-id="' + orderId + '"]');
-                console.log('DEBUG: remarkField found:', !!remarkField);
-                if (!arrivalForm) {
-                    console.error('ERROR: arrivalForm is null');
-                    alert('Form not found. Please refresh the page.');
-                    return;
-                }
-                delayOrderId.value = orderId;
-                delayPlatform.value = platformKey;
-                delayRemark.value = remarkField ? remarkField.value : '';
-                console.log('DEBUG: form values set. Submitting form...');
-                var hiddenButton = document.createElement('input');
-                hiddenButton.type = 'hidden';
-                hiddenButton.name = 'saveDelayBtn';
-                hiddenButton.value = '1';
-                arrivalForm.appendChild(hiddenButton);
-                arrivalForm.submit();
-            });
+        // Use event delegation for save-delay-btn to handle dynamically added buttons
+        document.addEventListener('click', function (event) {
+            var button = event.target.closest('.save-delay-btn');
+            if (!button) return;
+
+            console.log('DEBUG: save-delay-btn clicked via delegation');
+            var platformKey = button.getAttribute('data-platform') || '';
+            var orderId = button.getAttribute('data-order-id') || '';
+            console.log('DEBUG: platformKey=' + platformKey + ', orderId=' + orderId);
+            var remarkField = document.querySelector('.delay-remark-field[data-platform="' + platformKey + '"][data-order-id="' + orderId + '"]');
+            console.log('DEBUG: remarkField found:', !!remarkField);
+            if (!arrivalForm) {
+                console.error('ERROR: arrivalForm is null');
+                alert('Form not found. Please refresh the page.');
+                return;
+            }
+            delayOrderId.value = orderId;
+            delayPlatform.value = platformKey;
+            delayRemark.value = remarkField ? remarkField.value : '';
+            console.log('DEBUG: form values set. Submitting form...');
+            var hiddenButton = document.createElement('input');
+            hiddenButton.type = 'hidden';
+            hiddenButton.name = 'saveDelayBtn';
+            hiddenButton.value = '1';
+            arrivalForm.appendChild(hiddenButton);
+            arrivalForm.submit();
         });
-        console.log('DEBUG: Found ' + document.querySelectorAll('.save-delay-btn').length + ' save-delay-btn buttons');
+        console.log('DEBUG: Event delegation attached for save-delay-btn');
 
         document.querySelectorAll('.btn-assign-estimated-date').forEach(function (button) {
             button.addEventListener('click', function () {
