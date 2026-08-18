@@ -748,6 +748,78 @@ if (input('export') === '1') {
         <?php endif; ?>
     </script>
     <?php campaignRenderPopupScript($pageTitle, $pageUrl); ?>
+
+    <!-- DEBUG CONSOLE -->
+    <script>
+    (function() {
+        const debugBtn = document.createElement('button');
+        debugBtn.textContent = '🔧 Debug Console';
+        debugBtn.style.cssText = 'position:fixed;bottom:20px;right:20px;padding:10px 15px;background:#333;color:#fff;border:none;cursor:pointer;z-index:9999;border-radius:5px;';
+        debugBtn.onclick = function() {
+            const modal = document.getElementById('debugModal');
+            modal.style.display = modal.style.display === 'block' ? 'none' : 'block';
+        };
+        document.body.appendChild(debugBtn);
+
+        const modal = document.createElement('div');
+        modal.id = 'debugModal';
+        modal.style.cssText = 'position:fixed;bottom:70px;right:20px;width:500px;max-height:400px;background:#1e1e1e;color:#00ff00;border:1px solid #00ff00;border-radius:5px;padding:15px;font-family:monospace;font-size:12px;overflow-y:auto;z-index:9998;display:none;';
+        modal.innerHTML = '<div style="margin-bottom:10px;font-weight:bold;color:#ffff00;">📊 Debug Information</div>' +
+                         '<div id="debugContent">Loading...</div>';
+        document.body.appendChild(modal);
+    })();
+    </script>
+
+    <?php
+    // Render debug info as JSON data for the console
+    $debugData = array(
+        'campaign_id' => $campaignId,
+        'campaign_name' => $campaign['campaign_name'] ?? '',
+        'period_start' => $campaign['period_start_date'] ?? '',
+        'period_end' => $campaign['period_end_date'] ?? '',
+    );
+
+    // Get campaign package IDs
+    $campaignPackageIds = campaignFetchCampaignPackageIds($connect, $campaignId);
+    $debugData['selected_package_ids'] = $campaignPackageIds;
+
+    // Get package names from PACKAGE table
+    $packageNames = array();
+    if (!empty($campaignPackageIds) && defined('PKG') && campaignTableExists($connect, PKG)) {
+        $escapedIds = array_map(function($id) use ($connect) { return (int)$id; }, $campaignPackageIds);
+        $sql = "SELECT id, name FROM `" . PKG . "` WHERE id IN (" . implode(',', $escapedIds) . ") ORDER BY id";
+        $result = $connect->query($sql);
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $packageNames[$row['id']] = $row['name'];
+            }
+        }
+    }
+    $debugData['package_names'] = $packageNames;
+
+    // Get sample orders from finance database
+    $sampleOrders = array();
+    if ($finance_connect instanceof mysqli) {
+        $result = $finance_connect->query("SELECT id, order_no, package, amount, order_date FROM `t_order_header` ORDER BY id DESC LIMIT 5");
+        if ($result) {
+            while ($row = $result->fetch_assoc()) {
+                $packageIds = campaignPurchaseExtractPackageIds($row['package'], $connect);
+                $sampleOrders[] = array(
+                    'order_id' => $row['id'],
+                    'order_no' => $row['order_no'],
+                    'package_text' => $row['package'],
+                    'extracted_ids' => $packageIds,
+                    'matching_campaign_packages' => !empty($packageIds) ? array_intersect($packageIds, $campaignPackageIds) : array(),
+                );
+            }
+        }
+    }
+    $debugData['sample_orders'] = $sampleOrders;
+
+    echo '<script>';
+    echo 'document.getElementById("debugContent").innerHTML = "<pre>" + JSON.stringify(' . json_encode($debugData) . ', null, 2) + "</pre>";';
+    echo '</script>';
+    ?>
 </body>
 
 </html>
