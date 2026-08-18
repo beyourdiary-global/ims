@@ -1579,20 +1579,39 @@ if (!function_exists('campaignRunPurchaseCheck')) {
               )");
 
         $customers = array();
+
+        // Always auto-discover customers from Finance DB who bought campaign packages in the date range
+        if (!empty($summary['campaign_package_ids'])) {
+            $summary['debug_info'][] = 'Auto-discovering customers from Finance DB who purchased campaign packages...';
+            $customers = campaignAutoDiscoverCustomersForPackages($connect, $financeConnect, $campaign, $summary['campaign_package_ids'], $periodStart, $periodEnd);
+            $summary['debug_info'][] = 'Auto-discovered ' . count($customers) . ' customers';
+        }
+
+        // Also include manually added customers (for backward compatibility)
+        $manualCustomers = array();
         $customerSql = "SELECT * FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' ORDER BY `id` ASC";
         $customerResult = mysqli_query($connect, $customerSql);
         if ($customerResult) {
             while ($customerRow = $customerResult->fetch_assoc()) {
-                $customers[] = $customerRow;
+                $manualCustomers[] = $customerRow;
             }
         }
 
-        // If no customers added manually, auto-discover customers from Finance DB who bought campaign packages
-        if (empty($customers) && !empty($summary['campaign_package_ids'])) {
-            $summary['debug_info'][] = 'No manual customers found. Auto-discovering customers from Finance DB...';
-            $customers = campaignAutoDiscoverCustomersForPackages($connect, $financeConnect, $campaign, $summary['campaign_package_ids'], $periodStart, $periodEnd);
-            $summary['debug_info'][] = 'Auto-discovered ' . count($customers) . ' customers';
+        // Merge auto-discovered and manual customers, avoiding duplicates by customer_name
+        $customersByName = array();
+        foreach ($customers as $customer) {
+            $custName = trim((string)($customer['customer_name'] ?? ''));
+            if ($custName !== '') {
+                $customersByName[$custName] = $customer;
+            }
         }
+        foreach ($manualCustomers as $customer) {
+            $custName = trim((string)($customer['customer_name'] ?? ''));
+            if ($custName !== '') {
+                $customersByName[$custName] = $customer;  // Manual customer overrides auto-discovered
+            }
+        }
+        $customers = array_values($customersByName);
 
         $insertStmt = $connect->prepare("INSERT INTO " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " (`campaign_id`,`campaign_customer_id`,`package_id`,`platform`,`order_id`,`order_no`,`order_detail`,`order_status`,`order_amount`,`order_date`,`package_text`,`customer_type`,`create_by`,`create_date`,`create_time`,`status`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURDATE(),CURTIME(),'A')");
         $updateRecordStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " SET `package_id`=?, `order_detail`=?, `order_status`=?, `order_amount`=?, `order_date`=?, `package_text`=?, `customer_type`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
