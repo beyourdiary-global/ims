@@ -799,15 +799,43 @@ if (input('export') === '1') {
 
     // Get sample orders from finance database
     $sampleOrders = array();
+    $financeDbInfo = array();
     if ($finance_connect instanceof mysqli) {
-        $result = $finance_connect->query("SELECT id, order_no, package, amount, order_date FROM `t_order_header` ORDER BY id DESC LIMIT 5");
+        // Check available columns in t_order_header
+        $columnsResult = $finance_connect->query("DESCRIBE `t_order_header`");
+        $availableColumns = array();
+        if ($columnsResult) {
+            while ($col = $columnsResult->fetch_assoc()) {
+                $availableColumns[] = $col['Field'];
+            }
+        }
+        $financeDbInfo['available_columns'] = $availableColumns;
+
+        // Count total orders
+        $countResult = $finance_connect->query("SELECT COUNT(*) as cnt FROM `t_order_header`");
+        if ($countResult) {
+            $row = $countResult->fetch_assoc();
+            $financeDbInfo['total_orders'] = (int)$row['cnt'];
+        }
+
+        // Try to get sample orders - handle different possible column names
+        $packageCol = 'package';
+        if (in_array('package_text', $availableColumns)) {
+            $packageCol = 'package_text';
+        }
+
+        $sql = "SELECT id, order_no, " . $packageCol . " as package_text, amount, order_date FROM `t_order_header` ORDER BY id DESC LIMIT 5";
+        $result = $finance_connect->query($sql);
+        $financeDbInfo['query'] = $sql;
+        $financeDbInfo['query_error'] = $result ? null : $finance_connect->error;
+
         if ($result) {
             while ($row = $result->fetch_assoc()) {
-                $packageIds = campaignPurchaseExtractPackageIds($row['package'], $connect);
+                $packageIds = campaignPurchaseExtractPackageIds($row['package_text'], $connect);
                 $sampleOrders[] = array(
                     'order_id' => $row['id'],
                     'order_no' => $row['order_no'],
-                    'package_text' => $row['package'],
+                    'package_text' => $row['package_text'],
                     'extracted_ids' => $packageIds,
                     'matching_campaign_packages' => !empty($packageIds) ? array_intersect($packageIds, $campaignPackageIds) : array(),
                 );
@@ -815,6 +843,7 @@ if (input('export') === '1') {
         }
     }
     $debugData['sample_orders'] = $sampleOrders;
+    $debugData['finance_db_info'] = $financeDbInfo;
 
     echo '<script>';
     echo 'document.getElementById("debugContent").innerHTML = "<pre>" + JSON.stringify(' . json_encode($debugData) . ', null, 2) + "</pre>";';
