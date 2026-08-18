@@ -801,8 +801,10 @@ if (input('export') === '1') {
     $sampleOrders = array();
     $financeDbInfo = array();
     if ($finance_connect instanceof mysqli) {
-        // Get platforms used by campaign customers
+        // Get platforms used by campaign customers (manual + auto-discovered)
         $platformsUsed = array();
+
+        // First, check manual customers
         $platformResult = $connect->query("SELECT DISTINCT platform FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE campaign_id=" . (int)$campaignId . " AND status='A'");
         if ($platformResult) {
             while ($row = $platformResult->fetch_assoc()) {
@@ -812,6 +814,39 @@ if (input('export') === '1') {
                 }
             }
         }
+
+        // If no manual customers, get platforms from auto-discovered customers
+        if (empty($platformsUsed) && !empty($campaignPackageIds)) {
+            $configs = campaignPurchasePlatformConfigs($connect, $finance_connect);
+            // Try each platform to find if any have matching packages
+            foreach ($configs as $platformName => $config) {
+                if (empty($config['table']) || !($config['conn'] instanceof mysqli)) {
+                    continue;
+                }
+                $table = (string) $config['table'];
+                if (!campaignTableExists($config['conn'], $table)) {
+                    continue;
+                }
+                // Check if this platform has any orders for campaign packages
+                $packageCol = campaignGetFirstExistingColumn($config['conn'], $table, isset($config['package_cols']) ? $config['package_cols'] : array());
+                if ($packageCol !== '') {
+                    $packageConditions = array();
+                    foreach ($campaignPackageIds as $pkgId) {
+                        $escapedId = $config['conn']->real_escape_string((string)$pkgId);
+                        $packageConditions[] = campaignPurchaseQuoteColumn($packageCol) . " LIKE '%" . $escapedId . "%'";
+                    }
+                    $checkSql = "SELECT COUNT(*) as cnt FROM `" . $table . "` WHERE " . implode(' OR ', $packageConditions) . " LIMIT 1";
+                    $checkResult = $config['conn']->query($checkSql);
+                    if ($checkResult) {
+                        $checkRow = $checkResult->fetch_assoc();
+                        if ($checkRow['cnt'] > 0) {
+                            $platformsUsed[] = strtolower($platformName);
+                        }
+                    }
+                }
+            }
+        }
+
         $financeDbInfo['platforms_in_campaign'] = $platformsUsed;
 
         // Get platform configs
