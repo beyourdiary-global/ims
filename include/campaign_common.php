@@ -1284,6 +1284,9 @@ if (!function_exists('campaignAutoDiscoverCustomersForPackages')) {
                             'id' => 0,  // No campaign_customer id - this is auto-discovered
                             'campaign_id' => $campaignId,
                             'customer_name' => $custName,
+                            'customer_id' => '',
+                            'customer_contact' => '',
+                            'customer_label' => '',
                             'email' => '',
                             'phone' => '',
                             'platform' => strtolower($platform),
