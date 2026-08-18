@@ -801,46 +801,88 @@ if (input('export') === '1') {
     $sampleOrders = array();
     $financeDbInfo = array();
     if ($finance_connect instanceof mysqli) {
-        // Check available columns in t_order_header
-        $columnsResult = $finance_connect->query("DESCRIBE `t_order_header`");
-        $availableColumns = array();
-        if ($columnsResult) {
-            while ($col = $columnsResult->fetch_assoc()) {
-                $availableColumns[] = $col['Field'];
+        // Get platforms used by campaign customers
+        $platformsUsed = array();
+        $platformResult = $connect->query("SELECT DISTINCT platform FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE campaign_id=" . (int)$campaignId . " AND status='A'");
+        if ($platformResult) {
+            while ($row = $platformResult->fetch_assoc()) {
+                $platform = trim((string)($row['platform'] ?? ''));
+                if ($platform !== '') {
+                    $platformsUsed[] = $platform;
+                }
             }
         }
-        $financeDbInfo['available_columns'] = $availableColumns;
+        $financeDbInfo['platforms_in_campaign'] = $platformsUsed;
 
-        // Count total orders
-        $countResult = $finance_connect->query("SELECT COUNT(*) as cnt FROM `t_order_header`");
-        if ($countResult) {
-            $row = $countResult->fetch_assoc();
-            $financeDbInfo['total_orders'] = (int)$row['cnt'];
-        }
+        // Get platform configs
+        $configs = campaignPurchasePlatformConfigs($connect, $finance_connect);
+        $financeDbInfo['available_platforms'] = array_keys($configs);
 
-        // Try to get sample orders - handle different possible column names
-        $packageCol = 'package';
-        if (in_array('package_text', $availableColumns)) {
-            $packageCol = 'package_text';
-        }
+        // Try to get sample orders from each platform table
+        $allOrders = array();
+        foreach ($platformsUsed as $platform) {
+            $platformKey = ucwords(strtolower(trim((string) $platform)));
+            if (!isset($configs[$platformKey])) {
+                continue;
+            }
 
-        $sql = "SELECT id, order_no, " . $packageCol . " as package_text, amount, order_date FROM `t_order_header` ORDER BY id DESC LIMIT 5";
-        $result = $finance_connect->query($sql);
-        $financeDbInfo['query'] = $sql;
-        $financeDbInfo['query_error'] = $result ? null : $finance_connect->error;
+            $config = $configs[$platformKey];
+            $table = (string)($config['table'] ?? '');
+            if ($table === '') {
+                continue;
+            }
 
-        if ($result) {
+            // Check if table exists
+            $tableCheckResult = $finance_connect->query("SHOW TABLES LIKE '" . $finance_connect->real_escape_string($table) . "'");
+            if (!$tableCheckResult || $tableCheckResult->num_rows === 0) {
+                $financeDbInfo['errors'][] = "Table '" . htmlspecialchars($table) . "' not found for platform " . htmlspecialchars($platform);
+                continue;
+            }
+
+            // Get sample orders from this platform
+            $packageCol = 'package';
+            $orderNoCol = 'order_no';
+            $dateCol = 'order_date';
+            $amountCol = 'amount';
+
+            // Try more flexible columns
+            $orderNoCols = isset($config['order_no_cols']) ? $config['order_no_cols'] : array();
+            $orderNoCol = campaignGetFirstExistingColumn($finance_connect, $table, $orderNoCols);
+            $dateCol = campaignGetFirstExistingColumn($finance_connect, $table, isset($config['date_cols']) ? $config['date_cols'] : array());
+            $amountCol = campaignGetFirstExistingColumn($finance_connect, $table, isset($config['amount_cols']) ? $config['amount_cols'] : array());
+            $packageCol = campaignGetFirstExistingColumn($finance_connect, $table, isset($config['package_cols']) ? $config['package_cols'] : array());
+
+            if ($dateCol === '') {
+                $financeDbInfo['errors'][] = "Could not find date column for platform " . htmlspecialchars($platform);
+                continue;
+            }
+
+            $sql = "SELECT id, " . campaignPurchaseQuoteColumn($orderNoCol) . " as order_no, " . campaignPurchaseQuoteColumn($packageCol) . " as package_text, " . campaignPurchaseQuoteColumn($amountCol) . " as amount, " . campaignPurchaseQuoteColumn($dateCol) . " as order_date FROM `" . $table . "` ORDER BY id DESC LIMIT 10";
+            $result = $finance_connect->query($sql);
+            if (!$result) {
+                $financeDbInfo['errors'][] = "Query failed for " . htmlspecialchars($platform) . ": " . htmlspecialchars($finance_connect->error);
+                continue;
+            }
+
             while ($row = $result->fetch_assoc()) {
-                $packageIds = campaignPurchaseExtractPackageIds($row['package_text'], $connect);
-                $sampleOrders[] = array(
+                $packageText = $row['package_text'] ?? '';
+                $packageIds = campaignPurchaseExtractPackageIds($packageText, $connect);
+                $matchingIds = !empty($packageIds) ? array_intersect($packageIds, $campaignPackageIds) : array();
+
+                $allOrders[] = array(
+                    'platform' => $platform,
                     'order_id' => $row['id'],
                     'order_no' => $row['order_no'],
-                    'package_text' => $row['package_text'],
+                    'package_text' => $packageText,
                     'extracted_ids' => $packageIds,
-                    'matching_campaign_packages' => !empty($packageIds) ? array_intersect($packageIds, $campaignPackageIds) : array(),
+                    'matching_campaign_packages' => $matchingIds,
                 );
             }
         }
+
+        $sampleOrders = array_slice($allOrders, 0, 5);
+        $financeDbInfo['total_sample_orders'] = count($allOrders);
+        $financeDbInfo['displayed_sample_orders'] = count($sampleOrders);
     }
     $debugData['sample_orders'] = $sampleOrders;
     $debugData['finance_db_info'] = $financeDbInfo;
