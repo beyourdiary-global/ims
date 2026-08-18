@@ -1060,7 +1060,7 @@ if (!function_exists('campaignPurchaseResolvePackageDisplayName')) {
 }
 
 if (!function_exists('campaignPurchaseExtractPackageIds')) {
-    function campaignPurchaseExtractPackageIds($packageValue)
+    function campaignPurchaseExtractPackageIds($packageValue, $connect = null)
     {
         $packageValue = trim((string) $packageValue);
         if ($packageValue === '') {
@@ -1070,8 +1070,24 @@ if (!function_exists('campaignPurchaseExtractPackageIds')) {
         $ids = array();
         foreach (explode(',', $packageValue) as $part) {
             $part = trim($part);
-            if ($part !== '' && ctype_digit($part)) {
+            if ($part === '') {
+                continue;
+            }
+
+            // If it's already a numeric ID, use it directly
+            if (ctype_digit($part)) {
                 $ids[(int) $part] = (int) $part;
+            } elseif ($connect !== null && defined('PKG') && campaignTableExists($connect, PKG)) {
+                // If it's a package name, try to look it up in the database
+                $safePart = $connect->real_escape_string($part);
+                $result = $connect->query("SELECT `id` FROM `" . PKG . "` WHERE `name`='" . $safePart . "' LIMIT 1");
+                if ($result && $result->num_rows > 0) {
+                    $row = $result->fetch_assoc();
+                    $packageId = (int) ($row['id'] ?? 0);
+                    if ($packageId > 0) {
+                        $ids[$packageId] = $packageId;
+                    }
+                }
             }
         }
 
@@ -1296,7 +1312,7 @@ if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
             $detailText = $detailCol !== '' ? campaignNormalizeTextValue($row[$detailCol] ?? '', 65535) : '';
             $packageText = $packageCol !== '' ? campaignNormalizeTextValue($row[$packageCol] ?? '', 65535) : '';
 
-            $orderPackageIds = campaignPurchaseExtractPackageIds($packageText);
+            $orderPackageIds = campaignPurchaseExtractPackageIds($packageText, $connect);
             $packageId = null;
 
             if (!empty($campaignPackageIds)) {
@@ -1398,7 +1414,7 @@ if (!function_exists('campaignBackfillPackageIds')) {
                 continue;
             }
 
-            $orderPackageIds = campaignPurchaseExtractPackageIds($packageText);
+            $orderPackageIds = campaignPurchaseExtractPackageIds($packageText, $connect);
             $matchingIds = array_intersect($orderPackageIds, $campaignPackageIds);
             $packageId = !empty($matchingIds) ? reset($matchingIds) : null;
 
