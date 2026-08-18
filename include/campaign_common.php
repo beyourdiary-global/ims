@@ -1080,17 +1080,26 @@ if (!function_exists('campaignPurchaseExtractPackageIds')) {
             } elseif ($connect !== null && defined('PKG') && campaignTableExists($connect, PKG)) {
                 // If it's a package name, try to look it up in the database
                 $safePart = $connect->real_escape_string($part);
-                $result = $connect->query("SELECT `id` FROM `" . PKG . "` WHERE `name`='" . $safePart . "' LIMIT 1");
+                $sql = "SELECT `id` FROM `" . PKG . "` WHERE `name`='" . $safePart . "' LIMIT 1";
+                error_log("DEBUG campaignPurchaseExtractPackageIds: looking up part='" . $part . "' sql=" . $sql);
+                $result = $connect->query($sql);
+                error_log("DEBUG campaignPurchaseExtractPackageIds: query result: " . ($result ? "got result, num_rows=" . $result->num_rows : "failed"));
                 if ($result && $result->num_rows > 0) {
                     $row = $result->fetch_assoc();
                     $packageId = (int) ($row['id'] ?? 0);
+                    error_log("DEBUG campaignPurchaseExtractPackageIds: found packageId=" . $packageId);
                     if ($packageId > 0) {
                         $ids[$packageId] = $packageId;
                     }
+                } else {
+                    error_log("DEBUG campaignPurchaseExtractPackageIds: NO MATCH for part='" . $part . "'");
                 }
+            } else {
+                error_log("DEBUG campaignPurchaseExtractPackageIds: no connect or PKG not defined or table doesn't exist. connect=" . ($connect ? "yes" : "null") . " PKG=" . (defined('PKG') ? PKG : "undefined") . " exists=" . (defined('PKG') && $connect && campaignTableExists($connect, PKG) ? "yes" : "no"));
             }
         }
 
+        error_log("DEBUG campaignPurchaseExtractPackageIds: final result for '" . $packageValue . "' = " . json_encode(array_values($ids)));
         return array_values($ids);
     }
 }
@@ -1259,6 +1268,7 @@ if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
         // empty selection means "no package restriction" (existing campaigns keep
         // their old behavior of counting every purchase in the period).
         $campaignPackageIds = campaignFetchCampaignPackageIds($connect, (int) ($campaign['id'] ?? 0));
+        error_log("DEBUG campaignPurchaseFetchOrdersForCustomer: campaign_id=" . (int) ($campaign['id'] ?? 0) . " campaignPackageIds=" . json_encode($campaignPackageIds));
 
         $safeFromDate = $orderConn->real_escape_string(campaignDateValue($fromDate));
         $safeToDate = $orderConn->real_escape_string(campaignDateValue($toDate));
@@ -1441,6 +1451,8 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             'customers_not_purchased' => 0,
             'notes' => array(),
             'skip_reasons' => array(),
+            'campaign_package_ids' => array(),
+            'debug_info' => array(),
         );
 
         $campaign = campaignFetchCampaign($connect, $campaignId);
@@ -1448,6 +1460,10 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             $summary['notes'][] = 'Campaign not found.';
             return $summary;
         }
+
+        // Store campaign package IDs for debugging
+        $summary['campaign_package_ids'] = campaignFetchCampaignPackageIds($connect, $campaignId);
+        $summary['debug_info'][] = 'Campaign ID: ' . $campaignId . ', Selected Package IDs: [' . implode(', ', $summary['campaign_package_ids']) . ']';
 
         $periodStart = campaignDateValue($fromDate !== '' ? $fromDate : ($campaign['period_start_date'] ?? ''));
         $periodEnd = campaignDateValue($toDate !== '' ? $toDate : ($campaign['period_end_date'] ?? ''));

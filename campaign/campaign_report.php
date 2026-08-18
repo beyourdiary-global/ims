@@ -280,6 +280,9 @@ if (post('actionBtn') === 'refreshReport') {
         }
         $refreshSummaryMessage .= ' Not-purchased breakdown: ' . implode(', ', $reasonParts) . '.';
     }
+    if (!empty($summary['debug_info']) && is_array($summary['debug_info'])) {
+        $refreshSummaryMessage .= ' [DEBUG: ' . implode(' | ', $summary['debug_info']) . ']';
+    }
     campaignSetPopup($refreshSummaryMessage, $pageUrl, 'ErrMO');
     echo '<script>location.href = "' . $pageUrl . '";</script>';
     exit();
