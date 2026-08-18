@@ -1285,17 +1285,27 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
         var delayOrderId = document.getElementById('table_delay_order_id');
         var delayPlatform = document.getElementById('table_delay_platform');
         var delayRemark = document.getElementById('table_delay_remark');
+
+        // Debug logging
+        console.log('DEBUG: arrival_order_form found:', !!arrivalForm);
+        console.log('DEBUG: delayOrderId found:', !!delayOrderId);
+        console.log('DEBUG: delayPlatform found:', !!delayPlatform);
+        console.log('DEBUG: delayRemark found:', !!delayRemark);
+
         var clearArrivalFollowUpAttachmentPreview = bindArrivalFollowUpAttachmentPreview(
             'arrival_follow_up_attachment',
             'arrival_follow_up_attachment_preview_wrap',
             'arrival_follow_up_attachment_preview_img',
             'arrival_follow_up_attachment_preview_note'
         );
-        
+
         var arrivalFollowUpModalElement = document.getElementById('arrivalFollowUpModal');
         var arrivalFollowUpModal = arrivalFollowUpModalElement && typeof bootstrap !== 'undefined' && bootstrap.Modal
             ? bootstrap.Modal.getOrCreateInstance(arrivalFollowUpModalElement)
             : null;
+        console.log('DEBUG: arrivalFollowUpModal found:', !!arrivalFollowUpModal);
+        console.log('DEBUG: bootstrap available:', typeof bootstrap !== 'undefined');
+        console.log('DEBUG: bootstrap.Modal available:', typeof bootstrap !== 'undefined' && !!bootstrap.Modal);
 
         function setArrivalFollowUpFieldError(fieldId, errorId, hasError) {
             var field = document.getElementById(fieldId);
@@ -1400,12 +1410,15 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
         });
         document.querySelectorAll('.confirm-receive-btn').forEach(function (button) {
             button.addEventListener('click', function () {
+                console.log('DEBUG: confirm-receive-btn clicked');
                 var blockMessage = button.getAttribute('data-block-message') || '';
                 if (blockMessage) {
+                    console.log('DEBUG: blocked with message:', blockMessage);
                     showNotification(blockMessage, 'warning');
                     return;
                 }
 
+                console.log('DEBUG: setting up modal data...');
                 document.getElementById('arrival_follow_up_platform').value = button.getAttribute('data-platform') || '';
                 document.getElementById('arrival_follow_up_order_id').value = button.getAttribute('data-order-id') || '';
                 document.getElementById('arrival_follow_up_platform_section').value = <?= json_encode($activePlatform) ?>;
@@ -1423,7 +1436,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                 document.getElementById('arrival_follow_up_next_date').value = '';
                 document.getElementById('arrival_follow_up_next_date').max = button.getAttribute('data-max-date') || '';
                 document.getElementById('arrival_follow_up_rule_hint').textContent = button.getAttribute('data-rule-label') || '';
-                
+
                 arrivalFollowUpFormSubmitted = false;
                 clearArrivalFollowUpRequiredErrors();
 
@@ -1446,11 +1459,15 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                     clearArrivalFollowUpAttachmentPreview();
                 }
 
+                console.log('DEBUG: attempting to show modal. arrivalFollowUpModal:', !!arrivalFollowUpModal);
                 if (arrivalFollowUpModal) {
                     arrivalFollowUpModal.show();
+                } else {
+                    console.error('ERROR: arrivalFollowUpModal is null or undefined');
                 }
             });
         });
+        console.log('DEBUG: Found ' + document.querySelectorAll('.confirm-receive-btn').length + ' confirm-receive-btn buttons');
 
         var arrivalFollowUpContactEditBtn = document.getElementById('arrival_follow_up_contact_edit_btn');
         if (arrivalFollowUpContactEditBtn) {
@@ -1463,12 +1480,21 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
 
         document.querySelectorAll('.save-delay-btn').forEach(function (button) {
             button.addEventListener('click', function () {
+                console.log('DEBUG: save-delay-btn clicked');
                 var platformKey = button.getAttribute('data-platform') || '';
                 var orderId = button.getAttribute('data-order-id') || '';
+                console.log('DEBUG: platformKey=' + platformKey + ', orderId=' + orderId);
                 var remarkField = document.querySelector('.delay-remark-field[data-platform="' + platformKey + '"][data-order-id="' + orderId + '"]');
+                console.log('DEBUG: remarkField found:', !!remarkField);
+                if (!arrivalForm) {
+                    console.error('ERROR: arrivalForm is null');
+                    alert('Form not found. Please refresh the page.');
+                    return;
+                }
                 delayOrderId.value = orderId;
                 delayPlatform.value = platformKey;
                 delayRemark.value = remarkField ? remarkField.value : '';
+                console.log('DEBUG: form values set. Submitting form...');
                 var hiddenButton = document.createElement('input');
                 hiddenButton.type = 'hidden';
                 hiddenButton.name = 'saveDelayBtn';
@@ -1477,6 +1503,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                 arrivalForm.submit();
             });
         });
+        console.log('DEBUG: Found ' + document.querySelectorAll('.save-delay-btn').length + ' save-delay-btn buttons');
 
         document.querySelectorAll('.btn-assign-estimated-date').forEach(function (button) {
             button.addEventListener('click', function () {
