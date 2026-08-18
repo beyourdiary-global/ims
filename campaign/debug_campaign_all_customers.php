@@ -53,7 +53,7 @@ foreach ($campaignPackageIds as $pkgId) {
     $packageConditions[] = "package LIKE '%" . $escapedId . "%'";
 }
 
-$sql = "SELECT DISTINCT buyer_username, customer_name FROM `" . $shopeeTable . "`
+$sql = "SELECT DISTINCT buyer, customer_name FROM `" . $shopeeTable . "`
     WHERE (" . implode(' OR ', $packageConditions) . ")
     AND DATE(date) >= '" . $financeConn->real_escape_string($dateFrom) . "'
     AND DATE(date) <= '" . $financeConn->real_escape_string($dateTo) . "'
@@ -67,7 +67,7 @@ if (!$result) {
 $allOrderingCustomers = array();
 while ($row = $result->fetch_assoc()) {
     $allOrderingCustomers[] = array(
-        'buyer_username' => $row['buyer_username'],
+        'buyer' => $row['buyer'],
         'customer_name' => $row['customer_name'],
     );
 }
@@ -81,14 +81,14 @@ if (count($allOrderingCustomers) === 0) {
     echo "<tr style='background: #f0f0f0;'>";
     echo "<th>Status</th>";
     echo "<th>Customer Name</th>";
-    echo "<th>Buyer Username</th>";
+    echo "<th>Buyer</th>";
     echo "<th>Orders in Period</th>";
     echo "<th>Packages Purchased</th>";
     echo "</tr>";
 
     foreach ($allOrderingCustomers as $customer) {
         $custName = htmlspecialchars($customer['customer_name']);
-        $buyerUsername = htmlspecialchars($customer['buyer_username']);
+        $buyer = htmlspecialchars($customer['buyer']);
 
         // Check if already added
         $isAdded = in_array($custName, array_column($addedCustomers, 'customer_name'));
@@ -129,7 +129,7 @@ if (count($allOrderingCustomers) === 0) {
         echo "<tr>";
         echo "<td>" . $statusBadge . "</td>";
         echo "<td>" . $custName . "</td>";
-        echo "<td>" . $buyerUsername . "</td>";
+        echo "<td>" . $buyer . "</td>";
         echo "<td style='text-align: center;'>" . $orderCount . "</td>";
         echo "<td>" . $packagesStr . "</td>";
         echo "</tr>";
