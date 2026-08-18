@@ -1258,7 +1258,9 @@ if (!function_exists('campaignAutoDiscoverCustomersForPackages')) {
                 continue;
             }
 
-            $customerCol = campaignGetFirstExistingColumn($config['conn'], $table, isset($config['customer_cols']) ? $config['customer_cols'] : array());
+            // For customer column, prioritize customer_name over other identifiers
+            $preferredCustomerCols = array('customer_name', 'buyer_username', 'buyer', 'customer_id', 'cust_id', 'name');
+            $customerCol = campaignGetFirstExistingColumn($config['conn'], $table, $preferredCustomerCols);
             if ($customerCol === '') {
                 continue;
             }
