@@ -1527,7 +1527,8 @@ if (!function_exists('campaignRunPurchaseCheck')) {
 
                 if ($existingRecordId > 0) {
                     if ($updateRecordStmt) {
-                        $updateRecordStmt->bind_param('isdsdssi', $packageId, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId, $existingRecordId);
+                        $packageIdForBind = $packageId;
+                        $updateRecordStmt->bind_param('isdsdssi', $packageIdForBind, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId, $existingRecordId);
                         if ($updateRecordStmt->execute()) {
                             $summary['records_updated']++;
                         }
@@ -1540,7 +1541,8 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                     $platform = (string) ($order['platform'] ?? ($customerRow['platform'] ?? ''));
                     $orderId = (string) ($order['order_id'] ?? '');
                     $orderNo = (string) ($order['order_no'] ?? '');
-                    $insertStmt->bind_param('iiisssssdssss', $campaignId, $campaignCustomerId, $packageId, $platform, $orderId, $orderNo, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId);
+                    $packageIdForBind = $packageId;
+                    $insertStmt->bind_param('iiisssssdssss', $campaignId, $campaignCustomerId, $packageIdForBind, $platform, $orderId, $orderNo, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId);
                     if ($insertStmt->execute()) {
                         $summary['records_inserted']++;
                         $newRecordId = (int) $connect->insert_id;
