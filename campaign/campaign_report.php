@@ -97,9 +97,8 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             $customerId = (int) ($purchaseRow['campaign_customer_id'] ?? 0);
             $customerType = trim((string) ($purchaseRow['customer_type'] ?? ''));
             $sales = is_numeric($purchaseRow['sales'] ?? null) ? (float) $purchaseRow['sales'] : 0;
-            if ($customerId > 0) {
-                $purchasedCustomerIds[$customerId] = true;
-            }
+            // Count any customer with purchase records, including auto-discovered (campaign_customer_id=0)
+            $purchasedCustomerIds[$customerId] = true;
             $data['metrics']['total_sales'] += $sales;
             if ($customerType === 'Return Customer') {
                 $data['metrics']['return_customer_amount']++;
