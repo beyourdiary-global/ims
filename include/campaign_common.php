@@ -1220,6 +1220,83 @@ if (!function_exists('campaignPurchaseResolveOrderStatusDisplayName')) {
     }
 }
 
+if (!function_exists('campaignAutoDiscoverCustomersForPackages')) {
+    function campaignAutoDiscoverCustomersForPackages($connect, $financeConnect, $campaign, $packageIds, $fromDate, $toDate)
+    {
+        $customers = array();
+        if (empty($packageIds) || !($financeConnect instanceof mysqli)) {
+            return $customers;
+        }
+
+        $campaignId = (int) ($campaign['id'] ?? 0);
+        $configs = campaignPurchasePlatformConfigs($connect, $financeConnect);
+
+        foreach ($configs as $platform => $config) {
+            if (empty($config['table']) || !($config['conn'] instanceof mysqli)) {
+                continue;
+            }
+
+            $table = (string) $config['table'];
+            if (!campaignTableExists($config['conn'], $table)) {
+                continue;
+            }
+
+            // Find all distinct customers who bought these packages
+            $packageConditions = array();
+            $packageCol = campaignGetFirstExistingColumn($config['conn'], $table, isset($config['package_cols']) ? $config['package_cols'] : array());
+            if ($packageCol === '') {
+                continue;
+            }
+
+            foreach ($packageIds as $pkgId) {
+                $escapedId = $config['conn']->real_escape_string((string)$pkgId);
+                $packageConditions[] = campaignPurchaseQuoteColumn($packageCol) . " LIKE '%" . $escapedId . "%'";
+            }
+
+            $dateCol = campaignGetFirstExistingColumn($config['conn'], $table, isset($config['date_cols']) ? $config['date_cols'] : array());
+            if ($dateCol === '') {
+                continue;
+            }
+
+            $customerCol = campaignGetFirstExistingColumn($config['conn'], $table, isset($config['customer_cols']) ? $config['customer_cols'] : array());
+            if ($customerCol === '') {
+                continue;
+            }
+
+            $safeFromDate = $config['conn']->real_escape_string(campaignDateValue($fromDate));
+            $safeToDate = $config['conn']->real_escape_string(campaignDateValue($toDate));
+
+            $sql = "SELECT DISTINCT " . campaignPurchaseQuoteColumn($customerCol) . " as customer_name FROM `" . $table . "`
+                    WHERE (" . implode(' OR ', $packageConditions) . ")
+                    AND DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") >= '" . $safeFromDate . "'
+                    AND DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") <= '" . $safeToDate . "'
+                    ORDER BY customer_name";
+
+            $result = $config['conn']->query($sql);
+            if ($result) {
+                while ($row = $result->fetch_assoc()) {
+                    $custName = trim((string)($row['customer_name'] ?? ''));
+                    if ($custName !== '' && !isset($customers[$custName])) {
+                        // Create synthetic customer record for auto-discovered customers
+                        $customers[$custName] = array(
+                            'id' => 0,  // No campaign_customer id - this is auto-discovered
+                            'campaign_id' => $campaignId,
+                            'customer_name' => $custName,
+                            'email' => '',
+                            'phone' => '',
+                            'platform' => strtolower($platform),
+                            'status' => 'A',
+                            '_auto_discovered' => true,
+                        );
+                    }
+                }
+            }
+        }
+
+        return array_values($customers);
+    }
+}
+
 if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
     function campaignPurchaseFetchOrdersForCustomer($connect, $financeConnect, $campaign, $campaignCustomer, $fromDate, $toDate, &$reasonOut = null)
     {
@@ -1505,6 +1582,13 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             }
         }
 
+        // If no customers added manually, auto-discover customers from Finance DB who bought campaign packages
+        if (empty($customers) && !empty($summary['campaign_package_ids'])) {
+            $summary['debug_info'][] = 'No manual customers found. Auto-discovering customers from Finance DB...';
+            $customers = campaignAutoDiscoverCustomersForPackages($connect, $financeConnect, $campaign, $summary['campaign_package_ids'], $periodStart, $periodEnd);
+            $summary['debug_info'][] = 'Auto-discovered ' . count($customers) . ' customers';
+        }
+
         $insertStmt = $connect->prepare("INSERT INTO " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " (`campaign_id`,`campaign_customer_id`,`package_id`,`platform`,`order_id`,`order_no`,`order_detail`,`order_status`,`order_amount`,`order_date`,`package_text`,`customer_type`,`create_by`,`create_date`,`create_time`,`status`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURDATE(),CURTIME(),'A')");
         $updateRecordStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " SET `package_id`=?, `order_detail`=?, `order_status`=?, `order_amount`=?, `order_date`=?, `package_text`=?, `customer_type`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
         $userId = campaignCurrentUserId();
@@ -1512,7 +1596,10 @@ if (!function_exists('campaignRunPurchaseCheck')) {
         foreach ($customers as $customerRow) {
             $summary['checked_customers']++;
             $campaignCustomerId = (int) ($customerRow['id'] ?? 0);
-            if ($campaignCustomerId <= 0) {
+            $isAutoDiscovered = !empty($customerRow['_auto_discovered']);
+
+            // Skip only if not auto-discovered AND id is missing/invalid
+            if (!$isAutoDiscovered && $campaignCustomerId <= 0) {
                 continue;
             }
 
