@@ -203,7 +203,15 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         LEFT JOIN " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " cpr ON cpr.`campaign_customer_id`=cc.`id` AND cpr.`campaign_id`=cc.`campaign_id` AND cpr.`status`='A'" . (empty($packageIds) ? '' : " AND cpr.`package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhereCpr . "
         WHERE cc.`campaign_id`='" . (int) $campaignId . "' AND cc.`status`='A'
         GROUP BY cc.`id`
-        ORDER BY total_amount DESC, cc.`customer_name` ASC";
+        UNION ALL
+        SELECT 0, '[Auto-Discovered]', '', MAX(cpr2.`platform`) AS platform,
+            COUNT(cpr2.`id`) AS order_count,
+            SUM(IFNULL(cpr2.`order_amount`,0)) AS total_amount,
+            MAX(cpr2.`order_date`) AS last_order_date
+        FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " cpr2
+        WHERE cpr2.`campaign_id`='" . (int) $campaignId . "' AND cpr2.`campaign_customer_id`=0 AND cpr2.`status`='A'" . (empty($packageIds) ? '' : " AND cpr2.`package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhereCpr . "
+        LIMIT 1
+        ORDER BY total_amount DESC, customer_name ASC";
     $customerResult = mysqli_query($connect, $customerSql);
     if ($customerResult) {
         while ($customerRow = $customerResult->fetch_assoc()) {
@@ -211,8 +219,12 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             $orderCount = (int) ($customerRow['order_count'] ?? 0);
 
             $orders = array();
-            if ($customerId > 0 && $orderCount > 0) {
-                $orderDetailSql = "SELECT `id`, `order_no`, `package_text`, `order_amount`, `order_date`, `order_status`, `platform` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_customer_id`='" . $customerId . "' AND `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . (empty($packageIds) ? '' : " AND `package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhere . " ORDER BY `order_date` DESC";
+            if ($orderCount > 0) {
+                if ($customerId === 0) {
+                    $orderDetailSql = "SELECT `id`, `order_no`, `package_text`, `order_amount`, `order_date`, `order_status`, `platform` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_customer_id`=0 AND `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . (empty($packageIds) ? '' : " AND `package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhere . " ORDER BY `order_date` DESC";
+                } else {
+                    $orderDetailSql = "SELECT `id`, `order_no`, `package_text`, `order_amount`, `order_date`, `order_status`, `platform` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_customer_id`='" . $customerId . "' AND `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . (empty($packageIds) ? '' : " AND `package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhere . " ORDER BY `order_date` DESC";
+                }
                 $orderDetailResult = mysqli_query($connect, $orderDetailSql);
                 if ($orderDetailResult) {
                     while ($orderDetailRow = $orderDetailResult->fetch_assoc()) {
