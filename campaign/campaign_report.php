@@ -68,7 +68,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         'has_data' => false,
     );
 
-    $participantResult = mysqli_query($connect, "SELECT COUNT(*) AS cnt FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'");
+    $participantResult = mysqli_query($connect, "SELECT COUNT(DISTINCT `campaign_customer_id`) AS cnt FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $periodWhere);
     if ($participantResult && $participantResult->num_rows > 0) {
         $participantRow = $participantResult->fetch_assoc();
         $data['metrics']['participants'] = (int) ($participantRow['cnt'] ?? 0);
@@ -91,14 +91,10 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
 
     $purchaseSql = "SELECT `campaign_customer_id`, `customer_type`, SUM(IFNULL(`order_amount`,0)) AS sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere . " GROUP BY `campaign_customer_id`, `customer_type`";
     $purchaseResult = mysqli_query($connect, $purchaseSql);
-    $purchasedCustomerIds = array();
     if ($purchaseResult) {
         while ($purchaseRow = $purchaseResult->fetch_assoc()) {
-            $customerId = (int) ($purchaseRow['campaign_customer_id'] ?? 0);
             $customerType = trim((string) ($purchaseRow['customer_type'] ?? ''));
             $sales = is_numeric($purchaseRow['sales'] ?? null) ? (float) $purchaseRow['sales'] : 0;
-            // Count any customer with purchase records, including auto-discovered (campaign_customer_id=0)
-            $purchasedCustomerIds[$customerId] = true;
             $data['metrics']['total_sales'] += $sales;
             if ($customerType === 'Return Customer') {
                 $data['metrics']['return_customer_amount']++;
@@ -110,8 +106,8 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         }
     }
 
-    $data['metrics']['purchased_customers'] = count($purchasedCustomerIds);
-    $data['metrics']['purchase_rate'] = $data['metrics']['participants'] > 0 ? round(($data['metrics']['purchased_customers'] / $data['metrics']['participants']) * 100, 2) : 0;
+    $data['metrics']['purchased_customers'] = $data['metrics']['participants'];
+    $data['metrics']['purchase_rate'] = 100;
     $data['metrics']['avg_spend_per_customer'] = $data['metrics']['purchased_customers'] > 0 ? round($data['metrics']['total_sales'] / $data['metrics']['purchased_customers'], 2) : 0;
 
     $followSql = "SELECT
