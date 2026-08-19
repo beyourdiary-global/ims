@@ -58,7 +58,10 @@ foreach ($customers as $customer) {
 
         $packageIdForBind = is_null($packageId) ? 0 : (int)$packageId;
 
-        $bindResult = $insertStmt->bind_param('iiiisssssdssss',
+        echo "  Types: campaignId=" . gettype($campaignId) . ", customerId=" . gettype($campaignCustomerId) . ", packageId=" . gettype($packageIdForBind) . "\n";
+        echo "  Types: platform=" . gettype($platform) . ", orderAmount=" . gettype($orderAmount) . ", userId=" . gettype($userId) . "\n";
+
+        $bindResult = $insertStmt->bind_param('iiisssssdssss',
             $campaignId,
             $campaignCustomerId,
             $packageIdForBind,
