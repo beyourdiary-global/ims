@@ -1685,7 +1685,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                     $orderId = (string) ($order['order_id'] ?? '');
                     $orderNo = (string) ($order['order_no'] ?? '');
                     $packageIdForBind = is_null($packageId) ? 0 : (int) $packageId;
-                    $insertStmt->bind_param('iiiisssssdssss', $campaignId, $campaignCustomerId, $packageIdForBind, $platform, $orderId, $orderNo, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId);
+                    $insertStmt->bind_param('iiisssssdssss', $campaignId, $campaignCustomerId, $packageIdForBind, $platform, $orderId, $orderNo, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId);
                     if ($insertStmt->execute()) {
                         $summary['records_inserted']++;
                         $newRecordId = (int) $connect->insert_id;
