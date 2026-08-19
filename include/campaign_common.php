@@ -1289,7 +1289,7 @@ if (!function_exists('campaignAutoDiscoverCustomersForPackages')) {
                             'customer_label' => '',
                             'email' => '',
                             'phone' => '',
-                            'platform' => strtolower($platform),
+                            'platform' => $platform,
                             'status' => 'A',
                             '_auto_discovered' => true,
                         );
