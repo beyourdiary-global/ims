@@ -1670,7 +1670,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
 
                 if ($existingRecordId > 0) {
                     if ($updateRecordStmt) {
-                        $packageIdForBind = $packageId;
+                        $packageIdForBind = is_null($packageId) ? 0 : (int) $packageId;
                         $updateRecordStmt->bind_param('issdssssi', $packageIdForBind, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId, $existingRecordId);
                         if ($updateRecordStmt->execute()) {
                             $summary['records_updated']++;
@@ -1684,7 +1684,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                     $platform = (string) ($order['platform'] ?? ($customerRow['platform'] ?? ''));
                     $orderId = (string) ($order['order_id'] ?? '');
                     $orderNo = (string) ($order['order_no'] ?? '');
-                    $packageIdForBind = $packageId;
+                    $packageIdForBind = is_null($packageId) ? 0 : (int) $packageId;
                     $insertStmt->bind_param('iiiisssssdssss', $campaignId, $campaignCustomerId, $packageIdForBind, $platform, $orderId, $orderNo, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId);
                     if ($insertStmt->execute()) {
                         $summary['records_inserted']++;
