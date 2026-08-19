@@ -20,14 +20,15 @@ echo "<h3>1. Selected Campaign Packages (IMS DB):</h3>";
 $selectedIds = array(419, 407, 402, 400, 406);
 echo "<p>Package IDs: " . implode(', ', $selectedIds) . "</p>";
 
-$result = $conn->query("SELECT id, pkg_name FROM PACKAGE WHERE id IN (419, 407, 402, 400, 406) ORDER BY id DESC");
+$result = $conn->query("SELECT id, pkg_name, status FROM PACKAGE WHERE id IN (419, 407, 402, 400, 406) ORDER BY id DESC");
 if ($result && $result->num_rows > 0) {
     echo "<table border='1' cellpadding='5' style='width: 100%;'>";
-    echo "<tr><th>ID</th><th>Package Name</th></tr>";
+    echo "<tr><th>ID</th><th>Package Name</th><th>Status</th></tr>";
     while ($row = $result->fetch_assoc()) {
         echo "<tr>";
         echo "<td>" . htmlspecialchars($row['id']) . "</td>";
         echo "<td>" . htmlspecialchars($row['pkg_name']) . "</td>";
+        echo "<td>" . htmlspecialchars($row['status']) . "</td>";
         echo "</tr>";
     }
     echo "</table>";
