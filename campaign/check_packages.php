@@ -20,6 +20,7 @@ echo "<h3>1. Selected Campaign Packages (IMS DB):</h3>";
 $selectedIds = array(419, 407, 402, 400, 406);
 echo "<p>Package IDs: " . implode(', ', $selectedIds) . "</p>";
 
+// Try to find these packages in PACKAGE table
 $result = $conn->query("SELECT id, pkg_name, status FROM PACKAGE WHERE id IN (419, 407, 402, 400, 406) ORDER BY id DESC");
 if ($result && $result->num_rows > 0) {
     echo "<table border='1' cellpadding='5' style='width: 100%;'>";
@@ -33,7 +34,44 @@ if ($result && $result->num_rows > 0) {
     }
     echo "</table>";
 } else {
-    echo "<p style='background: #ffcccc; padding: 10px;'><strong>✗ Packages not found in IMS DB!</strong></p>";
+    echo "<p style='background: #ffcccc; padding: 10px;'><strong>✗ Packages not found in PACKAGE table!</strong></p>";
+
+    // Check if they're in CAMPAIGN_PACKAGE table instead
+    echo "<p><strong>Checking CAMPAIGN_PACKAGE table...</strong></p>";
+    $result = $conn->query("SELECT DISTINCT package_id FROM CAMPAIGN_PACKAGE WHERE package_id IN (419, 407, 402, 400, 406)");
+    if ($result && $result->num_rows > 0) {
+        echo "<p style='background: #ccffcc; padding: 10px;'>✓ Found in CAMPAIGN_PACKAGE table (linked to campaigns)</p>";
+    }
+
+    // Check which tables contain these IDs
+    echo "<p><strong>Tables in IMS DB containing these IDs:</strong></p>";
+    $tables = $conn->query("SELECT TABLE_NAME FROM INFORMATION_SCHEMA.TABLES WHERE TABLE_SCHEMA = '" . dbname . "'");
+    $foundTables = array();
+    if ($tables) {
+        while ($tableRow = $tables->fetch_assoc()) {
+            $tableName = $tableRow['TABLE_NAME'];
+            // Check if table has an id column
+            $colCheck = $conn->query("SHOW COLUMNS FROM " . $tableName . " LIKE 'id'");
+            if ($colCheck && $colCheck->num_rows > 0) {
+                $checkResult = $conn->query("SELECT COUNT(*) as cnt FROM `" . $tableName . "` WHERE id IN (419, 407, 402, 400, 406)");
+                if ($checkResult) {
+                    $row = $checkResult->fetch_assoc();
+                    if ($row['cnt'] > 0) {
+                        $foundTables[] = $tableName . " (" . $row['cnt'] . " rows)";
+                    }
+                }
+            }
+        }
+    }
+    if (!empty($foundTables)) {
+        echo "<ul>";
+        foreach ($foundTables as $table) {
+            echo "<li>" . htmlspecialchars($table) . "</li>";
+        }
+        echo "</ul>";
+    } else {
+        echo "<p style='color: red;'><em>These IDs don't appear to exist in IMS DB at all.</em></p>";
+    }
 }
 
 // 2. Check Finance DB for orders with these package IDs
