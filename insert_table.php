@@ -5969,4 +5969,115 @@ if ($conn->select_db($db_cms)) {
     echo "<p style='color:red;'>Failed selecting CMS database for leave pin cleanup.</p>";
 }
 
+// ===== CAMPAIGN2 新Campaign系统 =====
+
+// campaign2 表
+$createCampaign2Sql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN2 . "` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `campaign_name` VARCHAR(255) NOT NULL,
+    `period_start_date` DATE NOT NULL,
+    `period_end_date` DATE NOT NULL,
+    `description` TEXT DEFAULT NULL,
+    `create_by` VARCHAR(30),
+    `create_date` DATE,
+    `create_time` TIME,
+    `update_by` VARCHAR(30),
+    `update_date` DATE,
+    `update_time` TIME,
+    `status` CHAR(1) DEFAULT 'A',
+    KEY `idx_campaign2_period` (`period_start_date`, `period_end_date`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCampaign2Sql)) {
+    echo "<p style='color:green;'>Verified table `" . CAMPAIGN2 . "` for Campaign2.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `" . CAMPAIGN2 . "`: " . $conn->error . "</p>";
+}
+
+// campaign2_pic 表
+$createCampaign2PicSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN2_PIC . "` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `campaign_id` INT NOT NULL,
+    `user_id` INT NOT NULL,
+    `create_by` VARCHAR(30),
+    `create_date` DATE,
+    `create_time` TIME,
+    `update_by` VARCHAR(30),
+    `update_date` DATE,
+    `update_time` TIME,
+    `status` CHAR(1) DEFAULT 'A',
+    KEY `idx_campaign2_pic_campaign` (`campaign_id`, `status`),
+    KEY `idx_campaign2_pic_user` (`user_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCampaign2PicSql)) {
+    echo "<p style='color:green;'>Verified table `" . CAMPAIGN2_PIC . "` for Campaign2 PIC.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `" . CAMPAIGN2_PIC . "`: " . $conn->error . "</p>";
+}
+
+// campaign2_customer 表
+$createCampaign2CustomerSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN2_CUSTOMER . "` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `campaign_id` INT NOT NULL,
+    `platform` VARCHAR(30) NOT NULL,
+    `platform_customer_id` VARCHAR(100) NOT NULL,
+    `customer_name` VARCHAR(255),
+    `customer_contact` VARCHAR(100),
+    `assign_by` VARCHAR(30),
+    `assign_date` DATE,
+    `create_by` VARCHAR(30),
+    `create_date` DATE,
+    `create_time` TIME,
+    `update_by` VARCHAR(30),
+    `update_date` DATE,
+    `update_time` TIME,
+    `status` CHAR(1) DEFAULT 'A',
+    UNIQUE KEY `idx_campaign2_customer_unique` (`campaign_id`, `platform`, `platform_customer_id`),
+    KEY `idx_campaign2_customer_campaign` (`campaign_id`, `status`),
+    KEY `idx_campaign2_customer_platform` (`platform`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCampaign2CustomerSql)) {
+    echo "<p style='color:green;'>Verified table `" . CAMPAIGN2_CUSTOMER . "` for Campaign2 Customer.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `" . CAMPAIGN2_CUSTOMER . "`: " . $conn->error . "</p>";
+}
+
+// campaign2_follow_up 表
+$createCampaign2FollowUpSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN2_FOLLOW_UP . "` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `campaign_id` INT NOT NULL,
+    `campaign2_customer_id` INT NOT NULL,
+    `message_shortcut_id` INT DEFAULT NULL,
+    `message_title` VARCHAR(255),
+    `message_preview` TEXT,
+    `follow_up_date` DATE NOT NULL,
+    `pic_user_id` INT DEFAULT NULL,
+    `follow_up_status` VARCHAR(30) DEFAULT 'Pending',
+    `attachment_path` VARCHAR(255),
+    `remark` TEXT,
+    `completed_by` VARCHAR(30),
+    `completed_date` DATE,
+    `completed_time` TIME,
+    `failed_date` DATE,
+    `create_by` VARCHAR(30),
+    `create_date` DATE,
+    `create_time` TIME,
+    `update_by` VARCHAR(30),
+    `update_date` DATE,
+    `update_time` TIME,
+    `status` CHAR(1) DEFAULT 'A',
+    KEY `idx_campaign2_followup_campaign` (`campaign_id`, `status`),
+    KEY `idx_campaign2_followup_customer` (`campaign2_customer_id`, `status`),
+    KEY `idx_campaign2_followup_date` (`follow_up_date`, `follow_up_status`, `status`),
+    KEY `idx_campaign2_followup_status` (`follow_up_status`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCampaign2FollowUpSql)) {
+    echo "<p style='color:green;'>Verified table `" . CAMPAIGN2_FOLLOW_UP . "` for Campaign2 Follow-up.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `" . CAMPAIGN2_FOLLOW_UP . "`: " . $conn->error . "</p>";
+}
+
 $conn->close();

@@ -315,6 +315,12 @@ define('CAMPAIGN_FOLLOW_UP', 'campaign_follow_up');
 define('CAMPAIGN_PURCHASE_RECORD', 'campaign_purchase_record');
 define('CAMPAIGN_RULE_SETTING', 'campaign_rule_setting');
 define('CAMPAIGN_RULE_GENERATED_LOG', 'campaign_rule_generated_log');
+
+// Campaign2 (新的Campaign系统)
+define('CAMPAIGN2', 'campaign2');
+define('CAMPAIGN2_PIC', 'campaign2_pic');
+define('CAMPAIGN2_CUSTOMER', 'campaign2_customer');
+define('CAMPAIGN2_FOLLOW_UP', 'campaign2_follow_up');
 define('SYSTEM_ALERT_MESSAGE', 'system_alert_message');
 define('ORDER_DELETE_APPROVAL_REQUEST', 'order_delete_approval_request');
 define('TASK_COLUMN', 'task_board_status');
