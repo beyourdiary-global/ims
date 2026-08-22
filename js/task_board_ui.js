@@ -3197,6 +3197,13 @@ function applyItemDetailToModal(
   $("#taskItemDetailStatusSearchInput").val("");
   renderStatusLabelOptions("");
 
+  // Initialize Bootstrap dropdown for status labels
+  var statusDropdownBtn = document.getElementById('taskItemDetailStatusDropdownBtn');
+  if (statusDropdownBtn && typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
+    var dropdownInstance = bootstrap.Dropdown.getOrCreateInstance(statusDropdownBtn);
+    console.log('[DEBUG] Bootstrap Dropdown initialized for status');
+  }
+
   // DEBUG: Check what's in the DOM
   setTimeout(function() {
     console.log('[DEBUG] After renderStatusLabelOptions, DOM check:');
