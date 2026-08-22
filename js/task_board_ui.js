@@ -1790,6 +1790,7 @@ function renderStatusLabelOptions(keyword) {
         : "";
 
     var disabled = !canEdit ? ' disabled' : '';
+    console.log('[renderStatusLabelOptions] item ' + i + ' (' + name + '): disabled=' + (disabled ? 'YES' : 'NO'));
     var itemHtml = '<label class="task-item-detail-status-option">' +
       '<input class="form-check-input task-item-detail-status-checkbox" type="checkbox" value="' +
       id +
@@ -1812,7 +1813,17 @@ function renderStatusLabelOptions(keyword) {
   }
 
   var finalHtml = html || '<div class="task-label-empty">No task status found.</div>';
+  console.log('[renderStatusLabelOptions] Final HTML length:', finalHtml.length, ', contains "disabled":', finalHtml.indexOf('disabled') > -1);
   $("#taskItemDetailStatusOptionList").html(finalHtml);
+
+  // Check what's in the DOM after insertion
+  setTimeout(function() {
+    var checkboxes = $("#taskItemDetailStatusOptionList input[type='checkbox']");
+    console.log('[renderStatusLabelOptions] After DOM insertion: ' + checkboxes.length + ' checkboxes found');
+    checkboxes.each(function(idx) {
+      console.log('  Checkbox ' + idx + ' disabled=' + ($(this).prop('disabled') ? 'YES' : 'NO') + ', attr=' + ($(this).attr('disabled') ? 'YES' : 'NO'));
+    });
+  }, 50);
 }
 
 function normalizeChildWorkItems(raw) {
