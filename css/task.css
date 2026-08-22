@@ -6240,6 +6240,8 @@ body.task-board-page .task-board-scroll {
   border: 1px solid #e4ebf4;
   border-radius: 8px;
   padding: 0.35rem;
+  display: block !important;
+  visibility: visible !important;
 }
 
 .task-item-detail-status-option-row {
