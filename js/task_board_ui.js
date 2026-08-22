@@ -1766,6 +1766,7 @@ function removeStatusLabelFromSelection(statusLabelId) {
 }
 
 function renderStatusLabelOptions(keyword) {
+  console.log('[renderStatusLabelOptions] canEdit=' + canEdit + ', statusLabels.length=' + state.statusLabels.length);
   var query = String(keyword || "")
     .trim()
     .toLowerCase();
