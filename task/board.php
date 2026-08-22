@@ -591,6 +591,14 @@ if (
         );
         error_log('[DEBUG] get_item_detail statusLabels count: ' . (isset($result['statusLabels']) && is_array($result['statusLabels']) ? count($result['statusLabels']) : 'NOT ARRAY/SET'));
         error_log('[DEBUG] get_item_detail statusLabels: ' . json_encode($result['statusLabels'] ?? array()));
+
+        // Check database directly
+        $dbCheck = mysqli_query($connect, "SELECT COUNT(*) as cnt, GROUP_CONCAT(name) as names FROM task_status_label WHERE status='A'");
+        if ($dbCheck) {
+            $row = $dbCheck->fetch_assoc();
+            error_log('[DEBUG] DB check - active status labels count: ' . ($row['cnt'] ?? 0) . ', names: ' . ($row['names'] ?? ''));
+        }
+
         taskJsonResponse($result);
     }
 
