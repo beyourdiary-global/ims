@@ -3196,6 +3196,16 @@ function applyItemDetailToModal(
   setSelectedStatusLabels(statusIds);
   $("#taskItemDetailStatusSearchInput").val("");
   renderStatusLabelOptions("");
+
+  // DEBUG: Check what's in the DOM
+  setTimeout(function() {
+    console.log('[DEBUG] After renderStatusLabelOptions, DOM check:');
+    console.log('[DEBUG] #taskItemDetailStatusOptionList children count:', $("#taskItemDetailStatusOptionList").children().length);
+    console.log('[DEBUG] #taskItemDetailStatusOptionList HTML:', $("#taskItemDetailStatusOptionList").html());
+    console.log('[DEBUG] state.statusLabels length:', state.statusLabels.length);
+    console.log('[DEBUG] itemDetailModalState.selectedStatusLabelIds:', itemDetailModalState.selectedStatusLabelIds);
+  }, 100);
+
   renderDetailAssigneeSelect(Number(info.assignee_user_id || 0));
   renderDetailReporterSelect(Number(info.reporter_user_id || 0));
   var effectiveParentOptions = Array.isArray(parentOptions)
