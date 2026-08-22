@@ -3197,12 +3197,14 @@ function applyItemDetailToModal(
   $("#taskItemDetailStatusSearchInput").val("");
   renderStatusLabelOptions("");
 
-  // Initialize Bootstrap dropdown for status labels
-  var statusDropdownBtn = document.getElementById('taskItemDetailStatusDropdownBtn');
-  if (statusDropdownBtn && typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
-    var dropdownInstance = bootstrap.Dropdown.getOrCreateInstance(statusDropdownBtn);
-    console.log('[DEBUG] Bootstrap Dropdown initialized for status');
-  }
+  // Initialize Bootstrap dropdown AFTER DOM is fully updated
+  setTimeout(function() {
+    var statusDropdownBtn = document.getElementById('taskItemDetailStatusDropdownBtn');
+    if (statusDropdownBtn && typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
+      var dropdownInstance = bootstrap.Dropdown.getOrCreateInstance(statusDropdownBtn);
+      console.log('[DEBUG] Bootstrap Dropdown initialized for status after DOM update');
+    }
+  }, 200);
 
   // DEBUG: Check what's in the DOM
   setTimeout(function() {
