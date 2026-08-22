@@ -3772,6 +3772,7 @@ if ($conn->select_db($db_cms)) {
         `name` VARCHAR(120) NOT NULL,
         `color` VARCHAR(7) NOT NULL DEFAULT '#DCE8FF',
         `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y',
+        `sort_order` INT NOT NULL DEFAULT 0,
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
         `create_date` DATE DEFAULT NULL,
@@ -3796,6 +3797,15 @@ if ($conn->select_db($db_cms)) {
             echo "<p style='color:green;'>Added `color` column to `" . TASK_STATUS_LABEL . "`.</p>";
         } else {
             echo "<p style='color:red;'>Failed adding `color` to `" . TASK_STATUS_LABEL . "`: " . $conn->error . "</p>";
+        }
+    }
+
+    $taskStatusLabelSortRst = $conn->query("SHOW COLUMNS FROM `" . TASK_STATUS_LABEL . "` LIKE 'sort_order'");
+    if ($taskStatusLabelSortRst && $taskStatusLabelSortRst->num_rows === 0) {
+        if ($conn->query("ALTER TABLE `" . TASK_STATUS_LABEL . "` ADD COLUMN `sort_order` INT NOT NULL DEFAULT 0 AFTER `is_enabled`")) {
+            echo "<p style='color:green;'>Added `sort_order` column to `" . TASK_STATUS_LABEL . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding `sort_order` to `" . TASK_STATUS_LABEL . "`: " . $conn->error . "</p>";
         }
     }
 
