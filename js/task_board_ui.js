@@ -536,17 +536,22 @@ function removeTaskStatusLabelFromCards(statusLabelId) {
 
 function normalizeStatusLabels(list) {
   var source = Array.isArray(list) ? list : [];
+  console.log('[DEBUG] normalizeStatusLabels input source length:', source.length);
+  console.log('[DEBUG] normalizeStatusLabels input:', source);
   var byId = {};
   for (var i = 0; i < source.length; i++) {
     var item = source[i] || {};
     var id = Number(item.id || 0);
     var name = String(item.name || "").trim();
+    console.log('[DEBUG] normalizeStatusLabels processing item', i, '- id:', id, 'name:', name, 'item:', item);
     if (!id || !name) {
+      console.log('[DEBUG] normalizeStatusLabels skipping item', i);
       continue;
     }
-    byId[id] = { id: id, name: name };
+    byId[id] = { id: id, name: name, color: item.color };
   }
 
+  console.log('[DEBUG] normalizeStatusLabels byId:', byId);
   state.statusLabels = Object.keys(byId)
     .map(function (key) {
       return byId[Number(key)];
@@ -554,6 +559,7 @@ function normalizeStatusLabels(list) {
     .sort(function (a, b) {
       return String(a.name || "").localeCompare(String(b.name || ""));
     });
+  console.log('[DEBUG] normalizeStatusLabels final state.statusLabels:', state.statusLabels);
 
   var allowedIds = state.statusLabels.map(function (item) {
     return Number(item.id || 0);
@@ -1766,6 +1772,8 @@ function removeStatusLabelFromSelection(statusLabelId) {
 }
 
 function renderStatusLabelOptions(keyword) {
+  console.log('[DEBUG] renderStatusLabelOptions called, state.statusLabels length:', state.statusLabels.length);
+  console.log('[DEBUG] state.statusLabels content:', state.statusLabels);
   var query = String(keyword || "")
     .trim()
     .toLowerCase();
@@ -1775,7 +1783,9 @@ function renderStatusLabelOptions(keyword) {
     var item = state.statusLabels[i] || {};
     var id = Number(item.id || 0);
     var name = String(item.name || "").trim();
+    console.log('[DEBUG] processing status item', i, ':', {id: id, name: name});
     if (!id || !name) {
+      console.log('[DEBUG] skipping item', i, '- id or name missing');
       continue;
     }
 
