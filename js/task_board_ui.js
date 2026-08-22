@@ -1823,6 +1823,19 @@ function renderStatusLabelOptions(keyword) {
     checkboxes.each(function(idx) {
       console.log('  Checkbox ' + idx + ' disabled=' + ($(this).prop('disabled') ? 'YES' : 'NO') + ', attr=' + ($(this).attr('disabled') ? 'YES' : 'NO'));
     });
+
+    // Watch for mutations on disabled attribute
+    checkboxes.each(function(idx) {
+      var observer = new MutationObserver(function(mutations) {
+        mutations.forEach(function(mutation) {
+          if (mutation.attributeName === 'disabled') {
+            console.log('[MUTATION] Checkbox ' + idx + ' disabled attribute changed to:', $(mutation.target).attr('disabled'));
+            console.trace('[MUTATION TRACE]');
+          }
+        });
+      });
+      observer.observe(this, { attributes: true, attributeFilter: ['disabled'] });
+    });
   }, 50);
 }
 
