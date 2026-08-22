@@ -1798,8 +1798,7 @@ function renderStatusLabelOptions(keyword) {
         ? " checked"
         : "";
 
-    html +=
-      '<label class="task-item-detail-status-option">' +
+    var itemHtml = '<label class="task-item-detail-status-option">' +
       '<input class="form-check-input task-item-detail-status-checkbox" type="checkbox" value="' +
       id +
       '"' +
@@ -1816,11 +1815,17 @@ function renderStatusLabelOptions(keyword) {
       '" title="Delete status label"><i class="fa-regular fa-trash-can"></i></button>'
         : "") +
       "</label>";
+    console.log('[DEBUG] Adding status item HTML for', name, ':', itemHtml);
+    html += itemHtml;
   }
 
-  $("#taskItemDetailStatusOptionList").html(
-    html || '<div class="task-label-empty">No task status found.</div>',
-  );
+  console.log('[DEBUG] Total html generated length:', html.length);
+  var finalHtml = html || '<div class="task-label-empty">No task status found.</div>';
+  console.log('[DEBUG] Final HTML to insert:', finalHtml);
+  console.log('[DEBUG] Target element #taskItemDetailStatusOptionList exists?', $("#taskItemDetailStatusOptionList").length > 0);
+  console.log('[DEBUG] HTML length:', finalHtml.length);
+  $("#taskItemDetailStatusOptionList").html(finalHtml);
+  console.log('[DEBUG] After insertion, element HTML:', $("#taskItemDetailStatusOptionList").html().substring(0, 200));
 }
 
 function normalizeChildWorkItems(raw) {
