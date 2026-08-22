@@ -48,10 +48,21 @@ if (function_exists('audit_log')) {
 }
 
 $boardPinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
-$isProjectOwner = taskIsProjectOwner($connect, $currentProjectId, $currentUserId);
-$workItemCanAdd = taskIsActionAllowed('add', $boardPinAccess) && ($isProjectOwner || taskUserCanWorkItemAction($connect, $currentProjectId, 'add'));
-$workItemCanEdit = taskIsActionAllowed('edit', $boardPinAccess) && ($isProjectOwner || taskUserCanWorkItemAction($connect, $currentProjectId, 'edit'));
-$workItemCanDelete = taskIsActionAllowed('delete', $boardPinAccess) && ($isProjectOwner || taskUserCanWorkItemAction($connect, $currentProjectId, 'delete'));
+$isProjectOwner = $currentProjectId > 0
+    && isset($currentProject['owner_user_id'])
+    && (int) $currentProject['owner_user_id'] === (int) $currentUserId;
+$hasFullProjectAccess = $isProjectOwner;
+$projectAccessRecord = array(
+    'work_item_add' => $hasFullProjectAccess ? 1 : 0,
+    'work_item_edit' => $hasFullProjectAccess ? 1 : 0,
+    'work_item_delete' => $hasFullProjectAccess ? 1 : 0,
+);
+if (!$hasFullProjectAccess) {
+    $projectAccessRecord = taskGetProjectUserAccessRecord($connect, $currentProjectId, $currentUserId);
+}
+$workItemCanAdd = taskIsActionAllowed('add', $boardPinAccess) && !empty($projectAccessRecord['work_item_add']);
+$workItemCanEdit = taskIsActionAllowed('edit', $boardPinAccess) && !empty($projectAccessRecord['work_item_edit']);
+$workItemCanDelete = taskIsActionAllowed('delete', $boardPinAccess) && !empty($projectAccessRecord['work_item_delete']);
 $workTypes = taskGetWorkTypes($connect, $currentProjectId);
 $workTypeIcons = taskGetSvgIconOptions();
 $projectKeySetting = taskGetProjectKeySetting($connect, $currentProjectId);
