@@ -3125,8 +3125,13 @@ function applyItemDetailToModal(
   itemLinks,
 ) {
   var info = detail && typeof detail === "object" ? detail : {};
+  console.log('[DEBUG] applyItemDetailToModal statusLabels:', statusLabels);
+  console.log('[DEBUG] state.statusLabels before normalize:', state.statusLabels);
   if (Array.isArray(statusLabels)) {
     normalizeStatusLabels(statusLabels);
+    console.log('[DEBUG] state.statusLabels after normalize:', state.statusLabels);
+  } else {
+    console.log('[DEBUG] statusLabels is NOT an array:', typeof statusLabels);
   }
 
   var title = String(info.title || "").trim();

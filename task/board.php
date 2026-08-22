@@ -589,6 +589,8 @@ if (
             $connect,
             (int) post('item_id')
         );
+        error_log('[DEBUG] get_item_detail statusLabels count: ' . (isset($result['statusLabels']) && is_array($result['statusLabels']) ? count($result['statusLabels']) : 'NOT ARRAY/SET'));
+        error_log('[DEBUG] get_item_detail statusLabels: ' . json_encode($result['statusLabels'] ?? array()));
         taskJsonResponse($result);
     }
 
