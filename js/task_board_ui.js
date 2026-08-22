@@ -1814,7 +1814,14 @@ function renderStatusLabelOptions(keyword) {
 
   var finalHtml = html || '<div class="task-label-empty">No task status found.</div>';
   console.log('[renderStatusLabelOptions] Final HTML length:', finalHtml.length, ', contains "disabled":', finalHtml.indexOf('disabled') > -1);
-  $("#taskItemDetailStatusOptionList").html(finalHtml);
+  console.log('[renderStatusLabelOptions] First 500 chars of finalHtml:', finalHtml.substring(0, 500));
+
+  var $container = $("#taskItemDetailStatusOptionList");
+  console.log('[renderStatusLabelOptions] Before .html() - container HTML:', $container.html().substring(0, 200));
+
+  $container.html(finalHtml);
+
+  console.log('[renderStatusLabelOptions] After .html() - container HTML:', $container.html().substring(0, 200));
 
   // Check what's in the DOM after insertion
   setTimeout(function() {
