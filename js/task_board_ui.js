@@ -1766,7 +1766,6 @@ function removeStatusLabelFromSelection(statusLabelId) {
 }
 
 function renderStatusLabelOptions(keyword) {
-  console.log('[renderStatusLabelOptions] canEdit=' + canEdit + ', statusLabels.length=' + state.statusLabels.length);
   var query = String(keyword || "")
     .trim()
     .toLowerCase();
@@ -1789,8 +1788,7 @@ function renderStatusLabelOptions(keyword) {
         ? " checked"
         : "";
 
-    var disabled = !canEdit ? ' disabled' : '';
-    console.log('[renderStatusLabelOptions] item ' + i + ' (' + name + '): disabled=' + (disabled ? 'YES' : 'NO'));
+    var disabled = !canEdit ? " disabled" : "";
     var itemHtml = '<label class="task-item-detail-status-option">' +
       '<input class="form-check-input task-item-detail-status-checkbox" type="checkbox" value="' +
       id +
@@ -1812,38 +1810,9 @@ function renderStatusLabelOptions(keyword) {
     html += itemHtml;
   }
 
-  var finalHtml = html || '<div class="task-label-empty">No task status found.</div>';
-  console.log('[renderStatusLabelOptions] Final HTML length:', finalHtml.length, ', contains "disabled":', finalHtml.indexOf('disabled') > -1);
-  console.log('[renderStatusLabelOptions] First 500 chars of finalHtml:', finalHtml.substring(0, 500));
-
-  var $container = $("#taskItemDetailStatusOptionList");
-  console.log('[renderStatusLabelOptions] Before .html() - container HTML:', $container.html().substring(0, 200));
-
-  $container.html(finalHtml);
-
-  console.log('[renderStatusLabelOptions] After .html() - container HTML:', $container.html().substring(0, 200));
-
-  // Check what's in the DOM after insertion
-  setTimeout(function() {
-    var checkboxes = $("#taskItemDetailStatusOptionList input[type='checkbox']");
-    console.log('[renderStatusLabelOptions] After DOM insertion: ' + checkboxes.length + ' checkboxes found');
-    checkboxes.each(function(idx) {
-      console.log('  Checkbox ' + idx + ' disabled=' + ($(this).prop('disabled') ? 'YES' : 'NO') + ', attr=' + ($(this).attr('disabled') ? 'YES' : 'NO'));
-    });
-
-    // Watch for mutations on disabled attribute
-    checkboxes.each(function(idx) {
-      var observer = new MutationObserver(function(mutations) {
-        mutations.forEach(function(mutation) {
-          if (mutation.attributeName === 'disabled') {
-            console.log('[MUTATION] Checkbox ' + idx + ' disabled attribute changed to:', $(mutation.target).attr('disabled'));
-            console.trace('[MUTATION TRACE]');
-          }
-        });
-      });
-      observer.observe(this, { attributes: true, attributeFilter: ['disabled'] });
-    });
-  }, 50);
+  $("#taskItemDetailStatusOptionList").html(
+    html || '<div class="task-label-empty">No task status found.</div>',
+  );
 }
 
 function normalizeChildWorkItems(raw) {

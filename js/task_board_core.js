@@ -82,7 +82,6 @@ var csrfToken = String(cfg.csrfToken || "");
 var canAdd = !!cfg.canAdd;
 var canEdit = !!cfg.canEdit;
 var canDelete = !!cfg.canDelete;
-console.log('[task_board_core] Permission check: canAdd=' + canAdd + ', canEdit=' + canEdit + ', canDelete=' + canDelete + ', isProjectOwner=' + !!cfg.isProjectOwner);
 var state = {
   siteUrl: String(cfg.siteUrl || "").replace(/\/+$/, ""),
   currentProjectId: Number(cfg.currentProjectId || 0),

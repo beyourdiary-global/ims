@@ -56,14 +56,35 @@ $projectAccessRecord = array(
     'work_item_add' => $hasFullProjectAccess ? 1 : 0,
     'work_item_edit' => $hasFullProjectAccess ? 1 : 0,
     'work_item_delete' => $hasFullProjectAccess ? 1 : 0,
+    'allowed_work_type_ids' => array(),
+    'allowed_status_ids' => array(),
 );
 if (!$hasFullProjectAccess) {
     $projectAccessRecord = taskGetProjectUserAccessRecord($connect, $currentProjectId, $currentUserId);
 }
+$allowedWorkTypeIds = isset($projectAccessRecord['allowed_work_type_ids']) && is_array($projectAccessRecord['allowed_work_type_ids'])
+    ? $projectAccessRecord['allowed_work_type_ids']
+    : array();
+$allowedStatusIds = isset($projectAccessRecord['allowed_status_ids']) && is_array($projectAccessRecord['allowed_status_ids'])
+    ? $projectAccessRecord['allowed_status_ids']
+    : array();
 $workItemCanAdd = taskIsActionAllowed('add', $boardPinAccess) && !empty($projectAccessRecord['work_item_add']);
 $workItemCanEdit = taskIsActionAllowed('edit', $boardPinAccess) && !empty($projectAccessRecord['work_item_edit']);
 $workItemCanDelete = taskIsActionAllowed('delete', $boardPinAccess) && !empty($projectAccessRecord['work_item_delete']);
-error_log('[view_my_task.php] DEBUG: isProjectOwner=' . ($isProjectOwner ? '1' : '0') . ', hasFullProjectAccess=' . ($hasFullProjectAccess ? '1' : '0') . ', work_item_edit=' . !empty($projectAccessRecord['work_item_edit']) . ', taskIsActionAllowed(edit)=' . (taskIsActionAllowed('edit', $boardPinAccess) ? '1' : '0') . ', canEdit=' . ($workItemCanEdit ? '1' : '0'));
+$columnPermissions = $hasFullProjectAccess
+    ? array_reduce(taskGetProjectAccessFieldOptions(), function ($permissions, $field) {
+        $fieldKey = isset($field['key']) ? (string) $field['key'] : '';
+        if ($fieldKey !== '') {
+            $permissions[$fieldKey] = array(
+                'column_key' => $fieldKey,
+                'add' => 1,
+                'edit' => 1,
+                'delete' => 1,
+            );
+        }
+        return $permissions;
+    }, array())
+    : taskGetProjectColumnAccessMap($connect, $currentProjectId, $currentUserId);
 $workTypes = taskGetWorkTypes($connect, $currentProjectId);
 $workTypeIcons = taskGetSvgIconOptions();
 $projectKeySetting = taskGetProjectKeySetting($connect, $currentProjectId);
@@ -233,6 +254,9 @@ window.taskBoardConfig = {
     canEdit: <?= $workItemCanEdit ? 'true' : 'false' ?>,
     canDelete: <?= $workItemCanDelete ? 'true' : 'false' ?>,
     isProjectOwner: <?= $isProjectOwner ? 'true' : 'false' ?>,
+    allowedWorkTypeIds: <?= json_encode(array_values($allowedWorkTypeIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    allowedStatusIds: <?= json_encode(array_values($allowedStatusIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    columnPermissions: <?= json_encode($columnPermissions, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     projectKey: <?= json_encode($projectKeySetting, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     currentProject: <?= json_encode($currentProject, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     workTypes: <?= json_encode($workTypes, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
