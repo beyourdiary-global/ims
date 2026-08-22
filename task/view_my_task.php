@@ -63,6 +63,7 @@ if (!$hasFullProjectAccess) {
 $workItemCanAdd = taskIsActionAllowed('add', $boardPinAccess) && !empty($projectAccessRecord['work_item_add']);
 $workItemCanEdit = taskIsActionAllowed('edit', $boardPinAccess) && !empty($projectAccessRecord['work_item_edit']);
 $workItemCanDelete = taskIsActionAllowed('delete', $boardPinAccess) && !empty($projectAccessRecord['work_item_delete']);
+error_log('[view_my_task.php] DEBUG: isProjectOwner=' . ($isProjectOwner ? '1' : '0') . ', hasFullProjectAccess=' . ($hasFullProjectAccess ? '1' : '0') . ', work_item_edit=' . !empty($projectAccessRecord['work_item_edit']) . ', taskIsActionAllowed(edit)=' . (taskIsActionAllowed('edit', $boardPinAccess) ? '1' : '0') . ', canEdit=' . ($workItemCanEdit ? '1' : '0'));
 $workTypes = taskGetWorkTypes($connect, $currentProjectId);
 $workTypeIcons = taskGetSvgIconOptions();
 $projectKeySetting = taskGetProjectKeySetting($connect, $currentProjectId);
