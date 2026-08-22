@@ -241,8 +241,6 @@ window.taskBoardConfig = {
     statusLabels: <?= json_encode($statusLabels, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
-console.log('[DEBUG] taskBoardData.statusLabels:', window.taskBoardData.statusLabels);
-console.log('[DEBUG] statusLabels count:', (Array.isArray(window.taskBoardData.statusLabels) ? window.taskBoardData.statusLabels.length : 'NOT ARRAY'));
 </script>
 <script src="../js/task_board_core.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_core.js') ?>"></script>
 <script src="../js/task_board_ui.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_ui.js') ?>"></script>

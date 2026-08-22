@@ -536,22 +536,17 @@ function removeTaskStatusLabelFromCards(statusLabelId) {
 
 function normalizeStatusLabels(list) {
   var source = Array.isArray(list) ? list : [];
-  console.log('[DEBUG] normalizeStatusLabels input source length:', source.length);
-  console.log('[DEBUG] normalizeStatusLabels input:', source);
   var byId = {};
   for (var i = 0; i < source.length; i++) {
     var item = source[i] || {};
     var id = Number(item.id || 0);
     var name = String(item.name || "").trim();
-    console.log('[DEBUG] normalizeStatusLabels processing item', i, '- id:', id, 'name:', name, 'item:', item);
     if (!id || !name) {
-      console.log('[DEBUG] normalizeStatusLabels skipping item', i);
       continue;
     }
     byId[id] = { id: id, name: name, color: item.color };
   }
 
-  console.log('[DEBUG] normalizeStatusLabels byId:', byId);
   state.statusLabels = Object.keys(byId)
     .map(function (key) {
       return byId[Number(key)];
@@ -559,7 +554,6 @@ function normalizeStatusLabels(list) {
     .sort(function (a, b) {
       return String(a.name || "").localeCompare(String(b.name || ""));
     });
-  console.log('[DEBUG] normalizeStatusLabels final state.statusLabels:', state.statusLabels);
 
   var allowedIds = state.statusLabels.map(function (item) {
     return Number(item.id || 0);
@@ -1772,8 +1766,6 @@ function removeStatusLabelFromSelection(statusLabelId) {
 }
 
 function renderStatusLabelOptions(keyword) {
-  console.log('[DEBUG] renderStatusLabelOptions called, state.statusLabels length:', state.statusLabels.length);
-  console.log('[DEBUG] state.statusLabels content:', state.statusLabels);
   var query = String(keyword || "")
     .trim()
     .toLowerCase();
@@ -1783,9 +1775,7 @@ function renderStatusLabelOptions(keyword) {
     var item = state.statusLabels[i] || {};
     var id = Number(item.id || 0);
     var name = String(item.name || "").trim();
-    console.log('[DEBUG] processing status item', i, ':', {id: id, name: name});
     if (!id || !name) {
-      console.log('[DEBUG] skipping item', i, '- id or name missing');
       continue;
     }
 
@@ -1815,17 +1805,11 @@ function renderStatusLabelOptions(keyword) {
       '" title="Delete status label"><i class="fa-regular fa-trash-can"></i></button>'
         : "") +
       "</label>";
-    console.log('[DEBUG] Adding status item HTML for', name, ':', itemHtml);
     html += itemHtml;
   }
 
-  console.log('[DEBUG] Total html generated length:', html.length);
   var finalHtml = html || '<div class="task-label-empty">No task status found.</div>';
-  console.log('[DEBUG] Final HTML to insert:', finalHtml);
-  console.log('[DEBUG] Target element #taskItemDetailStatusOptionList exists?', $("#taskItemDetailStatusOptionList").length > 0);
-  console.log('[DEBUG] HTML length:', finalHtml.length);
   $("#taskItemDetailStatusOptionList").html(finalHtml);
-  console.log('[DEBUG] After insertion, element HTML:', $("#taskItemDetailStatusOptionList").html().substring(0, 200));
 }
 
 function normalizeChildWorkItems(raw) {
@@ -3140,13 +3124,8 @@ function applyItemDetailToModal(
   itemLinks,
 ) {
   var info = detail && typeof detail === "object" ? detail : {};
-  console.log('[DEBUG] applyItemDetailToModal statusLabels:', statusLabels);
-  console.log('[DEBUG] state.statusLabels before normalize:', state.statusLabels);
   if (Array.isArray(statusLabels)) {
     normalizeStatusLabels(statusLabels);
-    console.log('[DEBUG] state.statusLabels after normalize:', state.statusLabels);
-  } else {
-    console.log('[DEBUG] statusLabels is NOT an array:', typeof statusLabels);
   }
 
   var title = String(info.title || "").trim();
@@ -3202,18 +3181,9 @@ function applyItemDetailToModal(
     var statusDropdownBtn = document.getElementById('taskItemDetailStatusDropdownBtn');
     if (statusDropdownBtn && typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
       var dropdownInstance = bootstrap.Dropdown.getOrCreateInstance(statusDropdownBtn);
-      console.log('[DEBUG] Bootstrap Dropdown initialized for status after DOM update');
     }
   }, 200);
 
-  // DEBUG: Check what's in the DOM
-  setTimeout(function() {
-    console.log('[DEBUG] After renderStatusLabelOptions, DOM check:');
-    console.log('[DEBUG] #taskItemDetailStatusOptionList children count:', $("#taskItemDetailStatusOptionList").children().length);
-    console.log('[DEBUG] #taskItemDetailStatusOptionList HTML:', $("#taskItemDetailStatusOptionList").html());
-    console.log('[DEBUG] state.statusLabels length:', state.statusLabels.length);
-    console.log('[DEBUG] itemDetailModalState.selectedStatusLabelIds:', itemDetailModalState.selectedStatusLabelIds);
-  }, 100);
 
   renderDetailAssigneeSelect(Number(info.assignee_user_id || 0));
   renderDetailReporterSelect(Number(info.reporter_user_id || 0));
