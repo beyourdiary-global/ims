@@ -48,10 +48,10 @@ if (function_exists('audit_log')) {
 }
 
 $boardPinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
-$workItemCanAdd = taskIsActionAllowed('add', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'add');
-$workItemCanEdit = taskIsActionAllowed('edit', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'edit');
-$workItemCanDelete = taskIsActionAllowed('delete', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'delete');
 $isProjectOwner = taskIsProjectOwner($connect, $currentProjectId, $currentUserId);
+$workItemCanAdd = taskIsActionAllowed('add', $boardPinAccess) && ($isProjectOwner || taskUserCanWorkItemAction($connect, $currentProjectId, 'add'));
+$workItemCanEdit = taskIsActionAllowed('edit', $boardPinAccess) && ($isProjectOwner || taskUserCanWorkItemAction($connect, $currentProjectId, 'edit'));
+$workItemCanDelete = taskIsActionAllowed('delete', $boardPinAccess) && ($isProjectOwner || taskUserCanWorkItemAction($connect, $currentProjectId, 'delete'));
 $workTypes = taskGetWorkTypes($connect, $currentProjectId);
 $workTypeIcons = taskGetSvgIconOptions();
 $projectKeySetting = taskGetProjectKeySetting($connect, $currentProjectId);
