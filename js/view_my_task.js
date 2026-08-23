@@ -87,13 +87,51 @@
     $row.nextUntil(stopSelector).toggleClass("is-hidden", collapsing);
   });
 
+  function buildRefreshUrl() {
+    var params = new URLSearchParams(window.location.search);
+    params.set("ajax", "table");
+    return window.location.pathname + "?" + params.toString();
+  }
+
   $(document).on("click", "#viewMyTaskRefreshBtn", function () {
     var $btn = $(this);
     if ($btn.hasClass("is-spinning")) {
       return;
     }
     $btn.addClass("is-spinning");
-    window.location.reload();
+    closeAllViewMyTaskFilterPopups();
+
+    $.ajax({
+      url: buildRefreshUrl(),
+      method: "GET",
+      dataType: "html",
+      cache: false,
+    })
+      .done(function (html) {
+        $("#viewMyTaskContent").html(html);
+        // Drop filter values that no longer exist in the refreshed rows,
+        // then re-apply what is still valid.
+        Object.keys(activeViewMyTaskFilters).forEach(function (colKey) {
+          var available = getViewMyTaskUniqueValues(colKey);
+          var kept = activeViewMyTaskFilters[colKey].filter(function (value) {
+            return available.indexOf(value) !== -1;
+          });
+          if (kept.length > 0) {
+            activeViewMyTaskFilters[colKey] = kept;
+          } else {
+            delete activeViewMyTaskFilters[colKey];
+          }
+        });
+        applyViewMyTaskFilters();
+      })
+      .fail(function () {
+        if (typeof window.notify === "function") {
+          window.notify("Unable to refresh the task list. Please try again.");
+        }
+      })
+      .always(function () {
+        $("#viewMyTaskRefreshBtn").removeClass("is-spinning");
+      });
   });
 
   var FILTER_COLUMN_MAP = {
