@@ -2,116 +2,6 @@
 
 if (defined('ROOT')) {
     include_once ROOT . '/include/system_alert_common.php';
-    // Follow-up entries saved here become real cases/rounds in the Follow Up List.
-    include_once ROOT . '/include/customer_follow_up_common.php';
-}
-
-if (!function_exists('urlGetUserRecordLogPlatformFromCustomerColumn')) {
-    /**
-     * Maps the customer column a page is scoped to onto the follow-up platform key, so a
-     * log entry can be tied to the same follow-up case the Follow Up List works with.
-     */
-    function urlGetUserRecordLogPlatformFromCustomerColumn($customerColumn)
-    {
-        $map = array(
-            'shopee_cust_id' => 'shopee',
-            'lazada_cust_id' => 'lazada',
-            'facebook_cust_id' => 'facebook',
-            'website_cust_id' => 'website',
-            'cust_id' => 'customer_info',
-        );
-        $customerColumn = trim((string) $customerColumn);
-
-        return isset($map[$customerColumn]) ? $map[$customerColumn] : '';
-    }
-}
-
-if (!function_exists('urlGetUserRecordLogFollowUpCaseOptions')) {
-    /**
-     * Open follow-up cases for the customer this page is scoped to, used to let the user
-     * say which case a follow-up entry belongs to instead of guessing.
-     */
-    function urlGetUserRecordLogFollowUpCaseOptions($connect, $context)
-    {
-        if (!function_exists('customerFollowUpFetchActiveCasesByCustomer')) {
-            return array();
-        }
-
-        $platform = urlGetUserRecordLogPlatformFromCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '');
-        $customerId = (int) (isset($context['customer_id']) ? $context['customer_id'] : 0);
-        if ($platform === '' || $customerId <= 0) {
-            return array();
-        }
-
-        $actorUserId = defined('USER_ID') ? (int) USER_ID : 0;
-        $actorUserGroupId = defined('USER_GROUP') ? USER_GROUP : null;
-
-        $options = array();
-        foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
-            $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
-            if (in_array($caseStatus, array('done', 'lost'), true)) {
-                continue;
-            }
-            if (function_exists('customerFollowUpCanUserManageCase')
-                && !customerFollowUpCanUserManageCase($caseRow, $actorUserId, $actorUserGroupId, $connect)
-            ) {
-                continue;
-            }
-
-            $orderNo = trim((string) (isset($caseRow['order_no']) ? $caseRow['order_no'] : ''));
-            $roundNo = (int) (isset($caseRow['current_round_no']) ? $caseRow['current_round_no'] : 1);
-            $label = '#' . (int) $caseRow['id']
-                . ' · ' . ($orderNo !== '' ? ('Order ' . $orderNo) : 'No order')
-                . ' · Round ' . max(1, $roundNo);
-            if ($caseStatus !== '') {
-                $label .= ' · ' . ucwords($caseStatus);
-            }
-
-            $options[] = array('id' => (int) $caseRow['id'], 'label' => $label);
-        }
-
-        return $options;
-    }
-}
-
-if (!function_exists('urlSyncUserRecordLogFollowUp')) {
-    /**
-     * Pushes a saved log entry's Next Follow-Up Date into the customer follow-up module
-     * and returns array('follow_up_id' => int, 'round_id' => int, 'message' => string).
-     * Returns zeroed ids (and no error) when the page is not customer-scoped or the entry
-     * carries no follow-up date, which keeps plain notes behaving exactly as before.
-     */
-    function urlSyncUserRecordLogFollowUp($connect, $context, $data)
-    {
-        $empty = array('follow_up_id' => 0, 'round_id' => 0, 'message' => '');
-
-        if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
-            return $empty;
-        }
-
-        $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
-        if ($nextFollowUpDate === '') {
-            return $empty;
-        }
-
-        $platform = urlGetUserRecordLogPlatformFromCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '');
-        $customerId = (int) (isset($context['customer_id']) ? $context['customer_id'] : 0);
-        if ($platform === '' || $customerId <= 0) {
-            return $empty;
-        }
-
-        return customerFollowUpSyncFromCustomerLog($connect, array(
-            'platform' => $platform,
-            'customer_id' => $customerId,
-            'customer_name' => isset($context['customer_label']) ? $context['customer_label'] : '',
-            'customer_username' => isset($context['customer_label']) ? $context['customer_label'] : '',
-            'next_follow_up_date' => $nextFollowUpDate,
-            'message_shortcut_id' => isset($data['message_shortcut_id']) ? (int) $data['message_shortcut_id'] : 0,
-            'remark' => 'Scheduled from the customer page User Record Log.',
-            'follow_up_id' => isset($data['follow_up_id']) ? (int) $data['follow_up_id'] : 0,
-            'actor_user_id' => defined('USER_ID') ? (int) USER_ID : 0,
-        ));
-    }
 }
 
 if (!function_exists('urlServerLog')) {
@@ -1345,20 +1235,6 @@ if (!function_exists('urlBuildListHtml')) {
                 $followUpCopyFields['Follow-Up Day'] = $followUpDay;
             }
 
-            // When this entry is tied to a follow-up case, link straight to it so the
-            // customer page and the Follow Up List stay one follow-up, not two.
-            $linkedFollowUpId = isset($row['follow_up_id']) ? (int) $row['follow_up_id'] : 0;
-            if ($linkedFollowUpId > 0) {
-                $linkedRoundId = isset($row['follow_up_round_id']) ? (int) $row['follow_up_round_id'] : 0;
-                $followUpListUrl = rtrim((string) (isset($GLOBALS['SITEURL']) ? $GLOBALS['SITEURL'] : ''), '/')
-                    . '/customer/customer_follow_up_list.php?follow_up_id=' . $linkedFollowUpId
-                    . ($linkedRoundId > 0 ? ('&round_id=' . $linkedRoundId) : '');
-                $followUpMetaItems[] = '<span><strong>Follow-Up Case:</strong> <a href="'
-                    . htmlspecialchars($followUpListUrl, ENT_QUOTES, 'UTF-8')
-                    . '" target="_blank" rel="noopener">#' . $linkedFollowUpId . '</a></span>';
-                $followUpCopyFields['Follow-Up Case'] = '#' . $linkedFollowUpId;
-            }
-
             $copyHtml = urlBuildUserRecordLogCopyHtml($displayNo, $auditMetaText, $summary, $content, $attachmentList, $uploadWebDir, $followUpCopyFields);
             $copyText = urlBuildUserRecordLogCopyText($displayNo, $auditMetaText, $summary, $content, $attachmentList, $uploadWebDir, $followUpCopyFields);
 
@@ -1405,7 +1281,6 @@ if (!function_exists('urlBuildListHtml')) {
             $html .= '    <input type="hidden" class="url-edit-next-follow-up-date" value="' . htmlspecialchars($nextFollowUpDate, ENT_QUOTES, 'UTF-8') . '">';
             $html .= '    <input type="hidden" class="url-edit-follow-up-times" value="' . htmlspecialchars($followUpTimes, ENT_QUOTES, 'UTF-8') . '">';
             $html .= '    <input type="hidden" class="url-edit-follow-up-day" value="' . htmlspecialchars($followUpDay, ENT_QUOTES, 'UTF-8') . '">';
-            $html .= '    <input type="hidden" class="url-edit-follow-up-id" value="' . $linkedFollowUpId . '">';
             $html .= '  </div>';
 
             if ($approvalRecordId > 0 && $approvalRecordId === $recordId && $approvalPanelHtml !== '') {
@@ -1824,9 +1699,6 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             $summary = '';
         }
         $messageShortcutId = (int) post('message_shortcut_id');
-        // Which follow-up case this entry belongs to; 0 means "let the module decide"
-        // (reuse the customer's only open case, or open a new customer-sourced one).
-        $submittedFollowUpId = (int) post('follow_up_id');
         $followUpTimes = urlNormalizeUserRecordLogShortText(post('follow_up_times'));
         $followUpDay = urlNormalizeUserRecordLogShortText(post('follow_up_day'));
         $hasSummaryColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'summary');
@@ -2024,28 +1896,6 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             if ($hasFollowUpDayColumn) {
                 $updateParts[] = "follow_up_day=" . ($followUpDay !== '' ? ("'" . urlEsc($dbConnect, $followUpDay) . "'") : 'NULL');
             }
-            // Push the follow-up date into the customer follow-up module so this entry and
-            // the Follow Up List describe the same follow-up, then remember which case and
-            // round it landed on.
-            $followUpSync = urlSyncUserRecordLogFollowUp($dbConnect, $context, array(
-                'next_follow_up_date' => $nextFollowUpDate,
-                'message_shortcut_id' => $messageShortcutId,
-                'follow_up_id' => $submittedFollowUpId > 0
-                    ? $submittedFollowUpId
-                    : (isset($currentRow['follow_up_id']) ? (int) $currentRow['follow_up_id'] : 0),
-            ));
-            if (trim((string) $followUpSync['message']) !== '') {
-                if ($urlIsFallback) {
-                    urlFallbackResponse($followUpSync['message'], false, $context['return_url']);
-                }
-                urlJsonResponse(array('ok' => 0, 'message' => $followUpSync['message']));
-            }
-            if ($followUpSync['follow_up_id'] > 0 && urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_id')) {
-                $updateParts[] = "follow_up_id=" . (int) $followUpSync['follow_up_id'];
-                if ($followUpSync['round_id'] > 0 && urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_round_id')) {
-                    $updateParts[] = "follow_up_round_id=" . (int) $followUpSync['round_id'];
-                }
-            }
             $updateParts[] = "updated_by='" . urlEsc($dbConnect, USER_ID) . "'";
             $updateParts[] = "updated_at=NOW()";
 
@@ -2195,30 +2045,6 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             $insertColumns[] = 'follow_up_day';
             $insertValues[] = $followUpDay !== '' ? ("'" . urlEsc($dbConnect, $followUpDay) . "'") : 'NULL';
         }
-
-        // Push the follow-up date into the customer follow-up module so this entry and the
-        // Follow Up List describe the same follow-up, then remember which case and round it
-        // landed on.
-        $followUpSync = urlSyncUserRecordLogFollowUp($dbConnect, $context, array(
-            'next_follow_up_date' => $nextFollowUpDate,
-            'message_shortcut_id' => $messageShortcutId,
-            'follow_up_id' => $submittedFollowUpId,
-        ));
-        if (trim((string) $followUpSync['message']) !== '') {
-            if ($urlIsFallback) {
-                urlFallbackResponse($followUpSync['message'], false, $context['return_url']);
-            }
-            urlJsonResponse(array('ok' => 0, 'message' => $followUpSync['message']));
-        }
-        if ($followUpSync['follow_up_id'] > 0 && urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_id')) {
-            $insertColumns[] = 'follow_up_id';
-            $insertValues[] = (int) $followUpSync['follow_up_id'];
-            if ($followUpSync['round_id'] > 0 && urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_round_id')) {
-                $insertColumns[] = 'follow_up_round_id';
-                $insertValues[] = (int) $followUpSync['round_id'];
-            }
-        }
-
         $insertColumns = array_merge($insertColumns, array('created_by', 'created_at', 'updated_by', 'updated_at', 'status'));
         $insertValues = array_merge($insertValues, array(
             "'" . urlEsc($dbConnect, USER_ID) . "'",
@@ -2996,23 +2822,6 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                             <textarea class="form-control" id="url_content" name="content" rows="4" required></textarea>
                             <div class="url-editor-note">Supports paragraphs, bold text, emoji, and bullet or numbered lists.</div>
                         </div>
-                        <?php
-                        $followUpCaseOptions = urlGetUserRecordLogFollowUpCaseOptions($connect, $context);
-                        $followUpModuleAvailable = urlGetUserRecordLogPlatformFromCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '') !== ''
-                            && (int) (isset($context['customer_id']) ? $context['customer_id'] : 0) > 0;
-                        ?>
-                        <?php if ($followUpModuleAvailable) { ?>
-                            <div class="mb-3">
-                                <label class="form-label" for="url_follow_up_id">Follow-Up Case</label>
-                                <select class="form-select" id="url_follow_up_id" name="follow_up_id">
-                                    <option value="0">Auto (use the open case, or start a new one)</option>
-                                    <?php foreach ($followUpCaseOptions as $followUpCaseOption) { ?>
-                                        <option value="<?php echo (int) $followUpCaseOption['id']; ?>"><?php echo htmlspecialchars($followUpCaseOption['label'], ENT_QUOTES, 'UTF-8'); ?></option>
-                                    <?php } ?>
-                                </select>
-                                <div class="url-editor-note">Setting a Next Follow-Up Date below schedules it on this follow-up case, so it also shows in the Follow Up List.</div>
-                            </div>
-                        <?php } ?>
                         <div class="row g-3 mb-3">
                             <div class="col-12 col-md-4">
                                 <label class="form-label" for="url_next_follow_up_date">Next Follow-Up Date</label>

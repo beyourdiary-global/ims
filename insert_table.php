@@ -2287,7 +2287,6 @@ $customerFollowUpNotificationTable = defined('CUSTOMER_FOLLOW_UP_NOTIFICATION') 
 $createCustomerFollowUpSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpTable}` (
     `id` INT NOT NULL AUTO_INCREMENT,
     `platform` VARCHAR(30) NOT NULL DEFAULT '',
-    `case_source` VARCHAR(20) NOT NULL DEFAULT 'order',
     `order_id` INT NOT NULL DEFAULT 0,
     `order_no` VARCHAR(120) DEFAULT NULL,
     `customer_id` INT NOT NULL DEFAULT 0,
@@ -2351,9 +2350,6 @@ $customerFollowUpColumns = array(
     'update_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `update_date` DATE DEFAULT NULL AFTER `update_by`",
     'update_time' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `update_time` TIME DEFAULT NULL AFTER `update_date`",
     'status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `update_time`",
-    // 'order' = case opened from a received order; 'customer' = case opened straight
-    // from a customer page follow-up entry, which has no order behind it.
-    'case_source' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `case_source` VARCHAR(20) NOT NULL DEFAULT 'order' AFTER `platform`",
 );
 
 foreach ($customerFollowUpColumns as $columnName => $alterSql) {
@@ -2372,11 +2368,6 @@ migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'next_follow_up_date', "A
 migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_times', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_times` VARCHAR(255) DEFAULT NULL AFTER `next_follow_up_date`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_times`.");
 migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_day', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_day` VARCHAR(255) DEFAULT NULL AFTER `follow_up_times`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_day`.");
 migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'is_system_record', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `is_system_record` TINYINT(1) DEFAULT NULL AFTER `updated_at`", "Verified `" . USER_RECORD_LOG . "` includes `is_system_record`.");
-// Links a user record log row back to the follow-up case/round it belongs to, so the
-// customer page and the Follow Up List show the same follow-up instead of two copies.
-migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_id', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_id` INT DEFAULT NULL AFTER `follow_up_day`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_id`.");
-migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_round_id', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_round_id` INT DEFAULT NULL AFTER `follow_up_id`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_round_id`.");
-migrationEnsureIndex($conn, $db_cms, USER_RECORD_LOG, 'idx_url_follow_up', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD INDEX `idx_url_follow_up` (`follow_up_id`, `follow_up_round_id`)", "Verified `" . USER_RECORD_LOG . "` follow-up link index.");
 
 $createCustomerFollowUpRoundSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpRoundTable}` (
     `id` INT NOT NULL AUTO_INCREMENT,

@@ -1593,11 +1593,7 @@ if (!empty($customerTagLabelFilters)) {
                                             $customerAssignedTagIds = function_exists('customerTagExtractTagIds') ? customerTagExtractTagIds($customerTagRows) : array();
                                             $orderViewUrl = customerFollowUpPageBuildOrderViewUrl($rowPlatform, isset($row['order_id']) ? (int) $row['order_id'] : 0);
                                             $customerDetailUrl = customerFollowUpPageBuildCustomerDetailUrl($connect, isset($finance_connect) ? $finance_connect : null, $rowPlatform, $rowCustomerId);
-                                            // Cases opened from a customer page have no order behind them,
-                                            // so show that instead of a meaningless order id of 0.
-                                            $orderDisplayValue = customerFollowUpIsOrderlessCase($row)
-                                                ? 'No order (customer follow-up)'
-                                                : (string) (isset($row['order_no']) && $row['order_no'] !== '' ? $row['order_no'] : $row['order_id']);
+                                            $orderDisplayValue = (string) (isset($row['order_no']) && $row['order_no'] !== '' ? $row['order_no'] : $row['order_id']);
                                             $customerUsername = (string) (isset($row['customer_username']) ? $row['customer_username'] : '');
                                             $userRecordLogCustomerLabel = $customerUsername !== ''
                                                 ? $customerUsername
