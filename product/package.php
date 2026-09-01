@@ -88,6 +88,49 @@ if (!function_exists('packageFormatRelationDisplayName')) {
     }
 }
 
+if (!function_exists('packageBuildUniqueCopyValue')) {
+    /**
+     * Builds a value that does not clash with an existing active package, by appending
+     * the given suffix to the original ("Set A" -> "Set A (Copy)" -> "Set A (Copy 2)").
+     * Used when duplicating a package so the prefilled form can be saved straight away
+     * instead of failing the duplicate check on the value it copied.
+     */
+    function packageBuildUniqueCopyValue($connect, $columnName, $originalValue, $suffix)
+    {
+        $originalValue = trim((string) $originalValue);
+        if (!($connect instanceof mysqli) || $originalValue === '') {
+            return $originalValue;
+        }
+
+        $columnName = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $columnName);
+        if ($columnName === '') {
+            return $originalValue;
+        }
+
+        for ($attempt = 1; $attempt <= 50; $attempt++) {
+            $candidate = $originalValue . ' ' . $suffix . ($attempt > 1 ? (' ' . $attempt) : '');
+            $candidate = trim(preg_replace('/\s+/', ' ', $candidate));
+
+            $result = mysqli_query(
+                $connect,
+                "SELECT id FROM `" . PKG . "`
+                 WHERE status = 'A' AND `" . $columnName . "` = '" . mysqli_real_escape_string($connect, $candidate) . "'
+                 LIMIT 1"
+            );
+
+            if (!$result) {
+                return $candidate;
+            }
+
+            if (mysqli_num_rows($result) === 0) {
+                return $candidate;
+            }
+        }
+
+        return $originalValue . ' ' . $suffix . ' ' . time();
+    }
+}
+
 if (!function_exists('packageResolveActiveProductId')) {
     function packageResolveActiveProductId($connect, $productId, $productName = '')
     {
@@ -213,6 +256,40 @@ if ($act != 'I' && (!$result || !($row = $result->fetch_assoc()))) {
     $_SESSION['tempValConfirmBox'] = true;
     $act = "F";
 }
+
+// Copy Data: `act=I&copy_from=<id>` prefills the Add form from an existing package so the
+// user can adjust the details and save it as a new package. $dataId stays empty, so the
+// form still submits as an insert and the package being copied is never touched. Name and
+// Item Code get a "(Copy)" suffix because both identify a package elsewhere in the system.
+$copySourceRow = array();
+$copySourceLabel = '';
+$copyFromPackageId = 0;
+if ($act === 'I' && empty($dataId)) {
+    $requestedCopyFromId = trim((string) (!empty(input('copy_from')) ? input('copy_from') : post('copy_from')));
+    if ($requestedCopyFromId !== '' && ctype_digit($requestedCopyFromId) && (int) $requestedCopyFromId > 0) {
+        $copyFromPackageId = (int) $requestedCopyFromId;
+        $copyResult = getData('*', "id = '" . $copyFromPackageId . "' AND status = 'A'", '', $tblName, $connect);
+        $copyRow = ($copyResult && $copyResult->num_rows > 0) ? $copyResult->fetch_assoc() : null;
+
+        if (!is_array($copyRow)) {
+            $copyFromPackageId = 0;
+            $copySourceError = 'The package you tried to copy was not found or is no longer active.';
+        } else {
+            $copySourceLabel = packageFormatRelationDisplayName($copyRow);
+            $copySourceRow = $copyRow;
+            // The new package is its own record: drop the source identity and audit trail.
+            unset($copySourceRow['id'], $copySourceRow['create_by'], $copySourceRow['create_date'], $copySourceRow['create_time'], $copySourceRow['update_by'], $copySourceRow['update_date'], $copySourceRow['update_time']);
+            $copySourceRow['name'] = packageBuildUniqueCopyValue($connect, 'name', isset($copyRow['name']) ? $copyRow['name'] : '', '(Copy)');
+            $copySourceRow['item_code'] = packageBuildUniqueCopyValue($connect, 'item_code', isset($copyRow['item_code']) ? $copyRow['item_code'] : '', '(Copy)');
+
+            // Only prefill on the first load; once the form is posted the submitted values win.
+            if (!post('actionBtn')) {
+                $row = $copySourceRow;
+            }
+        }
+    }
+}
+
 //Delete Data
 if ($act == 'D') {
     deleteRecord($tblName, '', $dataId, $row['name'], $connect, $connect, $cdate, $ctime, $pageTitle);
@@ -748,7 +825,20 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
 </head>
 
 <body>
-    
+    <?php if ($copyFromPackageId > 0 && !post('actionBtn')) { ?>
+        <script>
+            // The shared form helper restores a saved draft over every field on
+            // DOMContentLoaded. A leftover Add draft would overwrite the values we just
+            // copied, so drop it here, while inline scripts still run before that event.
+            (function () {
+                if (typeof clearLocalStoragePreservingCustomerRecordFilters === "function") {
+                    clearLocalStoragePreservingCustomerRecordFilters();
+                } else if (window.localStorage) {
+                    window.localStorage.clear();
+                }
+            })();
+        </script>
+    <?php } ?>
 
     <div class="page-load-cover">
 
@@ -760,10 +850,26 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
         <div id="formContainer" class="container-fluid mt-2">
             <div class="col-12 col-md-12 formWidthAdjust">
                 <form id="form" method="post" novalidate>
+                    <?php if ($copyFromPackageId > 0) { ?>
+                        <input type="hidden" name="copy_from" value="<?php echo (int) $copyFromPackageId; ?>">
+                    <?php } ?>
                     <div class="form-group mb-5">
                         <h2>
                             <?php echo $pageActionTitle ?>
                         </h2>
+                        <?php if (isset($copySourceError)) { ?>
+                            <div class="alert alert-warning mt-3 mb-0" role="alert">
+                                <i class="fa-solid fa-triangle-exclamation me-1"></i>
+                                <?php echo htmlspecialchars($copySourceError, ENT_QUOTES, 'UTF-8'); ?>
+                            </div>
+                        <?php } else if ($copyFromPackageId > 0) { ?>
+                            <div class="alert alert-info mt-3 mb-0" role="alert">
+                                <i class="fa-solid fa-copy me-1"></i>
+                                Copied from <strong><?php echo htmlspecialchars($copySourceLabel, ENT_QUOTES, 'UTF-8'); ?></strong>.
+                                Review the details below &mdash; <strong>Name</strong> and <strong>Item Code</strong> already carry a
+                                &ldquo;(Copy)&rdquo; suffix so they stay unique. Saving creates a new package; the original is not changed.
+                            </div>
+                        <?php } ?>
                     </div>
                     <div class="row">
                         <div class="col-12 col-md-4">
