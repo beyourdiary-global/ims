@@ -257,15 +257,17 @@ if ($act != 'I' && (!$result || !($row = $result->fetch_assoc()))) {
     $act = "F";
 }
 
-// Copy Data: `act=I&copy_from=<id>` prefills the Add form from an existing package so the
+// Copy Data: `act=I&source_id=<id>` prefills the Add form from an existing package so the
 // user can adjust the details and save it as a new package. $dataId stays empty, so the
 // form still submits as an insert and the package being copied is never touched. Name and
 // Item Code get a "(Copy)" suffix because both identify a package elsewhere in the system.
+// The parameter is deliberately not named "copy_*": in an HTML attribute "&copy_from" is
+// parsed as the © entity, which silently breaks the link.
 $copySourceRow = array();
 $copySourceLabel = '';
 $copyFromPackageId = 0;
 if ($act === 'I' && empty($dataId)) {
-    $requestedCopyFromId = trim((string) (!empty(input('copy_from')) ? input('copy_from') : post('copy_from')));
+    $requestedCopyFromId = trim((string) (!empty(input('source_id')) ? input('source_id') : post('source_id')));
     if ($requestedCopyFromId !== '' && ctype_digit($requestedCopyFromId) && (int) $requestedCopyFromId > 0) {
         $copyFromPackageId = (int) $requestedCopyFromId;
         $copyResult = getData('*', "id = '" . $copyFromPackageId . "' AND status = 'A'", '', $tblName, $connect);
@@ -851,7 +853,7 @@ if (!empty($dataId) && ctype_digit((string) $dataId)) {
             <div class="col-12 col-md-12 formWidthAdjust">
                 <form id="form" method="post" novalidate>
                     <?php if ($copyFromPackageId > 0) { ?>
-                        <input type="hidden" name="copy_from" value="<?php echo (int) $copyFromPackageId; ?>">
+                        <input type="hidden" name="source_id" value="<?php echo (int) $copyFromPackageId; ?>">
                     <?php } ?>
                     <div class="form-group mb-5">
                         <h2>

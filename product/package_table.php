@@ -338,8 +338,14 @@ if (!$result) {
                                         <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
                                         <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                         <?php if (isActionAllowed("Add", $pinAccess)): ?>
+                                            <?php
+                                            // The query string must escape "&" and must not start a parameter with a
+                                            // legacy HTML entity name: "&copy_from" is parsed as "©_from", which
+                                            // corrupts the act value and lands the form on its error dialog.
+                                            $copyHref = $redirectPage . '?act=' . rawurlencode((string) $act_1) . '&source_id=' . (int) $row['id'];
+                                            ?>
                                             <a class="btn btn-secondary me-1 package-copy-btn"
-                                               href="<?= $redirectPage ?>?act=<?= $act_1 ?>&copy_from=<?= (int) $row['id'] ?>"
+                                               href="<?= htmlspecialchars($copyHref, ENT_QUOTES, 'UTF-8') ?>"
                                                title="Copy this package into a new one"
                                                data-package-name="<?= htmlspecialchars((string) $row['name'], ENT_QUOTES, 'UTF-8') ?>">
                                                 <i class="fas fa-copy"></i>
