@@ -1660,21 +1660,6 @@ if (!function_exists('customerFollowUpBuildReadableLogMessage')) {
             }
         }
 
-        $lines = array();
-        $lines[] = 'Follow-Up Action: ' . ($actionLabel !== '' ? $actionLabel : 'N/A');
-
-        $detailLines = array();
-        $appendLine($detailLines, 'Order No', $orderNo);
-        $appendLine($detailLines, 'Customer / Username', $customerLabel);
-        $appendLine($detailLines, 'Platform', $platformLabel);
-        if ($roundNo > 0) {
-            $detailLines[] = 'Follow-Up Round: ' . $roundNo;
-        }
-        $appendLine($detailLines, 'Next Follow-Up Date', $nextFollowUpDate);
-        $appendLine($detailLines, 'WhatsApp / Contact No', $contactNo);
-        $appendLine($detailLines, 'Action By', $actorDisplayName);
-        $appendLine($detailLines, 'Action Time', $actionDateTime);
-
         $rejectReason = trim((string) (isset($newValue['reject_reason']) ? $newValue['reject_reason'] : ''));
         if ($rejectReason === '' && strtolower($actionType) === 'reject_follow_up') {
             $rejectReason = $remark;
@@ -1699,60 +1684,93 @@ if (!function_exists('customerFollowUpBuildReadableLogMessage')) {
             $tagAction = stripos($actionType, 'remove') !== false ? 'Remove' : 'Add';
         }
 
-        if (strtolower($actionType) === 'reject_follow_up') {
-            $appendLine($detailLines, 'Reject Reason', $rejectReason);
-        }
-        if (strtolower($actionType) === 'approve_follow_up') {
-            $appendLine($detailLines, 'Comment', $remark);
-        }
-        if (strtolower($actionType) === 'request_postponement') {
-            $appendLine($detailLines, 'Current Assigned Follow-Up Date', $currentAssignedNextFollowUpDate);
-            $appendLine($detailLines, 'Postpone Reason', $postponeReason);
-            $appendLine($detailLines, 'Requested New Follow-Up Date', $requestedNextFollowUpDate);
-        }
-        if (strtolower($actionType) === 'reschedule_first_round_date') {
-            $appendLine($detailLines, 'Previous Next Follow-Up Date', $currentAssignedNextFollowUpDate);
-            $appendLine($detailLines, 'Updated Next Follow-Up Date', $nextFollowUpDate);
-        }
-        if (strtolower($actionType) === 'approve_postponement') {
-            $appendLine($detailLines, 'Approved New Follow-Up Date', $approvedNextFollowUpDate);
-        }
-        if (strtolower($actionType) === 'reject_postponement') {
-            $appendLine($detailLines, 'Postpone Reject Reason', $postponeRejectReason);
-        }
-        if (in_array(strtolower($actionType), array('mark_missed_follow_up', 'save_delay_reason'), true)) {
-            $appendLine($detailLines, 'Original Follow-Up Date', $missedOriginalDate);
-            $appendLine($detailLines, 'Delay Reason', $delayReason);
-        }
-        if (strtolower($actionType) === 'mark_lost_customer') {
-            $appendLine($detailLines, 'Lost Tag Name', $lostTagName);
-        }
-        if ($tagName !== '') {
-            $appendLine($detailLines, 'Tag Action', $tagAction);
-            $appendLine($detailLines, 'Tag Name', $tagName);
+        // Every action reports the same shape: the case it happened on, what the follow-up
+        // date moved from and to, why, then the message and who did it. Each action used to
+        // invent its own field names - seven labels for a follow-up date and five for a
+        // reason - which is what made a run of log entries hard to read side by side.
+        $normalizedActionType = strtolower($actionType);
+        $dateBefore = '';
+        $dateAfter = $nextFollowUpDate;
+        $reasonLabel = '';
+        $reasonText = '';
+
+        switch ($normalizedActionType) {
+            case 'reject_follow_up':
+                $reasonLabel = 'Reject';
+                $reasonText = $rejectReason;
+                break;
+            case 'approve_follow_up':
+                $reasonLabel = 'Comment';
+                $reasonText = $remark;
+                break;
+            case 'request_postponement':
+                $dateBefore = $currentAssignedNextFollowUpDate;
+                $dateAfter = $requestedNextFollowUpDate;
+                $reasonLabel = 'Postpone';
+                $reasonText = $postponeReason;
+                break;
+            case 'reschedule_first_round_date':
+                $dateBefore = $currentAssignedNextFollowUpDate;
+                break;
+            case 'approve_postponement':
+                $dateBefore = $currentAssignedNextFollowUpDate;
+                $dateAfter = $approvedNextFollowUpDate;
+                break;
+            case 'reject_postponement':
+                $reasonLabel = 'Postpone Rejected';
+                $reasonText = $postponeRejectReason;
+                break;
+            case 'mark_missed_follow_up':
+            case 'save_delay_reason':
+                $dateBefore = $missedOriginalDate;
+                $reasonLabel = 'Delay';
+                $reasonText = $delayReason;
+                break;
         }
 
-        if (!empty($detailLines)) {
+        $lines = array();
+        $lines[] = 'Follow-Up Action: ' . ($actionLabel !== '' ? $actionLabel : 'N/A');
+
+        // The case block is always printed in full, blanks included, so entries line up
+        // when they are read one after another on the customer timeline.
+        $lines[] = '';
+        $lines[] = 'Order No: ' . ($orderNo !== '' ? $orderNo : '-');
+        $lines[] = 'Customer / Username: ' . ($customerLabel !== '' ? $customerLabel : '-');
+        $lines[] = 'Platform: ' . ($platformLabel !== '' ? $platformLabel : '-');
+        $lines[] = 'Follow-Up Round: ' . ($roundNo > 0 ? $roundNo : '-');
+        $lines[] = 'WhatsApp / Contact No: ' . ($contactNo !== '' ? $contactNo : '-');
+
+        $changeLines = array();
+        $appendLine($changeLines, 'Follow-Up Date (Before)', $dateBefore);
+        $appendLine($changeLines, 'Follow-Up Date (After)', $dateAfter);
+        if ($reasonText !== '') {
+            $changeLines[] = 'Reason (' . $reasonLabel . '): ' . $reasonText;
+        }
+        if ($lostTagName !== '') {
+            $changeLines[] = 'Tag (Lost): ' . $lostTagName;
+        }
+        if ($tagName !== '') {
+            $changeLines[] = 'Tag (' . ($tagAction !== '' ? $tagAction : 'Update') . '): ' . $tagName;
+        }
+        if (!empty($changeLines)) {
             $lines[] = '';
-            foreach ($detailLines as $detailLine) {
-                $lines[] = $detailLine;
+            foreach ($changeLines as $changeLine) {
+                $lines[] = $changeLine;
             }
         }
 
         if ($messageShortcutLabel !== '' || $messageShortcutContent !== '') {
             $lines[] = '';
-            if ($messageShortcutLabel !== '') {
-                $lines[] = 'Message Shortcut:';
-                $lines[] = $messageShortcutLabel;
-            }
+            $lines[] = 'Message Shortcut: ' . ($messageShortcutLabel !== '' ? $messageShortcutLabel : '-');
             if ($messageShortcutContent !== '') {
-                if ($messageShortcutLabel !== '') {
-                    $lines[] = '';
-                }
                 $lines[] = 'Message Shortcut Content:';
                 $lines[] = $messageShortcutContent;
             }
         }
+
+        $lines[] = '';
+        $lines[] = 'Action By: ' . ($actorDisplayName !== '' ? $actorDisplayName : '-');
+        $lines[] = 'Action Time: ' . ($actionDateTime !== '' ? $actionDateTime : '-');
 
         return implode("\n", $lines);
     }
