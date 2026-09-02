@@ -4,6 +4,13 @@ $pageTitle = 'Waiting To Pack';
 $displayPageTitle = 'Waiting To Pack';
 $disablePinGroupPageTitleSync = true;
 
+// The page polls itself to notice orders that left To Pack in another tab. Buffer the
+// shared page chrome so that request can answer with JSON only.
+$waitingToPackAjax = isset($_GET['ajax']) && $_GET['ajax'] === 'status_check';
+if ($waitingToPackAjax) {
+    ob_start();
+}
+
 include_once '../menuHeader.php';
 include_once '../checkCurrentPagePin.php';
 
@@ -13,6 +20,60 @@ $allOrdersAccess = checkPinByGroupId($connect, 130);
 $canViewPage = isActionAllowed('View', $processingAccess) || isActionAllowed('View', $legacyProcessingAccess) || isActionAllowed('View', $allOrdersAccess);
 if (!$canViewPage) {
     renderNotificationScript('You do not have permission to view Waiting To Pack.', 'error', '../dashboard.php', 1200, true);
+    exit;
+}
+
+if (!function_exists('waitingToPackFetchActiveOrderKeys')) {
+    /**
+     * "platform|id" for every order still sitting in To Pack. The listing itself needs
+     * whole rows, but the poll only has to know which rows are still valid, so it reads
+     * ids alone and stays cheap enough to run every few seconds.
+     */
+    function waitingToPackFetchActiveOrderKeys($cmsConnect, $financeConnect)
+    {
+        $orderKeys = array();
+
+        foreach (shopeeOmsGetOrderSourceConfigs() as $platformKey => $platformConfig) {
+            $orderConnect = shopeeOmsGetOrderSourceDbConnection($cmsConnect, $financeConnect, $platformConfig);
+            if (!($orderConnect instanceof mysqli)) {
+                continue;
+            }
+
+            $statusCondition = shopeeOmsBuildOrderStatusInCondition($orderConnect, 'order_status', array('TP'));
+            if ($statusCondition === '') {
+                continue;
+            }
+
+            $result = mysqli_query($orderConnect, "SELECT id FROM `" . $platformConfig['table'] . "` WHERE status = 'A' AND " . $statusCondition);
+            if (!$result) {
+                continue;
+            }
+
+            while ($row = mysqli_fetch_assoc($result)) {
+                $orderId = isset($row['id']) ? (int) $row['id'] : 0;
+                if ($orderId > 0) {
+                    $orderKeys[] = $platformKey . '|' . $orderId;
+                }
+            }
+        }
+
+        return $orderKeys;
+    }
+}
+
+if ($waitingToPackAjax) {
+    // Deliberately before the view audit entry: polling must not fill the audit log.
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    if (!headers_sent()) {
+        header('Content-Type: application/json; charset=utf-8');
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+    }
+    echo json_encode(array(
+        'ok' => 1,
+        'keys' => waitingToPackFetchActiveOrderKeys($connect, $finance_connect),
+    ));
     exit;
 }
 
@@ -397,7 +458,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                         $recipientName = shopeeOmsGetOrderRecipientNameText($row, $rowSourceConfig);
                                         $orderViewUrl = shopeeOmsGetOrderSourceViewUrl($rowSourceConfig, (int) $row['id']);
                                         ?>
-                                        <tr>
+                                        <tr data-order-key="<?= htmlspecialchars($rowPlatform . '|' . (int) $row['id'], ENT_QUOTES, 'UTF-8') ?>">
                                             <td><?= $rowNumber++ ?></td>
                                             <td><?= htmlspecialchars(isset($platformTabs[$rowPlatform]) ? $platformTabs[$rowPlatform] : ucfirst($rowPlatform)) ?></td>
                                             <td>
@@ -511,6 +572,8 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
 
         
 
+        var waitingToPackTables = [];
+
         document.querySelectorAll('.waiting-to-pack-table-js').forEach(function (tableElement) {
             var detailRowCount = getValidDataTableRowCount(tableElement);
             if (detailRowCount === 0) {
@@ -541,7 +604,158 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                     });
                 });
                 table.draw(false);
+                var ownerPanel = tableElement.closest('[data-platform-panel]');
+                waitingToPackTables.push({
+                    platform: ownerPanel ? (ownerPanel.getAttribute('data-platform-panel') || '') : '',
+                    table: table
+                });
             });
+
+            // An order can leave To Pack from the scan link, which normally opens in another
+            // tab, so this page has to notice on its own instead of waiting for a manual
+            // refresh. Poll for the orders still in To Pack, drop the rows that left, and
+            // offer a refresh when orders arrive (those need a full render to show).
+            var waitingToPackStatusUrl = <?= json_encode('waiting_to_pack.php?ajax=status_check') ?>;
+            var waitingToPackPollMs = 20000;
+            var waitingToPackChecking = false;
+            var waitingToPackNewOrdersNotified = false;
+
+            // Rows outside the current DataTables page are detached from the DOM, so every
+            // count and lookup below goes through the DataTables API rather than the DOM.
+            function eachWaitingToPackRowKey(table, callback) {
+                table.rows().nodes().each(function (node) {
+                    var key = node && node.getAttribute ? node.getAttribute('data-order-key') : '';
+                    if (key) {
+                        callback(key);
+                    }
+                });
+            }
+
+            function collectWaitingToPackRenderedKeys() {
+                var keys = {};
+                waitingToPackTables.forEach(function (entry) {
+                    if (entry.platform !== 'all') {
+                        return;
+                    }
+                    eachWaitingToPackRowKey(entry.table, function (key) {
+                        keys[key] = true;
+                    });
+                });
+                return keys;
+            }
+
+            function refreshWaitingToPackTabCounts() {
+                var countsByPlatform = {};
+                waitingToPackTables.forEach(function (entry) {
+                    var total = 0;
+                    eachWaitingToPackRowKey(entry.table, function () {
+                        total++;
+                    });
+                    countsByPlatform[entry.platform] = total;
+                });
+
+                document.querySelectorAll('[data-platform-tab]').forEach(function (button) {
+                    var platformKey = button.getAttribute('data-platform-tab') || 'all';
+                    var countBadge = button.querySelector('.oms-platform-count');
+                    if (countBadge && Object.prototype.hasOwnProperty.call(countsByPlatform, platformKey)) {
+                        countBadge.textContent = countsByPlatform[platformKey];
+                    }
+                });
+            }
+
+            function showWaitingToPackRefreshNotice() {
+                if (waitingToPackNewOrdersNotified || document.getElementById('waitingToPackRefreshNotice')) {
+                    return;
+                }
+                waitingToPackNewOrdersNotified = true;
+
+                var notice = document.createElement('div');
+                notice.id = 'waitingToPackRefreshNotice';
+                notice.className = 'alert alert-info d-flex align-items-center justify-content-between gap-2';
+                notice.innerHTML = '<span>New To Pack orders have arrived.</span>';
+
+                var reloadButton = document.createElement('button');
+                reloadButton.type = 'button';
+                reloadButton.className = 'btn btn-sm btn-primary';
+                reloadButton.textContent = 'Refresh';
+                reloadButton.addEventListener('click', function () {
+                    window.location.reload();
+                });
+                notice.appendChild(reloadButton);
+
+                var tabsCard = document.getElementById('omsPlatformTabs');
+                if (tabsCard && tabsCard.parentNode && tabsCard.parentNode.parentNode) {
+                    tabsCard.parentNode.parentNode.insertBefore(notice, tabsCard.parentNode.nextSibling);
+                }
+            }
+
+            function removeWaitingToPackRows(staleKeys) {
+                if (!staleKeys.length) {
+                    return;
+                }
+
+                waitingToPackTables.forEach(function (entry) {
+                    entry.table.rows(function (index, data, node) {
+                        var key = node && node.getAttribute ? node.getAttribute('data-order-key') : '';
+                        return key !== '' && staleKeys.indexOf(key) !== -1;
+                    }).remove();
+                    entry.table.draw(false);
+                });
+
+                refreshWaitingToPackTabCounts();
+            }
+
+            function checkWaitingToPackStatuses() {
+                if (waitingToPackChecking) {
+                    return;
+                }
+                waitingToPackChecking = true;
+
+                fetch(waitingToPackStatusUrl, { credentials: 'same-origin', headers: { 'X-Requested-With': 'XMLHttpRequest' } })
+                    .then(function (response) {
+                        return response.ok ? response.json() : null;
+                    })
+                    .then(function (payload) {
+                        if (!payload || !payload.ok || !Array.isArray(payload.keys)) {
+                            return;
+                        }
+
+                        var stillActive = {};
+                        payload.keys.forEach(function (key) {
+                            stillActive[key] = true;
+                        });
+
+                        var renderedKeys = collectWaitingToPackRenderedKeys();
+                        var staleKeys = Object.keys(renderedKeys).filter(function (key) {
+                            return !stillActive[key];
+                        });
+                        removeWaitingToPackRows(staleKeys);
+
+                        var hasNewOrders = payload.keys.some(function (key) {
+                            return !renderedKeys[key];
+                        });
+                        if (hasNewOrders) {
+                            showWaitingToPackRefreshNotice();
+                        }
+                    })
+                    .catch(function () {
+                        // A failed poll is not worth interrupting the user; the next one retries.
+                    })
+                    .then(function () {
+                        waitingToPackChecking = false;
+                    });
+            }
+
+            window.setInterval(checkWaitingToPackStatuses, waitingToPackPollMs);
+
+            // The common case: the scan link was opened in another tab and the user comes
+            // back here, so check the moment this tab becomes visible again.
+            document.addEventListener('visibilitychange', function () {
+                if (document.visibilityState === 'visible') {
+                    checkWaitingToPackStatuses();
+                }
+            });
+            window.addEventListener('focus', checkWaitingToPackStatuses);
 
             var hiddenPlatformInput = document.getElementById('waiting_to_pack_platform_section');
 
