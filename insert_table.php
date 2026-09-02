@@ -2354,6 +2354,9 @@ $customerFollowUpColumns = array(
     // 'order' = case opened from a received order; 'customer' = case opened straight
     // from a customer page follow-up entry, which has no order behind it.
     'case_source' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `case_source` VARCHAR(20) NOT NULL DEFAULT 'order' AFTER `platform`",
+    // JSON snapshot of the follow-up this case carried before a newer order took it over,
+    // so the single per-customer record can still show what came before.
+    'previous_follow_up_info' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpTable}` ADD COLUMN `previous_follow_up_info` TEXT DEFAULT NULL AFTER `remark`",
 );
 
 foreach ($customerFollowUpColumns as $columnName => $alterSql) {
@@ -2452,6 +2455,9 @@ $customerFollowUpRoundColumns = array(
     'update_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `update_date` DATE DEFAULT NULL AFTER `update_by`",
     'update_time' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `update_time` TIME DEFAULT NULL AFTER `update_date`",
     'status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `status` CHAR(1) NOT NULL DEFAULT 'A' AFTER `update_time`",
+    // 'Y' once a newer order restarted the follow-up cycle on the same customer case. The
+    // round stays active so its history survives, but it is no longer the current round.
+    'superseded' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `superseded` CHAR(1) NOT NULL DEFAULT 'N' AFTER `round_status`",
 );
 
 foreach ($customerFollowUpRoundColumns as $columnName => $alterSql) {

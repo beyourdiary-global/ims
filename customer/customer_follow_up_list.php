@@ -788,6 +788,7 @@ $listSql = "SELECT
         ON r.`follow_up_id` = f.`id`
        AND r.`round_no` = f.`current_round_no`
        AND r.`status` = 'A'
+       " . customerFollowUpBuildCurrentRoundCondition($connect, 'r') . "
     WHERE " . implode(' AND ', $whereConditions) . "
     ORDER BY
         CASE WHEN r.`next_follow_up_date` IS NULL THEN 1 ELSE 0 END ASC,
@@ -1974,6 +1975,24 @@ if (!empty($customerTagLabelFilters)) {
                                                     <div class="text-muted small">Round <?= $roundNo ?></div>
                                                     <?php if ($missedOriginalDate !== '') { ?>
                                                         <div class="delay-subtext">Missed Original Date: <?= htmlspecialchars($missedOriginalDate, ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <?php } ?>
+                                                    <?php
+                                                    // A newer order took this case over, so show the follow-up it replaced
+                                                    // instead of losing it along with the separate record it used to have.
+                                                    $previousFollowUpInfo = customerFollowUpDecodePreviousFollowUpInfo(isset($row['previous_follow_up_info']) ? $row['previous_follow_up_info'] : '');
+                                                    if (!empty($previousFollowUpInfo)) {
+                                                        $previousOrderLabel = trim((string) (isset($previousFollowUpInfo['order_no']) ? $previousFollowUpInfo['order_no'] : ''));
+                                                        if ($previousOrderLabel === '') {
+                                                            $previousOrderLabel = '#' . (int) (isset($previousFollowUpInfo['order_id']) ? $previousFollowUpInfo['order_id'] : 0);
+                                                        }
+                                                        $previousDateLabel = trim((string) (isset($previousFollowUpInfo['next_follow_up_date']) ? $previousFollowUpInfo['next_follow_up_date'] : ''));
+                                                        ?>
+                                                        <div class="delay-subtext">
+                                                            Overwrote previous follow-up:
+                                                            <?= htmlspecialchars($previousDateLabel !== '' ? $previousDateLabel : 'no date', ENT_QUOTES, 'UTF-8') ?>
+                                                            (Round <?= max(1, (int) (isset($previousFollowUpInfo['round_no']) ? $previousFollowUpInfo['round_no'] : 1)) ?>,
+                                                            Order <?= htmlspecialchars($previousOrderLabel, ENT_QUOTES, 'UTF-8') ?>)
+                                                        </div>
                                                     <?php } ?>
                                                 </td>
                                                 <td>

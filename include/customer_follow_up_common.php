@@ -58,6 +58,59 @@ if (!function_exists('customerFollowUpSupportsCaseSource')) {
     }
 }
 
+if (!function_exists('customerFollowUpSupportsRoundSuperseded')) {
+    function customerFollowUpSupportsRoundSuperseded($connect)
+    {
+        return $connect instanceof mysqli
+            && function_exists('shopeeOmsTableHasColumn')
+            && defined('dbname')
+            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP_ROUND, 'superseded');
+    }
+}
+
+if (!function_exists('customerFollowUpBuildCurrentRoundCondition')) {
+    /**
+     * Excludes rounds left behind by an earlier order on the same customer case. Without
+     * it a case that restarted its cycle matches both the old and the new round of the
+     * same number, which duplicates the case in every listing that joins on the round.
+     */
+    function customerFollowUpBuildCurrentRoundCondition($connect, $roundAlias = 'r')
+    {
+        if (!customerFollowUpSupportsRoundSuperseded($connect)) {
+            return '';
+        }
+
+        $roundAlias = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $roundAlias);
+        $prefix = $roundAlias !== '' ? ('`' . $roundAlias . '`.') : '';
+
+        return " AND IFNULL(" . $prefix . "`superseded`, 'N') <> 'Y'";
+    }
+}
+
+if (!function_exists('customerFollowUpSupportsPreviousFollowUpInfo')) {
+    function customerFollowUpSupportsPreviousFollowUpInfo($connect)
+    {
+        return $connect instanceof mysqli
+            && function_exists('shopeeOmsTableHasColumn')
+            && defined('dbname')
+            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP, 'previous_follow_up_info');
+    }
+}
+
+if (!function_exists('customerFollowUpDecodePreviousFollowUpInfo')) {
+    function customerFollowUpDecodePreviousFollowUpInfo($rawValue)
+    {
+        $rawValue = trim((string) $rawValue);
+        if ($rawValue === '') {
+            return array();
+        }
+
+        $decoded = json_decode($rawValue, true);
+
+        return is_array($decoded) ? $decoded : array();
+    }
+}
+
 if (!function_exists('customerFollowUpIsOrderlessCase')) {
     function customerFollowUpIsOrderlessCase($followUpRow)
     {
@@ -649,6 +702,7 @@ if (!function_exists('customerFollowUpFetchCurrentRound')) {
                 WHERE `follow_up_id` = " . $followUpId . "
                   AND `round_no` = " . $roundNo . "
                   AND `status` = 'A'
+                  " . customerFollowUpBuildCurrentRoundCondition($connect, '') . "
                 ORDER BY `id` DESC
                 LIMIT 1";
         $result = mysqli_query($connect, $sql);
@@ -3887,6 +3941,7 @@ if (!function_exists('customerFollowUpProcessDueNotifications')) {
                     ON r.`follow_up_id` = f.`id`
                    AND r.`round_no` = f.`current_round_no`
                    AND r.`status` = 'A'
+                   " . customerFollowUpBuildCurrentRoundCondition($connect, 'r') . "
                 WHERE f.`status` = 'A'
                   AND " . $effectiveDateSql . " = '" . customerFollowUpEscape($connect, $targetDate) . "'
                   AND (
@@ -3972,6 +4027,7 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                     ON r.`follow_up_id` = f.`id`
                    AND r.`round_no` = f.`current_round_no`
                    AND r.`status` = 'A'
+                   " . customerFollowUpBuildCurrentRoundCondition($connect, 'r') . "
                 WHERE f.`status` = 'A'
                   AND " . $effectiveDateSql . " IS NOT NULL
                   AND " . $effectiveDateSql . " < '" . customerFollowUpEscape($connect, $today) . "'
@@ -4085,6 +4141,7 @@ if (!function_exists('customerFollowUpProcessLostCases')) {
                    AND r.`round_no` = 6
                    AND r.`status` = 'A'
                    AND LOWER(r.`round_status`) = 'done'
+                   " . customerFollowUpBuildCurrentRoundCondition($connect, 'r') . "
                 WHERE f.`status` = 'A'
                   AND LOWER(IFNULL(f.`current_status`, '')) <> 'lost'
                   AND IFNULL(f.`lost_tag_added`, 'N') <> 'Y'";
@@ -4215,6 +4272,188 @@ if (!function_exists('customerFollowUpProcessLostCases')) {
     }
 }
 
+if (!function_exists('customerFollowUpFetchOpenCaseByCustomer')) {
+    /**
+     * The customer's one live follow-up case, if they have one. Cases already finished
+     * (Done) or written off (Lost) are not reused, so a returning customer starts fresh
+     * instead of reopening a closed record.
+     */
+    function customerFollowUpFetchOpenCaseByCustomer($connect, $platform, $customerId)
+    {
+        foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
+            $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
+            if (in_array($caseStatus, array('done', 'lost'), true)) {
+                continue;
+            }
+
+            return $caseRow;
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('customerFollowUpTakeOverCaseWithNewOrder')) {
+    /**
+     * Points an existing customer case at a newly received order and restarts its
+     * follow-up cycle. The rounds already recorded stay in the table, flagged as
+     * superseded so they keep their history without being mistaken for the current round,
+     * and the follow-up date being replaced is snapshotted onto the case and written to
+     * the action log as an explicit overwrite.
+     *
+     * Returns the follow-up id on success, 0 when the caller should fall back to creating
+     * a separate case.
+     */
+    function customerFollowUpTakeOverCaseWithNewOrder($connect, $existingCaseRow, $newOrderData)
+    {
+        $followUpId = isset($existingCaseRow['id']) ? (int) $existingCaseRow['id'] : 0;
+        if (!($connect instanceof mysqli) || $followUpId <= 0) {
+            return 0;
+        }
+
+        // Without the superseded flag the old rounds would still answer as the current
+        // round, so leave the case alone rather than corrupting it.
+        if (!customerFollowUpSupportsRoundSuperseded($connect)) {
+            return 0;
+        }
+
+        $actorUserId = (int) (isset($newOrderData['actor_user_id']) ? $newOrderData['actor_user_id'] : 0);
+        $newOrderId = (int) (isset($newOrderData['order_id']) ? $newOrderData['order_id'] : 0);
+        if ($actorUserId <= 0 || $newOrderId <= 0) {
+            return 0;
+        }
+
+        $currentRoundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        $previousInfo = array(
+            'order_id' => (int) (isset($existingCaseRow['order_id']) ? $existingCaseRow['order_id'] : 0),
+            'order_no' => trim((string) (isset($existingCaseRow['order_no']) ? $existingCaseRow['order_no'] : '')),
+            'package_name' => trim((string) (isset($existingCaseRow['package_name']) ? $existingCaseRow['package_name'] : '')),
+            'received_date' => trim((string) (isset($existingCaseRow['received_date']) ? $existingCaseRow['received_date'] : '')),
+            'round_no' => (int) (isset($currentRoundRow['round_no']) ? $currentRoundRow['round_no'] : (isset($existingCaseRow['current_round_no']) ? $existingCaseRow['current_round_no'] : 0)),
+            'next_follow_up_date' => trim((string) (isset($currentRoundRow['next_follow_up_date']) ? $currentRoundRow['next_follow_up_date'] : '')),
+            'round_status' => customerFollowUpNormalizeStatus(isset($currentRoundRow['round_status']) ? $currentRoundRow['round_status'] : ''),
+            'replaced_on' => customerFollowUpNowDate(),
+        );
+
+        $today = customerFollowUpNowDate();
+        $nowTime = customerFollowUpNowTime();
+        $receivedDate = trim((string) (isset($newOrderData['received_date']) ? $newOrderData['received_date'] : '')) !== ''
+            ? trim((string) $newOrderData['received_date'])
+            : $today;
+
+        $supersedeSql = "UPDATE `" . CUSTOMER_FOLLOW_UP_ROUND . "`
+                         SET `superseded` = 'Y',
+                             `update_by` = '" . customerFollowUpEscape($connect, (string) $actorUserId) . "',
+                             `update_date` = '" . customerFollowUpEscape($connect, $today) . "',
+                             `update_time` = '" . customerFollowUpEscape($connect, $nowTime) . "'
+                         WHERE `follow_up_id` = " . $followUpId . "
+                           AND `status` = 'A'
+                           AND IFNULL(`superseded`, 'N') <> 'Y'";
+        if (!mysqli_query($connect, $supersedeSql)) {
+            return 0;
+        }
+
+        $caseFields = array(
+            'order_id' => $newOrderId,
+            'order_no' => trim((string) (isset($newOrderData['order_no']) ? $newOrderData['order_no'] : '')),
+            'package_name' => trim((string) (isset($newOrderData['package_name']) ? $newOrderData['package_name'] : '')),
+            'received_date' => $receivedDate,
+            'customer_type' => strtolower(trim((string) (isset($newOrderData['customer_type']) ? $newOrderData['customer_type'] : ''))) === 'return' ? 'return' : 'new',
+            'purchase_count_snapshot' => (int) (isset($newOrderData['purchase_count_snapshot']) ? $newOrderData['purchase_count_snapshot'] : 0),
+            'current_round_no' => 1,
+            'current_status' => '',
+            'follow_up_started' => 'Y',
+            'update_by' => (string) $actorUserId,
+            'update_date' => $today,
+            'update_time' => $nowTime,
+        );
+
+        $newCustomerName = trim((string) (isset($newOrderData['customer_name']) ? $newOrderData['customer_name'] : ''));
+        if ($newCustomerName !== '') {
+            $caseFields['customer_name'] = $newCustomerName;
+        }
+        $newCustomerUsername = trim((string) (isset($newOrderData['customer_username']) ? $newOrderData['customer_username'] : ''));
+        if ($newCustomerUsername !== '') {
+            $caseFields['customer_username'] = $newCustomerUsername;
+        }
+        $newContactNo = trim((string) (isset($newOrderData['contact_no']) ? $newOrderData['contact_no'] : ''));
+        if ($newContactNo !== '') {
+            $caseFields['contact_no'] = $newContactNo;
+        }
+        if (customerFollowUpSupportsPreviousFollowUpInfo($connect)) {
+            $caseFields['previous_follow_up_info'] = json_encode($previousInfo);
+        }
+
+        if (!customerFollowUpUpdateCaseRecord($connect, $followUpId, $caseFields)) {
+            return 0;
+        }
+
+        $newRoundId = customerFollowUpCreateFollowUpRound($connect, array(
+            'follow_up_id' => $followUpId,
+            'round_no' => 1,
+            'stage_no' => 1,
+            'previous_follow_up_date' => $receivedDate,
+            'approval_status' => 'pending',
+            'postpone_status' => 'none',
+            'round_status' => '',
+            'create_by' => (string) $actorUserId,
+        ));
+
+        if ($newRoundId <= 0) {
+            return 0;
+        }
+
+        $overwriteRemark = 'Overwrite follow up date: order '
+            . ($previousInfo['order_no'] !== '' ? $previousInfo['order_no'] : ('#' . $previousInfo['order_id']))
+            . ' round ' . max(1, (int) $previousInfo['round_no'])
+            . ' was following up on ' . ($previousInfo['next_follow_up_date'] !== '' ? $previousInfo['next_follow_up_date'] : 'no date')
+            . ', replaced by order ' . ($caseFields['order_no'] !== '' ? $caseFields['order_no'] : ('#' . $newOrderId))
+            . ' received on ' . $receivedDate . '.';
+
+        customerFollowUpInsertActionLog($connect, array(
+            'follow_up_id' => $followUpId,
+            'round_id' => $newRoundId,
+            'action_type' => 'overwrite_follow_up_date',
+            'old_value' => $previousInfo,
+            'new_value' => array(
+                'order_id' => $newOrderId,
+                'order_no' => $caseFields['order_no'],
+                'received_date' => $receivedDate,
+                'round_no' => 1,
+            ),
+            'remark' => $overwriteRemark,
+            'action_by' => (string) $actorUserId,
+        ));
+
+        if (function_exists('audit_log')) {
+            $actorDisplayName = function_exists('customerFollowUpGetUserDisplayName')
+                ? customerFollowUpGetUserDisplayName($connect, $actorUserId)
+                : (string) $actorUserId;
+
+            audit_log(array(
+                'log_act'     => 'edit',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'query_rec'   => $followUpId,
+                'query_table' => CUSTOMER_FOLLOW_UP,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'oldval'      => json_encode($previousInfo),
+                'changes'     => json_encode($caseFields),
+                'act_msg'     => $actorDisplayName . ' overwrote the follow-up on case [<b> ID = ' . $followUpId . '</b> ] with a newly received order.',
+            ));
+        }
+
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpFetchRoundById($connect, $newRoundId);
+        if (!empty($followUpRow)) {
+            customerFollowUpApplyCustomerTypeTags($connect, $followUpRow, $roundRow, (string) $actorUserId);
+        }
+
+        return $followUpId;
+    }
+}
+
 if (!function_exists('customerFollowUpStartFromReceivedOrder')) {
     function customerFollowUpStartFromReceivedOrder($connect, $platform, $orderId, $orderNo, $customerId, $customerUsername, $packageName, $receivedDate, $purchaseCountSnapshot, $currentUserId, $customerName = '', $contactNo = '')
     {
@@ -4233,6 +4472,31 @@ if (!function_exists('customerFollowUpStartFromReceivedOrder')) {
         }
 
         $customerType = $purchaseCountSnapshot >= 1 ? 'return' : 'new';
+
+        // A customer gets one follow-up record, not one per order. When the customer
+        // already has an open case, the new order takes it over: the case moves to the new
+        // order and restarts its cycle, with the follow-up it was carrying kept both as a
+        // snapshot on the record and as an action log entry.
+        $openCustomerCase = customerFollowUpFetchOpenCaseByCustomer($connect, $platform, (int) $customerId);
+        if (!empty($openCustomerCase)) {
+            $takeoverFollowUpId = customerFollowUpTakeOverCaseWithNewOrder($connect, $openCustomerCase, array(
+                'order_id' => $orderId,
+                'order_no' => $orderNo,
+                'customer_name' => $customerName,
+                'customer_username' => $customerUsername,
+                'package_name' => $packageName,
+                'received_date' => $receivedDate,
+                'customer_type' => $customerType,
+                'purchase_count_snapshot' => $purchaseCountSnapshot,
+                'contact_no' => $contactNo,
+                'actor_user_id' => $currentUserId,
+            ));
+
+            if ($takeoverFollowUpId > 0) {
+                return $takeoverFollowUpId;
+            }
+        }
+
         $followUpId = customerFollowUpCreateFollowUpCase($connect, array(
             'platform' => $platform,
             'order_id' => $orderId,
@@ -4376,9 +4640,10 @@ if (!function_exists('customerFollowUpResolveCaseForCustomerLog')) {
     /**
      * Picks which follow-up case a customer page entry belongs to:
      *   1. an explicitly chosen case, when the user selected one;
-     *   2. the customer's only open case, when there is exactly one;
+     *   2. the customer's open case, since a customer only ever has one;
      *   3. otherwise a new customer-sourced case.
-     * Cases that are already closed (Done / Lost) are never reused.
+     * Cases that are already closed (Done / Lost) are never reused. Returns an empty
+     * array when the case exists but is not the actor's to touch.
      */
     function customerFollowUpResolveCaseForCustomerLog($connect, $platform, $customerId, $requestedFollowUpId, $actorUserId, $options = array())
     {
@@ -4410,32 +4675,16 @@ if (!function_exists('customerFollowUpResolveCaseForCustomerLog')) {
             return $requestedRow;
         }
 
-        $openCases = array();
-        foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
-            $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
-            if (in_array($caseStatus, array('done', 'lost'), true)) {
-                continue;
+        // A customer has at most one live case, so reuse it rather than opening a second
+        // record. When it is assigned to somebody else the caller is told, because quietly
+        // starting a parallel case is exactly the duplicate this module is meant to avoid.
+        $openCase = customerFollowUpFetchOpenCaseByCustomer($connect, $platform, $customerId);
+        if (!empty($openCase)) {
+            if (!customerFollowUpCanUserManageCase($openCase, $actorUserId, $actorUserGroupId, $connect)) {
+                return array();
             }
-            // Cases belonging to somebody else are left alone; the entry opens its own
-            // customer-sourced case instead of quietly rescheduling another user's work.
-            if (!customerFollowUpCanUserManageCase($caseRow, $actorUserId, $actorUserGroupId, $connect)) {
-                continue;
-            }
-            $openCases[] = $caseRow;
-        }
 
-        if (count($openCases) === 1) {
-            return $openCases[0];
-        }
-
-        if (!empty($openCases)) {
-            // More than one open case and no explicit pick: fall back to the most recent
-            // customer-sourced case so repeated customer page entries stay on one case.
-            foreach ($openCases as $caseRow) {
-                if (customerFollowUpIsOrderlessCase($caseRow)) {
-                    return $caseRow;
-                }
-            }
+            return $openCase;
         }
 
         $newFollowUpId = customerFollowUpStartFromCustomer($connect, $platform, $customerId, (int) $actorUserId, $options);
@@ -4492,7 +4741,7 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
         if (empty($followUpRow)) {
             $result['message'] = $requestedFollowUpId > 0
                 ? 'That follow-up case does not belong to this customer, or it is not assigned to you.'
-                : 'Unable to resolve a follow-up case for this customer.';
+                : 'This customer already has a follow-up case assigned to someone else, so it was left untouched.';
             return $result;
         }
 
