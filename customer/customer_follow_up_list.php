@@ -1619,12 +1619,12 @@ if (!empty($customerTagLabelFilters)) {
 
                                             $canManageOwnCase = customerFollowUpCanUserManageCase($row, USER_ID, USER_GROUP, $connect);
                                             $hasMissingNextFollowUpDate = customerFollowUpIsEmptyDateValue(isset($row['next_follow_up_date']) ? $row['next_follow_up_date'] : '');
-                                            $canAppeal = $canManageOwnCase && $roundStatus === 'Rejected' && $roundNo <= 6;
+                                            $canAppeal = $canManageOwnCase && $roundStatus === 'Rejected' && $roundNo <= customerFollowUpGetMaxRoundNo();
                                             $canViewAppeal = !empty($latestAppealLog);
                                             $canSubmit = !$canAppeal
                                                 && $canManageOwnCase
                                                 && !in_array($roundStatus, array('Pending Approval', 'Approved', 'Postponed', 'Missed Follow-Up', 'Done', 'Lost', 'Rejected'), true)
-                                                && $roundNo <= 6;
+                                                && $roundNo <= customerFollowUpGetMaxRoundNo();
                                             $canSaveDelayReason = $canManageOwnCase && customerFollowUpRequiresDelayReasonBeforeMissedAction($row);
                                             $canComplete = $canManageOwnCase && customerFollowUpCanCompleteRound($row);
                                             $canRescheduleFirstRound = $canManageOwnCase
