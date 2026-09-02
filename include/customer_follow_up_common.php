@@ -58,6 +58,18 @@ if (!function_exists('customerFollowUpSupportsCaseSource')) {
     }
 }
 
+if (!function_exists('customerFollowUpGetMaxRoundNo')) {
+    /**
+     * The last round a case can reach. Completing it marks the case Done, and the lost
+     * cron measures from that completion, so every place that means "the final round"
+     * reads this rather than hardcoding the number.
+     */
+    function customerFollowUpGetMaxRoundNo()
+    {
+        return 20;
+    }
+}
+
 if (!function_exists('customerFollowUpSupportsRoundSuperseded')) {
     function customerFollowUpSupportsRoundSuperseded($connect)
     {
@@ -900,7 +912,7 @@ if (!function_exists('customerFollowUpCalculateMaxAllowedNextFollowUpDate')) {
             return array(
                 'success' => true,
                 'max_date' => date('Y-m-d', strtotime($today . ' +6 months')),
-                'rule_label' => 'Return Customer round 1-6 max date = today + 6 months.',
+                'rule_label' => 'Return Customer max date = today + 6 months.',
             );
         }
 
@@ -939,7 +951,7 @@ if (!function_exists('customerFollowUpCalculateMaxAllowedNextFollowUpDate')) {
         return array(
             'success' => true,
             'max_date' => date('Y-m-d', strtotime($previousDate . ' +3 months')),
-            'rule_label' => 'New Customer round 4-6 max date = previous follow-up date + 3 months.',
+            'rule_label' => 'New Customer round 4 onwards max date = previous follow-up date + 3 months.',
         );
     }
 }
@@ -3185,7 +3197,7 @@ if (!function_exists('customerFollowUpCompleteCurrentRound')) {
         }
 
         $nextRoundNo = (int) (isset($followUpRow['current_round_no']) ? $followUpRow['current_round_no'] : 1);
-        if ($nextRoundNo < 6) {
+        if ($nextRoundNo < customerFollowUpGetMaxRoundNo()) {
             $nextRoundNo++;
             $nextRoundRow = customerFollowUpFetchCurrentRound($connect, $followUpId, $nextRoundNo);
             if (empty($nextRoundRow)) {
@@ -3238,7 +3250,7 @@ if (!function_exists('customerFollowUpCompleteCurrentRound')) {
         customerFollowUpHandleRoundThreeCompletionTags($connect, isset($GLOBALS['finance_connect']) ? $GLOBALS['finance_connect'] : $connect, $updatedFollowUpRow, $updatedRoundRow, (string) $actorUserId);
 
         mysqli_commit($connect);
-        return array('success' => true, 'message' => (int) $followUpRow['current_round_no'] >= 6 ? 'Round 6 completed. Follow-up case marked as Done.' : 'Follow-up completed and next round placeholder is ready.');
+        return array('success' => true, 'message' => (int) $followUpRow['current_round_no'] >= customerFollowUpGetMaxRoundNo() ? ('Round ' . customerFollowUpGetMaxRoundNo() . ' completed. Follow-up case marked as Done.') : 'Follow-up completed and next round placeholder is ready.');
     }
 }
 
@@ -4138,7 +4150,7 @@ if (!function_exists('customerFollowUpProcessLostCases')) {
                 FROM `" . CUSTOMER_FOLLOW_UP . "` f
                 INNER JOIN `" . CUSTOMER_FOLLOW_UP_ROUND . "` r
                     ON r.`follow_up_id` = f.`id`
-                   AND r.`round_no` = 6
+                   AND r.`round_no` = " . customerFollowUpGetMaxRoundNo() . "
                    AND r.`status` = 'A'
                    AND LOWER(r.`round_status`) = 'done'
                    " . customerFollowUpBuildCurrentRoundCondition($connect, 'r') . "
@@ -4343,11 +4355,11 @@ if (!function_exists('customerFollowUpTakeOverCaseWithNewOrder')) {
             : $today;
 
         // Rounds count the customer's follow-up history, not one order's, so the new order
-        // continues the sequence. Six stays the ceiling the rest of the module works to: a
-        // case that completes round 6 is marked Done and is no longer reused, so reaching
-        // the cap here only happens while round 6 is still open.
+        // continues the sequence, up to the module-wide ceiling. A case that completes the
+        // final round is marked Done and is no longer reused, so the cap only bites here
+        // while that last round is still open.
         $previousRoundNo = max(1, (int) (isset($existingCaseRow['current_round_no']) ? $existingCaseRow['current_round_no'] : 1));
-        $nextRoundNo = min(6, $previousRoundNo + 1);
+        $nextRoundNo = min(customerFollowUpGetMaxRoundNo(), $previousRoundNo + 1);
 
         $supersedeSql = "UPDATE `" . CUSTOMER_FOLLOW_UP_ROUND . "`
                          SET `superseded` = 'Y',
