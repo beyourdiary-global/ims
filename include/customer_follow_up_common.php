@@ -71,7 +71,7 @@ if (!function_exists('customerFollowUpSupportsRoundSuperseded')) {
 if (!function_exists('customerFollowUpBuildCurrentRoundCondition')) {
     /**
      * Excludes rounds left behind by an earlier order on the same customer case. Without
-     * it a case that restarted its cycle matches both the old and the new round of the
+     * it a case taken over by a newer order matches both the old and the new round of the
      * same number, which duplicates the case in every listing that joins on the round.
      */
     function customerFollowUpBuildCurrentRoundCondition($connect, $roundAlias = 'r')
@@ -4295,11 +4295,12 @@ if (!function_exists('customerFollowUpFetchOpenCaseByCustomer')) {
 
 if (!function_exists('customerFollowUpTakeOverCaseWithNewOrder')) {
     /**
-     * Points an existing customer case at a newly received order and restarts its
-     * follow-up cycle. The rounds already recorded stay in the table, flagged as
-     * superseded so they keep their history without being mistaken for the current round,
-     * and the follow-up date being replaced is snapshotted onto the case and written to
-     * the action log as an explicit overwrite.
+     * Points an existing customer case at a newly received order and advances it to the
+     * next round, since rounds track the customer's follow-up history rather than one
+     * order's. The rounds already recorded stay in the table, flagged as superseded so
+     * they keep their history without being mistaken for the current round, and the
+     * follow-up date being replaced is snapshotted onto the case and written to the action
+     * log as an explicit overwrite.
      *
      * Returns the follow-up id on success, 0 when the caller should fall back to creating
      * a separate case.
@@ -4341,6 +4342,13 @@ if (!function_exists('customerFollowUpTakeOverCaseWithNewOrder')) {
             ? trim((string) $newOrderData['received_date'])
             : $today;
 
+        // Rounds count the customer's follow-up history, not one order's, so the new order
+        // continues the sequence. Six stays the ceiling the rest of the module works to: a
+        // case that completes round 6 is marked Done and is no longer reused, so reaching
+        // the cap here only happens while round 6 is still open.
+        $previousRoundNo = max(1, (int) (isset($existingCaseRow['current_round_no']) ? $existingCaseRow['current_round_no'] : 1));
+        $nextRoundNo = min(6, $previousRoundNo + 1);
+
         $supersedeSql = "UPDATE `" . CUSTOMER_FOLLOW_UP_ROUND . "`
                          SET `superseded` = 'Y',
                              `update_by` = '" . customerFollowUpEscape($connect, (string) $actorUserId) . "',
@@ -4360,7 +4368,7 @@ if (!function_exists('customerFollowUpTakeOverCaseWithNewOrder')) {
             'received_date' => $receivedDate,
             'customer_type' => strtolower(trim((string) (isset($newOrderData['customer_type']) ? $newOrderData['customer_type'] : ''))) === 'return' ? 'return' : 'new',
             'purchase_count_snapshot' => (int) (isset($newOrderData['purchase_count_snapshot']) ? $newOrderData['purchase_count_snapshot'] : 0),
-            'current_round_no' => 1,
+            'current_round_no' => $nextRoundNo,
             'current_status' => '',
             'follow_up_started' => 'Y',
             'update_by' => (string) $actorUserId,
@@ -4390,8 +4398,8 @@ if (!function_exists('customerFollowUpTakeOverCaseWithNewOrder')) {
 
         $newRoundId = customerFollowUpCreateFollowUpRound($connect, array(
             'follow_up_id' => $followUpId,
-            'round_no' => 1,
-            'stage_no' => 1,
+            'round_no' => $nextRoundNo,
+            'stage_no' => $nextRoundNo,
             'previous_follow_up_date' => $receivedDate,
             'approval_status' => 'pending',
             'postpone_status' => 'none',
@@ -4408,7 +4416,8 @@ if (!function_exists('customerFollowUpTakeOverCaseWithNewOrder')) {
             . ' round ' . max(1, (int) $previousInfo['round_no'])
             . ' was following up on ' . ($previousInfo['next_follow_up_date'] !== '' ? $previousInfo['next_follow_up_date'] : 'no date')
             . ', replaced by order ' . ($caseFields['order_no'] !== '' ? $caseFields['order_no'] : ('#' . $newOrderId))
-            . ' received on ' . $receivedDate . '.';
+            . ' received on ' . $receivedDate
+            . ' (now round ' . $nextRoundNo . ').';
 
         customerFollowUpInsertActionLog($connect, array(
             'follow_up_id' => $followUpId,
@@ -4419,7 +4428,7 @@ if (!function_exists('customerFollowUpTakeOverCaseWithNewOrder')) {
                 'order_id' => $newOrderId,
                 'order_no' => $caseFields['order_no'],
                 'received_date' => $receivedDate,
-                'round_no' => 1,
+                'round_no' => $nextRoundNo,
             ),
             'remark' => $overwriteRemark,
             'action_by' => (string) $actorUserId,
@@ -4475,7 +4484,7 @@ if (!function_exists('customerFollowUpStartFromReceivedOrder')) {
 
         // A customer gets one follow-up record, not one per order. When the customer
         // already has an open case, the new order takes it over: the case moves to the new
-        // order and restarts its cycle, with the follow-up it was carrying kept both as a
+        // order and moves on to the next round, with the follow-up it was carrying kept both as a
         // snapshot on the record and as an action log entry.
         $openCustomerCase = customerFollowUpFetchOpenCaseByCustomer($connect, $platform, (int) $customerId);
         if (!empty($openCustomerCase)) {
