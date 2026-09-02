@@ -368,6 +368,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                     <th>Order ID</th>
                                     <th>Stock Out Warehouse</th>
                                     <th>Customer</th>
+                                    <th>Customer Name</th>
                                     <th>Package</th>
                                     <th>Airbill No</th>
                                     <th>Link</th>
@@ -392,6 +393,8 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                         if ($rowPlatform === 'shopee') {
                                             $customerDisplayHtml = customerLabelRenderShopeeBuyerCell($connect, $finance_connect, isset($row['buyer']) ? $row['buyer'] : '', '', $shopeeBuyerMetaMap);
                                         }
+                                        // Who the parcel is addressed to, which for Shopee is not the buyer username shown above.
+                                        $recipientName = shopeeOmsGetOrderRecipientNameText($row, $rowSourceConfig);
                                         $orderViewUrl = shopeeOmsGetOrderSourceViewUrl($rowSourceConfig, (int) $row['id']);
                                         ?>
                                         <tr>
@@ -412,6 +415,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                             </td>
                                             <td><?= htmlspecialchars($stockOutWarehouseName !== '' ? $stockOutWarehouseName : '-') ?></td>
                                             <td><?= $customerDisplayHtml ?></td>
+                                            <td><?= htmlspecialchars($recipientName !== '' ? $recipientName : '-', ENT_QUOTES, 'UTF-8') ?></td>
                                             <td><?= htmlspecialchars(!empty($packageSummary['bundle_name']) ? $packageSummary['bundle_name'] : '-') ?></td>
                                             <td><?= htmlspecialchars((string) (isset($row[$airbillField]) && trim((string) $row[$airbillField]) !== '' ? $row[$airbillField] : '-')) ?></td>
                                             <td>
@@ -426,7 +430,7 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                                     <?php } ?>
                                 <?php } else { ?>
                                     <tr>
-                                        <td colspan="9" class="text-center">No To Pack orders found.</td>
+                                        <td colspan="10" class="text-center">No To Pack orders found.</td>
                                     </tr>
                                 <?php } ?>
                             </tbody>
@@ -524,7 +528,8 @@ foreach ($platformTabs as $platformKey => $platformLabel) {
                     autoWidth: false,
                     order: [],
                     columnDefs: [
-                        { orderable: false, searchable: false, targets: [0, 7] }
+                        // 0 = S/N, 8 = Link. The Link index moved when Customer Name was added.
+                        { orderable: false, searchable: false, targets: [0, 8] }
                     ]
                 });
                 datatableAlignment(tableElement.id);
