@@ -4663,8 +4663,14 @@ if (!function_exists('customerFollowUpResolveCaseForCustomerLog')) {
      *   1. an explicitly chosen case, when the user selected one;
      *   2. the customer's open case, since a customer only ever has one;
      *   3. otherwise a new customer-sourced case.
-     * Cases that are already closed (Done / Lost) are never reused. Returns an empty
-     * array when the case exists but is not the actor's to touch.
+     * Cases that are already closed (Done / Lost) are never reused.
+     *
+     * Scheduling a date from the customer page is treated as a scheduling action rather
+     * than a case action, so it is deliberately not gated on customerFollowUpCanUserManageCase():
+     * that rule still guards submitting, appealing and postponing a round, but blocking a
+     * date here would leave whoever is on the customer page unable to record anything,
+     * since one customer now has exactly one case to write to. Who made the change is
+     * recorded on the action log instead.
      */
     function customerFollowUpResolveCaseForCustomerLog($connect, $platform, $customerId, $requestedFollowUpId, $actorUserId, $options = array())
     {
@@ -4676,10 +4682,6 @@ if (!function_exists('customerFollowUpResolveCaseForCustomerLog')) {
             return array();
         }
 
-        $actorUserGroupId = isset($options['actor_user_group_id'])
-            ? $options['actor_user_group_id']
-            : (defined('USER_GROUP') ? USER_GROUP : null);
-
         if ($requestedFollowUpId > 0) {
             $requestedRow = customerFollowUpReadFollowUpCase($connect, $requestedFollowUpId);
             if (empty($requestedRow)
@@ -4689,22 +4691,13 @@ if (!function_exists('customerFollowUpResolveCaseForCustomerLog')) {
                 return array();
             }
 
-            if (!customerFollowUpCanUserManageCase($requestedRow, $actorUserId, $actorUserGroupId, $connect)) {
-                return array();
-            }
-
             return $requestedRow;
         }
 
         // A customer has at most one live case, so reuse it rather than opening a second
-        // record. When it is assigned to somebody else the caller is told, because quietly
-        // starting a parallel case is exactly the duplicate this module is meant to avoid.
+        // record, whoever it happens to be assigned to.
         $openCase = customerFollowUpFetchOpenCaseByCustomer($connect, $platform, $customerId);
         if (!empty($openCase)) {
-            if (!customerFollowUpCanUserManageCase($openCase, $actorUserId, $actorUserGroupId, $connect)) {
-                return array();
-            }
-
             return $openCase;
         }
 
@@ -4761,8 +4754,8 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
 
         if (empty($followUpRow)) {
             $result['message'] = $requestedFollowUpId > 0
-                ? 'That follow-up case does not belong to this customer, or it is not assigned to you.'
-                : 'This customer already has a follow-up case assigned to someone else, so it was left untouched.';
+                ? 'That follow-up case does not belong to this customer.'
+                : 'Unable to resolve a follow-up case for this customer.';
             return $result;
         }
 
@@ -4820,13 +4813,28 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
             return $result;
         }
 
+        // The customer page lets anyone schedule the date, so make it visible in the log
+        // when that was not the person the case is assigned to.
+        $actionRemark = trim((string) (isset($data['remark']) ? $data['remark'] : ''));
+        $assignedUserId = (int) (isset($followUpRow['assigned_user_id']) ? $followUpRow['assigned_user_id'] : 0);
+        if ($assignedUserId !== $actorUserId) {
+            $actorLabel = customerFollowUpGetUserDisplayName($connect, $actorUserId);
+            $assignedLabel = $assignedUserId > 0
+                ? customerFollowUpGetUserDisplayName($connect, $assignedUserId)
+                : 'nobody';
+            $actionRemark = trim($actionRemark . ' Scheduled by ' . $actorLabel . ', who is not the assigned user (' . $assignedLabel . ').');
+        }
+
         customerFollowUpInsertActionLog($connect, array(
             'follow_up_id' => $followUpId,
             'round_id' => $roundId,
             'action_type' => 'schedule_next_follow_up_from_customer_page',
-            'old_value' => array('next_follow_up_date' => $previousNextFollowUpDate),
+            'old_value' => array(
+                'next_follow_up_date' => $previousNextFollowUpDate,
+                'assigned_user_id' => $assignedUserId,
+            ),
             'new_value' => array('next_follow_up_date' => $nextFollowUpDate),
-            'remark' => trim((string) (isset($data['remark']) ? $data['remark'] : '')),
+            'remark' => $actionRemark,
             'action_by' => (string) $actorUserId,
         ));
 

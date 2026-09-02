@@ -43,20 +43,14 @@ if (!function_exists('urlGetUserRecordLogFollowUpCaseOptions')) {
             return array();
         }
 
-        $actorUserId = defined('USER_ID') ? (int) USER_ID : 0;
-        $actorUserGroupId = defined('USER_GROUP') ? USER_GROUP : null;
-
         $options = array();
         foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
             $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
             if (in_array($caseStatus, array('done', 'lost'), true)) {
                 continue;
             }
-            if (function_exists('customerFollowUpCanUserManageCase')
-                && !customerFollowUpCanUserManageCase($caseRow, $actorUserId, $actorUserGroupId, $connect)
-            ) {
-                continue;
-            }
+            // Not filtered by assignee: scheduling a date here is open to whoever is on the
+            // customer page, and the action log records who did it.
 
             $orderNo = trim((string) (isset($caseRow['order_no']) ? $caseRow['order_no'] : ''));
             $roundNo = (int) (isset($caseRow['current_round_no']) ? $caseRow['current_round_no'] : 1);
