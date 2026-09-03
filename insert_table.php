@@ -2383,6 +2383,9 @@ migrationEnsureIndex($conn, $db_cms, USER_RECORD_LOG, 'idx_url_follow_up', "ALTE
 // JSON snapshot of the follow-up this entry rescheduled, so the entry says what it
 // replaced instead of silently showing only the new date.
 migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'previous_follow_up_info', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `previous_follow_up_info` TEXT DEFAULT NULL AFTER `follow_up_round_id`", "Verified `" . USER_RECORD_LOG . "` includes `previous_follow_up_info`.");
+// JSON list of every follow-up action recorded on this entry. One entry per follow-up
+// round is reused and updated in place, so this is what keeps the earlier states visible.
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_history', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_history` TEXT DEFAULT NULL AFTER `previous_follow_up_info`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_history`.");
 
 $createCustomerFollowUpRoundSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpRoundTable}` (
     `id` INT NOT NULL AUTO_INCREMENT,

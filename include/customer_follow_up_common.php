@@ -1162,6 +1162,188 @@ if (!function_exists('customerFollowUpGetPlatformUserRecordLogColumn')) {
     }
 }
 
+if (!function_exists('customerFollowUpSupportsLogHistory')) {
+    function customerFollowUpSupportsLogHistory($connect)
+    {
+        return function_exists('urlUserRecordLogColumnExists')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_history');
+    }
+}
+
+if (!function_exists('customerFollowUpBuildLogHistoryEntry')) {
+    /**
+     * One compact line's worth of "what this action did", kept alongside the entry so
+     * every earlier state stays visible once the entry is reused.
+     */
+    function customerFollowUpBuildLogHistoryEntry($data)
+    {
+        $actionLabel = trim((string) (isset($data['action_label']) ? $data['action_label'] : ''));
+        if ($actionLabel === '') {
+            return array();
+        }
+
+        $details = array();
+        $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
+        if ($nextFollowUpDate !== '') {
+            $details[] = 'Follow-Up Date: ' . $nextFollowUpDate;
+        }
+        $roundNo = (int) (isset($data['round_no']) ? $data['round_no'] : 0);
+        if ($roundNo > 0) {
+            $details[] = 'Round: ' . $roundNo;
+        }
+        $historyRemark = trim((string) (isset($data['action_remark']) ? $data['action_remark'] : ''));
+        if ($historyRemark !== '') {
+            $details[] = $historyRemark;
+        }
+
+        return array(
+            'time' => trim(customerFollowUpNowDate() . ' ' . customerFollowUpNowTime()),
+            'action' => $actionLabel,
+            'detail' => implode(' | ', $details),
+            'by' => trim((string) (isset($data['actor_display_name']) ? $data['actor_display_name'] : '')),
+        );
+    }
+}
+
+if (!function_exists('customerFollowUpRenderLogHistory')) {
+    function customerFollowUpRenderLogHistory($historyEntries)
+    {
+        if (!is_array($historyEntries) || empty($historyEntries)) {
+            return '';
+        }
+
+        $lines = array('--- Follow-Up Update History ---');
+        foreach ($historyEntries as $historyEntry) {
+            if (!is_array($historyEntry)) {
+                continue;
+            }
+
+            $line = '[' . trim((string) (isset($historyEntry['time']) ? $historyEntry['time'] : '')) . '] '
+                . trim((string) (isset($historyEntry['action']) ? $historyEntry['action'] : ''));
+
+            $detail = trim((string) (isset($historyEntry['detail']) ? $historyEntry['detail'] : ''));
+            if ($detail !== '') {
+                $line .= ' - ' . $detail;
+            }
+
+            $by = trim((string) (isset($historyEntry['by']) ? $historyEntry['by'] : ''));
+            if ($by !== '') {
+                $line .= ' (by ' . $by . ')';
+            }
+
+            $lines[] = $line;
+        }
+
+        return count($lines) > 1 ? implode("\n", $lines) : '';
+    }
+}
+
+if (!function_exists('customerFollowUpFindRoundUserRecordLogId')) {
+    /**
+     * The entry already written for this follow-up round, which the next action on the
+     * same round updates instead of inserting beside.
+     */
+    function customerFollowUpFindRoundUserRecordLogId($connect, $customerColumn, $customerId, $data)
+    {
+        $followUpId = (int) (isset($data['follow_up_id']) ? $data['follow_up_id'] : 0);
+        $roundId = (int) (isset($data['round_id']) ? $data['round_id'] : 0);
+
+        if ($followUpId <= 0 || $roundId <= 0 || $customerId <= 0) {
+            return 0;
+        }
+        if (!function_exists('urlUserRecordLogColumnExists')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_id')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_round_id')
+        ) {
+            return 0;
+        }
+
+        $customerColumn = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $customerColumn);
+        $sql = "SELECT `id`
+                FROM `" . USER_RECORD_LOG . "`
+                WHERE `status` = 'A'
+                  AND `" . $customerColumn . "` = " . $customerId . "
+                  AND `follow_up_id` = " . $followUpId . "
+                  AND `follow_up_round_id` = " . $roundId . "
+                ORDER BY `id` DESC
+                LIMIT 1";
+
+        $result = mysqli_query($connect, $sql);
+        if (!$result || mysqli_num_rows($result) === 0) {
+            return 0;
+        }
+
+        $row = mysqli_fetch_assoc($result);
+
+        return isset($row['id']) ? (int) $row['id'] : 0;
+    }
+}
+
+if (!function_exists('customerFollowUpUpdateRoundUserRecordLog')) {
+    /**
+     * Rewrites the round's entry with the latest action and the running history beneath
+     * it, so the entry shows where the follow-up stands now and every step that got it
+     * there. Returns the entry id.
+     */
+    function customerFollowUpUpdateRoundUserRecordLog($connect, $logId, $content, $attachment, $actorUserId, $data)
+    {
+        $logId = (int) $logId;
+        if ($logId <= 0) {
+            return 0;
+        }
+
+        $historyEntries = array();
+        if (customerFollowUpSupportsLogHistory($connect)) {
+            $historyResult = mysqli_query($connect, "SELECT `follow_up_history` FROM `" . USER_RECORD_LOG . "` WHERE `id` = " . $logId . " LIMIT 1");
+            if ($historyResult && mysqli_num_rows($historyResult) > 0) {
+                $historyRow = mysqli_fetch_assoc($historyResult);
+                $decodedHistory = json_decode((string) (isset($historyRow['follow_up_history']) ? $historyRow['follow_up_history'] : ''), true);
+                if (is_array($decodedHistory)) {
+                    $historyEntries = $decodedHistory;
+                }
+            }
+        }
+
+        $historyEntry = customerFollowUpBuildLogHistoryEntry($data);
+        if (!empty($historyEntry)) {
+            $historyEntries[] = $historyEntry;
+        }
+
+        $historyText = customerFollowUpRenderLogHistory($historyEntries);
+        $combinedContent = $historyText !== '' ? ($content . "\n\n" . $historyText) : $content;
+
+        $updateParts = array(
+            "`content` = '" . customerFollowUpEscape($connect, $combinedContent) . "'",
+            "`updated_by` = '" . customerFollowUpEscape($connect, $actorUserId) . "'",
+            "`updated_at` = NOW()",
+        );
+
+        if (trim((string) $attachment) !== '') {
+            $updateParts[] = "`attachment` = '" . customerFollowUpEscape($connect, $attachment) . "'";
+        }
+
+        if (customerFollowUpSupportsLogHistory($connect)) {
+            $updateParts[] = "`follow_up_history` = '" . customerFollowUpEscape($connect, json_encode($historyEntries)) . "'";
+        }
+
+        $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
+        if ($nextFollowUpDate !== ''
+            && customerFollowUpIsValidDateString($nextFollowUpDate)
+            && function_exists('urlUserRecordLogColumnExists')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'next_follow_up_date')
+        ) {
+            $updateParts[] = "`next_follow_up_date` = '" . customerFollowUpEscape($connect, $nextFollowUpDate) . "'";
+        }
+
+        $sql = "UPDATE `" . USER_RECORD_LOG . "`
+                SET " . implode(', ', $updateParts) . "
+                WHERE `id` = " . $logId . "
+                LIMIT 1";
+
+        return mysqli_query($connect, $sql) ? $logId : 0;
+    }
+}
+
 if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
     function customerFollowUpInsertReadableUserRecordLog($connect, $data)
     {
@@ -1184,6 +1366,17 @@ if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
 
         $attachment = trim((string) (isset($data['attachment']) ? $data['attachment'] : ''));
         $actorUserId = trim((string) (isset($data['created_by']) ? $data['created_by'] : (defined('USER_ID') ? USER_ID : '')));
+
+        // Approving, rejecting or rescheduling the same round is the same follow-up moving
+        // on, not a new one, so those actions reuse the round's entry and append to its
+        // history rather than filling the customer timeline with a row per click. Callers
+        // that write a one-off message (tag assignment) leave this off and still insert.
+        if (!empty($data['upsert'])) {
+            $existingLogId = customerFollowUpFindRoundUserRecordLogId($connect, $customerColumn, $customerId, $data);
+            if ($existingLogId > 0) {
+                return customerFollowUpUpdateRoundUserRecordLog($connect, $existingLogId, $content, $attachment, $actorUserId, $data);
+            }
+        }
 
         $insertColumns = "`" . $customerColumn . "`, `content`, `attachment`, `created_by`, `created_at`, `updated_by`, `updated_at`, `status`";
         $insertValues = ($customerId > 0 ? $customerId : 'NULL') . ",
@@ -1237,6 +1430,14 @@ if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
         ) {
             $insertColumns .= ", `next_follow_up_date`";
             $insertValues .= ",\n                    '" . customerFollowUpEscape($connect, $nextFollowUpDate) . "'";
+        }
+
+        // Seed the history so the first action is listed too, not just the ones that
+        // follow it.
+        $historyEntry = customerFollowUpBuildLogHistoryEntry($data);
+        if (!empty($historyEntry) && customerFollowUpSupportsLogHistory($connect)) {
+            $insertColumns .= ", `follow_up_history`";
+            $insertValues .= ",\n                    '" . customerFollowUpEscape($connect, json_encode(array($historyEntry))) . "'";
         }
 
         $sql = "INSERT INTO `" . USER_RECORD_LOG . "` (
@@ -1826,6 +2027,15 @@ if (!function_exists('customerFollowUpCreateActionArtifacts')) {
             'follow_up_id' => $followUpId,
             'round_id' => isset($roundRow['id']) ? (int) $roundRow['id'] : 0,
             'next_follow_up_date' => isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : '',
+            // Approve, reject and reschedule all land on the same round, so they update
+            // that round's entry and append to its history instead of adding a row each.
+            'upsert' => true,
+            'action_label' => $actionLabel,
+            'action_remark' => $remark,
+            'round_no' => isset($roundRow['round_no']) ? (int) $roundRow['round_no'] : 0,
+            'actor_display_name' => (function_exists('customerFollowUpGetUserDisplayName') && ctype_digit(trim((string) $actorUserId)))
+                ? customerFollowUpGetUserDisplayName($connect, (int) $actorUserId)
+                : (string) $actorUserId,
         ));
     }
 }
