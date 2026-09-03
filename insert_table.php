@@ -2380,6 +2380,9 @@ migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'is_system_record', "ALTE
 migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_id', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_id` INT DEFAULT NULL AFTER `follow_up_day`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_id`.");
 migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_round_id', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_round_id` INT DEFAULT NULL AFTER `follow_up_id`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_round_id`.");
 migrationEnsureIndex($conn, $db_cms, USER_RECORD_LOG, 'idx_url_follow_up', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD INDEX `idx_url_follow_up` (`follow_up_id`, `follow_up_round_id`)", "Verified `" . USER_RECORD_LOG . "` follow-up link index.");
+// JSON snapshot of the follow-up this entry rescheduled, so the entry says what it
+// replaced instead of silently showing only the new date.
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'previous_follow_up_info', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `previous_follow_up_info` TEXT DEFAULT NULL AFTER `follow_up_round_id`", "Verified `" . USER_RECORD_LOG . "` includes `previous_follow_up_info`.");
 
 $createCustomerFollowUpRoundSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpRoundTable}` (
     `id` INT NOT NULL AUTO_INCREMENT,

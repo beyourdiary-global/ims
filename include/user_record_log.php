@@ -68,6 +68,85 @@ if (!function_exists('urlGetUserRecordLogFollowUpCaseOptions')) {
     }
 }
 
+if (!function_exists('urlGetPreviousFollowUpLogSnapshot')) {
+    /**
+     * The customer's most recent log entry that carried a follow-up date, so a new entry
+     * can say what it rescheduled rather than only showing its own date. Returns the
+     * date, the round and a short excerpt of that entry's message.
+     */
+    function urlGetPreviousFollowUpLogSnapshot($dbConnect, $tblName, $context, $excludeRecordId = 0)
+    {
+        $customerColumn = urlSanitizeUserRecordLogCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '');
+        $customerId = (int) (isset($context['customer_id']) ? $context['customer_id'] : 0);
+        $excludeRecordId = (int) $excludeRecordId;
+
+        if (!($dbConnect instanceof mysqli) || $customerColumn === '' || $customerId <= 0) {
+            return array();
+        }
+        if (!urlUserRecordLogColumnExists($dbConnect, $tblName, 'next_follow_up_date')) {
+            return array();
+        }
+
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+        $sql = "SELECT `content`, `next_follow_up_date`, `follow_up_times`
+                FROM `" . $safeTable . "`
+                WHERE `status` = 'A'
+                  AND `" . $customerColumn . "` = " . $customerId . "
+                  AND `next_follow_up_date` IS NOT NULL
+                  AND `next_follow_up_date` <> ''
+                  " . ($excludeRecordId > 0 ? ("AND `id` <> " . $excludeRecordId) : "") . "
+                ORDER BY `created_at` DESC, `id` DESC
+                LIMIT 1";
+
+        $result = mysqli_query($dbConnect, $sql);
+        if (!$result || mysqli_num_rows($result) === 0) {
+            return array();
+        }
+
+        $row = mysqli_fetch_assoc($result);
+        $message = urlGetUserRecordLogContentPlainText(isset($row['content']) ? $row['content'] : '');
+        $message = trim(preg_replace('/\s+/', ' ', (string) $message));
+        if (function_exists('mb_substr')) {
+            if (mb_strlen($message, 'UTF-8') > 120) {
+                $message = mb_substr($message, 0, 120, 'UTF-8') . '...';
+            }
+        } else if (strlen($message) > 120) {
+            $message = substr($message, 0, 120) . '...';
+        }
+
+        return array(
+            'next_follow_up_date' => trim((string) (isset($row['next_follow_up_date']) ? $row['next_follow_up_date'] : '')),
+            'follow_up_round' => trim((string) (isset($row['follow_up_times']) ? $row['follow_up_times'] : '')),
+            'message' => $message,
+        );
+    }
+}
+
+if (!function_exists('urlBuildPreviousFollowUpSnapshotJson')) {
+    /**
+     * JSON describing the follow-up this entry is replacing, or '' when it is not a
+     * reschedule: the entry carries no date, there was no earlier one, or it lands on the
+     * same date and so changes nothing.
+     */
+    function urlBuildPreviousFollowUpSnapshotJson($dbConnect, $tblName, $context, $nextFollowUpDate, $excludeRecordId = 0)
+    {
+        $nextFollowUpDate = trim((string) $nextFollowUpDate);
+        if ($nextFollowUpDate === '') {
+            return '';
+        }
+
+        $previous = urlGetPreviousFollowUpLogSnapshot($dbConnect, $tblName, $context, $excludeRecordId);
+        if (empty($previous) || trim((string) $previous['next_follow_up_date']) === '') {
+            return '';
+        }
+        if (trim((string) $previous['next_follow_up_date']) === $nextFollowUpDate) {
+            return '';
+        }
+
+        return (string) json_encode($previous);
+    }
+}
+
 if (!function_exists('urlAppendFollowUpWarning')) {
     /**
      * Carries the follow-up module's warning (currently: the round was moved backwards)
@@ -1394,6 +1473,40 @@ if (!function_exists('urlBuildListHtml')) {
                 $followUpCopyFields['Follow-Up Case'] = '#' . $linkedFollowUpId;
             }
 
+            // Say outright that this entry rescheduled an earlier follow-up, and what that
+            // follow-up was, so the change is readable here and not only in the Follow Up
+            // List's action log.
+            $previousFollowUpInfo = array();
+            $rescheduleHtml = '';
+            if (isset($row['previous_follow_up_info']) && trim((string) $row['previous_follow_up_info']) !== '') {
+                $decodedPreviousInfo = json_decode((string) $row['previous_follow_up_info'], true);
+                if (is_array($decodedPreviousInfo)) {
+                    $previousFollowUpInfo = $decodedPreviousInfo;
+                }
+            }
+            if (!empty($previousFollowUpInfo)) {
+                $previousDate = trim((string) (isset($previousFollowUpInfo['next_follow_up_date']) ? $previousFollowUpInfo['next_follow_up_date'] : ''));
+                $previousRound = trim((string) (isset($previousFollowUpInfo['follow_up_round']) ? $previousFollowUpInfo['follow_up_round'] : ''));
+                $previousMessage = trim((string) (isset($previousFollowUpInfo['message']) ? $previousFollowUpInfo['message'] : ''));
+
+                $rescheduleText = 'Rescheduled from ' . $previousDate;
+                if ($previousRound !== '') {
+                    $rescheduleText .= ' (Round ' . $previousRound . ')';
+                }
+                $rescheduleText .= ' to ' . $nextFollowUpDate;
+
+                $rescheduleHtml = '<div class="url-log-reschedule-note"><strong>' . htmlspecialchars($rescheduleText, ENT_QUOTES, 'UTF-8') . '</strong>';
+                if ($previousMessage !== '') {
+                    $rescheduleHtml .= '<div class="url-log-reschedule-previous">Previous message: ' . htmlspecialchars($previousMessage, ENT_QUOTES, 'UTF-8') . '</div>';
+                }
+                $rescheduleHtml .= '</div>';
+
+                $followUpCopyFields['Rescheduled'] = $rescheduleText;
+                if ($previousMessage !== '') {
+                    $followUpCopyFields['Previous Message'] = $previousMessage;
+                }
+            }
+
             $copyHtml = urlBuildUserRecordLogCopyHtml($displayNo, $auditMetaText, $summary, $content, $attachmentList, $uploadWebDir, $followUpCopyFields);
             $copyText = urlBuildUserRecordLogCopyText($displayNo, $auditMetaText, $summary, $content, $attachmentList, $uploadWebDir, $followUpCopyFields);
 
@@ -1430,6 +1543,9 @@ if (!function_exists('urlBuildListHtml')) {
             $html .= '    </div>';
             if (!empty($followUpMetaItems)) {
                 $html .= '    <div class="url-log-extra-fields mt-3">' . implode('<span class="url-log-extra-sep">|</span>', $followUpMetaItems) . '</div>';
+            }
+            if (isset($rescheduleHtml) && $rescheduleHtml !== '') {
+                $html .= '    ' . $rescheduleHtml;
             }
             $html .= '    <textarea class="url-edit-summary d-none">' . htmlspecialchars($summary, ENT_QUOTES, 'UTF-8') . '</textarea>';
             $html .= '    <input type="hidden" class="url-edit-message-shortcut-id" value="' . $messageShortcutId . '">';
@@ -2062,6 +2178,16 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             // Push the follow-up date into the customer follow-up module so this entry and
             // the Follow Up List describe the same follow-up, then remember which case and
             // round it landed on.
+            // Capture what this entry is rescheduling before the new date is stored, so the
+            // entry can say which follow-up it replaced instead of only showing its own.
+            $previousFollowUpSnapshotJson = urlBuildPreviousFollowUpSnapshotJson(
+                $dbConnect,
+                $tblName,
+                $context,
+                $nextFollowUpDate,
+                (int) $recordId
+            );
+
             $followUpSync = urlSyncUserRecordLogFollowUp($dbConnect, $context, array(
                 'next_follow_up_date' => $nextFollowUpDate,
                 'follow_up_round' => $followUpTimes,
@@ -2081,6 +2207,9 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 if ($followUpSync['round_id'] > 0 && urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_round_id')) {
                     $updateParts[] = "follow_up_round_id=" . (int) $followUpSync['round_id'];
                 }
+            }
+            if ($previousFollowUpSnapshotJson !== '' && urlUserRecordLogColumnExists($dbConnect, $tblName, 'previous_follow_up_info')) {
+                $updateParts[] = "previous_follow_up_info='" . urlEsc($dbConnect, $previousFollowUpSnapshotJson) . "'";
             }
             $updateParts[] = "updated_by='" . urlEsc($dbConnect, USER_ID) . "'";
             $updateParts[] = "updated_at=NOW()";
@@ -2235,6 +2364,16 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         // Push the follow-up date into the customer follow-up module so this entry and the
         // Follow Up List describe the same follow-up, then remember which case and round it
         // landed on.
+        // Capture what this entry is rescheduling before the new date is stored, so the
+        // entry can say which follow-up it replaced instead of only showing its own.
+        $previousFollowUpSnapshotJson = urlBuildPreviousFollowUpSnapshotJson(
+            $dbConnect,
+            $tblName,
+            $context,
+            $nextFollowUpDate,
+            0
+        );
+
         $followUpSync = urlSyncUserRecordLogFollowUp($dbConnect, $context, array(
             'next_follow_up_date' => $nextFollowUpDate,
             'follow_up_round' => $followUpTimes,
@@ -2254,6 +2393,10 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 $insertColumns[] = 'follow_up_round_id';
                 $insertValues[] = (int) $followUpSync['round_id'];
             }
+        }
+        if ($previousFollowUpSnapshotJson !== '' && urlUserRecordLogColumnExists($dbConnect, $tblName, 'previous_follow_up_info')) {
+            $insertColumns[] = 'previous_follow_up_info';
+            $insertValues[] = "'" . urlEsc($dbConnect, $previousFollowUpSnapshotJson) . "'";
         }
 
         $insertColumns = array_merge($insertColumns, array('created_by', 'created_at', 'updated_by', 'updated_at', 'status'));
@@ -2799,6 +2942,21 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     gap: 0.5rem;
                     font-size: 0.9rem;
                     color: #4f5a6b;
+                }
+
+                .user-record-log-module .url-log-reschedule-note {
+                    margin-top: 0.5rem;
+                    padding: 0.5rem 0.75rem;
+                    border-left: 3px solid #f0ad4e;
+                    background-color: #fff8ec;
+                    border-radius: 4px;
+                    font-size: 0.9rem;
+                    color: #4f5a6b;
+                }
+
+                .user-record-log-module .url-log-reschedule-previous {
+                    margin-top: 0.25rem;
+                    font-style: italic;
                 }
 
                 .user-record-log-module .url-log-extra-sep {
