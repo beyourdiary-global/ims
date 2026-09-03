@@ -68,6 +68,45 @@ if (!function_exists('urlGetUserRecordLogFollowUpCaseOptions')) {
     }
 }
 
+if (!function_exists('urlAppendFollowUpWarning')) {
+    /**
+     * Carries the follow-up module's warning (currently: the round was moved backwards)
+     * into the save confirmation, so the person who did it is told straight away rather
+     * than only the admins being notified.
+     */
+    function urlAppendFollowUpWarning($message, $followUpSync)
+    {
+        $warning = is_array($followUpSync) && isset($followUpSync['warning'])
+            ? trim((string) $followUpSync['warning'])
+            : '';
+
+        return $warning !== '' ? ($message . ' ' . $warning) : $message;
+    }
+}
+
+if (!function_exists('urlGetUserRecordLogCurrentFollowUpRound')) {
+    /**
+     * The round the customer's open follow-up case is on, so the form shows the real
+     * number rather than an empty box the user has to guess at.
+     */
+    function urlGetUserRecordLogCurrentFollowUpRound($connect, $context)
+    {
+        if (!function_exists('customerFollowUpFetchOpenCaseByCustomer')) {
+            return 0;
+        }
+
+        $platform = urlGetUserRecordLogPlatformFromCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '');
+        $customerId = (int) (isset($context['customer_id']) ? $context['customer_id'] : 0);
+        if ($platform === '' || $customerId <= 0) {
+            return 0;
+        }
+
+        $openCase = customerFollowUpFetchOpenCaseByCustomer($connect, $platform, $customerId);
+
+        return !empty($openCase) ? max(1, (int) $openCase['current_round_no']) : 0;
+    }
+}
+
 if (!function_exists('urlSyncUserRecordLogFollowUp')) {
     /**
      * Pushes a saved log entry's Next Follow-Up Date into the customer follow-up module
@@ -77,14 +116,15 @@ if (!function_exists('urlSyncUserRecordLogFollowUp')) {
      */
     function urlSyncUserRecordLogFollowUp($connect, $context, $data)
     {
-        $empty = array('follow_up_id' => 0, 'round_id' => 0, 'message' => '');
+        $empty = array('follow_up_id' => 0, 'round_id' => 0, 'message' => '', 'warning' => '');
 
         if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
             return $empty;
         }
 
         $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
-        if ($nextFollowUpDate === '') {
+        $followUpRound = trim((string) (isset($data['follow_up_round']) ? $data['follow_up_round'] : ''));
+        if ($nextFollowUpDate === '' && $followUpRound === '') {
             return $empty;
         }
 
@@ -100,6 +140,7 @@ if (!function_exists('urlSyncUserRecordLogFollowUp')) {
             'customer_name' => isset($context['customer_label']) ? $context['customer_label'] : '',
             'customer_username' => isset($context['customer_label']) ? $context['customer_label'] : '',
             'next_follow_up_date' => $nextFollowUpDate,
+            'follow_up_round' => $followUpRound,
             'message_shortcut_id' => isset($data['message_shortcut_id']) ? (int) $data['message_shortcut_id'] : 0,
             'remark' => 'Scheduled from the customer page User Record Log.',
             'follow_up_id' => isset($data['follow_up_id']) ? (int) $data['follow_up_id'] : 0,
@@ -1331,8 +1372,8 @@ if (!function_exists('urlBuildListHtml')) {
                 $followUpCopyFields['Next Follow-Up Date'] = $nextFollowUpDate;
             }
             if ($followUpTimes !== '') {
-                $followUpMetaItems[] = '<span><strong>Follow-Up Times:</strong> ' . htmlspecialchars($followUpTimes, ENT_QUOTES, 'UTF-8') . '</span>';
-                $followUpCopyFields['Follow-Up Times'] = $followUpTimes;
+                $followUpMetaItems[] = '<span><strong>Follow-Up Round:</strong> ' . htmlspecialchars($followUpTimes, ENT_QUOTES, 'UTF-8') . '</span>';
+                $followUpCopyFields['Follow-Up Round'] = $followUpTimes;
             }
             if ($followUpDay !== '') {
                 $followUpMetaItems[] = '<span><strong>Follow-Up Day:</strong> ' . htmlspecialchars($followUpDay, ENT_QUOTES, 'UTF-8') . '</span>';
@@ -2023,6 +2064,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             // round it landed on.
             $followUpSync = urlSyncUserRecordLogFollowUp($dbConnect, $context, array(
                 'next_follow_up_date' => $nextFollowUpDate,
+                'follow_up_round' => $followUpTimes,
                 'message_shortcut_id' => $messageShortcutId,
                 'follow_up_id' => $submittedFollowUpId > 0
                     ? $submittedFollowUpId
@@ -2142,9 +2184,9 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             }
 
             if ($urlIsFallback) {
-                urlFallbackResponse('Record updated successfully.', true, $context['return_url']);
+                urlFallbackResponse(urlAppendFollowUpWarning('Record updated successfully.', $followUpSync), true, $context['return_url']);
             }
-            urlJsonResponse(array('ok' => 1, 'message' => 'Record updated successfully.'));
+            urlJsonResponse(array('ok' => 1, 'message' => urlAppendFollowUpWarning('Record updated successfully.', $followUpSync)));
         }
 
         $customerIdSql = 'NULL';
@@ -2195,6 +2237,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         // landed on.
         $followUpSync = urlSyncUserRecordLogFollowUp($dbConnect, $context, array(
             'next_follow_up_date' => $nextFollowUpDate,
+            'follow_up_round' => $followUpTimes,
             'message_shortcut_id' => $messageShortcutId,
             'follow_up_id' => $submittedFollowUpId,
         ));
@@ -2288,9 +2331,9 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         }
 
         if ($urlIsFallback) {
-            urlFallbackResponse('Record added successfully.', true, $context['return_url']);
+            urlFallbackResponse(urlAppendFollowUpWarning('Record added successfully.', $followUpSync), true, $context['return_url']);
         }
-        urlJsonResponse(array('ok' => 1, 'message' => 'Record added successfully.'));
+        urlJsonResponse(array('ok' => 1, 'message' => urlAppendFollowUpWarning('Record added successfully.', $followUpSync)));
     }
 }
 
@@ -2994,6 +3037,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                         $followUpCaseOptions = urlGetUserRecordLogFollowUpCaseOptions($connect, $context);
                         $followUpModuleAvailable = urlGetUserRecordLogPlatformFromCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '') !== ''
                             && (int) (isset($context['customer_id']) ? $context['customer_id'] : 0) > 0;
+                        $followUpCurrentRoundNo = urlGetUserRecordLogCurrentFollowUpRound($connect, $context);
                         ?>
                         <?php if ($followUpModuleAvailable) { ?>
                             <div class="mb-3">
@@ -3013,8 +3057,11 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                                 <input type="date" class="form-control" id="url_next_follow_up_date" name="next_follow_up_date">
                             </div>
                             <div class="col-12 col-md-4">
-                                <label class="form-label" for="url_follow_up_times">Follow-Up Times</label>
-                                <input type="text" class="form-control" id="url_follow_up_times" name="follow_up_times">
+                                <label class="form-label" for="url_follow_up_times">Follow-Up Round</label>
+                                <input type="number" min="1" step="1" class="form-control" id="url_follow_up_times" name="follow_up_times"
+                                       value="<?php echo $followUpCurrentRoundNo > 0 ? (int) $followUpCurrentRoundNo : ''; ?>"
+                                       data-current-round="<?php echo (int) $followUpCurrentRoundNo; ?>">
+                                <div class="url-editor-note">This is the follow-up round on the customer's case. Lowering it moves the follow-up backwards and notifies the admins.</div>
                             </div>
                             <div class="col-12 col-md-4">
                                 <label class="form-label" for="url_follow_up_day">Follow-Up Day</label>

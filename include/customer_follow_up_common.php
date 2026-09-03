@@ -4725,17 +4725,132 @@ if (!function_exists('customerFollowUpResolveCaseForCustomerLog')) {
     }
 }
 
+if (!function_exists('customerFollowUpAdjustCaseRound')) {
+    /**
+     * Sets the case's round by hand, which is what the customer page's follow-up count
+     * edits. Moving the round down is allowed but flagged: it rewinds the follow-up
+     * progress the module otherwise only ever advances, so the caller gets a warning back
+     * and the admins get a notification, on top of the from/to entry in the action log.
+     *
+     * Returns array('success', 'message', 'warning', 'old_round_no', 'new_round_no').
+     */
+    function customerFollowUpAdjustCaseRound($connect, $followUpRow, $newRoundNo, $actorUserId)
+    {
+        $result = array('success' => false, 'message' => '', 'warning' => '', 'old_round_no' => 0, 'new_round_no' => 0);
+
+        $followUpId = isset($followUpRow['id']) ? (int) $followUpRow['id'] : 0;
+        $actorUserId = (int) $actorUserId;
+        $newRoundNo = (int) $newRoundNo;
+        $maxRoundNo = customerFollowUpGetMaxRoundNo();
+
+        if (!($connect instanceof mysqli) || $followUpId <= 0 || $actorUserId <= 0) {
+            return $result;
+        }
+
+        if ($newRoundNo < 1 || $newRoundNo > $maxRoundNo) {
+            $result['message'] = 'Follow-Up Round must be between 1 and ' . $maxRoundNo . '.';
+            return $result;
+        }
+
+        $oldRoundNo = max(1, (int) (isset($followUpRow['current_round_no']) ? $followUpRow['current_round_no'] : 1));
+        $result['old_round_no'] = $oldRoundNo;
+        $result['new_round_no'] = $newRoundNo;
+
+        if ($oldRoundNo === $newRoundNo) {
+            $result['success'] = true;
+            return $result;
+        }
+
+        $today = customerFollowUpNowDate();
+        $nowTime = customerFollowUpNowTime();
+
+        if (!customerFollowUpUpdateCaseRecord($connect, $followUpId, array(
+            'current_round_no' => $newRoundNo,
+            'update_by' => (string) $actorUserId,
+            'update_date' => $today,
+            'update_time' => $nowTime,
+        ))) {
+            $result['message'] = 'Unable to update the follow-up round.';
+            return $result;
+        }
+
+        // The round the case now points at has to exist, or the listing and the crons have
+        // no current round to read.
+        $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpCreateOrLoadCurrentRound($connect, $updatedFollowUpRow);
+
+        $isRewind = $newRoundNo < $oldRoundNo;
+        $remark = 'Follow-Up Round changed from ' . $oldRoundNo . ' to ' . $newRoundNo . '.';
+        if ($isRewind) {
+            $remark .= ' This moves the follow-up backwards.';
+        }
+
+        customerFollowUpInsertActionLog($connect, array(
+            'follow_up_id' => $followUpId,
+            'round_id' => isset($roundRow['id']) ? (int) $roundRow['id'] : 0,
+            'action_type' => 'adjust_follow_up_round',
+            'old_value' => array('round_no' => $oldRoundNo),
+            'new_value' => array('round_no' => $newRoundNo),
+            'remark' => $remark,
+            'action_by' => (string) $actorUserId,
+        ));
+
+        $actorDisplayName = customerFollowUpGetUserDisplayName($connect, $actorUserId);
+
+        if (function_exists('audit_log')) {
+            audit_log(array(
+                'log_act'     => 'edit',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'query_rec'   => $followUpId,
+                'query_table' => CUSTOMER_FOLLOW_UP,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'oldval'      => 'current_round_no=' . $oldRoundNo,
+                'changes'     => 'current_round_no=' . $newRoundNo,
+                'act_msg'     => $actorDisplayName . ' changed the follow-up round on case [<b> ID = ' . $followUpId . '</b> ] from ' . $oldRoundNo . ' to ' . $newRoundNo . '.',
+            ));
+        }
+
+        if ($isRewind) {
+            $result['warning'] = 'Follow-Up Round was moved back from ' . $oldRoundNo . ' to ' . $newRoundNo . '. The change has been recorded.';
+
+            foreach (customerFollowUpGetAdminUsers($connect) as $adminUser) {
+                $notifyUserId = isset($adminUser['id']) ? (int) $adminUser['id'] : 0;
+                if ($notifyUserId <= 0) {
+                    continue;
+                }
+
+                customerFollowUpCreateNotificationRow($connect, array(
+                    'follow_up_id' => $followUpId,
+                    'round_id' => isset($roundRow['id']) ? (int) $roundRow['id'] : 0,
+                    'notify_user_id' => $notifyUserId,
+                    'notify_role' => 'admin',
+                    'notification_type' => 'follow_up_round_moved_back',
+                    'title' => 'Follow-Up Round Moved Back',
+                    'message' => $actorDisplayName . ' changed the follow-up round from ' . $oldRoundNo . ' to ' . $newRoundNo . ' on case ID ' . $followUpId . '.',
+                    'create_date' => $today,
+                ));
+            }
+        }
+
+        $result['success'] = true;
+        return $result;
+    }
+}
+
 if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
     /**
      * Bridge used by the customer page User Record Log: a log entry that carries a Next
      * Follow-Up Date becomes a real follow-up round in the Follow Up List, instead of a
      * note that only lives on the customer page.
      *
-     * Returns array('follow_up_id' => int, 'round_id' => int, 'message' => string).
+     * Returns array('follow_up_id' => int, 'round_id' => int, 'message' => string,
+     * 'warning' => string).
      */
     function customerFollowUpSyncFromCustomerLog($connect, $data)
     {
-        $result = array('follow_up_id' => 0, 'round_id' => 0, 'message' => '');
+        $result = array('follow_up_id' => 0, 'round_id' => 0, 'message' => '', 'warning' => '');
 
         if (!($connect instanceof mysqli)) {
             return $result;
@@ -4746,10 +4861,17 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
         $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
         $actorUserId = (int) (isset($data['actor_user_id']) ? $data['actor_user_id'] : (defined('USER_ID') ? USER_ID : 0));
 
+        // The round can be edited on its own, so a request carrying only a round still has
+        // work to do even with no date.
+        $requestedRoundNo = isset($data['follow_up_round']) && trim((string) $data['follow_up_round']) !== ''
+            ? (int) $data['follow_up_round']
+            : 0;
+        $hasDate = $nextFollowUpDate !== '' && customerFollowUpIsValidDateString($nextFollowUpDate);
+
         if ($platform === '' || $customerId <= 0 || $actorUserId <= 0) {
             return $result;
         }
-        if ($nextFollowUpDate === '' || !customerFollowUpIsValidDateString($nextFollowUpDate)) {
+        if (!$hasDate && $requestedRoundNo <= 0) {
             return $result;
         }
 
@@ -4780,6 +4902,24 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
         $followUpId = (int) $followUpRow['id'];
         $result['follow_up_id'] = $followUpId;
 
+        // Apply the round first: the date rules below are measured against the round the
+        // case is on, so they must see the round the user just set.
+        if ($requestedRoundNo > 0) {
+            $roundAdjustment = customerFollowUpAdjustCaseRound($connect, $followUpRow, $requestedRoundNo, $actorUserId);
+            if (empty($roundAdjustment['success'])) {
+                $result['message'] = trim((string) $roundAdjustment['message']) !== ''
+                    ? $roundAdjustment['message']
+                    : 'Unable to update the follow-up round.';
+                return $result;
+            }
+
+            if (trim((string) $roundAdjustment['warning']) !== '') {
+                $result['warning'] = $roundAdjustment['warning'];
+            }
+
+            $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        }
+
         $roundRow = customerFollowUpCreateOrLoadCurrentRound($connect, $followUpRow);
         if (empty($roundRow)) {
             $result['message'] = 'Unable to prepare the follow-up round.';
@@ -4788,6 +4928,10 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
 
         $roundId = (int) $roundRow['id'];
         $result['round_id'] = $roundId;
+
+        if (!$hasDate) {
+            return $result;
+        }
 
         $dateValidation = customerFollowUpValidateNextFollowUpDateLimit($followUpRow, $roundRow, $nextFollowUpDate);
         if (empty($dateValidation['success'])) {
