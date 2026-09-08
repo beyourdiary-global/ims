@@ -1182,11 +1182,20 @@ if (!function_exists('customerFollowUpBuildLogHistoryEntry')) {
             return array();
         }
 
-        $details = array();
+        // What moved is shown as from/to so the change reads at a glance; the flat detail
+        // line carries the rest, which has no before value to compare against.
+        $changes = array();
         $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
-        if ($nextFollowUpDate !== '') {
-            $details[] = 'Follow-Up Date: ' . $nextFollowUpDate;
+        $previousFollowUpDate = trim((string) (isset($data['previous_next_follow_up_date']) ? $data['previous_next_follow_up_date'] : ''));
+        if ($nextFollowUpDate !== '' && $nextFollowUpDate !== $previousFollowUpDate) {
+            $changes[] = array(
+                'field' => 'Follow-Up Date',
+                'from' => $previousFollowUpDate,
+                'to' => $nextFollowUpDate,
+            );
         }
+
+        $details = array();
         $roundNo = (int) (isset($data['round_no']) ? $data['round_no'] : 0);
         if ($roundNo > 0) {
             $details[] = 'Round: ' . $roundNo;
@@ -1199,6 +1208,7 @@ if (!function_exists('customerFollowUpBuildLogHistoryEntry')) {
         return array(
             'time' => trim(customerFollowUpNowDate() . ' ' . customerFollowUpNowTime()),
             'action' => $actionLabel,
+            'changes' => $changes,
             'detail' => implode(' | ', $details),
             'by' => trim((string) (isset($data['actor_display_name']) ? $data['actor_display_name'] : '')),
         );
@@ -1994,6 +2004,11 @@ if (!function_exists('customerFollowUpCreateActionArtifacts')) {
             'follow_up_id' => $followUpId,
             'round_id' => isset($roundRow['id']) ? (int) $roundRow['id'] : 0,
             'next_follow_up_date' => isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : '',
+            // The state before this action, so the history can show the date as from -> to
+            // rather than leaving the reader to compare it against the line above.
+            'previous_next_follow_up_date' => (is_array($oldValue) && isset($oldValue['next_follow_up_date']))
+                ? (string) $oldValue['next_follow_up_date']
+                : '',
             // Approve, reject and reschedule all land on the same round, so they update
             // that round's entry and append to its history instead of adding a row each.
             'upsert' => true,
