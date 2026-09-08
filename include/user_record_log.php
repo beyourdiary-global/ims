@@ -122,6 +122,148 @@ if (!function_exists('urlGetPreviousFollowUpLogSnapshot')) {
     }
 }
 
+if (!function_exists('urlFindReusableFollowUpLogId')) {
+    /**
+     * An entry already written for this follow-up round carrying the same message. Saving
+     * the customer page form again with only the date or round changed is that follow-up
+     * moving on, not a new note, so it updates this entry instead of adding another row.
+     * A different message is a genuinely new note and gets its own entry.
+     */
+    function urlFindReusableFollowUpLogId($dbConnect, $tblName, $context, $followUpId, $roundId, $content)
+    {
+        $followUpId = (int) $followUpId;
+        $roundId = (int) $roundId;
+        $customerColumn = urlSanitizeUserRecordLogCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '');
+        $customerId = (int) (isset($context['customer_id']) ? $context['customer_id'] : 0);
+
+        if (!($dbConnect instanceof mysqli) || $followUpId <= 0 || $roundId <= 0 || $customerColumn === '' || $customerId <= 0) {
+            return 0;
+        }
+        if (!urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_id')
+            || !urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_round_id')
+        ) {
+            return 0;
+        }
+
+        $targetText = urlNormalizeFollowUpLogContentKey($content);
+        if ($targetText === '') {
+            return 0;
+        }
+
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+        $sql = "SELECT `id`, `content`
+                FROM `" . $safeTable . "`
+                WHERE `status` = 'A'
+                  AND `" . $customerColumn . "` = " . $customerId . "
+                  AND `follow_up_id` = " . $followUpId . "
+                  AND `follow_up_round_id` = " . $roundId . "
+                ORDER BY `id` DESC
+                LIMIT 20";
+
+        $result = mysqli_query($dbConnect, $sql);
+        if (!$result) {
+            return 0;
+        }
+
+        while ($row = mysqli_fetch_assoc($result)) {
+            if (urlNormalizeFollowUpLogContentKey(isset($row['content']) ? $row['content'] : '') === $targetText) {
+                return isset($row['id']) ? (int) $row['id'] : 0;
+            }
+        }
+
+        return 0;
+    }
+}
+
+if (!function_exists('urlNormalizeFollowUpLogContentKey')) {
+    /**
+     * Compares messages by their visible text, so formatting-only differences between two
+     * saves of the same note do not read as a different note.
+     */
+    function urlNormalizeFollowUpLogContentKey($content)
+    {
+        $text = urlGetUserRecordLogContentPlainText((string) $content);
+
+        return trim(preg_replace('/\s+/', ' ', (string) $text));
+    }
+}
+
+if (!function_exists('urlAppendFollowUpLogHistory')) {
+    /**
+     * Adds one line to the entry's follow-up history and returns the encoded list, so the
+     * reused entry keeps showing every state it has been through.
+     */
+    function urlAppendFollowUpLogHistory($dbConnect, $tblName, $logId, $historyEntry)
+    {
+        $historyEntries = array();
+
+        if (urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_history')) {
+            $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+            $result = mysqli_query($dbConnect, "SELECT `follow_up_history` FROM `" . $safeTable . "` WHERE `id` = " . (int) $logId . " LIMIT 1");
+            if ($result && mysqli_num_rows($result) > 0) {
+                $row = mysqli_fetch_assoc($result);
+                $decoded = json_decode((string) (isset($row['follow_up_history']) ? $row['follow_up_history'] : ''), true);
+                if (is_array($decoded)) {
+                    $historyEntries = $decoded;
+                }
+            }
+        }
+
+        $historyEntries[] = $historyEntry;
+
+        return (string) json_encode($historyEntries);
+    }
+}
+
+if (!function_exists('urlRenderUserRecordLogFollowUpHistory')) {
+    /**
+     * Renders the entry's follow-up update history. Approving, rescheduling and the like
+     * reuse one entry per round, so this is where the earlier states stay visible.
+     */
+    function urlRenderUserRecordLogFollowUpHistory($historyJson)
+    {
+        $historyJson = trim((string) $historyJson);
+        if ($historyJson === '') {
+            return '';
+        }
+
+        $historyEntries = json_decode($historyJson, true);
+        if (!is_array($historyEntries) || empty($historyEntries)) {
+            return '';
+        }
+
+        $rows = '';
+        foreach ($historyEntries as $historyEntry) {
+            if (!is_array($historyEntry)) {
+                continue;
+            }
+
+            $line = '<div class="url-log-history-row">';
+            $line .= '<span class="url-log-history-time">' . htmlspecialchars(trim((string) (isset($historyEntry['time']) ? $historyEntry['time'] : '')), ENT_QUOTES, 'UTF-8') . '</span> ';
+            $line .= '<strong>' . htmlspecialchars(trim((string) (isset($historyEntry['action']) ? $historyEntry['action'] : '')), ENT_QUOTES, 'UTF-8') . '</strong>';
+
+            $detail = trim((string) (isset($historyEntry['detail']) ? $historyEntry['detail'] : ''));
+            if ($detail !== '') {
+                $line .= ' &mdash; ' . htmlspecialchars($detail, ENT_QUOTES, 'UTF-8');
+            }
+
+            $by = trim((string) (isset($historyEntry['by']) ? $historyEntry['by'] : ''));
+            if ($by !== '') {
+                $line .= ' <span class="url-log-history-by">(by ' . htmlspecialchars($by, ENT_QUOTES, 'UTF-8') . ')</span>';
+            }
+
+            $line .= '</div>';
+            $rows .= $line;
+        }
+
+        if ($rows === '') {
+            return '';
+        }
+
+        return '    <div class="url-log-history"><div class="url-log-history-title">Follow-Up Update History</div>' . $rows . '</div>';
+    }
+}
+
 if (!function_exists('urlBuildPreviousFollowUpSnapshotJson')) {
     /**
      * JSON describing the follow-up this entry is replacing, or '' when it is not a
@@ -1547,6 +1689,9 @@ if (!function_exists('urlBuildListHtml')) {
             if (isset($rescheduleHtml) && $rescheduleHtml !== '') {
                 $html .= '    ' . $rescheduleHtml;
             }
+            // An entry is reused as the follow-up moves on, so list every update it has
+            // been through rather than leaving only the latest state visible.
+            $html .= urlRenderUserRecordLogFollowUpHistory(isset($row['follow_up_history']) ? $row['follow_up_history'] : '');
             $html .= '    <textarea class="url-edit-summary d-none">' . htmlspecialchars($summary, ENT_QUOTES, 'UTF-8') . '</textarea>';
             $html .= '    <input type="hidden" class="url-edit-message-shortcut-id" value="' . $messageShortcutId . '">';
             $html .= '    <textarea class="url-copy-html d-none">' . htmlspecialchars($copyHtml, ENT_QUOTES, 'UTF-8') . '</textarea>';
@@ -2399,6 +2544,85 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             $insertValues[] = "'" . urlEsc($dbConnect, $previousFollowUpSnapshotJson) . "'";
         }
 
+        // Re-saving the same message on the same follow-up round is that follow-up moving
+        // on, so update the entry it already has instead of adding a near-identical row.
+        $reusableLogId = urlFindReusableFollowUpLogId(
+            $dbConnect,
+            $tblName,
+            $context,
+            (int) $followUpSync['follow_up_id'],
+            (int) $followUpSync['round_id'],
+            $content
+        );
+        if ($reusableLogId > 0) {
+            $reuseUpdateParts = array();
+            if ($hasNextFollowUpDateColumn) {
+                $reuseUpdateParts[] = "next_follow_up_date=" . ($nextFollowUpDate !== '' ? ("'" . urlEsc($dbConnect, $nextFollowUpDate) . "'") : 'NULL');
+            }
+            if ($hasFollowUpTimesColumn) {
+                $reuseUpdateParts[] = "follow_up_times=" . ($followUpTimes !== '' ? ("'" . urlEsc($dbConnect, $followUpTimes) . "'") : 'NULL');
+            }
+            if ($hasFollowUpDayColumn) {
+                $reuseUpdateParts[] = "follow_up_day=" . ($followUpDay !== '' ? ("'" . urlEsc($dbConnect, $followUpDay) . "'") : 'NULL');
+            }
+            if ($hasMessageShortcutIdColumn) {
+                $reuseUpdateParts[] = "message_shortcut_id=" . ($messageShortcutId > 0 ? $messageShortcutId : 'NULL');
+            }
+            if ($previousFollowUpSnapshotJson !== '' && urlUserRecordLogColumnExists($dbConnect, $tblName, 'previous_follow_up_info')) {
+                $reuseUpdateParts[] = "previous_follow_up_info='" . urlEsc($dbConnect, $previousFollowUpSnapshotJson) . "'";
+            }
+            if (urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_history')) {
+                $reuseHistoryJson = urlAppendFollowUpLogHistory($dbConnect, $tblName, $reusableLogId, array(
+                    'time' => date('Y-m-d H:i:s'),
+                    'action' => 'Updated from customer page',
+                    'detail' => trim(
+                        ($nextFollowUpDate !== '' ? ('Follow-Up Date: ' . $nextFollowUpDate) : '')
+                        . ($followUpTimes !== '' ? (($nextFollowUpDate !== '' ? ' | ' : '') . 'Round: ' . $followUpTimes) : '')
+                    ),
+                    'by' => (string) USER_NAME,
+                ));
+                $reuseUpdateParts[] = "follow_up_history='" . urlEsc($dbConnect, $reuseHistoryJson) . "'";
+            }
+            $reuseUpdateParts[] = "updated_by='" . urlEsc($dbConnect, USER_ID) . "'";
+            $reuseUpdateParts[] = "updated_at=NOW()";
+
+            $reuseSql = "UPDATE " . $tblName . " SET
+                " . implode(",
+                ", $reuseUpdateParts) . "
+                WHERE id='" . (int) $reusableLogId . "'";
+            $reuseOk = mysqli_query($dbConnect, $reuseSql);
+
+            if (function_exists('audit_log')) {
+                audit_log(array(
+                    'log_act' => 'Edit',
+                    'cdate' => $GLOBALS['cdate'],
+                    'ctime' => $GLOBALS['ctime'],
+                    'uid' => USER_ID,
+                    'cby' => USER_ID,
+                    'query_rec' => $reuseSql,
+                    'query_table' => $tblName,
+                    'oldval' => '',
+                    'changes' => 'next_follow_up_date=' . $nextFollowUpDate . ', follow_up_times=' . $followUpTimes,
+                    'newval' => '',
+                    'act_msg' => USER_NAME . ' updated the follow-up on User Record Log [ID=' . (int) $reusableLogId . '] instead of adding a duplicate entry.',
+                    'page' => $pageTitle,
+                    'connect' => $connect,
+                ));
+            }
+
+            if (!$reuseOk) {
+                if ($urlIsFallback) {
+                    urlFallbackResponse('Failed to update the existing follow-up record.', false, $context['return_url']);
+                }
+                urlJsonResponse(array('ok' => 0, 'message' => 'Failed to update the existing follow-up record.'));
+            }
+
+            if ($urlIsFallback) {
+                urlFallbackResponse(urlAppendFollowUpWarning('Existing follow-up record updated.', $followUpSync), true, $context['return_url']);
+            }
+            urlJsonResponse(array('ok' => 1, 'message' => urlAppendFollowUpWarning('Existing follow-up record updated.', $followUpSync)));
+        }
+
         $insertColumns = array_merge($insertColumns, array('created_by', 'created_at', 'updated_by', 'updated_at', 'status'));
         $insertValues = array_merge($insertValues, array(
             "'" . urlEsc($dbConnect, USER_ID) . "'",
@@ -2957,6 +3181,33 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                 .user-record-log-module .url-log-reschedule-previous {
                     margin-top: 0.25rem;
                     font-style: italic;
+                }
+
+                .user-record-log-module .url-log-history {
+                    margin-top: 0.5rem;
+                    padding: 0.5rem 0.75rem;
+                    border-left: 3px solid #6c8ebf;
+                    background-color: #f4f7fb;
+                    border-radius: 4px;
+                    font-size: 0.85rem;
+                    color: #4f5a6b;
+                }
+
+                .user-record-log-module .url-log-history-title {
+                    font-weight: 600;
+                    margin-bottom: 0.25rem;
+                }
+
+                .user-record-log-module .url-log-history-row {
+                    padding: 0.1rem 0;
+                }
+
+                .user-record-log-module .url-log-history-time {
+                    color: #8a94a6;
+                }
+
+                .user-record-log-module .url-log-history-by {
+                    color: #8a94a6;
                 }
 
                 .user-record-log-module .url-log-extra-sep {
