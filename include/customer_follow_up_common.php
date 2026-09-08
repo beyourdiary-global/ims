@@ -1205,39 +1205,6 @@ if (!function_exists('customerFollowUpBuildLogHistoryEntry')) {
     }
 }
 
-if (!function_exists('customerFollowUpRenderLogHistory')) {
-    function customerFollowUpRenderLogHistory($historyEntries)
-    {
-        if (!is_array($historyEntries) || empty($historyEntries)) {
-            return '';
-        }
-
-        $lines = array('--- Follow-Up Update History ---');
-        foreach ($historyEntries as $historyEntry) {
-            if (!is_array($historyEntry)) {
-                continue;
-            }
-
-            $line = '[' . trim((string) (isset($historyEntry['time']) ? $historyEntry['time'] : '')) . '] '
-                . trim((string) (isset($historyEntry['action']) ? $historyEntry['action'] : ''));
-
-            $detail = trim((string) (isset($historyEntry['detail']) ? $historyEntry['detail'] : ''));
-            if ($detail !== '') {
-                $line .= ' - ' . $detail;
-            }
-
-            $by = trim((string) (isset($historyEntry['by']) ? $historyEntry['by'] : ''));
-            if ($by !== '') {
-                $line .= ' (by ' . $by . ')';
-            }
-
-            $lines[] = $line;
-        }
-
-        return count($lines) > 1 ? implode("\n", $lines) : '';
-    }
-}
-
 if (!function_exists('customerFollowUpFindRoundUserRecordLogId')) {
     /**
      * The entry already written for this follow-up round, which the next action on the
@@ -1309,11 +1276,11 @@ if (!function_exists('customerFollowUpUpdateRoundUserRecordLog')) {
             $historyEntries[] = $historyEntry;
         }
 
-        $historyText = customerFollowUpRenderLogHistory($historyEntries);
-        $combinedContent = $historyText !== '' ? ($content . "\n\n" . $historyText) : $content;
-
+        // The history lives in its own column and is rendered from there, so content stays
+        // exactly the message it represents. Baking the history into content would make an
+        // entry's text grow every update and stop it matching the message it came from.
         $updateParts = array(
-            "`content` = '" . customerFollowUpEscape($connect, $combinedContent) . "'",
+            "`content` = '" . customerFollowUpEscape($connect, $content) . "'",
             "`updated_by` = '" . customerFollowUpEscape($connect, $actorUserId) . "'",
             "`updated_at` = NOW()",
         );
