@@ -15,11 +15,12 @@ include_once '../checkCurrentPagePin.php';
 include_once ROOT . '/include/customer_follow_up_common.php';
 
 $pageAccess = checkPinByGroupId($connect, $currentPagePin);
-// Merging rewrites other people's cases, so this page is admin-only rather than following
-// the follow-up list's per-assignee rules.
-$canUseCleanup = isActionAllowed('Edit', $pageAccess) && customerFollowUpIsAdminUser(defined('USER_GROUP') ? USER_GROUP : null);
-if (!$canUseCleanup) {
-    renderNotificationScript('You do not have permission to use Follow-Up Cleanup.', 'error', 'customer_follow_up_list.php', 1200, true);
+// No permission of its own: this page tidies the follow-up data the Customer Follow-Up
+// page shows, so whoever can open that page can use it. Everything here is still
+// confirmed one at a time, soft-deletes rather than removes, and is written to the audit
+// log, so the actions stay reversible and attributable.
+if (!isActionAllowed('View', $pageAccess)) {
+    renderNotificationScript('You do not have permission to view Customer Follow-Up.', 'error', 'dashboard.php', 1200, true);
     exit;
 }
 

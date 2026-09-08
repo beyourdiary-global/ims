@@ -1330,13 +1330,11 @@ if (!empty($customerTagLabelFilters)) {
                                 <h2 class="mb-1"><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h2>
                                 <div class="follow-up-note">Follow-up workflow, missed/lost monitoring, and approval handling are managed from this page.</div>
                             </div>
-                            <?php if ($canViewAllFollowUpRecords) { ?>
-                                <div class="mt-auto mb-auto">
-                                    <a class="btn btn-sm btn-rounded btn-warning" href="customer_follow_up_cleanup.php">
-                                        <i class="fa-solid fa-broom"></i> Follow-Up Cleanup
-                                    </a>
-                                </div>
-                            <?php } ?>
+                            <div class="mt-auto mb-auto">
+                                <a class="btn btn-sm btn-rounded btn-warning" href="customer_follow_up_cleanup.php">
+                                    <i class="fa-solid fa-broom"></i> Follow-Up Cleanup
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
