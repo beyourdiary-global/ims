@@ -4792,23 +4792,326 @@ if (!function_exists('customerFollowUpStartFromReceivedOrder')) {
     }
 }
 
+if (!function_exists('customerFollowUpFindDuplicateCaseGroups')) {
+    /**
+     * Customers still holding more than one open follow-up case, with those cases ordered
+     * most-recently-received first. This is what the review page lists and what the
+     * backfill works through; a customer with a single case never appears.
+     */
+    function customerFollowUpFindDuplicateCaseGroups($connect)
+    {
+        $groups = array();
+        if (!($connect instanceof mysqli)) {
+            return $groups;
+        }
+
+        $duplicateSql = "SELECT `platform`, `customer_id`, COUNT(*) AS `case_count`
+                         FROM `" . CUSTOMER_FOLLOW_UP . "`
+                         WHERE `status` = 'A'
+                           AND `customer_id` > 0
+                           AND LOWER(IFNULL(`current_status`, '')) NOT IN ('done', 'lost')
+                         GROUP BY `platform`, `customer_id`
+                         HAVING COUNT(*) > 1";
+        $duplicateResult = mysqli_query($connect, $duplicateSql);
+
+        while ($duplicateResult && ($duplicateRow = mysqli_fetch_assoc($duplicateResult))) {
+            $platform = customerFollowUpNormalizePlatform($duplicateRow['platform']);
+            $customerId = (int) $duplicateRow['customer_id'];
+            if ($platform === '' || $customerId <= 0) {
+                continue;
+            }
+
+            $openCases = array();
+            foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
+                $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
+                if (in_array($caseStatus, array('done', 'lost'), true)) {
+                    continue;
+                }
+
+                $caseRow['current_round'] = customerFollowUpFetchCurrentRound($connect, (int) $caseRow['id']);
+                $openCases[] = $caseRow;
+            }
+
+            if (count($openCases) < 2) {
+                continue;
+            }
+
+            // Most recently received first: that is the follow-up actually in progress and
+            // the default the reviewer is offered.
+            usort($openCases, function ($a, $b) {
+                $dateA = trim((string) (isset($a['received_date']) ? $a['received_date'] : ''));
+                $dateB = trim((string) (isset($b['received_date']) ? $b['received_date'] : ''));
+                if ($dateA !== $dateB) {
+                    return strcmp($dateB, $dateA);
+                }
+
+                return (int) $b['id'] <=> (int) $a['id'];
+            });
+
+            $groups[] = array(
+                'platform' => $platform,
+                'customer_id' => $customerId,
+                'cases' => $openCases,
+            );
+        }
+
+        return $groups;
+    }
+}
+
+if (!function_exists('customerFollowUpMergeCasesIntoSurvivor')) {
+    /**
+     * Folds a customer's other open cases into the one chosen to keep. The others have
+     * their rounds marked superseded and are soft-deleted, and each merge is written to
+     * the survivor's action log. The survivor carries the furthest round any of them
+     * reached, since rounds count the customer's follow-up history rather than one
+     * order's.
+     *
+     * Returns array('success', 'message', 'cases_merged', 'rounds_superseded').
+     */
+    function customerFollowUpMergeCasesIntoSurvivor($connect, $platform, $customerId, $survivorId, $actorUserId)
+    {
+        $result = array('success' => false, 'message' => '', 'cases_merged' => 0, 'rounds_superseded' => 0);
+
+        $platform = customerFollowUpNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $survivorId = (int) $survivorId;
+        $actorUserId = (int) $actorUserId;
+
+        if (!($connect instanceof mysqli) || $platform === '' || $customerId <= 0 || $survivorId <= 0) {
+            return $result;
+        }
+        if (!customerFollowUpSupportsRoundSuperseded($connect)) {
+            $result['message'] = 'customer_follow_up_round.superseded is missing. Run insert_table.php first.';
+            return $result;
+        }
+
+        $survivor = array();
+        $others = array();
+        foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
+            $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
+            if (in_array($caseStatus, array('done', 'lost'), true)) {
+                continue;
+            }
+
+            if ((int) $caseRow['id'] === $survivorId) {
+                $survivor = $caseRow;
+            } else {
+                $others[] = $caseRow;
+            }
+        }
+
+        if (empty($survivor)) {
+            $result['message'] = 'The case to keep was not found among the open cases for this customer.';
+            return $result;
+        }
+        if (empty($others)) {
+            $result['success'] = true;
+            $result['message'] = 'Nothing to merge; this customer already has a single open case.';
+            return $result;
+        }
+
+        $today = customerFollowUpNowDate();
+        $nowTime = customerFollowUpNowTime();
+        $maxRoundNo = customerFollowUpGetMaxRoundNo();
+
+        $mergedRoundNo = max(1, (int) $survivor['current_round_no']);
+        foreach ($others as $otherCase) {
+            $mergedRoundNo = max($mergedRoundNo, (int) $otherCase['current_round_no']);
+        }
+        $mergedRoundNo = min($maxRoundNo, $mergedRoundNo);
+
+        foreach ($others as $mergedCase) {
+            $mergedCaseId = (int) $mergedCase['id'];
+            $mergedRound = customerFollowUpFetchCurrentRound($connect, $mergedCaseId);
+            $mergedOrderLabel = trim((string) (isset($mergedCase['order_no']) ? $mergedCase['order_no'] : ''));
+            if ($mergedOrderLabel === '') {
+                $mergedOrderLabel = '#' . (int) $mergedCase['order_id'];
+            }
+
+            $supersedeSql = "UPDATE `" . CUSTOMER_FOLLOW_UP_ROUND . "`
+                             SET `superseded` = 'Y',
+                                 `update_by` = '" . customerFollowUpEscape($connect, (string) $actorUserId) . "',
+                                 `update_date` = '" . customerFollowUpEscape($connect, $today) . "',
+                                 `update_time` = '" . customerFollowUpEscape($connect, $nowTime) . "'
+                             WHERE `follow_up_id` = " . $mergedCaseId . "
+                               AND `status` = 'A'
+                               AND IFNULL(`superseded`, 'N') <> 'Y'";
+            if (!mysqli_query($connect, $supersedeSql)) {
+                $result['message'] = 'Failed to supersede rounds for case ' . $mergedCaseId . '.';
+                return $result;
+            }
+            $result['rounds_superseded'] += (int) mysqli_affected_rows($connect);
+
+            if (!customerFollowUpUpdateCaseRecord($connect, $mergedCaseId, array(
+                'status' => 'D',
+                'remark' => 'Merged into follow-up case ' . $survivorId . ' on ' . $today . '.',
+                'update_by' => (string) $actorUserId,
+                'update_date' => $today,
+                'update_time' => $nowTime,
+            ))) {
+                $result['message'] = 'Failed to close merged case ' . $mergedCaseId . '.';
+                return $result;
+            }
+
+            customerFollowUpInsertActionLog($connect, array(
+                'follow_up_id' => $survivorId,
+                'round_id' => 0,
+                'action_type' => 'merged_duplicate_case',
+                'old_value' => array(
+                    'follow_up_id' => $mergedCaseId,
+                    'order_no' => $mergedOrderLabel,
+                    'round_no' => (int) $mergedCase['current_round_no'],
+                    'next_follow_up_date' => trim((string) (isset($mergedRound['next_follow_up_date']) ? $mergedRound['next_follow_up_date'] : '')),
+                ),
+                'new_value' => array('follow_up_id' => $survivorId, 'round_no' => $mergedRoundNo),
+                'remark' => 'Merged duplicate follow-up case ' . $mergedCaseId . ' (order ' . $mergedOrderLabel . ') into this case.',
+                'action_by' => (string) $actorUserId,
+            ));
+
+            $result['cases_merged']++;
+        }
+
+        $survivorFields = array(
+            'update_by' => (string) $actorUserId,
+            'update_date' => $today,
+            'update_time' => $nowTime,
+        );
+        if ($mergedRoundNo !== (int) $survivor['current_round_no']) {
+            $survivorFields['current_round_no'] = $mergedRoundNo;
+        }
+        customerFollowUpUpdateCaseRecord($connect, $survivorId, $survivorFields);
+
+        $survivorRow = customerFollowUpReadFollowUpCase($connect, $survivorId);
+        if (!empty($survivorRow)) {
+            customerFollowUpCreateOrLoadCurrentRound($connect, $survivorRow);
+        }
+
+        if (function_exists('audit_log')) {
+            $actorDisplayName = customerFollowUpGetUserDisplayName($connect, $actorUserId);
+            audit_log(array(
+                'log_act'     => 'edit',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'query_rec'   => $survivorId,
+                'query_table' => CUSTOMER_FOLLOW_UP,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'act_msg'     => $actorDisplayName . ' merged ' . $result['cases_merged'] . ' duplicate follow-up case(s) into case [<b> ID = ' . $survivorId . '</b> ].',
+            ));
+        }
+
+        $result['success'] = true;
+        return $result;
+    }
+}
+
+if (!function_exists('customerFollowUpFindUnlinkedFollowUpLogs')) {
+    /**
+     * Follow-up entries written before entries carried a case link. Without the link a
+     * later edit cannot find the entry to reuse and adds another row instead, so these are
+     * what the review page offers to attach.
+     */
+    function customerFollowUpFindUnlinkedFollowUpLogs($connect)
+    {
+        $items = array();
+        if (!($connect instanceof mysqli)
+            || !function_exists('urlUserRecordLogColumnExists')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_id')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_round_id')
+        ) {
+            return $items;
+        }
+
+        $caseResult = mysqli_query($connect, "SELECT * FROM `" . CUSTOMER_FOLLOW_UP . "`
+                                              WHERE `status` = 'A'
+                                                AND `customer_id` > 0
+                                                AND LOWER(IFNULL(`current_status`, '')) NOT IN ('done', 'lost')");
+
+        while ($caseResult && ($caseRow = mysqli_fetch_assoc($caseResult))) {
+            $platform = customerFollowUpNormalizePlatform($caseRow['platform']);
+            $customerColumn = customerFollowUpGetPlatformUserRecordLogColumn($platform);
+            $customerId = (int) $caseRow['customer_id'];
+            if ($customerColumn === '' || $customerId <= 0) {
+                continue;
+            }
+
+            $roundRow = customerFollowUpFetchCurrentRound($connect, (int) $caseRow['id']);
+            $roundId = (int) (isset($roundRow['id']) ? $roundRow['id'] : 0);
+            if ($roundId <= 0) {
+                continue;
+            }
+
+            $logSql = "SELECT `id`, `content`, `next_follow_up_date`, `follow_up_times`, `created_at`, `created_by`
+                       FROM `" . USER_RECORD_LOG . "`
+                       WHERE `status` = 'A'
+                         AND `" . $customerColumn . "` = " . $customerId . "
+                         AND `next_follow_up_date` IS NOT NULL
+                         AND `next_follow_up_date` <> ''
+                         AND IFNULL(`follow_up_id`, 0) = 0
+                       ORDER BY `created_at` DESC, `id` DESC
+                       LIMIT 1";
+            $logResult = mysqli_query($connect, $logSql);
+            if (!$logResult || mysqli_num_rows($logResult) === 0) {
+                continue;
+            }
+
+            $items[] = array(
+                'platform' => $platform,
+                'customer_id' => $customerId,
+                'case' => $caseRow,
+                'round' => $roundRow,
+                'log' => mysqli_fetch_assoc($logResult),
+            );
+        }
+
+        return $items;
+    }
+}
+
+if (!function_exists('customerFollowUpLinkUserRecordLogToCase')) {
+    /**
+     * Attaches one existing entry to a case and its current round, and brings the entry's
+     * round into step so the customer page and the Follow Up List do not disagree.
+     */
+    function customerFollowUpLinkUserRecordLogToCase($connect, $logId, $caseId, $roundId, $roundNo, $actorUserId)
+    {
+        $logId = (int) $logId;
+        $caseId = (int) $caseId;
+        $roundId = (int) $roundId;
+
+        if (!($connect instanceof mysqli) || $logId <= 0 || $caseId <= 0 || $roundId <= 0) {
+            return false;
+        }
+        if (!function_exists('urlUserRecordLogColumnExists')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_id')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_round_id')
+        ) {
+            return false;
+        }
+
+        $updateParts = array(
+            "`follow_up_id` = " . $caseId,
+            "`follow_up_round_id` = " . $roundId,
+            "`updated_by` = '" . customerFollowUpEscape($connect, (string) $actorUserId) . "'",
+            "`updated_at` = NOW()",
+        );
+        if ((int) $roundNo > 0 && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_times')) {
+            $updateParts[] = "`follow_up_times` = '" . customerFollowUpEscape($connect, (string) (int) $roundNo) . "'";
+        }
+
+        return mysqli_query($connect, "UPDATE `" . USER_RECORD_LOG . "` SET " . implode(', ', $updateParts) . " WHERE `id` = " . $logId . " LIMIT 1") ? true : false;
+    }
+}
+
 if (!function_exists('customerFollowUpBackfillExistingData')) {
     /**
-     * Brings follow-up data created before the one-case-per-customer rule into line with
-     * it, so existing follow-ups behave like new ones instead of staying invisible to the
-     * merge, round and reuse logic.
+     * Non-interactive counterpart to the review page: works through every duplicate group
+     * and unlinked entry, keeping the most recently received case in each group. Shares
+     * its detection and merge logic with the page, so both behave the same.
      *
-     * Two passes:
-     *   1. customers holding more than one open case keep the most recent one; the others
-     *      are soft-deleted after their rounds are marked superseded, their details are
-     *      snapshotted onto the survivor and the merge is written to the action log;
-     *   2. the newest user record log entry that carries a follow-up date but no case link
-     *      is attached to the customer's case and current round, which is what lets a
-     *      later edit reuse that entry rather than adding another.
-     *
-     * Runs as a dry run unless $options['apply'] is true, and is safe to run again: the
-     * first pass only sees customers who still hold several open cases, and the second
-     * only entries that are still unlinked.
+     * Runs as a dry run unless $options['apply'] is true, and is safe to run again: each
+     * pass only selects rows it has not already handled.
      */
     function customerFollowUpBackfillExistingData($connect, $financeConnect, $options = array())
     {
@@ -4834,212 +5137,66 @@ if (!function_exists('customerFollowUpBackfillExistingData')) {
             return $summary;
         }
 
-        $today = customerFollowUpNowDate();
-        $nowTime = customerFollowUpNowTime();
-        $maxRoundNo = customerFollowUpGetMaxRoundNo();
-
-        // Pass 1: one open case per customer.
-        $duplicateSql = "SELECT `platform`, `customer_id`, COUNT(*) AS `case_count`
-                         FROM `" . CUSTOMER_FOLLOW_UP . "`
-                         WHERE `status` = 'A'
-                           AND `customer_id` > 0
-                           AND LOWER(IFNULL(`current_status`, '')) NOT IN ('done', 'lost')
-                         GROUP BY `platform`, `customer_id`
-                         HAVING COUNT(*) > 1";
-        $duplicateResult = mysqli_query($connect, $duplicateSql);
-
-        while ($duplicateResult && ($duplicateRow = mysqli_fetch_assoc($duplicateResult))) {
-            $platform = customerFollowUpNormalizePlatform($duplicateRow['platform']);
-            $customerId = (int) $duplicateRow['customer_id'];
-            if ($platform === '' || $customerId <= 0) {
-                continue;
-            }
-
-            $openCases = array();
-            foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
-                $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
-                if (in_array($caseStatus, array('done', 'lost'), true)) {
-                    continue;
-                }
-                $openCases[] = $caseRow;
-            }
-
-            if (count($openCases) < 2) {
-                continue;
-            }
-
-            // Most recently received wins; that is the follow-up actually in progress.
-            usort($openCases, function ($a, $b) {
-                $dateA = trim((string) (isset($a['received_date']) ? $a['received_date'] : ''));
-                $dateB = trim((string) (isset($b['received_date']) ? $b['received_date'] : ''));
-                if ($dateA !== $dateB) {
-                    return strcmp($dateB, $dateA);
-                }
-
-                return (int) $b['id'] <=> (int) $a['id'];
-            });
-
-            $survivor = array_shift($openCases);
-            $survivorId = (int) $survivor['id'];
+        foreach (customerFollowUpFindDuplicateCaseGroups($connect) as $group) {
             $summary['customers_with_duplicates']++;
+            $cases = $group['cases'];
+            $survivor = $cases[0];
 
-            // Rounds count the customer's follow-up history, so the survivor carries the
-            // furthest any of the merged cases had reached.
-            $mergedRoundNo = max(1, (int) $survivor['current_round_no']);
-            foreach ($openCases as $mergedCase) {
-                $mergedRoundNo = max($mergedRoundNo, (int) $mergedCase['current_round_no']);
-            }
-            $mergedRoundNo = min($maxRoundNo, $mergedRoundNo);
-
-            foreach ($openCases as $mergedCase) {
-                $mergedCaseId = (int) $mergedCase['id'];
-                $mergedRound = customerFollowUpFetchCurrentRound($connect, $mergedCaseId);
+            foreach (array_slice($cases, 1) as $mergedCase) {
                 $mergedOrderLabel = trim((string) (isset($mergedCase['order_no']) ? $mergedCase['order_no'] : ''));
                 if ($mergedOrderLabel === '') {
                     $mergedOrderLabel = '#' . (int) $mergedCase['order_id'];
                 }
-
-                $summary['actions'][] = 'Customer ' . $platform . '/' . $customerId
-                    . ': merge case ' . $mergedCaseId . ' (order ' . $mergedOrderLabel
-                    . ', round ' . (int) $mergedCase['current_round_no'] . ') into case ' . $survivorId . '.';
-
-                if (!$apply) {
-                    $summary['cases_merged']++;
-                    continue;
-                }
-
-                $supersedeSql = "UPDATE `" . CUSTOMER_FOLLOW_UP_ROUND . "`
-                                 SET `superseded` = 'Y',
-                                     `update_by` = '" . customerFollowUpEscape($connect, (string) $actorUserId) . "',
-                                     `update_date` = '" . customerFollowUpEscape($connect, $today) . "',
-                                     `update_time` = '" . customerFollowUpEscape($connect, $nowTime) . "'
-                                 WHERE `follow_up_id` = " . $mergedCaseId . "
-                                   AND `status` = 'A'
-                                   AND IFNULL(`superseded`, 'N') <> 'Y'";
-                if (mysqli_query($connect, $supersedeSql)) {
-                    $summary['rounds_superseded'] += (int) mysqli_affected_rows($connect);
-                } else {
-                    $summary['errors'][] = 'Failed to supersede rounds for case ' . $mergedCaseId . '.';
-                    continue;
-                }
-
-                $mergedRemark = 'Merged into follow-up case ' . $survivorId . ' by the one-case-per-customer backfill on ' . $today . '.';
-                if (!customerFollowUpUpdateCaseRecord($connect, $mergedCaseId, array(
-                    'status' => 'D',
-                    'remark' => $mergedRemark,
-                    'update_by' => (string) $actorUserId,
-                    'update_date' => $today,
-                    'update_time' => $nowTime,
-                ))) {
-                    $summary['errors'][] = 'Failed to close merged case ' . $mergedCaseId . '.';
-                    continue;
-                }
-
-                customerFollowUpInsertActionLog($connect, array(
-                    'follow_up_id' => $survivorId,
-                    'round_id' => 0,
-                    'action_type' => 'merged_duplicate_case',
-                    'old_value' => array(
-                        'follow_up_id' => $mergedCaseId,
-                        'order_no' => $mergedOrderLabel,
-                        'round_no' => (int) $mergedCase['current_round_no'],
-                        'next_follow_up_date' => trim((string) (isset($mergedRound['next_follow_up_date']) ? $mergedRound['next_follow_up_date'] : '')),
-                    ),
-                    'new_value' => array('follow_up_id' => $survivorId, 'round_no' => $mergedRoundNo),
-                    'remark' => 'Merged duplicate follow-up case ' . $mergedCaseId . ' (order ' . $mergedOrderLabel . ') into this case.',
-                    'action_by' => (string) $actorUserId,
-                ));
-
-                $summary['cases_merged']++;
+                $summary['actions'][] = 'Customer ' . $group['platform'] . '/' . $group['customer_id']
+                    . ': merge case ' . (int) $mergedCase['id'] . ' (order ' . $mergedOrderLabel
+                    . ', round ' . (int) $mergedCase['current_round_no'] . ') into case ' . (int) $survivor['id'] . '.';
             }
 
             if (!$apply) {
+                $summary['cases_merged'] += count($cases) - 1;
                 continue;
             }
 
-            $survivorFields = array(
-                'update_by' => (string) $actorUserId,
-                'update_date' => $today,
-                'update_time' => $nowTime,
+            $mergeResult = customerFollowUpMergeCasesIntoSurvivor(
+                $connect,
+                $group['platform'],
+                $group['customer_id'],
+                (int) $survivor['id'],
+                $actorUserId
             );
-            if ($mergedRoundNo !== (int) $survivor['current_round_no']) {
-                $survivorFields['current_round_no'] = $mergedRoundNo;
-            }
-            customerFollowUpUpdateCaseRecord($connect, $survivorId, $survivorFields);
 
-            $survivorRow = customerFollowUpReadFollowUpCase($connect, $survivorId);
-            if (!empty($survivorRow)) {
-                customerFollowUpCreateOrLoadCurrentRound($connect, $survivorRow);
+            if (empty($mergeResult['success'])) {
+                $summary['errors'][] = trim((string) $mergeResult['message']) !== ''
+                    ? $mergeResult['message']
+                    : ('Failed to merge cases for customer ' . $group['platform'] . '/' . $group['customer_id'] . '.');
+                continue;
             }
+
+            $summary['cases_merged'] += (int) $mergeResult['cases_merged'];
+            $summary['rounds_superseded'] += (int) $mergeResult['rounds_superseded'];
         }
 
-        // Pass 2: attach the newest unlinked follow-up entry to the customer's case.
-        if (function_exists('urlUserRecordLogColumnExists')
-            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_id')
-            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_round_id')
-        ) {
-            $caseSql = "SELECT * FROM `" . CUSTOMER_FOLLOW_UP . "`
-                        WHERE `status` = 'A'
-                          AND `customer_id` > 0
-                          AND LOWER(IFNULL(`current_status`, '')) NOT IN ('done', 'lost')";
-            $caseResult = mysqli_query($connect, $caseSql);
+        foreach (customerFollowUpFindUnlinkedFollowUpLogs($connect) as $item) {
+            $summary['actions'][] = 'Customer ' . $item['platform'] . '/' . $item['customer_id']
+                . ': link user record log ' . (int) $item['log']['id'] . ' to case ' . (int) $item['case']['id']
+                . ' round ' . (int) $item['case']['current_round_no'] . '.';
 
-            while ($caseResult && ($caseRow = mysqli_fetch_assoc($caseResult))) {
-                $platform = customerFollowUpNormalizePlatform($caseRow['platform']);
-                $customerColumn = customerFollowUpGetPlatformUserRecordLogColumn($platform);
-                $customerId = (int) $caseRow['customer_id'];
-                if ($customerColumn === '' || $customerId <= 0) {
-                    continue;
-                }
+            if (!$apply) {
+                $summary['log_entries_linked']++;
+                continue;
+            }
 
-                $roundRow = customerFollowUpFetchCurrentRound($connect, (int) $caseRow['id']);
-                $roundId = (int) (isset($roundRow['id']) ? $roundRow['id'] : 0);
-                if ($roundId <= 0) {
-                    continue;
-                }
-
-                $logSql = "SELECT `id`, `next_follow_up_date`
-                           FROM `" . USER_RECORD_LOG . "`
-                           WHERE `status` = 'A'
-                             AND `" . $customerColumn . "` = " . $customerId . "
-                             AND `next_follow_up_date` IS NOT NULL
-                             AND `next_follow_up_date` <> ''
-                             AND IFNULL(`follow_up_id`, 0) = 0
-                           ORDER BY `created_at` DESC, `id` DESC
-                           LIMIT 1";
-                $logResult = mysqli_query($connect, $logSql);
-                if (!$logResult || mysqli_num_rows($logResult) === 0) {
-                    continue;
-                }
-
-                $logRow = mysqli_fetch_assoc($logResult);
-                $logId = (int) $logRow['id'];
-
-                $summary['actions'][] = 'Customer ' . $platform . '/' . $customerId
-                    . ': link user record log ' . $logId . ' to case ' . (int) $caseRow['id']
-                    . ' round ' . (int) $caseRow['current_round_no'] . '.';
-
-                if (!$apply) {
-                    $summary['log_entries_linked']++;
-                    continue;
-                }
-
-                $updateParts = array(
-                    "`follow_up_id` = " . (int) $caseRow['id'],
-                    "`follow_up_round_id` = " . $roundId,
-                    "`updated_at` = NOW()",
-                );
-                // Keep the entry's round in step with the case, so the customer page and
-                // the Follow Up List do not disagree the moment this runs.
-                if (urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_times')) {
-                    $updateParts[] = "`follow_up_times` = '" . customerFollowUpEscape($connect, (string) (int) $caseRow['current_round_no']) . "'";
-                }
-
-                if (mysqli_query($connect, "UPDATE `" . USER_RECORD_LOG . "` SET " . implode(', ', $updateParts) . " WHERE `id` = " . $logId . " LIMIT 1")) {
-                    $summary['log_entries_linked']++;
-                } else {
-                    $summary['errors'][] = 'Failed to link user record log ' . $logId . '.';
-                }
+            if (customerFollowUpLinkUserRecordLogToCase(
+                $connect,
+                (int) $item['log']['id'],
+                (int) $item['case']['id'],
+                (int) $item['round']['id'],
+                (int) $item['case']['current_round_no'],
+                $actorUserId
+            )) {
+                $summary['log_entries_linked']++;
+            } else {
+                $summary['errors'][] = 'Failed to link user record log ' . (int) $item['log']['id'] . '.';
             }
         }
 
