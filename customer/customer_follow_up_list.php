@@ -2212,10 +2212,10 @@ if (!empty($customerTagLabelFilters)) {
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="submit_message_shortcut_id">
-                                Message Shortcut<span class="customer-follow-up-required-star">*</span>
+                                New Next Follow-Up Message Shortcut
                             </label>
-                            <select class="form-select" id="submit_message_shortcut_id" name="message_shortcut_id" required>
-                                <option value="">Select Message Shortcut</option>
+                            <select class="form-select" id="submit_message_shortcut_id" name="message_shortcut_id">
+                                <option value="">Leave blank - decide the message later</option>
                                 <?php foreach ($messageShortcutOptions as $shortcutRow) {
                                     $shortcutId = isset($shortcutRow['id']) ? (int) $shortcutRow['id'] : 0;
                                     if ($shortcutId <= 0) {
@@ -2226,6 +2226,7 @@ if (!empty($customerTagLabelFilters)) {
                                     <option value="<?= $shortcutId ?>"><?= htmlspecialchars($shortcutLabel !== '' ? $shortcutLabel : ('Shortcut #' . $shortcutId), ENT_QUOTES, 'UTF-8') ?></option>
                                 <?php } ?>
                             </select>
+                            <div class="form-text">The message for the follow-up being scheduled below. Leave blank if it has not been decided yet.</div>
                             <div class="customer-follow-up-field-error" id="submit_message_shortcut_error">Message Shortcut is required.</div>
                         </div>
                         <div class="mb-3">
@@ -3220,7 +3221,9 @@ if (!empty($customerTagLabelFilters)) {
 
             var attachmentIsRequired = attachmentInput ? attachmentInput.required : true;
             var attachmentMissing = attachmentIsRequired && (!attachmentInput || !attachmentInput.files || attachmentInput.files.length === 0);
-            var shortcutMissing = !shortcutInput || shortcutInput.value.trim() === '';
+            // The shortcut names the message for the follow-up being scheduled, which may not
+            // be decided yet, so it is optional.
+            var shortcutMissing = false;
             var nextDateMissing = !nextDateInput || nextDateInput.value.trim() === '';
 
             customerFollowUpSetSubmitAttachmentError(attachmentMissing);
