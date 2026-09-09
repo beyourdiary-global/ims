@@ -1652,31 +1652,37 @@ if (!function_exists('urlBuildListHtml')) {
             $attachmentPreviewHtml = urlBuildUserRecordLogAttachmentPreviewGrid($attachmentList, $uploadWebDir);
             $followUpMetaItems = array();
             $followUpCopyFields = array();
-            if ($nextFollowUpDate !== '') {
-                $followUpMetaItems[] = '<span><strong>Next Follow-Up Date:</strong> ' . htmlspecialchars($nextFollowUpDate, ENT_QUOTES, 'UTF-8') . '</span>';
-                $followUpCopyFields['Next Follow-Up Date'] = $nextFollowUpDate;
-            }
-            if ($followUpTimes !== '') {
-                $followUpMetaItems[] = '<span><strong>Follow-Up Round:</strong> ' . htmlspecialchars($followUpTimes, ENT_QUOTES, 'UTF-8') . '</span>';
-                $followUpCopyFields['Follow-Up Round'] = $followUpTimes;
-            }
-            if ($followUpDay !== '') {
-                $followUpMetaItems[] = '<span><strong>Follow-Up Day:</strong> ' . htmlspecialchars($followUpDay, ENT_QUOTES, 'UTF-8') . '</span>';
-                $followUpCopyFields['Follow-Up Day'] = $followUpDay;
-            }
-
-            // When this entry is tied to a follow-up case, link straight to it so the
-            // customer page and the Follow Up List stay one follow-up, not two.
             $linkedFollowUpId = isset($row['follow_up_id']) ? (int) $row['follow_up_id'] : 0;
-            if ($linkedFollowUpId > 0) {
-                $linkedRoundId = isset($row['follow_up_round_id']) ? (int) $row['follow_up_round_id'] : 0;
-                $followUpListUrl = rtrim((string) (isset($GLOBALS['SITEURL']) ? $GLOBALS['SITEURL'] : ''), '/')
-                    . '/customer/customer_follow_up_list.php?follow_up_id=' . $linkedFollowUpId
-                    . ($linkedRoundId > 0 ? ('&round_id=' . $linkedRoundId) : '');
-                $followUpMetaItems[] = '<span><strong>Follow-Up Case:</strong> <a href="'
-                    . htmlspecialchars($followUpListUrl, ENT_QUOTES, 'UTF-8')
-                    . '" target="_blank" rel="noopener">#' . $linkedFollowUpId . '</a></span>';
-                $followUpCopyFields['Follow-Up Case'] = '#' . $linkedFollowUpId;
+
+            // Follow-up entries all show the same four fields, blanks included, so the meta
+            // line does not change shape from one entry to the next. A plain note carries
+            // none of this and keeps its line off entirely.
+            $hasFollowUpMeta = ($nextFollowUpDate !== '' || $followUpTimes !== '' || $followUpDay !== '' || $linkedFollowUpId > 0);
+            if ($hasFollowUpMeta) {
+                $followUpMetaItems[] = '<span><strong>Next Follow-Up Date:</strong> ' . htmlspecialchars($nextFollowUpDate !== '' ? $nextFollowUpDate : '-', ENT_QUOTES, 'UTF-8') . '</span>';
+                $followUpCopyFields['Next Follow-Up Date'] = $nextFollowUpDate !== '' ? $nextFollowUpDate : '-';
+
+                $followUpMetaItems[] = '<span><strong>Follow-Up Round:</strong> ' . htmlspecialchars($followUpTimes !== '' ? $followUpTimes : '-', ENT_QUOTES, 'UTF-8') . '</span>';
+                $followUpCopyFields['Follow-Up Round'] = $followUpTimes !== '' ? $followUpTimes : '-';
+
+                $followUpMetaItems[] = '<span><strong>Follow-Up Day:</strong> ' . htmlspecialchars($followUpDay !== '' ? $followUpDay : '-', ENT_QUOTES, 'UTF-8') . '</span>';
+                $followUpCopyFields['Follow-Up Day'] = $followUpDay !== '' ? $followUpDay : '-';
+
+                // When this entry is tied to a follow-up case, link straight to it so the
+                // customer page and the Follow Up List stay one follow-up, not two.
+                if ($linkedFollowUpId > 0) {
+                    $linkedRoundId = isset($row['follow_up_round_id']) ? (int) $row['follow_up_round_id'] : 0;
+                    $followUpListUrl = rtrim((string) (isset($GLOBALS['SITEURL']) ? $GLOBALS['SITEURL'] : ''), '/')
+                        . '/customer/customer_follow_up_list.php?follow_up_id=' . $linkedFollowUpId
+                        . ($linkedRoundId > 0 ? ('&round_id=' . $linkedRoundId) : '');
+                    $followUpMetaItems[] = '<span><strong>Follow-Up Case:</strong> <a href="'
+                        . htmlspecialchars($followUpListUrl, ENT_QUOTES, 'UTF-8')
+                        . '" target="_blank" rel="noopener">#' . $linkedFollowUpId . '</a></span>';
+                    $followUpCopyFields['Follow-Up Case'] = '#' . $linkedFollowUpId;
+                } else {
+                    $followUpMetaItems[] = '<span><strong>Follow-Up Case:</strong> -</span>';
+                    $followUpCopyFields['Follow-Up Case'] = '-';
+                }
             }
 
             // Say outright that this entry rescheduled an earlier follow-up, and what that

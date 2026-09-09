@@ -1188,6 +1188,17 @@ if (!function_exists('customerFollowUpBuildLogHistoryEntry')) {
         // What moved is shown as from/to so the change reads at a glance; the flat detail
         // line carries the rest, which has no before value to compare against.
         $changes = array();
+
+        // Changes the caller knows about that are not a date move, such as the screenshot
+        // that evidences a submitted follow-up.
+        if (isset($data['extra_changes']) && is_array($data['extra_changes'])) {
+            foreach ($data['extra_changes'] as $extraChange) {
+                if (is_array($extraChange) && trim((string) (isset($extraChange['field']) ? $extraChange['field'] : '')) !== '') {
+                    $changes[] = $extraChange;
+                }
+            }
+        }
+
         $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
         $previousFollowUpDate = trim((string) (isset($data['previous_next_follow_up_date']) ? $data['previous_next_follow_up_date'] : ''));
         if ($nextFollowUpDate !== '' && $nextFollowUpDate !== $previousFollowUpDate) {
@@ -1412,13 +1423,20 @@ if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
             $insertValues .= ",\n                    '" . customerFollowUpEscape($connect, $nextFollowUpDate) . "'";
         }
 
-        // Seed the history so the first action is listed too, not just the ones that
-        // follow it.
-        $historyEntry = customerFollowUpBuildLogHistoryEntry($data);
-        if (!empty($historyEntry) && customerFollowUpSupportsLogHistory($connect)) {
-            $insertColumns .= ", `follow_up_history`";
-            $insertValues .= ",\n                    '" . customerFollowUpEscape($connect, json_encode(array($historyEntry))) . "'";
+        // Stamp the round on the entry, or it shows a blank Follow-Up Round beside entries
+        // saved from the customer page that carry one.
+        $entryRoundNo = (int) (isset($data['round_no']) ? $data['round_no'] : 0);
+        if ($entryRoundNo > 0
+            && function_exists('urlUserRecordLogColumnExists')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_times')
+        ) {
+            $insertColumns .= ", `follow_up_times`";
+            $insertValues .= ",\n                    '" . customerFollowUpEscape($connect, (string) $entryRoundNo) . "'";
         }
+
+        // No history on a brand-new entry: creating it is not an update, and a history
+        // block holding a single line reads as though something had already changed. The
+        // list starts at the first action that actually updates this entry.
 
         $sql = "INSERT INTO `" . USER_RECORD_LOG . "` (
                     " . $insertColumns . "
@@ -2017,6 +2035,9 @@ if (!function_exists('customerFollowUpCreateActionArtifacts')) {
             'upsert' => true,
             'action_label' => $actionLabel,
             'action_remark' => $remark,
+            'extra_changes' => (is_array($newValue) && isset($newValue['history_changes']) && is_array($newValue['history_changes']))
+                ? $newValue['history_changes']
+                : array(),
             'round_no' => isset($roundRow['round_no']) ? (int) $roundRow['round_no'] : 0,
             'actor_display_name' => (function_exists('customerFollowUpGetUserDisplayName') && ctype_digit(trim((string) $actorUserId)))
                 ? customerFollowUpGetUserDisplayName($connect, (int) $actorUserId)
@@ -3102,8 +3123,16 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         $actionType = $isResubmit ? 'resubmit_rejected_follow_up' : 'submit_follow_up';
         $actionLabel = $isAppeal ? 'Submitted follow-up appeal' : ($isResubmit ? 'Resubmitted rejected follow-up' : 'Submitted follow-up');
         $previousContactNo = trim((string) (isset($oldRoundState['contact_no']) && $oldRoundState['contact_no'] !== '' ? $oldRoundState['contact_no'] : (isset($oldFollowUpState['contact_no']) ? $oldFollowUpState['contact_no'] : '')));
+        // This entry is the follow-up that was just carried out, so it reports its own
+        // date. The date entered on the form belongs to the follow-up being scheduled and
+        // is reported on that round's entry instead; the round row still stores it so the
+        // approval and missed-follow-up rules keep working unchanged.
+        $roundOwnFollowUpDate = trim((string) (isset($oldRoundState['next_follow_up_date']) ? $oldRoundState['next_follow_up_date'] : ''));
+        $logRoundRow = $updatedRoundRow;
+        $logRoundRow['next_follow_up_date'] = $roundOwnFollowUpDate;
+
         $actionNewValue = array(
-            'next_follow_up_date' => $nextFollowUpDate,
+            'next_follow_up_date' => $roundOwnFollowUpDate,
             'contact_no' => $contactNo,
             'message_shortcut_id' => $messageShortcutId,
             'message_shortcut_label' => isset($messageShortcutRow['shortcuts_tag']) ? $messageShortcutRow['shortcuts_tag'] : '',
@@ -3112,6 +3141,12 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             'round_status' => $roundStatus,
             'reject_reason' => $isAppeal ? trim((string) (isset($oldRoundState['reject_reason']) ? $oldRoundState['reject_reason'] : '')) : '',
             'attachment_path' => isset($uploadResult['path']) ? (string) $uploadResult['path'] : '',
+            // What this action changed on this entry: the screenshot proving the follow-up
+            // was done, and the status it moved to.
+            'history_changes' => array(
+                array('field' => 'Customer Chat Screenshot', 'from' => '', 'to' => 'Uploaded'),
+                array('field' => 'Status', 'from' => customerFollowUpNormalizeStatus(isset($oldRoundState['round_status']) ? $oldRoundState['round_status'] : ''), 'to' => $roundStatus),
+            ),
         );
         $hasExtraLogData = (
             !empty($appealExtraLogData['appeal_existing_tag_ids'])
@@ -3130,7 +3165,7 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         customerFollowUpCreateActionArtifacts(
             $connect,
             $updatedFollowUpRow,
-            $updatedRoundRow,
+            $logRoundRow,
             $actionType,
             $actionLabel,
             $oldRoundState,
