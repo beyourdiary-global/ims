@@ -957,14 +957,17 @@ if (!function_exists('customerFollowUpCalculateMaxAllowedNextFollowUpDate')) {
 }
 
 if (!function_exists('customerFollowUpValidateRequiredFields')) {
-    function customerFollowUpValidateRequiredFields($data)
+    function customerFollowUpValidateRequiredFields($data, $options = array())
     {
         $errors = array();
+        // The shortcut names the message for the follow-up being scheduled, which is not
+        // always decided at that moment, so callers can let it be left blank.
+        $requireMessageShortcut = !isset($options['require_message_shortcut']) || !empty($options['require_message_shortcut']);
 
         if (empty($data['attachment'])) {
             $errors[] = 'Attachment is required.';
         }
-        if ((int) (isset($data['message_shortcut_id']) ? $data['message_shortcut_id'] : 0) <= 0) {
+        if ($requireMessageShortcut && (int) (isset($data['message_shortcut_id']) ? $data['message_shortcut_id'] : 0) <= 0) {
             $errors[] = 'Message Shortcut is required.';
         }
         if (trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : '')) === '') {
@@ -2963,13 +2966,20 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         $uploadedAttachmentPath = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
         $uploadedNewAttachment = empty($uploadResult['reused']) && $uploadedAttachmentPath !== '';
 
+        // The shortcut names the message for the follow-up being scheduled next, so it may
+        // legitimately be left blank when that has not been decided yet.
         $messageShortcutId = (int) (isset($formData['message_shortcut_id']) ? $formData['message_shortcut_id'] : 0);
-        $messageShortcutRow = customerFollowUpGetMessageShortcutById($connect, $messageShortcutId);
-        if (empty($messageShortcutRow)) {
+        $messageShortcutRow = $messageShortcutId > 0
+            ? customerFollowUpGetMessageShortcutById($connect, $messageShortcutId)
+            : array();
+        if ($messageShortcutId > 0 && empty($messageShortcutRow)) {
             if ($uploadedNewAttachment) {
                 customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
             }
-            return array('success' => false, 'message' => 'Message Shortcut is required.');
+            return array('success' => false, 'message' => 'The selected message shortcut was not found.');
+        }
+        if (empty($messageShortcutRow)) {
+            $messageShortcutId = 0;
         }
 
         $nextFollowUpDate = trim((string) (isset($formData['next_follow_up_date']) ? $formData['next_follow_up_date'] : ''));
@@ -2985,7 +2995,7 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             'attachment' => isset($uploadResult['path']) ? $uploadResult['path'] : '',
             'message_shortcut_id' => $messageShortcutId,
             'next_follow_up_date' => $nextFollowUpDate,
-        ));
+        ), array('require_message_shortcut' => false));
         if (!empty($requiredErrors)) {
             if ($uploadedNewAttachment) {
                 customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
@@ -3128,6 +3138,62 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             '',
             isset($uploadResult['path']) ? $uploadResult['path'] : ''
         );
+
+        // Submitting closes out the follow-up that was due - the screenshot lands on that
+        // round's existing entry above - and schedules the next one. The next follow-up is
+        // its own round, so it gets its own entry instead of being folded into the one
+        // just evidenced. current_round_no is deliberately left alone: the case only moves
+        // on when the round is completed, so approval and the crons still see this round,
+        // and completing it adopts the round created here rather than making another.
+        $nextRoundNo = min(customerFollowUpGetMaxRoundNo(), max(1, (int) $updatedFollowUpRow['current_round_no']) + 1);
+        if ($nextRoundNo > (int) $updatedFollowUpRow['current_round_no']) {
+            $nextRoundRow = customerFollowUpFetchCurrentRound($connect, $followUpId, $nextRoundNo);
+            if (empty($nextRoundRow)) {
+                $nextRoundId = customerFollowUpCreateFollowUpRound($connect, array(
+                    'follow_up_id' => $followUpId,
+                    'round_no' => $nextRoundNo,
+                    'stage_no' => $nextRoundNo,
+                    'next_follow_up_date' => $nextFollowUpDate,
+                    'previous_follow_up_date' => trim((string) (isset($oldRoundState['next_follow_up_date']) ? $oldRoundState['next_follow_up_date'] : '')),
+                    'message_shortcut_id' => $messageShortcutId,
+                    'message_shortcut_text' => isset($messageShortcutRow['shortcuts_message_text']) ? $messageShortcutRow['shortcuts_message_text'] : '',
+                    'contact_no' => $contactNo !== '' ? $contactNo : null,
+                    'approval_status' => 'pending',
+                    'postpone_status' => 'none',
+                    'round_status' => '',
+                    'create_by' => (string) $actorUserId,
+                ));
+                $nextRoundRow = $nextRoundId > 0 ? customerFollowUpFetchRoundById($connect, $nextRoundId) : array();
+            }
+
+            if (!empty($nextRoundRow)) {
+                $nextMessage = trim((string) (isset($messageShortcutRow['shortcuts_message_text']) ? $messageShortcutRow['shortcuts_message_text'] : ''));
+                $nextShortcutLabel = trim((string) (isset($messageShortcutRow['shortcuts_tag']) ? $messageShortcutRow['shortcuts_tag'] : ''));
+
+                $nextLines = array('Follow-Up Action: Next follow-up scheduled');
+                $nextLines[] = '';
+                $nextLines[] = 'Follow-Up Round: ' . $nextRoundNo;
+                $nextLines[] = 'Next Follow-Up Date: ' . $nextFollowUpDate;
+                $nextLines[] = '';
+                $nextLines[] = 'Message Shortcut: ' . ($nextShortcutLabel !== '' ? $nextShortcutLabel : '-');
+                $nextLines[] = 'Message Shortcut Content:';
+                $nextLines[] = $nextMessage !== '' ? $nextMessage : '(no message selected yet)';
+
+                customerFollowUpInsertReadableUserRecordLog($connect, array(
+                    'platform' => isset($updatedFollowUpRow['platform']) ? $updatedFollowUpRow['platform'] : '',
+                    'customer_id' => isset($updatedFollowUpRow['customer_id']) ? (int) $updatedFollowUpRow['customer_id'] : 0,
+                    'content' => implode("\n", $nextLines),
+                    'created_by' => (string) $actorUserId,
+                    'follow_up_id' => $followUpId,
+                    'round_id' => (int) $nextRoundRow['id'],
+                    'next_follow_up_date' => $nextFollowUpDate,
+                    'upsert' => true,
+                    'action_label' => 'Next follow-up scheduled',
+                    'round_no' => $nextRoundNo,
+                    'actor_display_name' => customerFollowUpGetUserDisplayName($connect, $actorUserId),
+                ));
+            }
+        }
 
         if ($contactNo !== '' && $contactNo !== $previousContactNo) {
             customerFollowUpCreateActionArtifacts(
