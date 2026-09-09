@@ -3131,6 +3131,24 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         $logRoundRow = $updatedRoundRow;
         $logRoundRow['next_follow_up_date'] = $roundOwnFollowUpDate;
 
+        // Measured against the date this round was due, so the entry says whether the
+        // follow-up was kept rather than only that it happened.
+        $submittedOnDate = customerFollowUpNowDate();
+        $followUpOutcome = 'Completed';
+        if ($roundOwnFollowUpDate !== '') {
+            $followUpOutcome = $submittedOnDate <= $roundOwnFollowUpDate ? 'Completed on time' : 'Completed late';
+        }
+
+        $submitHistoryChanges = array(
+            array('field' => 'Customer Chat Screenshot', 'from' => '', 'to' => 'Uploaded'),
+            array('field' => 'Follow-Up', 'from' => '', 'to' => $followUpOutcome),
+        );
+        // Only worth a line when someone still has to sign it off; a return customer's
+        // follow-up needs no approval and saying so every time is noise.
+        if ($approvalStatus === 'pending') {
+            $submitHistoryChanges[] = array('field' => 'Approval', 'from' => '', 'to' => 'Pending');
+        }
+
         $actionNewValue = array(
             'next_follow_up_date' => $roundOwnFollowUpDate,
             'contact_no' => $contactNo,
@@ -3141,12 +3159,12 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             'round_status' => $roundStatus,
             'reject_reason' => $isAppeal ? trim((string) (isset($oldRoundState['reject_reason']) ? $oldRoundState['reject_reason'] : '')) : '',
             'attachment_path' => isset($uploadResult['path']) ? (string) $uploadResult['path'] : '',
-            // What this action changed on this entry: the screenshot proving the follow-up
-            // was done, and the status it moved to.
-            'history_changes' => array(
-                array('field' => 'Customer Chat Screenshot', 'from' => '', 'to' => 'Uploaded'),
-                array('field' => 'Status', 'from' => customerFollowUpNormalizeStatus(isset($oldRoundState['round_status']) ? $oldRoundState['round_status'] : ''), 'to' => $roundStatus),
-            ),
+            // What this action changed on this entry. The follow-up itself is done - that
+            // is what the person doing it cares about - and whether it still needs signing
+            // off is a separate matter, so the two are not reported as one "status": the
+            // round status reads Pending Approval, which on its own looks like the
+            // follow-up was not carried out.
+            'history_changes' => $submitHistoryChanges,
         );
         $hasExtraLogData = (
             !empty($appealExtraLogData['appeal_existing_tag_ids'])
