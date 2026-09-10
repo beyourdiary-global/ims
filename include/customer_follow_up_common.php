@@ -3744,6 +3744,298 @@ if (!function_exists('customerFollowUpSubmitMissingNextFollowUpDate')) {
     }
 }
 
+if (!function_exists('customerFollowUpSupportsCancelRequest')) {
+    function customerFollowUpSupportsCancelRequest($connect)
+    {
+        return $connect instanceof mysqli
+            && function_exists('shopeeOmsTableHasColumn')
+            && defined('dbname')
+            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP_ROUND, 'cancel_status');
+    }
+}
+
+if (!function_exists('customerFollowUpGetCancelRequestPinId')) {
+    /**
+     * Raising a cancel request is restricted to holders of this pin. Approving one stays
+     * with the existing Approve/Reject pins, so a supervisor signs it off.
+     */
+    function customerFollowUpGetCancelRequestPinId()
+    {
+        return 27;
+    }
+}
+
+if (!function_exists('customerFollowUpNormalizeCancelStatus')) {
+    function customerFollowUpNormalizeCancelStatus($status)
+    {
+        $status = strtolower(trim((string) $status));
+        $allowed = array('none', 'pending', 'approved', 'rejected');
+
+        return in_array($status, $allowed, true) ? $status : 'none';
+    }
+}
+
+if (!function_exists('customerFollowUpCanRequestCancel')) {
+    /**
+     * A cancel can be raised while the follow-up is still live and no request is already
+     * waiting on a supervisor. Finished cases have nothing left to cancel.
+     */
+    function customerFollowUpCanRequestCancel($followUpRow, $roundRow)
+    {
+        $caseStatus = strtolower(trim((string) (isset($followUpRow['current_status']) ? $followUpRow['current_status'] : '')));
+        if (in_array($caseStatus, array('done', 'lost', 'cancelled'), true)) {
+            return false;
+        }
+
+        $cancelStatus = customerFollowUpNormalizeCancelStatus(isset($roundRow['cancel_status']) ? $roundRow['cancel_status'] : 'none');
+
+        return $cancelStatus !== 'pending' && $cancelStatus !== 'approved';
+    }
+}
+
+if (!function_exists('customerFollowUpRequestCancel')) {
+    /**
+     * Raises a request to stop following this customer up. Nothing is cancelled here: the
+     * case keeps running until a supervisor approves, so a request cannot quietly end a
+     * follow-up on its own.
+     */
+    function customerFollowUpRequestCancel($connect, $followUpId, $cancelReason, $actorUserId, $actorUserGroupId)
+    {
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        if (empty($followUpRow) || empty($roundRow)) {
+            return array('success' => false, 'message' => 'Follow-up round not found.');
+        }
+        if (!customerFollowUpSupportsCancelRequest($connect)) {
+            return array('success' => false, 'message' => 'Cancel request fields are missing. Run insert_table.php first.');
+        }
+        if (!customerFollowUpCanUserManageCase($followUpRow, $actorUserId, $actorUserGroupId, $connect)) {
+            return array('success' => false, 'message' => 'You do not have permission to request a cancel for this follow-up.');
+        }
+
+        $cancelReason = customerFollowUpSanitizeApprovalComment($cancelReason);
+        if ($cancelReason === '') {
+            return array('success' => false, 'message' => 'Cancel reason is required.');
+        }
+        if (!customerFollowUpCanRequestCancel($followUpRow, $roundRow)) {
+            return array('success' => false, 'message' => 'This follow-up is not available for a cancel request.');
+        }
+
+        mysqli_begin_transaction($connect);
+
+        $oldRoundState = $roundRow;
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+            'cancel_status' => 'pending',
+            'cancel_reason' => $cancelReason,
+            'cancel_reject_reason' => null,
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+
+        if (!$roundUpdated) {
+            mysqli_rollback($connect);
+            return array('success' => false, 'message' => 'Failed to submit the cancel request.');
+        }
+
+        $updatedRoundRow = customerFollowUpFetchRoundById($connect, (int) $roundRow['id']);
+        $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+
+        customerFollowUpCreateActionArtifacts(
+            $connect,
+            $updatedFollowUpRow,
+            $updatedRoundRow,
+            'request_cancel_follow_up',
+            'Requested follow-up cancellation',
+            $oldRoundState,
+            array(
+                'cancel_status' => 'pending',
+                'cancel_reason' => $cancelReason,
+            ),
+            $cancelReason,
+            '',
+            (string) $actorUserId
+        );
+
+        foreach (customerFollowUpGetAdminUsers($connect) as $adminUser) {
+            customerFollowUpCreateNotificationRow($connect, array(
+                'follow_up_id' => $followUpId,
+                'round_id' => (int) $updatedRoundRow['id'],
+                'notify_user_id' => isset($adminUser['id']) ? (int) $adminUser['id'] : 0,
+                'notify_role' => 'admin',
+                'notification_type' => 'request_cancel_follow_up',
+                'title' => 'Follow-Up Cancel Request Pending',
+                'message' => customerFollowUpGetUserDisplayName($connect, $actorUserId)
+                    . ' requested to cancel the follow-up for case ID ' . $followUpId . '. Reason: ' . $cancelReason,
+            ));
+        }
+
+        mysqli_commit($connect);
+        return array('success' => true, 'message' => 'Cancel request submitted and sent for approval.');
+    }
+}
+
+if (!function_exists('customerFollowUpApproveCancel')) {
+    /**
+     * Approves a pending cancel request, which is the point the follow-up actually stops:
+     * the case is marked Cancelled, so it drops out of the listing, is not reused for the
+     * customer's next order, and the due/missed/lost crons leave it alone.
+     */
+    function customerFollowUpApproveCancel($connect, $followUpId, $approvalComment, $actorUserId, $actorUserGroupId)
+    {
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        if (empty($followUpRow) || empty($roundRow)) {
+            return array('success' => false, 'message' => 'Follow-up round not found.');
+        }
+        if (!customerFollowUpSupportsCancelRequest($connect)) {
+            return array('success' => false, 'message' => 'Cancel request fields are missing. Run insert_table.php first.');
+        }
+        if (customerFollowUpNormalizeCancelStatus(isset($roundRow['cancel_status']) ? $roundRow['cancel_status'] : 'none') !== 'pending') {
+            return array('success' => false, 'message' => 'There is no pending cancel request on this follow-up.');
+        }
+
+        $approvalComment = customerFollowUpSanitizeApprovalComment($approvalComment);
+
+        mysqli_begin_transaction($connect);
+
+        $oldRoundState = $roundRow;
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+            'cancel_status' => 'approved',
+            'round_status' => 'Cancelled',
+            'approved_by' => (string) $actorUserId,
+            'approved_date' => customerFollowUpNowDate(),
+            'approved_time' => customerFollowUpNowTime(),
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+        $caseUpdated = customerFollowUpUpdateCaseRecord($connect, $followUpId, array(
+            'current_status' => 'Cancelled',
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+
+        if (!$roundUpdated || !$caseUpdated) {
+            mysqli_rollback($connect);
+            return array('success' => false, 'message' => 'Failed to approve the cancel request.');
+        }
+
+        $updatedRoundRow = customerFollowUpFetchRoundById($connect, (int) $roundRow['id']);
+        $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+
+        customerFollowUpCreateActionArtifacts(
+            $connect,
+            $updatedFollowUpRow,
+            $updatedRoundRow,
+            'approve_cancel_follow_up',
+            'Approved follow-up cancellation',
+            $oldRoundState,
+            array(
+                'cancel_status' => 'approved',
+                'round_status' => 'Cancelled',
+            ),
+            $approvalComment,
+            '',
+            (string) $actorUserId
+        );
+
+        $assignedUserId = (int) (isset($updatedFollowUpRow['assigned_user_id']) ? $updatedFollowUpRow['assigned_user_id'] : 0);
+        if ($assignedUserId > 0) {
+            customerFollowUpCreateNotificationRow($connect, array(
+                'follow_up_id' => $followUpId,
+                'round_id' => (int) $updatedRoundRow['id'],
+                'notify_user_id' => $assignedUserId,
+                'notify_role' => 'user',
+                'notification_type' => 'approve_cancel_follow_up',
+                'title' => 'Follow-Up Cancellation Approved',
+                'message' => 'The cancel request for case ID ' . $followUpId . ' was approved. This follow-up has stopped.',
+            ));
+        }
+
+        mysqli_commit($connect);
+        return array('success' => true, 'message' => 'Cancel request approved. This follow-up has been cancelled.');
+    }
+}
+
+if (!function_exists('customerFollowUpRejectCancel')) {
+    /**
+     * Turns down a pending cancel request. The follow-up carries on exactly as it was, so
+     * the round keeps its own status rather than being reset.
+     */
+    function customerFollowUpRejectCancel($connect, $followUpId, $rejectReason, $actorUserId, $actorUserGroupId)
+    {
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        if (empty($followUpRow) || empty($roundRow)) {
+            return array('success' => false, 'message' => 'Follow-up round not found.');
+        }
+        if (!customerFollowUpSupportsCancelRequest($connect)) {
+            return array('success' => false, 'message' => 'Cancel request fields are missing. Run insert_table.php first.');
+        }
+        if (customerFollowUpNormalizeCancelStatus(isset($roundRow['cancel_status']) ? $roundRow['cancel_status'] : 'none') !== 'pending') {
+            return array('success' => false, 'message' => 'There is no pending cancel request on this follow-up.');
+        }
+
+        $rejectReason = customerFollowUpSanitizeApprovalComment($rejectReason);
+        if ($rejectReason === '') {
+            return array('success' => false, 'message' => 'Cancel rejection reason is required.');
+        }
+
+        mysqli_begin_transaction($connect);
+
+        $oldRoundState = $roundRow;
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+            'cancel_status' => 'rejected',
+            'cancel_reject_reason' => $rejectReason,
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+
+        if (!$roundUpdated) {
+            mysqli_rollback($connect);
+            return array('success' => false, 'message' => 'Failed to reject the cancel request.');
+        }
+
+        $updatedRoundRow = customerFollowUpFetchRoundById($connect, (int) $roundRow['id']);
+        $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+
+        customerFollowUpCreateActionArtifacts(
+            $connect,
+            $updatedFollowUpRow,
+            $updatedRoundRow,
+            'reject_cancel_follow_up',
+            'Rejected follow-up cancellation',
+            $oldRoundState,
+            array(
+                'cancel_status' => 'rejected',
+                'cancel_reject_reason' => $rejectReason,
+            ),
+            $rejectReason,
+            '',
+            (string) $actorUserId
+        );
+
+        $assignedUserId = (int) (isset($updatedFollowUpRow['assigned_user_id']) ? $updatedFollowUpRow['assigned_user_id'] : 0);
+        if ($assignedUserId > 0) {
+            customerFollowUpCreateNotificationRow($connect, array(
+                'follow_up_id' => $followUpId,
+                'round_id' => (int) $updatedRoundRow['id'],
+                'notify_user_id' => $assignedUserId,
+                'notify_role' => 'user',
+                'notification_type' => 'reject_cancel_follow_up',
+                'title' => 'Follow-Up Cancellation Rejected',
+                'message' => 'The cancel request for case ID ' . $followUpId . ' was rejected. Reason: ' . $rejectReason,
+            ));
+        }
+
+        mysqli_commit($connect);
+        return array('success' => true, 'message' => 'Cancel request rejected. This follow-up continues.');
+    }
+}
+
 if (!function_exists('customerFollowUpRequestPostponement')) {
     function customerFollowUpRequestPostponement($connect, $followUpId, $postponeReason, $requestedNextDate, $actorUserId, $actorUserGroupId)
     {
@@ -4350,6 +4642,7 @@ if (!function_exists('customerFollowUpProcessDueNotifications')) {
                         OR IFNULL(TRIM(r.`round_status`), '') = ''
                   )
                   AND LOWER(IFNULL(r.`postpone_status`, 'none')) <> 'pending'
+                  AND LOWER(IFNULL(f.`current_status`, '')) <> 'cancelled'
                   AND f.`assigned_user_id` IS NOT NULL
                   AND f.`assigned_user_id` > 0";
         $result = mysqli_query($connect, $sql);
@@ -4436,7 +4729,8 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                         LOWER(r.`round_status`) IN ('approved', 'postponed')
                         OR IFNULL(TRIM(r.`round_status`), '') = ''
                   )
-                  AND LOWER(IFNULL(r.`postpone_status`, 'none')) <> 'pending'";
+                  AND LOWER(IFNULL(r.`postpone_status`, 'none')) <> 'pending'
+                  AND LOWER(IFNULL(f.`current_status`, '')) <> 'cancelled'";
         $result = mysqli_query($connect, $sql);
         if (!$result) {
             return $summary;
@@ -4683,7 +4977,7 @@ if (!function_exists('customerFollowUpFetchOpenCaseByCustomer')) {
     {
         foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
             $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
-            if (in_array($caseStatus, array('done', 'lost'), true)) {
+            if (in_array($caseStatus, array('done', 'lost', 'cancelled'), true)) {
                 continue;
             }
 
@@ -4988,7 +5282,7 @@ if (!function_exists('customerFollowUpFindDuplicateCaseGroups')) {
                          FROM `" . CUSTOMER_FOLLOW_UP . "`
                          WHERE `status` = 'A'
                            AND `customer_id` > 0
-                           AND LOWER(IFNULL(`current_status`, '')) NOT IN ('done', 'lost')
+                           AND LOWER(IFNULL(`current_status`, '')) NOT IN ('done', 'lost', 'cancelled')
                          GROUP BY `platform`, `customer_id`
                          HAVING COUNT(*) > 1";
         $duplicateResult = mysqli_query($connect, $duplicateSql);
@@ -5003,7 +5297,7 @@ if (!function_exists('customerFollowUpFindDuplicateCaseGroups')) {
             $openCases = array();
             foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
                 $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
-                if (in_array($caseStatus, array('done', 'lost'), true)) {
+                if (in_array($caseStatus, array('done', 'lost', 'cancelled'), true)) {
                     continue;
                 }
 
@@ -5069,7 +5363,7 @@ if (!function_exists('customerFollowUpMergeCasesIntoSurvivor')) {
         $others = array();
         foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
             $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
-            if (in_array($caseStatus, array('done', 'lost'), true)) {
+            if (in_array($caseStatus, array('done', 'lost', 'cancelled'), true)) {
                 continue;
             }
 
@@ -5205,7 +5499,7 @@ if (!function_exists('customerFollowUpFindUnlinkedFollowUpLogs')) {
         $caseResult = mysqli_query($connect, "SELECT * FROM `" . CUSTOMER_FOLLOW_UP . "`
                                               WHERE `status` = 'A'
                                                 AND `customer_id` > 0
-                                                AND LOWER(IFNULL(`current_status`, '')) NOT IN ('done', 'lost')");
+                                                AND LOWER(IFNULL(`current_status`, '')) NOT IN ('done', 'lost', 'cancelled')");
 
         while ($caseResult && ($caseRow = mysqli_fetch_assoc($caseResult))) {
             $platform = customerFollowUpNormalizePlatform($caseRow['platform']);

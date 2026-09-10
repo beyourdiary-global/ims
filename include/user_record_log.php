@@ -46,7 +46,7 @@ if (!function_exists('urlGetUserRecordLogFollowUpCaseOptions')) {
         $options = array();
         foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
             $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
-            if (in_array($caseStatus, array('done', 'lost'), true)) {
+            if (in_array($caseStatus, array('done', 'lost', 'cancelled'), true)) {
                 continue;
             }
             // Not filtered by assignee: scheduling a date here is open to whoever is on the

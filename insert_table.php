@@ -2464,6 +2464,11 @@ $customerFollowUpRoundColumns = array(
     // 'Y' once a newer order restarted the follow-up cycle on the same customer case. The
     // round stays active so its history survives, but it is no longer the current round.
     'superseded' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `superseded` CHAR(1) NOT NULL DEFAULT 'N' AFTER `round_status`",
+    // Cancelling a follow-up is requested by the assignee and only takes effect once a
+    // supervisor approves, so it carries its own request state like postponement does.
+    'cancel_status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `cancel_status` VARCHAR(20) NOT NULL DEFAULT 'none' AFTER `superseded`",
+    'cancel_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `cancel_reason` TEXT DEFAULT NULL AFTER `cancel_status`",
+    'cancel_reject_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `cancel_reject_reason` TEXT DEFAULT NULL AFTER `cancel_reason`",
 );
 
 foreach ($customerFollowUpRoundColumns as $columnName => $alterSql) {
@@ -4847,6 +4852,20 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . LABEL . "`: " . $conn->error . "</p>";
     }
 
+        // Cancelling a follow-up is restricted: this pin says who may raise the request,
+    // while approving it stays with the existing Approve/Reject pins.
+    $followUpCancelPinSql = "INSERT INTO `pin` (`id`, `name`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+        (27, 'Request Cancel', 'Request to cancel a customer follow-up', '1', CURDATE(), CURTIME(), 'A')
+        ON DUPLICATE KEY UPDATE
+            `name` = VALUES(`name`),
+            `remark` = VALUES(`remark`),
+            `status` = 'A'";
+    if ($conn->query($followUpCancelPinSql)) {
+        echo "<p style='color:green;'>Verified pin 27 for Request Cancel.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed verifying pin 27 for Request Cancel: " . $conn->error . "</p>";
+    }
+
     $taskPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
         (136, 'Board', '1,2,3,4', 'Task Board Management', '1', CURDATE(), CURTIME(), 'A'),
         (137, 'Summary', '1', 'Task Summary Management', '1', CURDATE(), CURTIME(), 'A'),
@@ -4863,7 +4882,7 @@ if ($conn->select_db($db_cms)) {
         (148, 'Daily Flow Report', '1', 'OMS daily flow reporting', '1', CURDATE(), CURTIME(), 'A'),
         (149, 'Flow Setting', '1,2,3,4', 'OMS flow setting management', '1', CURDATE(), CURTIME(), 'A'),
         (150, 'Customer Daily Report', '1', 'Customer daily edit activity reporting', '1', CURDATE(), CURTIME(), 'A'),
-        (151, 'Customer Follow-Up', '1,11,12', 'Customer follow-up approval and log access', '1', CURDATE(), CURTIME(), 'A'),
+        (151, 'Customer Follow-Up', '1,11,12,27', 'Customer follow-up approval, cancel request and log access', '1', CURDATE(), CURTIME(), 'A'),
         (160, 'Customer Dashboard', '1', 'Customer Dashboard view access', '1', CURDATE(), CURTIME(), 'A'),
         (161, 'Daily Follow Up Report', '1', 'Customer user record log daily activity reporting', '1', CURDATE(), CURTIME(), 'A'),
         (162, 'Member Point', '1', 'Member point customer summary view access', '1', CURDATE(), CURTIME(), 'A'),
