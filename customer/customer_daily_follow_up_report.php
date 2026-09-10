@@ -222,8 +222,10 @@ if (!function_exists('dailyFollowUpReportFormatTimesValue')) {
             return '-';
         }
 
+        // The value is the case's follow-up round now, not a free-typed count, so read it
+        // as a round rather than as "3rd times".
         if (preg_match('/^\d+$/', $value) === 1) {
-            return dailyFollowUpReportBuildOrdinalLabel($value) . ' times';
+            return 'Round ' . (int) $value;
         }
 
         return $value;

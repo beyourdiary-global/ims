@@ -907,6 +907,31 @@
       refreshUploadAttachmentMoveButtons();
     }
 
+    // Moving the follow-up round backwards rewinds progress the module otherwise only
+    // advances, so confirm before the form is submitted rather than only reporting it
+    // afterwards.
+    $followUpTimes.on("change", function () {
+      var currentRound = parseInt($followUpTimes.data("currentRound") || "0", 10) || 0;
+      var newRound = parseInt($followUpTimes.val() || "0", 10) || 0;
+
+      if (!currentRound || !newRound || newRound >= currentRound) {
+        return;
+      }
+
+      var confirmed = window.confirm(
+        "Follow-Up Round is currently " +
+          currentRound +
+          ". Changing it to " +
+          newRound +
+          " moves the follow-up backwards." +
+          "\n\nThe change will be recorded and the admins notified. Continue?",
+      );
+
+      if (!confirmed) {
+        $followUpTimes.val(String(currentRound));
+      }
+    });
+
     function resetForm() {
       $recordId.val("0");
       $messageShortcutId.val("");
@@ -914,7 +939,9 @@
       setSummaryEditorContent(currentSummaryValue);
       setEditorContent("");
       $nextFollowUpDate.val("");
-      $followUpTimes.val("");
+      // The round field mirrors the case, so it goes back to the current round rather
+      // than blank, which would read as "no round".
+      $followUpTimes.val(String($followUpTimes.data("currentRound") || ""));
       $followUpDay.val("");
       if ($followUpId.length) {
         $followUpId.val("0");

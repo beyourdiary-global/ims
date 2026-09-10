@@ -58,6 +58,71 @@ if (!function_exists('customerFollowUpSupportsCaseSource')) {
     }
 }
 
+if (!function_exists('customerFollowUpGetMaxRoundNo')) {
+    /**
+     * The last round a case can reach. Completing it marks the case Done, and the lost
+     * cron measures from that completion, so every place that means "the final round"
+     * reads this rather than hardcoding the number.
+     */
+    function customerFollowUpGetMaxRoundNo()
+    {
+        return 20;
+    }
+}
+
+if (!function_exists('customerFollowUpSupportsRoundSuperseded')) {
+    function customerFollowUpSupportsRoundSuperseded($connect)
+    {
+        return $connect instanceof mysqli
+            && function_exists('shopeeOmsTableHasColumn')
+            && defined('dbname')
+            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP_ROUND, 'superseded');
+    }
+}
+
+if (!function_exists('customerFollowUpBuildCurrentRoundCondition')) {
+    /**
+     * Excludes rounds left behind by an earlier order on the same customer case. Without
+     * it a case taken over by a newer order matches both the old and the new round of the
+     * same number, which duplicates the case in every listing that joins on the round.
+     */
+    function customerFollowUpBuildCurrentRoundCondition($connect, $roundAlias = 'r')
+    {
+        if (!customerFollowUpSupportsRoundSuperseded($connect)) {
+            return '';
+        }
+
+        $roundAlias = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $roundAlias);
+        $prefix = $roundAlias !== '' ? ('`' . $roundAlias . '`.') : '';
+
+        return " AND IFNULL(" . $prefix . "`superseded`, 'N') <> 'Y'";
+    }
+}
+
+if (!function_exists('customerFollowUpSupportsPreviousFollowUpInfo')) {
+    function customerFollowUpSupportsPreviousFollowUpInfo($connect)
+    {
+        return $connect instanceof mysqli
+            && function_exists('shopeeOmsTableHasColumn')
+            && defined('dbname')
+            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP, 'previous_follow_up_info');
+    }
+}
+
+if (!function_exists('customerFollowUpDecodePreviousFollowUpInfo')) {
+    function customerFollowUpDecodePreviousFollowUpInfo($rawValue)
+    {
+        $rawValue = trim((string) $rawValue);
+        if ($rawValue === '') {
+            return array();
+        }
+
+        $decoded = json_decode($rawValue, true);
+
+        return is_array($decoded) ? $decoded : array();
+    }
+}
+
 if (!function_exists('customerFollowUpIsOrderlessCase')) {
     function customerFollowUpIsOrderlessCase($followUpRow)
     {
@@ -649,6 +714,7 @@ if (!function_exists('customerFollowUpFetchCurrentRound')) {
                 WHERE `follow_up_id` = " . $followUpId . "
                   AND `round_no` = " . $roundNo . "
                   AND `status` = 'A'
+                  " . customerFollowUpBuildCurrentRoundCondition($connect, '') . "
                 ORDER BY `id` DESC
                 LIMIT 1";
         $result = mysqli_query($connect, $sql);
@@ -846,7 +912,7 @@ if (!function_exists('customerFollowUpCalculateMaxAllowedNextFollowUpDate')) {
             return array(
                 'success' => true,
                 'max_date' => date('Y-m-d', strtotime($today . ' +6 months')),
-                'rule_label' => 'Return Customer round 1-6 max date = today + 6 months.',
+                'rule_label' => 'Return Customer max date = today + 6 months.',
             );
         }
 
@@ -885,20 +951,23 @@ if (!function_exists('customerFollowUpCalculateMaxAllowedNextFollowUpDate')) {
         return array(
             'success' => true,
             'max_date' => date('Y-m-d', strtotime($previousDate . ' +3 months')),
-            'rule_label' => 'New Customer round 4-6 max date = previous follow-up date + 3 months.',
+            'rule_label' => 'New Customer round 4 onwards max date = previous follow-up date + 3 months.',
         );
     }
 }
 
 if (!function_exists('customerFollowUpValidateRequiredFields')) {
-    function customerFollowUpValidateRequiredFields($data)
+    function customerFollowUpValidateRequiredFields($data, $options = array())
     {
         $errors = array();
+        // The shortcut names the message for the follow-up being scheduled, which is not
+        // always decided at that moment, so callers can let it be left blank.
+        $requireMessageShortcut = !isset($options['require_message_shortcut']) || !empty($options['require_message_shortcut']);
 
         if (empty($data['attachment'])) {
             $errors[] = 'Attachment is required.';
         }
-        if ((int) (isset($data['message_shortcut_id']) ? $data['message_shortcut_id'] : 0) <= 0) {
+        if ($requireMessageShortcut && (int) (isset($data['message_shortcut_id']) ? $data['message_shortcut_id'] : 0) <= 0) {
             $errors[] = 'Message Shortcut is required.';
         }
         if (trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : '')) === '') {
@@ -1096,6 +1165,176 @@ if (!function_exists('customerFollowUpGetPlatformUserRecordLogColumn')) {
     }
 }
 
+if (!function_exists('customerFollowUpSupportsLogHistory')) {
+    function customerFollowUpSupportsLogHistory($connect)
+    {
+        return function_exists('urlUserRecordLogColumnExists')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_history');
+    }
+}
+
+if (!function_exists('customerFollowUpBuildLogHistoryEntry')) {
+    /**
+     * One compact line's worth of "what this action did", kept alongside the entry so
+     * every earlier state stays visible once the entry is reused.
+     */
+    function customerFollowUpBuildLogHistoryEntry($data)
+    {
+        $actionLabel = trim((string) (isset($data['action_label']) ? $data['action_label'] : ''));
+        if ($actionLabel === '') {
+            return array();
+        }
+
+        // What moved is shown as from/to so the change reads at a glance; the flat detail
+        // line carries the rest, which has no before value to compare against.
+        $changes = array();
+
+        // Changes the caller knows about that are not a date move, such as the screenshot
+        // that evidences a submitted follow-up.
+        if (isset($data['extra_changes']) && is_array($data['extra_changes'])) {
+            foreach ($data['extra_changes'] as $extraChange) {
+                if (is_array($extraChange) && trim((string) (isset($extraChange['field']) ? $extraChange['field'] : '')) !== '') {
+                    $changes[] = $extraChange;
+                }
+            }
+        }
+
+        $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
+        $previousFollowUpDate = trim((string) (isset($data['previous_next_follow_up_date']) ? $data['previous_next_follow_up_date'] : ''));
+        if ($nextFollowUpDate !== '' && $nextFollowUpDate !== $previousFollowUpDate) {
+            $changes[] = array(
+                'field' => 'Follow-Up Date',
+                'from' => $previousFollowUpDate,
+                'to' => $nextFollowUpDate,
+            );
+        }
+
+        $details = array();
+        $roundNo = (int) (isset($data['round_no']) ? $data['round_no'] : 0);
+        if ($roundNo > 0) {
+            $details[] = 'Round: ' . $roundNo;
+        }
+        $historyRemark = trim((string) (isset($data['action_remark']) ? $data['action_remark'] : ''));
+        if ($historyRemark !== '') {
+            $details[] = $historyRemark;
+        }
+
+        return array(
+            'time' => trim(customerFollowUpNowDate() . ' ' . customerFollowUpNowTime()),
+            'action' => $actionLabel,
+            'changes' => $changes,
+            'detail' => implode(' | ', $details),
+            'by' => trim((string) (isset($data['actor_display_name']) ? $data['actor_display_name'] : '')),
+        );
+    }
+}
+
+if (!function_exists('customerFollowUpFindRoundUserRecordLogId')) {
+    /**
+     * The entry already written for this follow-up round, which the next action on the
+     * same round updates instead of inserting beside.
+     */
+    function customerFollowUpFindRoundUserRecordLogId($connect, $customerColumn, $customerId, $data)
+    {
+        $followUpId = (int) (isset($data['follow_up_id']) ? $data['follow_up_id'] : 0);
+        $roundId = (int) (isset($data['round_id']) ? $data['round_id'] : 0);
+
+        if ($followUpId <= 0 || $roundId <= 0 || $customerId <= 0) {
+            return 0;
+        }
+        if (!function_exists('urlUserRecordLogColumnExists')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_id')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_round_id')
+        ) {
+            return 0;
+        }
+
+        $customerColumn = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $customerColumn);
+        $sql = "SELECT `id`
+                FROM `" . USER_RECORD_LOG . "`
+                WHERE `status` = 'A'
+                  AND `" . $customerColumn . "` = " . $customerId . "
+                  AND `follow_up_id` = " . $followUpId . "
+                  AND `follow_up_round_id` = " . $roundId . "
+                ORDER BY `id` DESC
+                LIMIT 1";
+
+        $result = mysqli_query($connect, $sql);
+        if (!$result || mysqli_num_rows($result) === 0) {
+            return 0;
+        }
+
+        $row = mysqli_fetch_assoc($result);
+
+        return isset($row['id']) ? (int) $row['id'] : 0;
+    }
+}
+
+if (!function_exists('customerFollowUpUpdateRoundUserRecordLog')) {
+    /**
+     * Rewrites the round's entry with the latest action and the running history beneath
+     * it, so the entry shows where the follow-up stands now and every step that got it
+     * there. Returns the entry id.
+     */
+    function customerFollowUpUpdateRoundUserRecordLog($connect, $logId, $content, $attachment, $actorUserId, $data)
+    {
+        $logId = (int) $logId;
+        if ($logId <= 0) {
+            return 0;
+        }
+
+        $historyEntries = array();
+        if (customerFollowUpSupportsLogHistory($connect)) {
+            $historyResult = mysqli_query($connect, "SELECT `follow_up_history` FROM `" . USER_RECORD_LOG . "` WHERE `id` = " . $logId . " LIMIT 1");
+            if ($historyResult && mysqli_num_rows($historyResult) > 0) {
+                $historyRow = mysqli_fetch_assoc($historyResult);
+                $decodedHistory = json_decode((string) (isset($historyRow['follow_up_history']) ? $historyRow['follow_up_history'] : ''), true);
+                if (is_array($decodedHistory)) {
+                    $historyEntries = $decodedHistory;
+                }
+            }
+        }
+
+        $historyEntry = customerFollowUpBuildLogHistoryEntry($data);
+        if (!empty($historyEntry)) {
+            $historyEntries[] = $historyEntry;
+        }
+
+        // The history lives in its own column and is rendered from there, so content stays
+        // exactly the message it represents. Baking the history into content would make an
+        // entry's text grow every update and stop it matching the message it came from.
+        $updateParts = array(
+            "`content` = '" . customerFollowUpEscape($connect, $content) . "'",
+            "`updated_by` = '" . customerFollowUpEscape($connect, $actorUserId) . "'",
+            "`updated_at` = NOW()",
+        );
+
+        if (trim((string) $attachment) !== '') {
+            $updateParts[] = "`attachment` = '" . customerFollowUpEscape($connect, $attachment) . "'";
+        }
+
+        if (customerFollowUpSupportsLogHistory($connect)) {
+            $updateParts[] = "`follow_up_history` = '" . customerFollowUpEscape($connect, json_encode($historyEntries)) . "'";
+        }
+
+        $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
+        if ($nextFollowUpDate !== ''
+            && customerFollowUpIsValidDateString($nextFollowUpDate)
+            && function_exists('urlUserRecordLogColumnExists')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'next_follow_up_date')
+        ) {
+            $updateParts[] = "`next_follow_up_date` = '" . customerFollowUpEscape($connect, $nextFollowUpDate) . "'";
+        }
+
+        $sql = "UPDATE `" . USER_RECORD_LOG . "`
+                SET " . implode(', ', $updateParts) . "
+                WHERE `id` = " . $logId . "
+                LIMIT 1";
+
+        return mysqli_query($connect, $sql) ? $logId : 0;
+    }
+}
+
 if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
     function customerFollowUpInsertReadableUserRecordLog($connect, $data)
     {
@@ -1118,6 +1357,17 @@ if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
 
         $attachment = trim((string) (isset($data['attachment']) ? $data['attachment'] : ''));
         $actorUserId = trim((string) (isset($data['created_by']) ? $data['created_by'] : (defined('USER_ID') ? USER_ID : '')));
+
+        // Approving, rejecting or rescheduling the same round is the same follow-up moving
+        // on, not a new one, so those actions reuse the round's entry and append to its
+        // history rather than filling the customer timeline with a row per click. Callers
+        // that write a one-off message (tag assignment) leave this off and still insert.
+        if (!empty($data['upsert'])) {
+            $existingLogId = customerFollowUpFindRoundUserRecordLogId($connect, $customerColumn, $customerId, $data);
+            if ($existingLogId > 0) {
+                return customerFollowUpUpdateRoundUserRecordLog($connect, $existingLogId, $content, $attachment, $actorUserId, $data);
+            }
+        }
 
         $insertColumns = "`" . $customerColumn . "`, `content`, `attachment`, `created_by`, `created_at`, `updated_by`, `updated_at`, `status`";
         $insertValues = ($customerId > 0 ? $customerId : 'NULL') . ",
@@ -1172,6 +1422,21 @@ if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
             $insertColumns .= ", `next_follow_up_date`";
             $insertValues .= ",\n                    '" . customerFollowUpEscape($connect, $nextFollowUpDate) . "'";
         }
+
+        // Stamp the round on the entry, or it shows a blank Follow-Up Round beside entries
+        // saved from the customer page that carry one.
+        $entryRoundNo = (int) (isset($data['round_no']) ? $data['round_no'] : 0);
+        if ($entryRoundNo > 0
+            && function_exists('urlUserRecordLogColumnExists')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_times')
+        ) {
+            $insertColumns .= ", `follow_up_times`";
+            $insertValues .= ",\n                    '" . customerFollowUpEscape($connect, (string) $entryRoundNo) . "'";
+        }
+
+        // No history on a brand-new entry: creating it is not an update, and a history
+        // block holding a single line reads as though something had already changed. The
+        // list starts at the first action that actually updates this entry.
 
         $sql = "INSERT INTO `" . USER_RECORD_LOG . "` (
                     " . $insertColumns . "
@@ -1594,21 +1859,6 @@ if (!function_exists('customerFollowUpBuildReadableLogMessage')) {
             }
         }
 
-        $lines = array();
-        $lines[] = 'Follow-Up Action: ' . ($actionLabel !== '' ? $actionLabel : 'N/A');
-
-        $detailLines = array();
-        $appendLine($detailLines, 'Order No', $orderNo);
-        $appendLine($detailLines, 'Customer / Username', $customerLabel);
-        $appendLine($detailLines, 'Platform', $platformLabel);
-        if ($roundNo > 0) {
-            $detailLines[] = 'Follow-Up Round: ' . $roundNo;
-        }
-        $appendLine($detailLines, 'Next Follow-Up Date', $nextFollowUpDate);
-        $appendLine($detailLines, 'WhatsApp / Contact No', $contactNo);
-        $appendLine($detailLines, 'Action By', $actorDisplayName);
-        $appendLine($detailLines, 'Action Time', $actionDateTime);
-
         $rejectReason = trim((string) (isset($newValue['reject_reason']) ? $newValue['reject_reason'] : ''));
         if ($rejectReason === '' && strtolower($actionType) === 'reject_follow_up') {
             $rejectReason = $remark;
@@ -1633,62 +1883,146 @@ if (!function_exists('customerFollowUpBuildReadableLogMessage')) {
             $tagAction = stripos($actionType, 'remove') !== false ? 'Remove' : 'Add';
         }
 
-        if (strtolower($actionType) === 'reject_follow_up') {
-            $appendLine($detailLines, 'Reject Reason', $rejectReason);
-        }
-        if (strtolower($actionType) === 'approve_follow_up') {
-            $appendLine($detailLines, 'Comment', $remark);
-        }
-        if (strtolower($actionType) === 'request_postponement') {
-            $appendLine($detailLines, 'Current Assigned Follow-Up Date', $currentAssignedNextFollowUpDate);
-            $appendLine($detailLines, 'Postpone Reason', $postponeReason);
-            $appendLine($detailLines, 'Requested New Follow-Up Date', $requestedNextFollowUpDate);
-        }
-        if (strtolower($actionType) === 'reschedule_first_round_date') {
-            $appendLine($detailLines, 'Previous Next Follow-Up Date', $currentAssignedNextFollowUpDate);
-            $appendLine($detailLines, 'Updated Next Follow-Up Date', $nextFollowUpDate);
-        }
-        if (strtolower($actionType) === 'approve_postponement') {
-            $appendLine($detailLines, 'Approved New Follow-Up Date', $approvedNextFollowUpDate);
-        }
-        if (strtolower($actionType) === 'reject_postponement') {
-            $appendLine($detailLines, 'Postpone Reject Reason', $postponeRejectReason);
-        }
-        if (in_array(strtolower($actionType), array('mark_missed_follow_up', 'save_delay_reason'), true)) {
-            $appendLine($detailLines, 'Original Follow-Up Date', $missedOriginalDate);
-            $appendLine($detailLines, 'Delay Reason', $delayReason);
-        }
-        if (strtolower($actionType) === 'mark_lost_customer') {
-            $appendLine($detailLines, 'Lost Tag Name', $lostTagName);
-        }
-        if ($tagName !== '') {
-            $appendLine($detailLines, 'Tag Action', $tagAction);
-            $appendLine($detailLines, 'Tag Name', $tagName);
+        // Every action reports the same shape: the case it happened on, what the follow-up
+        // date moved from and to, why, then the message and who did it. Each action used to
+        // invent its own field names - seven labels for a follow-up date and five for a
+        // reason - which is what made a run of log entries hard to read side by side.
+        $normalizedActionType = strtolower($actionType);
+        $dateBefore = '';
+        $dateAfter = $nextFollowUpDate;
+        $reasonLabel = '';
+        $reasonText = '';
+
+        switch ($normalizedActionType) {
+            case 'reject_follow_up':
+                $reasonLabel = 'Reject';
+                $reasonText = $rejectReason;
+                break;
+            case 'approve_follow_up':
+                $reasonLabel = 'Comment';
+                $reasonText = $remark;
+                break;
+            case 'request_postponement':
+                $dateBefore = $currentAssignedNextFollowUpDate;
+                $dateAfter = $requestedNextFollowUpDate;
+                $reasonLabel = 'Postpone';
+                $reasonText = $postponeReason;
+                break;
+            case 'reschedule_first_round_date':
+                $dateBefore = $currentAssignedNextFollowUpDate;
+                break;
+            case 'approve_postponement':
+                $dateBefore = $currentAssignedNextFollowUpDate;
+                $dateAfter = $approvedNextFollowUpDate;
+                break;
+            case 'reject_postponement':
+                $reasonLabel = 'Postpone Rejected';
+                $reasonText = $postponeRejectReason;
+                break;
+            case 'mark_missed_follow_up':
+            case 'save_delay_reason':
+                $dateBefore = $missedOriginalDate;
+                $reasonLabel = 'Delay';
+                $reasonText = $delayReason;
+                break;
         }
 
-        if (!empty($detailLines)) {
+        $lines = array();
+        $lines[] = 'Follow-Up Action: ' . ($actionLabel !== '' ? $actionLabel : 'N/A');
+
+        // The case block is always printed in full, blanks included, so entries line up
+        // when they are read one after another on the customer timeline.
+        $lines[] = '';
+        $lines[] = 'Order No: ' . ($orderNo !== '' ? $orderNo : '-');
+        $lines[] = 'Customer / Username: ' . ($customerLabel !== '' ? $customerLabel : '-');
+        $lines[] = 'Platform: ' . ($platformLabel !== '' ? $platformLabel : '-');
+        $lines[] = 'Follow-Up Round: ' . ($roundNo > 0 ? $roundNo : '-');
+        $lines[] = 'WhatsApp / Contact No: ' . ($contactNo !== '' ? $contactNo : '-');
+
+        $changeLines = array();
+        $appendLine($changeLines, 'Follow-Up Date (Before)', $dateBefore);
+        $appendLine($changeLines, 'Follow-Up Date (After)', $dateAfter);
+        if ($reasonText !== '') {
+            $changeLines[] = 'Reason (' . $reasonLabel . '): ' . $reasonText;
+        }
+        if ($lostTagName !== '') {
+            $changeLines[] = 'Tag (Lost): ' . $lostTagName;
+        }
+        if ($tagName !== '') {
+            $changeLines[] = 'Tag (' . ($tagAction !== '' ? $tagAction : 'Update') . '): ' . $tagName;
+        }
+        if (!empty($changeLines)) {
             $lines[] = '';
-            foreach ($detailLines as $detailLine) {
-                $lines[] = $detailLine;
+            foreach ($changeLines as $changeLine) {
+                $lines[] = $changeLine;
             }
         }
 
         if ($messageShortcutLabel !== '' || $messageShortcutContent !== '') {
             $lines[] = '';
-            if ($messageShortcutLabel !== '') {
-                $lines[] = 'Message Shortcut:';
-                $lines[] = $messageShortcutLabel;
-            }
+            $lines[] = 'Message Shortcut: ' . ($messageShortcutLabel !== '' ? $messageShortcutLabel : '-');
             if ($messageShortcutContent !== '') {
-                if ($messageShortcutLabel !== '') {
-                    $lines[] = '';
-                }
                 $lines[] = 'Message Shortcut Content:';
                 $lines[] = $messageShortcutContent;
             }
         }
 
+        $lines[] = '';
+        $lines[] = 'Action By: ' . ($actorDisplayName !== '' ? $actorDisplayName : '-');
+        $lines[] = 'Action Time: ' . ($actionDateTime !== '' ? $actionDateTime : '-');
+
         return implode("\n", $lines);
+    }
+}
+
+if (!function_exists('customerFollowUpFormatStateValueLabel')) {
+    function customerFollowUpFormatStateValueLabel($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        // Stored as approval_status style values ("not_required"); round statuses are
+        // already written for reading and are left as they are.
+        return ucwords(str_replace('_', ' ', $value));
+    }
+}
+
+if (!function_exists('customerFollowUpBuildStateChangeList')) {
+    /**
+     * The workflow states an action moved, as from/to. Only fields the action actually
+     * carried and actually changed are returned, so the history line names what happened
+     * instead of restating the whole round.
+     */
+    function customerFollowUpBuildStateChangeList($oldValue, $newValue)
+    {
+        $fieldLabels = array(
+            'approval_status' => 'Approval',
+            'round_status' => 'Status',
+            'postpone_status' => 'Postponement',
+        );
+
+        $changes = array();
+        foreach ($fieldLabels as $field => $label) {
+            if (!isset($newValue[$field])) {
+                continue;
+            }
+
+            $to = trim((string) $newValue[$field]);
+            $from = trim((string) (isset($oldValue[$field]) ? $oldValue[$field] : ''));
+            if ($to === '' || strcasecmp($from, $to) === 0) {
+                continue;
+            }
+
+            $changes[] = array(
+                'field' => $label,
+                'from' => customerFollowUpFormatStateValueLabel($from),
+                'to' => customerFollowUpFormatStateValueLabel($to),
+            );
+        }
+
+        return $changes;
     }
 }
 
@@ -1698,6 +2032,17 @@ if (!function_exists('customerFollowUpCreateActionArtifacts')) {
         $actorUserId = trim((string) ($actorUserId !== null ? $actorUserId : (defined('USER_ID') ? USER_ID : 'SYSTEM')));
         $actionDate = customerFollowUpNowDate();
         $actionTime = customerFollowUpNowTime();
+
+        // Work out what this action moved, so approving, rejecting or completing a round
+        // records the change rather than leaving the entry showing whatever the previous
+        // action reported - an approval that never appears reads as though it never
+        // happened. Callers that describe their own changes keep theirs.
+        $historyChanges = (is_array($newValue) && isset($newValue['history_changes']) && is_array($newValue['history_changes']))
+            ? $newValue['history_changes']
+            : customerFollowUpBuildStateChangeList(
+                is_array($oldValue) ? $oldValue : array(),
+                is_array($newValue) ? $newValue : array()
+            );
 
         customerFollowUpInsertActionLog($connect, array(
             'follow_up_id' => isset($followUpRow['id']) ? (int) $followUpRow['id'] : 0,
@@ -1742,6 +2087,21 @@ if (!function_exists('customerFollowUpCreateActionArtifacts')) {
             'follow_up_id' => $followUpId,
             'round_id' => isset($roundRow['id']) ? (int) $roundRow['id'] : 0,
             'next_follow_up_date' => isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : '',
+            // The state before this action, so the history can show the date as from -> to
+            // rather than leaving the reader to compare it against the line above.
+            'previous_next_follow_up_date' => (is_array($oldValue) && isset($oldValue['next_follow_up_date']))
+                ? (string) $oldValue['next_follow_up_date']
+                : '',
+            // Approve, reject and reschedule all land on the same round, so they update
+            // that round's entry and append to its history instead of adding a row each.
+            'upsert' => true,
+            'action_label' => $actionLabel,
+            'action_remark' => $remark,
+            'extra_changes' => $historyChanges,
+            'round_no' => isset($roundRow['round_no']) ? (int) $roundRow['round_no'] : 0,
+            'actor_display_name' => (function_exists('customerFollowUpGetUserDisplayName') && ctype_digit(trim((string) $actorUserId)))
+                ? customerFollowUpGetUserDisplayName($connect, (int) $actorUserId)
+                : (string) $actorUserId,
         ));
     }
 }
@@ -2687,13 +3047,20 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         $uploadedAttachmentPath = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
         $uploadedNewAttachment = empty($uploadResult['reused']) && $uploadedAttachmentPath !== '';
 
+        // The shortcut names the message for the follow-up being scheduled next, so it may
+        // legitimately be left blank when that has not been decided yet.
         $messageShortcutId = (int) (isset($formData['message_shortcut_id']) ? $formData['message_shortcut_id'] : 0);
-        $messageShortcutRow = customerFollowUpGetMessageShortcutById($connect, $messageShortcutId);
-        if (empty($messageShortcutRow)) {
+        $messageShortcutRow = $messageShortcutId > 0
+            ? customerFollowUpGetMessageShortcutById($connect, $messageShortcutId)
+            : array();
+        if ($messageShortcutId > 0 && empty($messageShortcutRow)) {
             if ($uploadedNewAttachment) {
                 customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
             }
-            return array('success' => false, 'message' => 'Message Shortcut is required.');
+            return array('success' => false, 'message' => 'The selected message shortcut was not found.');
+        }
+        if (empty($messageShortcutRow)) {
+            $messageShortcutId = 0;
         }
 
         $nextFollowUpDate = trim((string) (isset($formData['next_follow_up_date']) ? $formData['next_follow_up_date'] : ''));
@@ -2709,7 +3076,7 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             'attachment' => isset($uploadResult['path']) ? $uploadResult['path'] : '',
             'message_shortcut_id' => $messageShortcutId,
             'next_follow_up_date' => $nextFollowUpDate,
-        ));
+        ), array('require_message_shortcut' => false));
         if (!empty($requiredErrors)) {
             if ($uploadedNewAttachment) {
                 customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
@@ -2816,8 +3183,34 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         $actionType = $isResubmit ? 'resubmit_rejected_follow_up' : 'submit_follow_up';
         $actionLabel = $isAppeal ? 'Submitted follow-up appeal' : ($isResubmit ? 'Resubmitted rejected follow-up' : 'Submitted follow-up');
         $previousContactNo = trim((string) (isset($oldRoundState['contact_no']) && $oldRoundState['contact_no'] !== '' ? $oldRoundState['contact_no'] : (isset($oldFollowUpState['contact_no']) ? $oldFollowUpState['contact_no'] : '')));
+        // This entry is the follow-up that was just carried out, so it reports its own
+        // date. The date entered on the form belongs to the follow-up being scheduled and
+        // is reported on that round's entry instead; the round row still stores it so the
+        // approval and missed-follow-up rules keep working unchanged.
+        $roundOwnFollowUpDate = trim((string) (isset($oldRoundState['next_follow_up_date']) ? $oldRoundState['next_follow_up_date'] : ''));
+        $logRoundRow = $updatedRoundRow;
+        $logRoundRow['next_follow_up_date'] = $roundOwnFollowUpDate;
+
+        // Measured against the date this round was due, so the entry says whether the
+        // follow-up was kept rather than only that it happened.
+        $submittedOnDate = customerFollowUpNowDate();
+        $followUpOutcome = 'Completed';
+        if ($roundOwnFollowUpDate !== '') {
+            $followUpOutcome = $submittedOnDate <= $roundOwnFollowUpDate ? 'Completed on time' : 'Completed late';
+        }
+
+        $submitHistoryChanges = array(
+            array('field' => 'Customer Chat Screenshot', 'from' => '', 'to' => 'Uploaded'),
+            array('field' => 'Follow-Up', 'from' => '', 'to' => $followUpOutcome),
+        );
+        // Only worth a line when someone still has to sign it off; a return customer's
+        // follow-up needs no approval and saying so every time is noise.
+        if ($approvalStatus === 'pending') {
+            $submitHistoryChanges[] = array('field' => 'Approval', 'from' => '', 'to' => 'Pending');
+        }
+
         $actionNewValue = array(
-            'next_follow_up_date' => $nextFollowUpDate,
+            'next_follow_up_date' => $roundOwnFollowUpDate,
             'contact_no' => $contactNo,
             'message_shortcut_id' => $messageShortcutId,
             'message_shortcut_label' => isset($messageShortcutRow['shortcuts_tag']) ? $messageShortcutRow['shortcuts_tag'] : '',
@@ -2826,6 +3219,12 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             'round_status' => $roundStatus,
             'reject_reason' => $isAppeal ? trim((string) (isset($oldRoundState['reject_reason']) ? $oldRoundState['reject_reason'] : '')) : '',
             'attachment_path' => isset($uploadResult['path']) ? (string) $uploadResult['path'] : '',
+            // What this action changed on this entry. The follow-up itself is done - that
+            // is what the person doing it cares about - and whether it still needs signing
+            // off is a separate matter, so the two are not reported as one "status": the
+            // round status reads Pending Approval, which on its own looks like the
+            // follow-up was not carried out.
+            'history_changes' => $submitHistoryChanges,
         );
         $hasExtraLogData = (
             !empty($appealExtraLogData['appeal_existing_tag_ids'])
@@ -2844,7 +3243,7 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         customerFollowUpCreateActionArtifacts(
             $connect,
             $updatedFollowUpRow,
-            $updatedRoundRow,
+            $logRoundRow,
             $actionType,
             $actionLabel,
             $oldRoundState,
@@ -2852,6 +3251,62 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             '',
             isset($uploadResult['path']) ? $uploadResult['path'] : ''
         );
+
+        // Submitting closes out the follow-up that was due - the screenshot lands on that
+        // round's existing entry above - and schedules the next one. The next follow-up is
+        // its own round, so it gets its own entry instead of being folded into the one
+        // just evidenced. current_round_no is deliberately left alone: the case only moves
+        // on when the round is completed, so approval and the crons still see this round,
+        // and completing it adopts the round created here rather than making another.
+        $nextRoundNo = min(customerFollowUpGetMaxRoundNo(), max(1, (int) $updatedFollowUpRow['current_round_no']) + 1);
+        if ($nextRoundNo > (int) $updatedFollowUpRow['current_round_no']) {
+            $nextRoundRow = customerFollowUpFetchCurrentRound($connect, $followUpId, $nextRoundNo);
+            if (empty($nextRoundRow)) {
+                $nextRoundId = customerFollowUpCreateFollowUpRound($connect, array(
+                    'follow_up_id' => $followUpId,
+                    'round_no' => $nextRoundNo,
+                    'stage_no' => $nextRoundNo,
+                    'next_follow_up_date' => $nextFollowUpDate,
+                    'previous_follow_up_date' => trim((string) (isset($oldRoundState['next_follow_up_date']) ? $oldRoundState['next_follow_up_date'] : '')),
+                    'message_shortcut_id' => $messageShortcutId,
+                    'message_shortcut_text' => isset($messageShortcutRow['shortcuts_message_text']) ? $messageShortcutRow['shortcuts_message_text'] : '',
+                    'contact_no' => $contactNo !== '' ? $contactNo : null,
+                    'approval_status' => 'pending',
+                    'postpone_status' => 'none',
+                    'round_status' => '',
+                    'create_by' => (string) $actorUserId,
+                ));
+                $nextRoundRow = $nextRoundId > 0 ? customerFollowUpFetchRoundById($connect, $nextRoundId) : array();
+            }
+
+            if (!empty($nextRoundRow)) {
+                $nextMessage = trim((string) (isset($messageShortcutRow['shortcuts_message_text']) ? $messageShortcutRow['shortcuts_message_text'] : ''));
+                $nextShortcutLabel = trim((string) (isset($messageShortcutRow['shortcuts_tag']) ? $messageShortcutRow['shortcuts_tag'] : ''));
+
+                $nextLines = array('Follow-Up Action: Next follow-up scheduled');
+                $nextLines[] = '';
+                $nextLines[] = 'Follow-Up Round: ' . $nextRoundNo;
+                $nextLines[] = 'Next Follow-Up Date: ' . $nextFollowUpDate;
+                $nextLines[] = '';
+                $nextLines[] = 'Message Shortcut: ' . ($nextShortcutLabel !== '' ? $nextShortcutLabel : '-');
+                $nextLines[] = 'Message Shortcut Content:';
+                $nextLines[] = $nextMessage !== '' ? $nextMessage : '(no message selected yet)';
+
+                customerFollowUpInsertReadableUserRecordLog($connect, array(
+                    'platform' => isset($updatedFollowUpRow['platform']) ? $updatedFollowUpRow['platform'] : '',
+                    'customer_id' => isset($updatedFollowUpRow['customer_id']) ? (int) $updatedFollowUpRow['customer_id'] : 0,
+                    'content' => implode("\n", $nextLines),
+                    'created_by' => (string) $actorUserId,
+                    'follow_up_id' => $followUpId,
+                    'round_id' => (int) $nextRoundRow['id'],
+                    'next_follow_up_date' => $nextFollowUpDate,
+                    'upsert' => true,
+                    'action_label' => 'Next follow-up scheduled',
+                    'round_no' => $nextRoundNo,
+                    'actor_display_name' => customerFollowUpGetUserDisplayName($connect, $actorUserId),
+                ));
+            }
+        }
 
         if ($contactNo !== '' && $contactNo !== $previousContactNo) {
             customerFollowUpCreateActionArtifacts(
@@ -3131,7 +3586,7 @@ if (!function_exists('customerFollowUpCompleteCurrentRound')) {
         }
 
         $nextRoundNo = (int) (isset($followUpRow['current_round_no']) ? $followUpRow['current_round_no'] : 1);
-        if ($nextRoundNo < 6) {
+        if ($nextRoundNo < customerFollowUpGetMaxRoundNo()) {
             $nextRoundNo++;
             $nextRoundRow = customerFollowUpFetchCurrentRound($connect, $followUpId, $nextRoundNo);
             if (empty($nextRoundRow)) {
@@ -3184,7 +3639,7 @@ if (!function_exists('customerFollowUpCompleteCurrentRound')) {
         customerFollowUpHandleRoundThreeCompletionTags($connect, isset($GLOBALS['finance_connect']) ? $GLOBALS['finance_connect'] : $connect, $updatedFollowUpRow, $updatedRoundRow, (string) $actorUserId);
 
         mysqli_commit($connect);
-        return array('success' => true, 'message' => (int) $followUpRow['current_round_no'] >= 6 ? 'Round 6 completed. Follow-up case marked as Done.' : 'Follow-up completed and next round placeholder is ready.');
+        return array('success' => true, 'message' => (int) $followUpRow['current_round_no'] >= customerFollowUpGetMaxRoundNo() ? ('Round ' . customerFollowUpGetMaxRoundNo() . ' completed. Follow-up case marked as Done.') : 'Follow-up completed and next round placeholder is ready.');
     }
 }
 
@@ -3286,6 +3741,298 @@ if (!function_exists('customerFollowUpSubmitMissingNextFollowUpDate')) {
 
         mysqli_commit($connect);
         return array('success' => true, 'message' => 'Next follow-up date submitted successfully.');
+    }
+}
+
+if (!function_exists('customerFollowUpSupportsCancelRequest')) {
+    function customerFollowUpSupportsCancelRequest($connect)
+    {
+        return $connect instanceof mysqli
+            && function_exists('shopeeOmsTableHasColumn')
+            && defined('dbname')
+            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP_ROUND, 'cancel_status');
+    }
+}
+
+if (!function_exists('customerFollowUpGetCancelRequestPinId')) {
+    /**
+     * Raising a cancel request is restricted to holders of this pin. Approving one stays
+     * with the existing Approve/Reject pins, so a supervisor signs it off.
+     */
+    function customerFollowUpGetCancelRequestPinId()
+    {
+        return 27;
+    }
+}
+
+if (!function_exists('customerFollowUpNormalizeCancelStatus')) {
+    function customerFollowUpNormalizeCancelStatus($status)
+    {
+        $status = strtolower(trim((string) $status));
+        $allowed = array('none', 'pending', 'approved', 'rejected');
+
+        return in_array($status, $allowed, true) ? $status : 'none';
+    }
+}
+
+if (!function_exists('customerFollowUpCanRequestCancel')) {
+    /**
+     * A cancel can be raised while the follow-up is still live and no request is already
+     * waiting on a supervisor. Finished cases have nothing left to cancel.
+     */
+    function customerFollowUpCanRequestCancel($followUpRow, $roundRow)
+    {
+        $caseStatus = strtolower(trim((string) (isset($followUpRow['current_status']) ? $followUpRow['current_status'] : '')));
+        if (in_array($caseStatus, array('done', 'lost', 'cancelled'), true)) {
+            return false;
+        }
+
+        $cancelStatus = customerFollowUpNormalizeCancelStatus(isset($roundRow['cancel_status']) ? $roundRow['cancel_status'] : 'none');
+
+        return $cancelStatus !== 'pending' && $cancelStatus !== 'approved';
+    }
+}
+
+if (!function_exists('customerFollowUpRequestCancel')) {
+    /**
+     * Raises a request to stop following this customer up. Nothing is cancelled here: the
+     * case keeps running until a supervisor approves, so a request cannot quietly end a
+     * follow-up on its own.
+     */
+    function customerFollowUpRequestCancel($connect, $followUpId, $cancelReason, $actorUserId, $actorUserGroupId)
+    {
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        if (empty($followUpRow) || empty($roundRow)) {
+            return array('success' => false, 'message' => 'Follow-up round not found.');
+        }
+        if (!customerFollowUpSupportsCancelRequest($connect)) {
+            return array('success' => false, 'message' => 'Cancel request fields are missing. Run insert_table.php first.');
+        }
+        if (!customerFollowUpCanUserManageCase($followUpRow, $actorUserId, $actorUserGroupId, $connect)) {
+            return array('success' => false, 'message' => 'You do not have permission to request a cancel for this follow-up.');
+        }
+
+        $cancelReason = customerFollowUpSanitizeApprovalComment($cancelReason);
+        if ($cancelReason === '') {
+            return array('success' => false, 'message' => 'Cancel reason is required.');
+        }
+        if (!customerFollowUpCanRequestCancel($followUpRow, $roundRow)) {
+            return array('success' => false, 'message' => 'This follow-up is not available for a cancel request.');
+        }
+
+        mysqli_begin_transaction($connect);
+
+        $oldRoundState = $roundRow;
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+            'cancel_status' => 'pending',
+            'cancel_reason' => $cancelReason,
+            'cancel_reject_reason' => null,
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+
+        if (!$roundUpdated) {
+            mysqli_rollback($connect);
+            return array('success' => false, 'message' => 'Failed to submit the cancel request.');
+        }
+
+        $updatedRoundRow = customerFollowUpFetchRoundById($connect, (int) $roundRow['id']);
+        $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+
+        customerFollowUpCreateActionArtifacts(
+            $connect,
+            $updatedFollowUpRow,
+            $updatedRoundRow,
+            'request_cancel_follow_up',
+            'Requested follow-up cancellation',
+            $oldRoundState,
+            array(
+                'cancel_status' => 'pending',
+                'cancel_reason' => $cancelReason,
+            ),
+            $cancelReason,
+            '',
+            (string) $actorUserId
+        );
+
+        foreach (customerFollowUpGetAdminUsers($connect) as $adminUser) {
+            customerFollowUpCreateNotificationRow($connect, array(
+                'follow_up_id' => $followUpId,
+                'round_id' => (int) $updatedRoundRow['id'],
+                'notify_user_id' => isset($adminUser['id']) ? (int) $adminUser['id'] : 0,
+                'notify_role' => 'admin',
+                'notification_type' => 'request_cancel_follow_up',
+                'title' => 'Follow-Up Cancel Request Pending',
+                'message' => customerFollowUpGetUserDisplayName($connect, $actorUserId)
+                    . ' requested to cancel the follow-up for case ID ' . $followUpId . '. Reason: ' . $cancelReason,
+            ));
+        }
+
+        mysqli_commit($connect);
+        return array('success' => true, 'message' => 'Cancel request submitted and sent for approval.');
+    }
+}
+
+if (!function_exists('customerFollowUpApproveCancel')) {
+    /**
+     * Approves a pending cancel request, which is the point the follow-up actually stops:
+     * the case is marked Cancelled, so it drops out of the listing, is not reused for the
+     * customer's next order, and the due/missed/lost crons leave it alone.
+     */
+    function customerFollowUpApproveCancel($connect, $followUpId, $approvalComment, $actorUserId, $actorUserGroupId)
+    {
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        if (empty($followUpRow) || empty($roundRow)) {
+            return array('success' => false, 'message' => 'Follow-up round not found.');
+        }
+        if (!customerFollowUpSupportsCancelRequest($connect)) {
+            return array('success' => false, 'message' => 'Cancel request fields are missing. Run insert_table.php first.');
+        }
+        if (customerFollowUpNormalizeCancelStatus(isset($roundRow['cancel_status']) ? $roundRow['cancel_status'] : 'none') !== 'pending') {
+            return array('success' => false, 'message' => 'There is no pending cancel request on this follow-up.');
+        }
+
+        $approvalComment = customerFollowUpSanitizeApprovalComment($approvalComment);
+
+        mysqli_begin_transaction($connect);
+
+        $oldRoundState = $roundRow;
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+            'cancel_status' => 'approved',
+            'round_status' => 'Cancelled',
+            'approved_by' => (string) $actorUserId,
+            'approved_date' => customerFollowUpNowDate(),
+            'approved_time' => customerFollowUpNowTime(),
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+        $caseUpdated = customerFollowUpUpdateCaseRecord($connect, $followUpId, array(
+            'current_status' => 'Cancelled',
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+
+        if (!$roundUpdated || !$caseUpdated) {
+            mysqli_rollback($connect);
+            return array('success' => false, 'message' => 'Failed to approve the cancel request.');
+        }
+
+        $updatedRoundRow = customerFollowUpFetchRoundById($connect, (int) $roundRow['id']);
+        $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+
+        customerFollowUpCreateActionArtifacts(
+            $connect,
+            $updatedFollowUpRow,
+            $updatedRoundRow,
+            'approve_cancel_follow_up',
+            'Approved follow-up cancellation',
+            $oldRoundState,
+            array(
+                'cancel_status' => 'approved',
+                'round_status' => 'Cancelled',
+            ),
+            $approvalComment,
+            '',
+            (string) $actorUserId
+        );
+
+        $assignedUserId = (int) (isset($updatedFollowUpRow['assigned_user_id']) ? $updatedFollowUpRow['assigned_user_id'] : 0);
+        if ($assignedUserId > 0) {
+            customerFollowUpCreateNotificationRow($connect, array(
+                'follow_up_id' => $followUpId,
+                'round_id' => (int) $updatedRoundRow['id'],
+                'notify_user_id' => $assignedUserId,
+                'notify_role' => 'user',
+                'notification_type' => 'approve_cancel_follow_up',
+                'title' => 'Follow-Up Cancellation Approved',
+                'message' => 'The cancel request for case ID ' . $followUpId . ' was approved. This follow-up has stopped.',
+            ));
+        }
+
+        mysqli_commit($connect);
+        return array('success' => true, 'message' => 'Cancel request approved. This follow-up has been cancelled.');
+    }
+}
+
+if (!function_exists('customerFollowUpRejectCancel')) {
+    /**
+     * Turns down a pending cancel request. The follow-up carries on exactly as it was, so
+     * the round keeps its own status rather than being reset.
+     */
+    function customerFollowUpRejectCancel($connect, $followUpId, $rejectReason, $actorUserId, $actorUserGroupId)
+    {
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        if (empty($followUpRow) || empty($roundRow)) {
+            return array('success' => false, 'message' => 'Follow-up round not found.');
+        }
+        if (!customerFollowUpSupportsCancelRequest($connect)) {
+            return array('success' => false, 'message' => 'Cancel request fields are missing. Run insert_table.php first.');
+        }
+        if (customerFollowUpNormalizeCancelStatus(isset($roundRow['cancel_status']) ? $roundRow['cancel_status'] : 'none') !== 'pending') {
+            return array('success' => false, 'message' => 'There is no pending cancel request on this follow-up.');
+        }
+
+        $rejectReason = customerFollowUpSanitizeApprovalComment($rejectReason);
+        if ($rejectReason === '') {
+            return array('success' => false, 'message' => 'Cancel rejection reason is required.');
+        }
+
+        mysqli_begin_transaction($connect);
+
+        $oldRoundState = $roundRow;
+        $roundUpdated = customerFollowUpUpdateRoundRecord($connect, (int) $roundRow['id'], array(
+            'cancel_status' => 'rejected',
+            'cancel_reject_reason' => $rejectReason,
+            'update_by' => (string) $actorUserId,
+            'update_date' => customerFollowUpNowDate(),
+            'update_time' => customerFollowUpNowTime(),
+        ));
+
+        if (!$roundUpdated) {
+            mysqli_rollback($connect);
+            return array('success' => false, 'message' => 'Failed to reject the cancel request.');
+        }
+
+        $updatedRoundRow = customerFollowUpFetchRoundById($connect, (int) $roundRow['id']);
+        $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+
+        customerFollowUpCreateActionArtifacts(
+            $connect,
+            $updatedFollowUpRow,
+            $updatedRoundRow,
+            'reject_cancel_follow_up',
+            'Rejected follow-up cancellation',
+            $oldRoundState,
+            array(
+                'cancel_status' => 'rejected',
+                'cancel_reject_reason' => $rejectReason,
+            ),
+            $rejectReason,
+            '',
+            (string) $actorUserId
+        );
+
+        $assignedUserId = (int) (isset($updatedFollowUpRow['assigned_user_id']) ? $updatedFollowUpRow['assigned_user_id'] : 0);
+        if ($assignedUserId > 0) {
+            customerFollowUpCreateNotificationRow($connect, array(
+                'follow_up_id' => $followUpId,
+                'round_id' => (int) $updatedRoundRow['id'],
+                'notify_user_id' => $assignedUserId,
+                'notify_role' => 'user',
+                'notification_type' => 'reject_cancel_follow_up',
+                'title' => 'Follow-Up Cancellation Rejected',
+                'message' => 'The cancel request for case ID ' . $followUpId . ' was rejected. Reason: ' . $rejectReason,
+            ));
+        }
+
+        mysqli_commit($connect);
+        return array('success' => true, 'message' => 'Cancel request rejected. This follow-up continues.');
     }
 }
 
@@ -3887,6 +4634,7 @@ if (!function_exists('customerFollowUpProcessDueNotifications')) {
                     ON r.`follow_up_id` = f.`id`
                    AND r.`round_no` = f.`current_round_no`
                    AND r.`status` = 'A'
+                   " . customerFollowUpBuildCurrentRoundCondition($connect, 'r') . "
                 WHERE f.`status` = 'A'
                   AND " . $effectiveDateSql . " = '" . customerFollowUpEscape($connect, $targetDate) . "'
                   AND (
@@ -3894,6 +4642,7 @@ if (!function_exists('customerFollowUpProcessDueNotifications')) {
                         OR IFNULL(TRIM(r.`round_status`), '') = ''
                   )
                   AND LOWER(IFNULL(r.`postpone_status`, 'none')) <> 'pending'
+                  AND LOWER(IFNULL(f.`current_status`, '')) <> 'cancelled'
                   AND f.`assigned_user_id` IS NOT NULL
                   AND f.`assigned_user_id` > 0";
         $result = mysqli_query($connect, $sql);
@@ -3972,6 +4721,7 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                     ON r.`follow_up_id` = f.`id`
                    AND r.`round_no` = f.`current_round_no`
                    AND r.`status` = 'A'
+                   " . customerFollowUpBuildCurrentRoundCondition($connect, 'r') . "
                 WHERE f.`status` = 'A'
                   AND " . $effectiveDateSql . " IS NOT NULL
                   AND " . $effectiveDateSql . " < '" . customerFollowUpEscape($connect, $today) . "'
@@ -3979,7 +4729,8 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                         LOWER(r.`round_status`) IN ('approved', 'postponed')
                         OR IFNULL(TRIM(r.`round_status`), '') = ''
                   )
-                  AND LOWER(IFNULL(r.`postpone_status`, 'none')) <> 'pending'";
+                  AND LOWER(IFNULL(r.`postpone_status`, 'none')) <> 'pending'
+                  AND LOWER(IFNULL(f.`current_status`, '')) <> 'cancelled'";
         $result = mysqli_query($connect, $sql);
         if (!$result) {
             return $summary;
@@ -4082,9 +4833,10 @@ if (!function_exists('customerFollowUpProcessLostCases')) {
                 FROM `" . CUSTOMER_FOLLOW_UP . "` f
                 INNER JOIN `" . CUSTOMER_FOLLOW_UP_ROUND . "` r
                     ON r.`follow_up_id` = f.`id`
-                   AND r.`round_no` = 6
+                   AND r.`round_no` = " . customerFollowUpGetMaxRoundNo() . "
                    AND r.`status` = 'A'
                    AND LOWER(r.`round_status`) = 'done'
+                   " . customerFollowUpBuildCurrentRoundCondition($connect, 'r') . "
                 WHERE f.`status` = 'A'
                   AND LOWER(IFNULL(f.`current_status`, '')) <> 'lost'
                   AND IFNULL(f.`lost_tag_added`, 'N') <> 'Y'";
@@ -4215,6 +4967,197 @@ if (!function_exists('customerFollowUpProcessLostCases')) {
     }
 }
 
+if (!function_exists('customerFollowUpFetchOpenCaseByCustomer')) {
+    /**
+     * The customer's one live follow-up case, if they have one. Cases already finished
+     * (Done) or written off (Lost) are not reused, so a returning customer starts fresh
+     * instead of reopening a closed record.
+     */
+    function customerFollowUpFetchOpenCaseByCustomer($connect, $platform, $customerId)
+    {
+        foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
+            $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
+            if (in_array($caseStatus, array('done', 'lost', 'cancelled'), true)) {
+                continue;
+            }
+
+            return $caseRow;
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('customerFollowUpTakeOverCaseWithNewOrder')) {
+    /**
+     * Points an existing customer case at a newly received order and advances it to the
+     * next round, since rounds track the customer's follow-up history rather than one
+     * order's. The rounds already recorded stay in the table, flagged as superseded so
+     * they keep their history without being mistaken for the current round, and the
+     * follow-up date being replaced is snapshotted onto the case and written to the action
+     * log as an explicit overwrite.
+     *
+     * Returns the follow-up id on success, 0 when the caller should fall back to creating
+     * a separate case.
+     */
+    function customerFollowUpTakeOverCaseWithNewOrder($connect, $existingCaseRow, $newOrderData)
+    {
+        $followUpId = isset($existingCaseRow['id']) ? (int) $existingCaseRow['id'] : 0;
+        if (!($connect instanceof mysqli) || $followUpId <= 0) {
+            return 0;
+        }
+
+        // Without the superseded flag the old rounds would still answer as the current
+        // round, so leave the case alone rather than corrupting it.
+        if (!customerFollowUpSupportsRoundSuperseded($connect)) {
+            return 0;
+        }
+
+        $actorUserId = (int) (isset($newOrderData['actor_user_id']) ? $newOrderData['actor_user_id'] : 0);
+        $newOrderId = (int) (isset($newOrderData['order_id']) ? $newOrderData['order_id'] : 0);
+        if ($actorUserId <= 0 || $newOrderId <= 0) {
+            return 0;
+        }
+
+        $currentRoundRow = customerFollowUpFetchCurrentRound($connect, $followUpId);
+        $previousInfo = array(
+            'order_id' => (int) (isset($existingCaseRow['order_id']) ? $existingCaseRow['order_id'] : 0),
+            'order_no' => trim((string) (isset($existingCaseRow['order_no']) ? $existingCaseRow['order_no'] : '')),
+            'package_name' => trim((string) (isset($existingCaseRow['package_name']) ? $existingCaseRow['package_name'] : '')),
+            'received_date' => trim((string) (isset($existingCaseRow['received_date']) ? $existingCaseRow['received_date'] : '')),
+            'round_no' => (int) (isset($currentRoundRow['round_no']) ? $currentRoundRow['round_no'] : (isset($existingCaseRow['current_round_no']) ? $existingCaseRow['current_round_no'] : 0)),
+            'next_follow_up_date' => trim((string) (isset($currentRoundRow['next_follow_up_date']) ? $currentRoundRow['next_follow_up_date'] : '')),
+            'round_status' => customerFollowUpNormalizeStatus(isset($currentRoundRow['round_status']) ? $currentRoundRow['round_status'] : ''),
+            'replaced_on' => customerFollowUpNowDate(),
+        );
+
+        $today = customerFollowUpNowDate();
+        $nowTime = customerFollowUpNowTime();
+        $receivedDate = trim((string) (isset($newOrderData['received_date']) ? $newOrderData['received_date'] : '')) !== ''
+            ? trim((string) $newOrderData['received_date'])
+            : $today;
+
+        // Rounds count the customer's follow-up history, not one order's, so the new order
+        // continues the sequence, up to the module-wide ceiling. A case that completes the
+        // final round is marked Done and is no longer reused, so the cap only bites here
+        // while that last round is still open.
+        $previousRoundNo = max(1, (int) (isset($existingCaseRow['current_round_no']) ? $existingCaseRow['current_round_no'] : 1));
+        $nextRoundNo = min(customerFollowUpGetMaxRoundNo(), $previousRoundNo + 1);
+
+        $supersedeSql = "UPDATE `" . CUSTOMER_FOLLOW_UP_ROUND . "`
+                         SET `superseded` = 'Y',
+                             `update_by` = '" . customerFollowUpEscape($connect, (string) $actorUserId) . "',
+                             `update_date` = '" . customerFollowUpEscape($connect, $today) . "',
+                             `update_time` = '" . customerFollowUpEscape($connect, $nowTime) . "'
+                         WHERE `follow_up_id` = " . $followUpId . "
+                           AND `status` = 'A'
+                           AND IFNULL(`superseded`, 'N') <> 'Y'";
+        if (!mysqli_query($connect, $supersedeSql)) {
+            return 0;
+        }
+
+        $caseFields = array(
+            'order_id' => $newOrderId,
+            'order_no' => trim((string) (isset($newOrderData['order_no']) ? $newOrderData['order_no'] : '')),
+            'package_name' => trim((string) (isset($newOrderData['package_name']) ? $newOrderData['package_name'] : '')),
+            'received_date' => $receivedDate,
+            'customer_type' => strtolower(trim((string) (isset($newOrderData['customer_type']) ? $newOrderData['customer_type'] : ''))) === 'return' ? 'return' : 'new',
+            'purchase_count_snapshot' => (int) (isset($newOrderData['purchase_count_snapshot']) ? $newOrderData['purchase_count_snapshot'] : 0),
+            'current_round_no' => $nextRoundNo,
+            'current_status' => '',
+            'follow_up_started' => 'Y',
+            'update_by' => (string) $actorUserId,
+            'update_date' => $today,
+            'update_time' => $nowTime,
+        );
+
+        $newCustomerName = trim((string) (isset($newOrderData['customer_name']) ? $newOrderData['customer_name'] : ''));
+        if ($newCustomerName !== '') {
+            $caseFields['customer_name'] = $newCustomerName;
+        }
+        $newCustomerUsername = trim((string) (isset($newOrderData['customer_username']) ? $newOrderData['customer_username'] : ''));
+        if ($newCustomerUsername !== '') {
+            $caseFields['customer_username'] = $newCustomerUsername;
+        }
+        $newContactNo = trim((string) (isset($newOrderData['contact_no']) ? $newOrderData['contact_no'] : ''));
+        if ($newContactNo !== '') {
+            $caseFields['contact_no'] = $newContactNo;
+        }
+        if (customerFollowUpSupportsPreviousFollowUpInfo($connect)) {
+            $caseFields['previous_follow_up_info'] = json_encode($previousInfo);
+        }
+
+        if (!customerFollowUpUpdateCaseRecord($connect, $followUpId, $caseFields)) {
+            return 0;
+        }
+
+        $newRoundId = customerFollowUpCreateFollowUpRound($connect, array(
+            'follow_up_id' => $followUpId,
+            'round_no' => $nextRoundNo,
+            'stage_no' => $nextRoundNo,
+            'previous_follow_up_date' => $receivedDate,
+            'approval_status' => 'pending',
+            'postpone_status' => 'none',
+            'round_status' => '',
+            'create_by' => (string) $actorUserId,
+        ));
+
+        if ($newRoundId <= 0) {
+            return 0;
+        }
+
+        $overwriteRemark = 'Overwrite follow up date: order '
+            . ($previousInfo['order_no'] !== '' ? $previousInfo['order_no'] : ('#' . $previousInfo['order_id']))
+            . ' round ' . max(1, (int) $previousInfo['round_no'])
+            . ' was following up on ' . ($previousInfo['next_follow_up_date'] !== '' ? $previousInfo['next_follow_up_date'] : 'no date')
+            . ', replaced by order ' . ($caseFields['order_no'] !== '' ? $caseFields['order_no'] : ('#' . $newOrderId))
+            . ' received on ' . $receivedDate
+            . ' (now round ' . $nextRoundNo . ').';
+
+        customerFollowUpInsertActionLog($connect, array(
+            'follow_up_id' => $followUpId,
+            'round_id' => $newRoundId,
+            'action_type' => 'overwrite_follow_up_date',
+            'old_value' => $previousInfo,
+            'new_value' => array(
+                'order_id' => $newOrderId,
+                'order_no' => $caseFields['order_no'],
+                'received_date' => $receivedDate,
+                'round_no' => $nextRoundNo,
+            ),
+            'remark' => $overwriteRemark,
+            'action_by' => (string) $actorUserId,
+        ));
+
+        if (function_exists('audit_log')) {
+            $actorDisplayName = function_exists('customerFollowUpGetUserDisplayName')
+                ? customerFollowUpGetUserDisplayName($connect, $actorUserId)
+                : (string) $actorUserId;
+
+            audit_log(array(
+                'log_act'     => 'edit',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'query_rec'   => $followUpId,
+                'query_table' => CUSTOMER_FOLLOW_UP,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'oldval'      => json_encode($previousInfo),
+                'changes'     => json_encode($caseFields),
+                'act_msg'     => $actorDisplayName . ' overwrote the follow-up on case [<b> ID = ' . $followUpId . '</b> ] with a newly received order.',
+            ));
+        }
+
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpFetchRoundById($connect, $newRoundId);
+        if (!empty($followUpRow)) {
+            customerFollowUpApplyCustomerTypeTags($connect, $followUpRow, $roundRow, (string) $actorUserId);
+        }
+
+        return $followUpId;
+    }
+}
+
 if (!function_exists('customerFollowUpStartFromReceivedOrder')) {
     function customerFollowUpStartFromReceivedOrder($connect, $platform, $orderId, $orderNo, $customerId, $customerUsername, $packageName, $receivedDate, $purchaseCountSnapshot, $currentUserId, $customerName = '', $contactNo = '')
     {
@@ -4233,6 +5176,31 @@ if (!function_exists('customerFollowUpStartFromReceivedOrder')) {
         }
 
         $customerType = $purchaseCountSnapshot >= 1 ? 'return' : 'new';
+
+        // A customer gets one follow-up record, not one per order. When the customer
+        // already has an open case, the new order takes it over: the case moves to the new
+        // order and moves on to the next round, with the follow-up it was carrying kept both as a
+        // snapshot on the record and as an action log entry.
+        $openCustomerCase = customerFollowUpFetchOpenCaseByCustomer($connect, $platform, (int) $customerId);
+        if (!empty($openCustomerCase)) {
+            $takeoverFollowUpId = customerFollowUpTakeOverCaseWithNewOrder($connect, $openCustomerCase, array(
+                'order_id' => $orderId,
+                'order_no' => $orderNo,
+                'customer_name' => $customerName,
+                'customer_username' => $customerUsername,
+                'package_name' => $packageName,
+                'received_date' => $receivedDate,
+                'customer_type' => $customerType,
+                'purchase_count_snapshot' => $purchaseCountSnapshot,
+                'contact_no' => $contactNo,
+                'actor_user_id' => $currentUserId,
+            ));
+
+            if ($takeoverFollowUpId > 0) {
+                return $takeoverFollowUpId;
+            }
+        }
+
         $followUpId = customerFollowUpCreateFollowUpCase($connect, array(
             'platform' => $platform,
             'order_id' => $orderId,
@@ -4294,6 +5262,418 @@ if (!function_exists('customerFollowUpStartFromReceivedOrder')) {
         // This helper is used by the Confirm Received follow-up flow and can be reused by other received-order entry points.
         // Keep using purchase_count_snapshot captured at Confirm Received time so later order changes do not retroactively change customer_type.
         return $followUpId;
+    }
+}
+
+if (!function_exists('customerFollowUpFindDuplicateCaseGroups')) {
+    /**
+     * Customers still holding more than one open follow-up case, with those cases ordered
+     * most-recently-received first. This is what the review page lists and what the
+     * backfill works through; a customer with a single case never appears.
+     */
+    function customerFollowUpFindDuplicateCaseGroups($connect)
+    {
+        $groups = array();
+        if (!($connect instanceof mysqli)) {
+            return $groups;
+        }
+
+        $duplicateSql = "SELECT `platform`, `customer_id`, COUNT(*) AS `case_count`
+                         FROM `" . CUSTOMER_FOLLOW_UP . "`
+                         WHERE `status` = 'A'
+                           AND `customer_id` > 0
+                           AND LOWER(IFNULL(`current_status`, '')) NOT IN ('done', 'lost', 'cancelled')
+                         GROUP BY `platform`, `customer_id`
+                         HAVING COUNT(*) > 1";
+        $duplicateResult = mysqli_query($connect, $duplicateSql);
+
+        while ($duplicateResult && ($duplicateRow = mysqli_fetch_assoc($duplicateResult))) {
+            $platform = customerFollowUpNormalizePlatform($duplicateRow['platform']);
+            $customerId = (int) $duplicateRow['customer_id'];
+            if ($platform === '' || $customerId <= 0) {
+                continue;
+            }
+
+            $openCases = array();
+            foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
+                $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
+                if (in_array($caseStatus, array('done', 'lost', 'cancelled'), true)) {
+                    continue;
+                }
+
+                $caseRow['current_round'] = customerFollowUpFetchCurrentRound($connect, (int) $caseRow['id']);
+                $openCases[] = $caseRow;
+            }
+
+            if (count($openCases) < 2) {
+                continue;
+            }
+
+            // Most recently received first: that is the follow-up actually in progress and
+            // the default the reviewer is offered.
+            usort($openCases, function ($a, $b) {
+                $dateA = trim((string) (isset($a['received_date']) ? $a['received_date'] : ''));
+                $dateB = trim((string) (isset($b['received_date']) ? $b['received_date'] : ''));
+                if ($dateA !== $dateB) {
+                    return strcmp($dateB, $dateA);
+                }
+
+                return (int) $b['id'] <=> (int) $a['id'];
+            });
+
+            $groups[] = array(
+                'platform' => $platform,
+                'customer_id' => $customerId,
+                'cases' => $openCases,
+            );
+        }
+
+        return $groups;
+    }
+}
+
+if (!function_exists('customerFollowUpMergeCasesIntoSurvivor')) {
+    /**
+     * Folds a customer's other open cases into the one chosen to keep. The others have
+     * their rounds marked superseded and are soft-deleted, and each merge is written to
+     * the survivor's action log. The survivor carries the furthest round any of them
+     * reached, since rounds count the customer's follow-up history rather than one
+     * order's.
+     *
+     * Returns array('success', 'message', 'cases_merged', 'rounds_superseded').
+     */
+    function customerFollowUpMergeCasesIntoSurvivor($connect, $platform, $customerId, $survivorId, $actorUserId)
+    {
+        $result = array('success' => false, 'message' => '', 'cases_merged' => 0, 'rounds_superseded' => 0);
+
+        $platform = customerFollowUpNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $survivorId = (int) $survivorId;
+        $actorUserId = (int) $actorUserId;
+
+        if (!($connect instanceof mysqli) || $platform === '' || $customerId <= 0 || $survivorId <= 0) {
+            return $result;
+        }
+        if (!customerFollowUpSupportsRoundSuperseded($connect)) {
+            $result['message'] = 'customer_follow_up_round.superseded is missing. Run insert_table.php first.';
+            return $result;
+        }
+
+        $survivor = array();
+        $others = array();
+        foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
+            $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
+            if (in_array($caseStatus, array('done', 'lost', 'cancelled'), true)) {
+                continue;
+            }
+
+            if ((int) $caseRow['id'] === $survivorId) {
+                $survivor = $caseRow;
+            } else {
+                $others[] = $caseRow;
+            }
+        }
+
+        if (empty($survivor)) {
+            $result['message'] = 'The case to keep was not found among the open cases for this customer.';
+            return $result;
+        }
+        if (empty($others)) {
+            $result['success'] = true;
+            $result['message'] = 'Nothing to merge; this customer already has a single open case.';
+            return $result;
+        }
+
+        $today = customerFollowUpNowDate();
+        $nowTime = customerFollowUpNowTime();
+        $maxRoundNo = customerFollowUpGetMaxRoundNo();
+
+        $mergedRoundNo = max(1, (int) $survivor['current_round_no']);
+        foreach ($others as $otherCase) {
+            $mergedRoundNo = max($mergedRoundNo, (int) $otherCase['current_round_no']);
+        }
+        $mergedRoundNo = min($maxRoundNo, $mergedRoundNo);
+
+        foreach ($others as $mergedCase) {
+            $mergedCaseId = (int) $mergedCase['id'];
+            $mergedRound = customerFollowUpFetchCurrentRound($connect, $mergedCaseId);
+            $mergedOrderLabel = trim((string) (isset($mergedCase['order_no']) ? $mergedCase['order_no'] : ''));
+            if ($mergedOrderLabel === '') {
+                $mergedOrderLabel = '#' . (int) $mergedCase['order_id'];
+            }
+
+            $supersedeSql = "UPDATE `" . CUSTOMER_FOLLOW_UP_ROUND . "`
+                             SET `superseded` = 'Y',
+                                 `update_by` = '" . customerFollowUpEscape($connect, (string) $actorUserId) . "',
+                                 `update_date` = '" . customerFollowUpEscape($connect, $today) . "',
+                                 `update_time` = '" . customerFollowUpEscape($connect, $nowTime) . "'
+                             WHERE `follow_up_id` = " . $mergedCaseId . "
+                               AND `status` = 'A'
+                               AND IFNULL(`superseded`, 'N') <> 'Y'";
+            if (!mysqli_query($connect, $supersedeSql)) {
+                $result['message'] = 'Failed to supersede rounds for case ' . $mergedCaseId . '.';
+                return $result;
+            }
+            $result['rounds_superseded'] += (int) mysqli_affected_rows($connect);
+
+            if (!customerFollowUpUpdateCaseRecord($connect, $mergedCaseId, array(
+                'status' => 'D',
+                'remark' => 'Merged into follow-up case ' . $survivorId . ' on ' . $today . '.',
+                'update_by' => (string) $actorUserId,
+                'update_date' => $today,
+                'update_time' => $nowTime,
+            ))) {
+                $result['message'] = 'Failed to close merged case ' . $mergedCaseId . '.';
+                return $result;
+            }
+
+            customerFollowUpInsertActionLog($connect, array(
+                'follow_up_id' => $survivorId,
+                'round_id' => 0,
+                'action_type' => 'merged_duplicate_case',
+                'old_value' => array(
+                    'follow_up_id' => $mergedCaseId,
+                    'order_no' => $mergedOrderLabel,
+                    'round_no' => (int) $mergedCase['current_round_no'],
+                    'next_follow_up_date' => trim((string) (isset($mergedRound['next_follow_up_date']) ? $mergedRound['next_follow_up_date'] : '')),
+                ),
+                'new_value' => array('follow_up_id' => $survivorId, 'round_no' => $mergedRoundNo),
+                'remark' => 'Merged duplicate follow-up case ' . $mergedCaseId . ' (order ' . $mergedOrderLabel . ') into this case.',
+                'action_by' => (string) $actorUserId,
+            ));
+
+            $result['cases_merged']++;
+        }
+
+        $survivorFields = array(
+            'update_by' => (string) $actorUserId,
+            'update_date' => $today,
+            'update_time' => $nowTime,
+        );
+        if ($mergedRoundNo !== (int) $survivor['current_round_no']) {
+            $survivorFields['current_round_no'] = $mergedRoundNo;
+        }
+        customerFollowUpUpdateCaseRecord($connect, $survivorId, $survivorFields);
+
+        $survivorRow = customerFollowUpReadFollowUpCase($connect, $survivorId);
+        if (!empty($survivorRow)) {
+            customerFollowUpCreateOrLoadCurrentRound($connect, $survivorRow);
+        }
+
+        if (function_exists('audit_log')) {
+            $actorDisplayName = customerFollowUpGetUserDisplayName($connect, $actorUserId);
+            audit_log(array(
+                'log_act'     => 'edit',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'query_rec'   => $survivorId,
+                'query_table' => CUSTOMER_FOLLOW_UP,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'act_msg'     => $actorDisplayName . ' merged ' . $result['cases_merged'] . ' duplicate follow-up case(s) into case [<b> ID = ' . $survivorId . '</b> ].',
+            ));
+        }
+
+        $result['success'] = true;
+        return $result;
+    }
+}
+
+if (!function_exists('customerFollowUpFindUnlinkedFollowUpLogs')) {
+    /**
+     * Follow-up entries written before entries carried a case link. Without the link a
+     * later edit cannot find the entry to reuse and adds another row instead, so these are
+     * what the review page offers to attach.
+     */
+    function customerFollowUpFindUnlinkedFollowUpLogs($connect)
+    {
+        $items = array();
+        if (!($connect instanceof mysqli)
+            || !function_exists('urlUserRecordLogColumnExists')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_id')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_round_id')
+        ) {
+            return $items;
+        }
+
+        $caseResult = mysqli_query($connect, "SELECT * FROM `" . CUSTOMER_FOLLOW_UP . "`
+                                              WHERE `status` = 'A'
+                                                AND `customer_id` > 0
+                                                AND LOWER(IFNULL(`current_status`, '')) NOT IN ('done', 'lost', 'cancelled')");
+
+        while ($caseResult && ($caseRow = mysqli_fetch_assoc($caseResult))) {
+            $platform = customerFollowUpNormalizePlatform($caseRow['platform']);
+            $customerColumn = customerFollowUpGetPlatformUserRecordLogColumn($platform);
+            $customerId = (int) $caseRow['customer_id'];
+            if ($customerColumn === '' || $customerId <= 0) {
+                continue;
+            }
+
+            $roundRow = customerFollowUpFetchCurrentRound($connect, (int) $caseRow['id']);
+            $roundId = (int) (isset($roundRow['id']) ? $roundRow['id'] : 0);
+            if ($roundId <= 0) {
+                continue;
+            }
+
+            $logSql = "SELECT `id`, `content`, `next_follow_up_date`, `follow_up_times`, `created_at`, `created_by`
+                       FROM `" . USER_RECORD_LOG . "`
+                       WHERE `status` = 'A'
+                         AND `" . $customerColumn . "` = " . $customerId . "
+                         AND `next_follow_up_date` IS NOT NULL
+                         AND `next_follow_up_date` <> ''
+                         AND IFNULL(`follow_up_id`, 0) = 0
+                       ORDER BY `created_at` DESC, `id` DESC
+                       LIMIT 1";
+            $logResult = mysqli_query($connect, $logSql);
+            if (!$logResult || mysqli_num_rows($logResult) === 0) {
+                continue;
+            }
+
+            $items[] = array(
+                'platform' => $platform,
+                'customer_id' => $customerId,
+                'case' => $caseRow,
+                'round' => $roundRow,
+                'log' => mysqli_fetch_assoc($logResult),
+            );
+        }
+
+        return $items;
+    }
+}
+
+if (!function_exists('customerFollowUpLinkUserRecordLogToCase')) {
+    /**
+     * Attaches one existing entry to a case and its current round, and brings the entry's
+     * round into step so the customer page and the Follow Up List do not disagree.
+     */
+    function customerFollowUpLinkUserRecordLogToCase($connect, $logId, $caseId, $roundId, $roundNo, $actorUserId)
+    {
+        $logId = (int) $logId;
+        $caseId = (int) $caseId;
+        $roundId = (int) $roundId;
+
+        if (!($connect instanceof mysqli) || $logId <= 0 || $caseId <= 0 || $roundId <= 0) {
+            return false;
+        }
+        if (!function_exists('urlUserRecordLogColumnExists')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_id')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_round_id')
+        ) {
+            return false;
+        }
+
+        $updateParts = array(
+            "`follow_up_id` = " . $caseId,
+            "`follow_up_round_id` = " . $roundId,
+            "`updated_by` = '" . customerFollowUpEscape($connect, (string) $actorUserId) . "'",
+            "`updated_at` = NOW()",
+        );
+        if ((int) $roundNo > 0 && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_times')) {
+            $updateParts[] = "`follow_up_times` = '" . customerFollowUpEscape($connect, (string) (int) $roundNo) . "'";
+        }
+
+        return mysqli_query($connect, "UPDATE `" . USER_RECORD_LOG . "` SET " . implode(', ', $updateParts) . " WHERE `id` = " . $logId . " LIMIT 1") ? true : false;
+    }
+}
+
+if (!function_exists('customerFollowUpBackfillExistingData')) {
+    /**
+     * Non-interactive counterpart to the review page: works through every duplicate group
+     * and unlinked entry, keeping the most recently received case in each group. Shares
+     * its detection and merge logic with the page, so both behave the same.
+     *
+     * Runs as a dry run unless $options['apply'] is true, and is safe to run again: each
+     * pass only selects rows it has not already handled.
+     */
+    function customerFollowUpBackfillExistingData($connect, $financeConnect, $options = array())
+    {
+        $apply = !empty($options['apply']);
+        $actorUserId = (int) (isset($options['actor_user_id']) ? $options['actor_user_id'] : (defined('USER_ID') ? (int) USER_ID : 0));
+
+        $summary = array(
+            'apply' => $apply,
+            'customers_with_duplicates' => 0,
+            'cases_merged' => 0,
+            'rounds_superseded' => 0,
+            'log_entries_linked' => 0,
+            'errors' => array(),
+            'actions' => array(),
+        );
+
+        if (!($connect instanceof mysqli)) {
+            $summary['errors'][] = 'No database connection.';
+            return $summary;
+        }
+        if (!customerFollowUpSupportsRoundSuperseded($connect)) {
+            $summary['errors'][] = 'customer_follow_up_round.superseded is missing. Run insert_table.php first.';
+            return $summary;
+        }
+
+        foreach (customerFollowUpFindDuplicateCaseGroups($connect) as $group) {
+            $summary['customers_with_duplicates']++;
+            $cases = $group['cases'];
+            $survivor = $cases[0];
+
+            foreach (array_slice($cases, 1) as $mergedCase) {
+                $mergedOrderLabel = trim((string) (isset($mergedCase['order_no']) ? $mergedCase['order_no'] : ''));
+                if ($mergedOrderLabel === '') {
+                    $mergedOrderLabel = '#' . (int) $mergedCase['order_id'];
+                }
+                $summary['actions'][] = 'Customer ' . $group['platform'] . '/' . $group['customer_id']
+                    . ': merge case ' . (int) $mergedCase['id'] . ' (order ' . $mergedOrderLabel
+                    . ', round ' . (int) $mergedCase['current_round_no'] . ') into case ' . (int) $survivor['id'] . '.';
+            }
+
+            if (!$apply) {
+                $summary['cases_merged'] += count($cases) - 1;
+                continue;
+            }
+
+            $mergeResult = customerFollowUpMergeCasesIntoSurvivor(
+                $connect,
+                $group['platform'],
+                $group['customer_id'],
+                (int) $survivor['id'],
+                $actorUserId
+            );
+
+            if (empty($mergeResult['success'])) {
+                $summary['errors'][] = trim((string) $mergeResult['message']) !== ''
+                    ? $mergeResult['message']
+                    : ('Failed to merge cases for customer ' . $group['platform'] . '/' . $group['customer_id'] . '.');
+                continue;
+            }
+
+            $summary['cases_merged'] += (int) $mergeResult['cases_merged'];
+            $summary['rounds_superseded'] += (int) $mergeResult['rounds_superseded'];
+        }
+
+        foreach (customerFollowUpFindUnlinkedFollowUpLogs($connect) as $item) {
+            $summary['actions'][] = 'Customer ' . $item['platform'] . '/' . $item['customer_id']
+                . ': link user record log ' . (int) $item['log']['id'] . ' to case ' . (int) $item['case']['id']
+                . ' round ' . (int) $item['case']['current_round_no'] . '.';
+
+            if (!$apply) {
+                $summary['log_entries_linked']++;
+                continue;
+            }
+
+            if (customerFollowUpLinkUserRecordLogToCase(
+                $connect,
+                (int) $item['log']['id'],
+                (int) $item['case']['id'],
+                (int) $item['round']['id'],
+                (int) $item['case']['current_round_no'],
+                $actorUserId
+            )) {
+                $summary['log_entries_linked']++;
+            } else {
+                $summary['errors'][] = 'Failed to link user record log ' . (int) $item['log']['id'] . '.';
+            }
+        }
+
+        return $summary;
     }
 }
 
@@ -4376,9 +5756,16 @@ if (!function_exists('customerFollowUpResolveCaseForCustomerLog')) {
     /**
      * Picks which follow-up case a customer page entry belongs to:
      *   1. an explicitly chosen case, when the user selected one;
-     *   2. the customer's only open case, when there is exactly one;
+     *   2. the customer's open case, since a customer only ever has one;
      *   3. otherwise a new customer-sourced case.
      * Cases that are already closed (Done / Lost) are never reused.
+     *
+     * Scheduling a date from the customer page is treated as a scheduling action rather
+     * than a case action, so it is deliberately not gated on customerFollowUpCanUserManageCase():
+     * that rule still guards submitting, appealing and postponing a round, but blocking a
+     * date here would leave whoever is on the customer page unable to record anything,
+     * since one customer now has exactly one case to write to. Who made the change is
+     * recorded on the action log instead.
      */
     function customerFollowUpResolveCaseForCustomerLog($connect, $platform, $customerId, $requestedFollowUpId, $actorUserId, $options = array())
     {
@@ -4390,10 +5777,6 @@ if (!function_exists('customerFollowUpResolveCaseForCustomerLog')) {
             return array();
         }
 
-        $actorUserGroupId = isset($options['actor_user_group_id'])
-            ? $options['actor_user_group_id']
-            : (defined('USER_GROUP') ? USER_GROUP : null);
-
         if ($requestedFollowUpId > 0) {
             $requestedRow = customerFollowUpReadFollowUpCase($connect, $requestedFollowUpId);
             if (empty($requestedRow)
@@ -4403,44 +5786,133 @@ if (!function_exists('customerFollowUpResolveCaseForCustomerLog')) {
                 return array();
             }
 
-            if (!customerFollowUpCanUserManageCase($requestedRow, $actorUserId, $actorUserGroupId, $connect)) {
-                return array();
-            }
-
             return $requestedRow;
         }
 
-        $openCases = array();
-        foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
-            $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
-            if (in_array($caseStatus, array('done', 'lost'), true)) {
-                continue;
-            }
-            // Cases belonging to somebody else are left alone; the entry opens its own
-            // customer-sourced case instead of quietly rescheduling another user's work.
-            if (!customerFollowUpCanUserManageCase($caseRow, $actorUserId, $actorUserGroupId, $connect)) {
-                continue;
-            }
-            $openCases[] = $caseRow;
-        }
-
-        if (count($openCases) === 1) {
-            return $openCases[0];
-        }
-
-        if (!empty($openCases)) {
-            // More than one open case and no explicit pick: fall back to the most recent
-            // customer-sourced case so repeated customer page entries stay on one case.
-            foreach ($openCases as $caseRow) {
-                if (customerFollowUpIsOrderlessCase($caseRow)) {
-                    return $caseRow;
-                }
-            }
+        // A customer has at most one live case, so reuse it rather than opening a second
+        // record, whoever it happens to be assigned to.
+        $openCase = customerFollowUpFetchOpenCaseByCustomer($connect, $platform, $customerId);
+        if (!empty($openCase)) {
+            return $openCase;
         }
 
         $newFollowUpId = customerFollowUpStartFromCustomer($connect, $platform, $customerId, (int) $actorUserId, $options);
 
         return $newFollowUpId > 0 ? customerFollowUpReadFollowUpCase($connect, $newFollowUpId) : array();
+    }
+}
+
+if (!function_exists('customerFollowUpAdjustCaseRound')) {
+    /**
+     * Sets the case's round by hand, which is what the customer page's follow-up count
+     * edits. Moving the round down is allowed but flagged: it rewinds the follow-up
+     * progress the module otherwise only ever advances, so the caller gets a warning back
+     * and the admins get a notification, on top of the from/to entry in the action log.
+     *
+     * Returns array('success', 'message', 'warning', 'old_round_no', 'new_round_no').
+     */
+    function customerFollowUpAdjustCaseRound($connect, $followUpRow, $newRoundNo, $actorUserId)
+    {
+        $result = array('success' => false, 'message' => '', 'warning' => '', 'old_round_no' => 0, 'new_round_no' => 0);
+
+        $followUpId = isset($followUpRow['id']) ? (int) $followUpRow['id'] : 0;
+        $actorUserId = (int) $actorUserId;
+        $newRoundNo = (int) $newRoundNo;
+        $maxRoundNo = customerFollowUpGetMaxRoundNo();
+
+        if (!($connect instanceof mysqli) || $followUpId <= 0 || $actorUserId <= 0) {
+            return $result;
+        }
+
+        if ($newRoundNo < 1 || $newRoundNo > $maxRoundNo) {
+            $result['message'] = 'Follow-Up Round must be between 1 and ' . $maxRoundNo . '.';
+            return $result;
+        }
+
+        $oldRoundNo = max(1, (int) (isset($followUpRow['current_round_no']) ? $followUpRow['current_round_no'] : 1));
+        $result['old_round_no'] = $oldRoundNo;
+        $result['new_round_no'] = $newRoundNo;
+
+        if ($oldRoundNo === $newRoundNo) {
+            $result['success'] = true;
+            return $result;
+        }
+
+        $today = customerFollowUpNowDate();
+        $nowTime = customerFollowUpNowTime();
+
+        if (!customerFollowUpUpdateCaseRecord($connect, $followUpId, array(
+            'current_round_no' => $newRoundNo,
+            'update_by' => (string) $actorUserId,
+            'update_date' => $today,
+            'update_time' => $nowTime,
+        ))) {
+            $result['message'] = 'Unable to update the follow-up round.';
+            return $result;
+        }
+
+        // The round the case now points at has to exist, or the listing and the crons have
+        // no current round to read.
+        $updatedFollowUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        $roundRow = customerFollowUpCreateOrLoadCurrentRound($connect, $updatedFollowUpRow);
+
+        $isRewind = $newRoundNo < $oldRoundNo;
+        $remark = 'Follow-Up Round changed from ' . $oldRoundNo . ' to ' . $newRoundNo . '.';
+        if ($isRewind) {
+            $remark .= ' This moves the follow-up backwards.';
+        }
+
+        customerFollowUpInsertActionLog($connect, array(
+            'follow_up_id' => $followUpId,
+            'round_id' => isset($roundRow['id']) ? (int) $roundRow['id'] : 0,
+            'action_type' => 'adjust_follow_up_round',
+            'old_value' => array('round_no' => $oldRoundNo),
+            'new_value' => array('round_no' => $newRoundNo),
+            'remark' => $remark,
+            'action_by' => (string) $actorUserId,
+        ));
+
+        $actorDisplayName = customerFollowUpGetUserDisplayName($connect, $actorUserId);
+
+        if (function_exists('audit_log')) {
+            audit_log(array(
+                'log_act'     => 'edit',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'query_rec'   => $followUpId,
+                'query_table' => CUSTOMER_FOLLOW_UP,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'oldval'      => 'current_round_no=' . $oldRoundNo,
+                'changes'     => 'current_round_no=' . $newRoundNo,
+                'act_msg'     => $actorDisplayName . ' changed the follow-up round on case [<b> ID = ' . $followUpId . '</b> ] from ' . $oldRoundNo . ' to ' . $newRoundNo . '.',
+            ));
+        }
+
+        if ($isRewind) {
+            $result['warning'] = 'Follow-Up Round was moved back from ' . $oldRoundNo . ' to ' . $newRoundNo . '. The change has been recorded.';
+
+            foreach (customerFollowUpGetAdminUsers($connect) as $adminUser) {
+                $notifyUserId = isset($adminUser['id']) ? (int) $adminUser['id'] : 0;
+                if ($notifyUserId <= 0) {
+                    continue;
+                }
+
+                customerFollowUpCreateNotificationRow($connect, array(
+                    'follow_up_id' => $followUpId,
+                    'round_id' => isset($roundRow['id']) ? (int) $roundRow['id'] : 0,
+                    'notify_user_id' => $notifyUserId,
+                    'notify_role' => 'admin',
+                    'notification_type' => 'follow_up_round_moved_back',
+                    'title' => 'Follow-Up Round Moved Back',
+                    'message' => $actorDisplayName . ' changed the follow-up round from ' . $oldRoundNo . ' to ' . $newRoundNo . ' on case ID ' . $followUpId . '.',
+                    'create_date' => $today,
+                ));
+            }
+        }
+
+        $result['success'] = true;
+        return $result;
     }
 }
 
@@ -4450,11 +5922,12 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
      * Follow-Up Date becomes a real follow-up round in the Follow Up List, instead of a
      * note that only lives on the customer page.
      *
-     * Returns array('follow_up_id' => int, 'round_id' => int, 'message' => string).
+     * Returns array('follow_up_id' => int, 'round_id' => int, 'message' => string,
+     * 'warning' => string).
      */
     function customerFollowUpSyncFromCustomerLog($connect, $data)
     {
-        $result = array('follow_up_id' => 0, 'round_id' => 0, 'message' => '');
+        $result = array('follow_up_id' => 0, 'round_id' => 0, 'message' => '', 'warning' => '');
 
         if (!($connect instanceof mysqli)) {
             return $result;
@@ -4465,10 +5938,17 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
         $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
         $actorUserId = (int) (isset($data['actor_user_id']) ? $data['actor_user_id'] : (defined('USER_ID') ? USER_ID : 0));
 
+        // The round can be edited on its own, so a request carrying only a round still has
+        // work to do even with no date.
+        $requestedRoundNo = isset($data['follow_up_round']) && trim((string) $data['follow_up_round']) !== ''
+            ? (int) $data['follow_up_round']
+            : 0;
+        $hasDate = $nextFollowUpDate !== '' && customerFollowUpIsValidDateString($nextFollowUpDate);
+
         if ($platform === '' || $customerId <= 0 || $actorUserId <= 0) {
             return $result;
         }
-        if ($nextFollowUpDate === '' || !customerFollowUpIsValidDateString($nextFollowUpDate)) {
+        if (!$hasDate && $requestedRoundNo <= 0) {
             return $result;
         }
 
@@ -4491,13 +5971,31 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
 
         if (empty($followUpRow)) {
             $result['message'] = $requestedFollowUpId > 0
-                ? 'That follow-up case does not belong to this customer, or it is not assigned to you.'
+                ? 'That follow-up case does not belong to this customer.'
                 : 'Unable to resolve a follow-up case for this customer.';
             return $result;
         }
 
         $followUpId = (int) $followUpRow['id'];
         $result['follow_up_id'] = $followUpId;
+
+        // Apply the round first: the date rules below are measured against the round the
+        // case is on, so they must see the round the user just set.
+        if ($requestedRoundNo > 0) {
+            $roundAdjustment = customerFollowUpAdjustCaseRound($connect, $followUpRow, $requestedRoundNo, $actorUserId);
+            if (empty($roundAdjustment['success'])) {
+                $result['message'] = trim((string) $roundAdjustment['message']) !== ''
+                    ? $roundAdjustment['message']
+                    : 'Unable to update the follow-up round.';
+                return $result;
+            }
+
+            if (trim((string) $roundAdjustment['warning']) !== '') {
+                $result['warning'] = $roundAdjustment['warning'];
+            }
+
+            $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        }
 
         $roundRow = customerFollowUpCreateOrLoadCurrentRound($connect, $followUpRow);
         if (empty($roundRow)) {
@@ -4507,6 +6005,10 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
 
         $roundId = (int) $roundRow['id'];
         $result['round_id'] = $roundId;
+
+        if (!$hasDate) {
+            return $result;
+        }
 
         $dateValidation = customerFollowUpValidateNextFollowUpDateLimit($followUpRow, $roundRow, $nextFollowUpDate);
         if (empty($dateValidation['success'])) {
@@ -4550,13 +6052,28 @@ if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
             return $result;
         }
 
+        // The customer page lets anyone schedule the date, so make it visible in the log
+        // when that was not the person the case is assigned to.
+        $actionRemark = trim((string) (isset($data['remark']) ? $data['remark'] : ''));
+        $assignedUserId = (int) (isset($followUpRow['assigned_user_id']) ? $followUpRow['assigned_user_id'] : 0);
+        if ($assignedUserId !== $actorUserId) {
+            $actorLabel = customerFollowUpGetUserDisplayName($connect, $actorUserId);
+            $assignedLabel = $assignedUserId > 0
+                ? customerFollowUpGetUserDisplayName($connect, $assignedUserId)
+                : 'nobody';
+            $actionRemark = trim($actionRemark . ' Scheduled by ' . $actorLabel . ', who is not the assigned user (' . $assignedLabel . ').');
+        }
+
         customerFollowUpInsertActionLog($connect, array(
             'follow_up_id' => $followUpId,
             'round_id' => $roundId,
             'action_type' => 'schedule_next_follow_up_from_customer_page',
-            'old_value' => array('next_follow_up_date' => $previousNextFollowUpDate),
+            'old_value' => array(
+                'next_follow_up_date' => $previousNextFollowUpDate,
+                'assigned_user_id' => $assignedUserId,
+            ),
             'new_value' => array('next_follow_up_date' => $nextFollowUpDate),
-            'remark' => trim((string) (isset($data['remark']) ? $data['remark'] : '')),
+            'remark' => $actionRemark,
             'action_by' => (string) $actorUserId,
         ));
 

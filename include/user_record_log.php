@@ -43,20 +43,14 @@ if (!function_exists('urlGetUserRecordLogFollowUpCaseOptions')) {
             return array();
         }
 
-        $actorUserId = defined('USER_ID') ? (int) USER_ID : 0;
-        $actorUserGroupId = defined('USER_GROUP') ? USER_GROUP : null;
-
         $options = array();
         foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
             $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
-            if (in_array($caseStatus, array('done', 'lost'), true)) {
+            if (in_array($caseStatus, array('done', 'lost', 'cancelled'), true)) {
                 continue;
             }
-            if (function_exists('customerFollowUpCanUserManageCase')
-                && !customerFollowUpCanUserManageCase($caseRow, $actorUserId, $actorUserGroupId, $connect)
-            ) {
-                continue;
-            }
+            // Not filtered by assignee: scheduling a date here is open to whoever is on the
+            // customer page, and the action log records who did it.
 
             $orderNo = trim((string) (isset($caseRow['order_no']) ? $caseRow['order_no'] : ''));
             $roundNo = (int) (isset($caseRow['current_round_no']) ? $caseRow['current_round_no'] : 1);
@@ -74,6 +68,330 @@ if (!function_exists('urlGetUserRecordLogFollowUpCaseOptions')) {
     }
 }
 
+if (!function_exists('urlGetPreviousFollowUpLogSnapshot')) {
+    /**
+     * The customer's most recent log entry that carried a follow-up date, so a new entry
+     * can say what it rescheduled rather than only showing its own date. Returns the
+     * date, the round and a short excerpt of that entry's message.
+     */
+    function urlGetPreviousFollowUpLogSnapshot($dbConnect, $tblName, $context, $excludeRecordId = 0)
+    {
+        $customerColumn = urlSanitizeUserRecordLogCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '');
+        $customerId = (int) (isset($context['customer_id']) ? $context['customer_id'] : 0);
+        $excludeRecordId = (int) $excludeRecordId;
+
+        if (!($dbConnect instanceof mysqli) || $customerColumn === '' || $customerId <= 0) {
+            return array();
+        }
+        if (!urlUserRecordLogColumnExists($dbConnect, $tblName, 'next_follow_up_date')) {
+            return array();
+        }
+
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+        $sql = "SELECT `content`, `next_follow_up_date`, `follow_up_times`
+                FROM `" . $safeTable . "`
+                WHERE `status` = 'A'
+                  AND `" . $customerColumn . "` = " . $customerId . "
+                  AND `next_follow_up_date` IS NOT NULL
+                  AND `next_follow_up_date` <> ''
+                  " . ($excludeRecordId > 0 ? ("AND `id` <> " . $excludeRecordId) : "") . "
+                ORDER BY `created_at` DESC, `id` DESC
+                LIMIT 1";
+
+        $result = mysqli_query($dbConnect, $sql);
+        if (!$result || mysqli_num_rows($result) === 0) {
+            return array();
+        }
+
+        $row = mysqli_fetch_assoc($result);
+        $message = urlGetUserRecordLogContentPlainText(isset($row['content']) ? $row['content'] : '');
+        $message = trim(preg_replace('/\s+/', ' ', (string) $message));
+        if (function_exists('mb_substr')) {
+            if (mb_strlen($message, 'UTF-8') > 120) {
+                $message = mb_substr($message, 0, 120, 'UTF-8') . '...';
+            }
+        } else if (strlen($message) > 120) {
+            $message = substr($message, 0, 120) . '...';
+        }
+
+        return array(
+            'next_follow_up_date' => trim((string) (isset($row['next_follow_up_date']) ? $row['next_follow_up_date'] : '')),
+            'follow_up_round' => trim((string) (isset($row['follow_up_times']) ? $row['follow_up_times'] : '')),
+            'message' => $message,
+        );
+    }
+}
+
+if (!function_exists('urlFindReusableFollowUpLogRow')) {
+    /**
+     * An entry already written for this follow-up round carrying the same message. Saving
+     * the customer page form again with only the date or round changed is that follow-up
+     * moving on, not a new note, so it updates this entry instead of adding another row.
+     * A different message is a genuinely new note and gets its own entry.
+     */
+    function urlFindReusableFollowUpLogRow($dbConnect, $tblName, $context, $followUpId, $roundId, $content)
+    {
+        $followUpId = (int) $followUpId;
+        $roundId = (int) $roundId;
+        $customerColumn = urlSanitizeUserRecordLogCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '');
+        $customerId = (int) (isset($context['customer_id']) ? $context['customer_id'] : 0);
+
+        if (!($dbConnect instanceof mysqli) || $followUpId <= 0 || $roundId <= 0 || $customerColumn === '' || $customerId <= 0) {
+            return array();
+        }
+        if (!urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_id')
+            || !urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_round_id')
+        ) {
+            return array();
+        }
+
+        $targetText = urlNormalizeFollowUpLogContentKey($content);
+        if ($targetText === '') {
+            return array();
+        }
+
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+        $sql = "SELECT `id`, `content`, `next_follow_up_date`, `follow_up_times`, `follow_up_day`
+                FROM `" . $safeTable . "`
+                WHERE `status` = 'A'
+                  AND `" . $customerColumn . "` = " . $customerId . "
+                  AND `follow_up_id` = " . $followUpId . "
+                  AND `follow_up_round_id` = " . $roundId . "
+                ORDER BY `id` DESC
+                LIMIT 20";
+
+        $result = mysqli_query($dbConnect, $sql);
+        if (!$result) {
+            return array();
+        }
+
+        while ($row = mysqli_fetch_assoc($result)) {
+            if (urlNormalizeFollowUpLogContentKey(isset($row['content']) ? $row['content'] : '') === $targetText) {
+                return $row;
+            }
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('urlNormalizeFollowUpLogContentKey')) {
+    /**
+     * Compares messages by their visible text, so formatting-only differences between two
+     * saves of the same note do not read as a different note.
+     */
+    function urlNormalizeFollowUpLogContentKey($content)
+    {
+        $text = urlGetUserRecordLogContentPlainText((string) $content);
+
+        return trim(preg_replace('/\s+/', ' ', (string) $text));
+    }
+}
+
+if (!function_exists('urlAppendFollowUpLogHistory')) {
+    /**
+     * Adds one line to the entry's follow-up history and returns the encoded list, so the
+     * reused entry keeps showing every state it has been through.
+     */
+    function urlAppendFollowUpLogHistory($dbConnect, $tblName, $logId, $historyEntry)
+    {
+        $historyEntries = array();
+
+        if (urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_history')) {
+            $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+            $result = mysqli_query($dbConnect, "SELECT `follow_up_history` FROM `" . $safeTable . "` WHERE `id` = " . (int) $logId . " LIMIT 1");
+            if ($result && mysqli_num_rows($result) > 0) {
+                $row = mysqli_fetch_assoc($result);
+                $decoded = json_decode((string) (isset($row['follow_up_history']) ? $row['follow_up_history'] : ''), true);
+                if (is_array($decoded)) {
+                    $historyEntries = $decoded;
+                }
+            }
+        }
+
+        $historyEntries[] = $historyEntry;
+
+        return (string) json_encode($historyEntries);
+    }
+}
+
+if (!function_exists('urlBuildFollowUpLogChangeList')) {
+    /**
+     * The fields that actually moved between the stored entry and what is being saved,
+     * each as from/to. Unchanged fields are left out so the one thing that changed is the
+     * one thing the history shows.
+     */
+    function urlBuildFollowUpLogChangeList($existingRow, $newValues)
+    {
+        $labels = array(
+            'next_follow_up_date' => 'Follow-Up Date',
+            'follow_up_times' => 'Follow-Up Round',
+            'follow_up_day' => 'Follow-Up Day',
+        );
+
+        $changes = array();
+        foreach ($labels as $field => $label) {
+            if (!array_key_exists($field, $newValues)) {
+                continue;
+            }
+
+            $from = trim((string) (isset($existingRow[$field]) ? $existingRow[$field] : ''));
+            $to = trim((string) $newValues[$field]);
+            if ($from === $to) {
+                continue;
+            }
+
+            $changes[] = array(
+                'field' => $label,
+                'from' => $from,
+                'to' => $to,
+            );
+        }
+
+        return $changes;
+    }
+}
+
+if (!function_exists('urlRenderUserRecordLogFollowUpHistory')) {
+    /**
+     * Renders the entry's follow-up update history. Approving, rescheduling and the like
+     * reuse one entry per round, so this is where the earlier states stay visible.
+     */
+    function urlRenderUserRecordLogFollowUpHistory($historyJson)
+    {
+        $historyJson = trim((string) $historyJson);
+        if ($historyJson === '') {
+            return '';
+        }
+
+        $historyEntries = json_decode($historyJson, true);
+        if (!is_array($historyEntries) || empty($historyEntries)) {
+            return '';
+        }
+
+        $rows = '';
+        foreach ($historyEntries as $historyEntry) {
+            if (!is_array($historyEntry)) {
+                continue;
+            }
+
+            $line = '<div class="url-log-history-row">';
+            $line .= '<div class="url-log-history-head">';
+            $line .= '<span class="url-log-history-time">' . htmlspecialchars(trim((string) (isset($historyEntry['time']) ? $historyEntry['time'] : '')), ENT_QUOTES, 'UTF-8') . '</span> ';
+            $line .= '<strong>' . htmlspecialchars(trim((string) (isset($historyEntry['action']) ? $historyEntry['action'] : '')), ENT_QUOTES, 'UTF-8') . '</strong>';
+
+            $by = trim((string) (isset($historyEntry['by']) ? $historyEntry['by'] : ''));
+            if ($by !== '') {
+                $line .= ' <span class="url-log-history-by">(by ' . htmlspecialchars($by, ENT_QUOTES, 'UTF-8') . ')</span>';
+            }
+            $line .= '</div>';
+
+            // from -> to, so the change reads at a glance instead of having to compare the
+            // new state against the line above it.
+            $changes = isset($historyEntry['changes']) && is_array($historyEntry['changes']) ? $historyEntry['changes'] : array();
+            foreach ($changes as $change) {
+                if (!is_array($change)) {
+                    continue;
+                }
+
+                $from = trim((string) (isset($change['from']) ? $change['from'] : ''));
+                $to = trim((string) (isset($change['to']) ? $change['to'] : ''));
+
+                $line .= '<div class="url-log-history-change">';
+                $line .= '<span class="url-log-history-field">' . htmlspecialchars(trim((string) (isset($change['field']) ? $change['field'] : '')), ENT_QUOTES, 'UTF-8') . '</span>';
+                if ($from !== '') {
+                    $line .= '<span class="url-log-history-from">' . htmlspecialchars($from, ENT_QUOTES, 'UTF-8') . '</span>';
+                    $line .= '<span class="url-log-history-arrow">&rarr;</span>';
+                }
+                $line .= '<span class="url-log-history-to">' . htmlspecialchars($to !== '' ? $to : '-', ENT_QUOTES, 'UTF-8') . '</span>';
+                $line .= '</div>';
+            }
+
+            // Context that has no before value to compare against, plus entries written
+            // before changes were tracked. Kept plain so it does not compete with the
+            // highlighted change above it.
+            $detail = trim((string) (isset($historyEntry['detail']) ? $historyEntry['detail'] : ''));
+            if ($detail !== '') {
+                $detailClass = empty($changes) ? 'url-log-history-to' : 'url-log-history-detail';
+                $line .= '<div class="url-log-history-change"><span class="' . $detailClass . '">' . htmlspecialchars($detail, ENT_QUOTES, 'UTF-8') . '</span></div>';
+            }
+
+            $line .= '</div>';
+            $rows .= $line;
+        }
+
+        if ($rows === '') {
+            return '';
+        }
+
+        return '    <div class="url-log-history"><div class="url-log-history-title">Follow-Up Update History</div>' . $rows . '</div>';
+    }
+}
+
+if (!function_exists('urlBuildPreviousFollowUpSnapshotJson')) {
+    /**
+     * JSON describing the follow-up this entry is replacing, or '' when it is not a
+     * reschedule: the entry carries no date, there was no earlier one, or it lands on the
+     * same date and so changes nothing.
+     */
+    function urlBuildPreviousFollowUpSnapshotJson($dbConnect, $tblName, $context, $nextFollowUpDate, $excludeRecordId = 0)
+    {
+        $nextFollowUpDate = trim((string) $nextFollowUpDate);
+        if ($nextFollowUpDate === '') {
+            return '';
+        }
+
+        $previous = urlGetPreviousFollowUpLogSnapshot($dbConnect, $tblName, $context, $excludeRecordId);
+        if (empty($previous) || trim((string) $previous['next_follow_up_date']) === '') {
+            return '';
+        }
+        if (trim((string) $previous['next_follow_up_date']) === $nextFollowUpDate) {
+            return '';
+        }
+
+        return (string) json_encode($previous);
+    }
+}
+
+if (!function_exists('urlAppendFollowUpWarning')) {
+    /**
+     * Carries the follow-up module's warning (currently: the round was moved backwards)
+     * into the save confirmation, so the person who did it is told straight away rather
+     * than only the admins being notified.
+     */
+    function urlAppendFollowUpWarning($message, $followUpSync)
+    {
+        $warning = is_array($followUpSync) && isset($followUpSync['warning'])
+            ? trim((string) $followUpSync['warning'])
+            : '';
+
+        return $warning !== '' ? ($message . ' ' . $warning) : $message;
+    }
+}
+
+if (!function_exists('urlGetUserRecordLogCurrentFollowUpRound')) {
+    /**
+     * The round the customer's open follow-up case is on, so the form shows the real
+     * number rather than an empty box the user has to guess at.
+     */
+    function urlGetUserRecordLogCurrentFollowUpRound($connect, $context)
+    {
+        if (!function_exists('customerFollowUpFetchOpenCaseByCustomer')) {
+            return 0;
+        }
+
+        $platform = urlGetUserRecordLogPlatformFromCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '');
+        $customerId = (int) (isset($context['customer_id']) ? $context['customer_id'] : 0);
+        if ($platform === '' || $customerId <= 0) {
+            return 0;
+        }
+
+        $openCase = customerFollowUpFetchOpenCaseByCustomer($connect, $platform, $customerId);
+
+        return !empty($openCase) ? max(1, (int) $openCase['current_round_no']) : 0;
+    }
+}
+
 if (!function_exists('urlSyncUserRecordLogFollowUp')) {
     /**
      * Pushes a saved log entry's Next Follow-Up Date into the customer follow-up module
@@ -83,14 +401,15 @@ if (!function_exists('urlSyncUserRecordLogFollowUp')) {
      */
     function urlSyncUserRecordLogFollowUp($connect, $context, $data)
     {
-        $empty = array('follow_up_id' => 0, 'round_id' => 0, 'message' => '');
+        $empty = array('follow_up_id' => 0, 'round_id' => 0, 'message' => '', 'warning' => '');
 
         if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
             return $empty;
         }
 
         $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
-        if ($nextFollowUpDate === '') {
+        $followUpRound = trim((string) (isset($data['follow_up_round']) ? $data['follow_up_round'] : ''));
+        if ($nextFollowUpDate === '' && $followUpRound === '') {
             return $empty;
         }
 
@@ -106,6 +425,7 @@ if (!function_exists('urlSyncUserRecordLogFollowUp')) {
             'customer_name' => isset($context['customer_label']) ? $context['customer_label'] : '',
             'customer_username' => isset($context['customer_label']) ? $context['customer_label'] : '',
             'next_follow_up_date' => $nextFollowUpDate,
+            'follow_up_round' => $followUpRound,
             'message_shortcut_id' => isset($data['message_shortcut_id']) ? (int) $data['message_shortcut_id'] : 0,
             'remark' => 'Scheduled from the customer page User Record Log.',
             'follow_up_id' => isset($data['follow_up_id']) ? (int) $data['follow_up_id'] : 0,
@@ -1332,31 +1652,71 @@ if (!function_exists('urlBuildListHtml')) {
             $attachmentPreviewHtml = urlBuildUserRecordLogAttachmentPreviewGrid($attachmentList, $uploadWebDir);
             $followUpMetaItems = array();
             $followUpCopyFields = array();
-            if ($nextFollowUpDate !== '') {
-                $followUpMetaItems[] = '<span><strong>Next Follow-Up Date:</strong> ' . htmlspecialchars($nextFollowUpDate, ENT_QUOTES, 'UTF-8') . '</span>';
-                $followUpCopyFields['Next Follow-Up Date'] = $nextFollowUpDate;
-            }
-            if ($followUpTimes !== '') {
-                $followUpMetaItems[] = '<span><strong>Follow-Up Times:</strong> ' . htmlspecialchars($followUpTimes, ENT_QUOTES, 'UTF-8') . '</span>';
-                $followUpCopyFields['Follow-Up Times'] = $followUpTimes;
-            }
-            if ($followUpDay !== '') {
-                $followUpMetaItems[] = '<span><strong>Follow-Up Day:</strong> ' . htmlspecialchars($followUpDay, ENT_QUOTES, 'UTF-8') . '</span>';
-                $followUpCopyFields['Follow-Up Day'] = $followUpDay;
+            $linkedFollowUpId = isset($row['follow_up_id']) ? (int) $row['follow_up_id'] : 0;
+
+            // Follow-up entries all show the same four fields, blanks included, so the meta
+            // line does not change shape from one entry to the next. A plain note carries
+            // none of this and keeps its line off entirely.
+            $hasFollowUpMeta = ($nextFollowUpDate !== '' || $followUpTimes !== '' || $followUpDay !== '' || $linkedFollowUpId > 0);
+            if ($hasFollowUpMeta) {
+                $followUpMetaItems[] = '<span><strong>Next Follow-Up Date:</strong> ' . htmlspecialchars($nextFollowUpDate !== '' ? $nextFollowUpDate : '-', ENT_QUOTES, 'UTF-8') . '</span>';
+                $followUpCopyFields['Next Follow-Up Date'] = $nextFollowUpDate !== '' ? $nextFollowUpDate : '-';
+
+                $followUpMetaItems[] = '<span><strong>Follow-Up Round:</strong> ' . htmlspecialchars($followUpTimes !== '' ? $followUpTimes : '-', ENT_QUOTES, 'UTF-8') . '</span>';
+                $followUpCopyFields['Follow-Up Round'] = $followUpTimes !== '' ? $followUpTimes : '-';
+
+                $followUpMetaItems[] = '<span><strong>Follow-Up Day:</strong> ' . htmlspecialchars($followUpDay !== '' ? $followUpDay : '-', ENT_QUOTES, 'UTF-8') . '</span>';
+                $followUpCopyFields['Follow-Up Day'] = $followUpDay !== '' ? $followUpDay : '-';
+
+                // When this entry is tied to a follow-up case, link straight to it so the
+                // customer page and the Follow Up List stay one follow-up, not two.
+                if ($linkedFollowUpId > 0) {
+                    $linkedRoundId = isset($row['follow_up_round_id']) ? (int) $row['follow_up_round_id'] : 0;
+                    $followUpListUrl = rtrim((string) (isset($GLOBALS['SITEURL']) ? $GLOBALS['SITEURL'] : ''), '/')
+                        . '/customer/customer_follow_up_list.php?follow_up_id=' . $linkedFollowUpId
+                        . ($linkedRoundId > 0 ? ('&round_id=' . $linkedRoundId) : '');
+                    $followUpMetaItems[] = '<span><strong>Follow-Up Case:</strong> <a href="'
+                        . htmlspecialchars($followUpListUrl, ENT_QUOTES, 'UTF-8')
+                        . '" target="_blank" rel="noopener">#' . $linkedFollowUpId . '</a></span>';
+                    $followUpCopyFields['Follow-Up Case'] = '#' . $linkedFollowUpId;
+                } else {
+                    $followUpMetaItems[] = '<span><strong>Follow-Up Case:</strong> -</span>';
+                    $followUpCopyFields['Follow-Up Case'] = '-';
+                }
             }
 
-            // When this entry is tied to a follow-up case, link straight to it so the
-            // customer page and the Follow Up List stay one follow-up, not two.
-            $linkedFollowUpId = isset($row['follow_up_id']) ? (int) $row['follow_up_id'] : 0;
-            if ($linkedFollowUpId > 0) {
-                $linkedRoundId = isset($row['follow_up_round_id']) ? (int) $row['follow_up_round_id'] : 0;
-                $followUpListUrl = rtrim((string) (isset($GLOBALS['SITEURL']) ? $GLOBALS['SITEURL'] : ''), '/')
-                    . '/customer/customer_follow_up_list.php?follow_up_id=' . $linkedFollowUpId
-                    . ($linkedRoundId > 0 ? ('&round_id=' . $linkedRoundId) : '');
-                $followUpMetaItems[] = '<span><strong>Follow-Up Case:</strong> <a href="'
-                    . htmlspecialchars($followUpListUrl, ENT_QUOTES, 'UTF-8')
-                    . '" target="_blank" rel="noopener">#' . $linkedFollowUpId . '</a></span>';
-                $followUpCopyFields['Follow-Up Case'] = '#' . $linkedFollowUpId;
+            // Say outright that this entry rescheduled an earlier follow-up, and what that
+            // follow-up was, so the change is readable here and not only in the Follow Up
+            // List's action log.
+            $previousFollowUpInfo = array();
+            $rescheduleHtml = '';
+            if (isset($row['previous_follow_up_info']) && trim((string) $row['previous_follow_up_info']) !== '') {
+                $decodedPreviousInfo = json_decode((string) $row['previous_follow_up_info'], true);
+                if (is_array($decodedPreviousInfo)) {
+                    $previousFollowUpInfo = $decodedPreviousInfo;
+                }
+            }
+            if (!empty($previousFollowUpInfo)) {
+                $previousDate = trim((string) (isset($previousFollowUpInfo['next_follow_up_date']) ? $previousFollowUpInfo['next_follow_up_date'] : ''));
+                $previousRound = trim((string) (isset($previousFollowUpInfo['follow_up_round']) ? $previousFollowUpInfo['follow_up_round'] : ''));
+                $previousMessage = trim((string) (isset($previousFollowUpInfo['message']) ? $previousFollowUpInfo['message'] : ''));
+
+                $rescheduleText = 'Rescheduled from ' . $previousDate;
+                if ($previousRound !== '') {
+                    $rescheduleText .= ' (Round ' . $previousRound . ')';
+                }
+                $rescheduleText .= ' to ' . $nextFollowUpDate;
+
+                $rescheduleHtml = '<div class="url-log-reschedule-note"><strong>' . htmlspecialchars($rescheduleText, ENT_QUOTES, 'UTF-8') . '</strong>';
+                if ($previousMessage !== '') {
+                    $rescheduleHtml .= '<div class="url-log-reschedule-previous">Previous message: ' . htmlspecialchars($previousMessage, ENT_QUOTES, 'UTF-8') . '</div>';
+                }
+                $rescheduleHtml .= '</div>';
+
+                $followUpCopyFields['Rescheduled'] = $rescheduleText;
+                if ($previousMessage !== '') {
+                    $followUpCopyFields['Previous Message'] = $previousMessage;
+                }
             }
 
             $copyHtml = urlBuildUserRecordLogCopyHtml($displayNo, $auditMetaText, $summary, $content, $attachmentList, $uploadWebDir, $followUpCopyFields);
@@ -1396,6 +1756,12 @@ if (!function_exists('urlBuildListHtml')) {
             if (!empty($followUpMetaItems)) {
                 $html .= '    <div class="url-log-extra-fields mt-3">' . implode('<span class="url-log-extra-sep">|</span>', $followUpMetaItems) . '</div>';
             }
+            if (isset($rescheduleHtml) && $rescheduleHtml !== '') {
+                $html .= '    ' . $rescheduleHtml;
+            }
+            // An entry is reused as the follow-up moves on, so list every update it has
+            // been through rather than leaving only the latest state visible.
+            $html .= urlRenderUserRecordLogFollowUpHistory(isset($row['follow_up_history']) ? $row['follow_up_history'] : '');
             $html .= '    <textarea class="url-edit-summary d-none">' . htmlspecialchars($summary, ENT_QUOTES, 'UTF-8') . '</textarea>';
             $html .= '    <input type="hidden" class="url-edit-message-shortcut-id" value="' . $messageShortcutId . '">';
             $html .= '    <textarea class="url-copy-html d-none">' . htmlspecialchars($copyHtml, ENT_QUOTES, 'UTF-8') . '</textarea>';
@@ -2027,8 +2393,19 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             // Push the follow-up date into the customer follow-up module so this entry and
             // the Follow Up List describe the same follow-up, then remember which case and
             // round it landed on.
+            // Capture what this entry is rescheduling before the new date is stored, so the
+            // entry can say which follow-up it replaced instead of only showing its own.
+            $previousFollowUpSnapshotJson = urlBuildPreviousFollowUpSnapshotJson(
+                $dbConnect,
+                $tblName,
+                $context,
+                $nextFollowUpDate,
+                (int) $recordId
+            );
+
             $followUpSync = urlSyncUserRecordLogFollowUp($dbConnect, $context, array(
                 'next_follow_up_date' => $nextFollowUpDate,
+                'follow_up_round' => $followUpTimes,
                 'message_shortcut_id' => $messageShortcutId,
                 'follow_up_id' => $submittedFollowUpId > 0
                     ? $submittedFollowUpId
@@ -2045,6 +2422,9 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 if ($followUpSync['round_id'] > 0 && urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_round_id')) {
                     $updateParts[] = "follow_up_round_id=" . (int) $followUpSync['round_id'];
                 }
+            }
+            if ($previousFollowUpSnapshotJson !== '' && urlUserRecordLogColumnExists($dbConnect, $tblName, 'previous_follow_up_info')) {
+                $updateParts[] = "previous_follow_up_info='" . urlEsc($dbConnect, $previousFollowUpSnapshotJson) . "'";
             }
             $updateParts[] = "updated_by='" . urlEsc($dbConnect, USER_ID) . "'";
             $updateParts[] = "updated_at=NOW()";
@@ -2148,9 +2528,9 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             }
 
             if ($urlIsFallback) {
-                urlFallbackResponse('Record updated successfully.', true, $context['return_url']);
+                urlFallbackResponse(urlAppendFollowUpWarning('Record updated successfully.', $followUpSync), true, $context['return_url']);
             }
-            urlJsonResponse(array('ok' => 1, 'message' => 'Record updated successfully.'));
+            urlJsonResponse(array('ok' => 1, 'message' => urlAppendFollowUpWarning('Record updated successfully.', $followUpSync)));
         }
 
         $customerIdSql = 'NULL';
@@ -2199,8 +2579,19 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         // Push the follow-up date into the customer follow-up module so this entry and the
         // Follow Up List describe the same follow-up, then remember which case and round it
         // landed on.
+        // Capture what this entry is rescheduling before the new date is stored, so the
+        // entry can say which follow-up it replaced instead of only showing its own.
+        $previousFollowUpSnapshotJson = urlBuildPreviousFollowUpSnapshotJson(
+            $dbConnect,
+            $tblName,
+            $context,
+            $nextFollowUpDate,
+            0
+        );
+
         $followUpSync = urlSyncUserRecordLogFollowUp($dbConnect, $context, array(
             'next_follow_up_date' => $nextFollowUpDate,
+            'follow_up_round' => $followUpTimes,
             'message_shortcut_id' => $messageShortcutId,
             'follow_up_id' => $submittedFollowUpId,
         ));
@@ -2217,6 +2608,95 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 $insertColumns[] = 'follow_up_round_id';
                 $insertValues[] = (int) $followUpSync['round_id'];
             }
+        }
+        if ($previousFollowUpSnapshotJson !== '' && urlUserRecordLogColumnExists($dbConnect, $tblName, 'previous_follow_up_info')) {
+            $insertColumns[] = 'previous_follow_up_info';
+            $insertValues[] = "'" . urlEsc($dbConnect, $previousFollowUpSnapshotJson) . "'";
+        }
+
+        // Re-saving the same message on the same follow-up round is that follow-up moving
+        // on, so update the entry it already has instead of adding a near-identical row.
+        $reusableLogRow = urlFindReusableFollowUpLogRow(
+            $dbConnect,
+            $tblName,
+            $context,
+            (int) $followUpSync['follow_up_id'],
+            (int) $followUpSync['round_id'],
+            $content
+        );
+        $reusableLogId = !empty($reusableLogRow) ? (int) $reusableLogRow['id'] : 0;
+        if ($reusableLogId > 0) {
+            // Record what actually moved, not the whole new state: the point of the
+            // history is to show the change at a glance.
+            $reuseChanges = urlBuildFollowUpLogChangeList($reusableLogRow, array(
+                'next_follow_up_date' => $nextFollowUpDate,
+                'follow_up_times' => $followUpTimes,
+                'follow_up_day' => $followUpDay,
+            ));
+
+            $reuseUpdateParts = array();
+            if ($hasNextFollowUpDateColumn) {
+                $reuseUpdateParts[] = "next_follow_up_date=" . ($nextFollowUpDate !== '' ? ("'" . urlEsc($dbConnect, $nextFollowUpDate) . "'") : 'NULL');
+            }
+            if ($hasFollowUpTimesColumn) {
+                $reuseUpdateParts[] = "follow_up_times=" . ($followUpTimes !== '' ? ("'" . urlEsc($dbConnect, $followUpTimes) . "'") : 'NULL');
+            }
+            if ($hasFollowUpDayColumn) {
+                $reuseUpdateParts[] = "follow_up_day=" . ($followUpDay !== '' ? ("'" . urlEsc($dbConnect, $followUpDay) . "'") : 'NULL');
+            }
+            if ($hasMessageShortcutIdColumn) {
+                $reuseUpdateParts[] = "message_shortcut_id=" . ($messageShortcutId > 0 ? $messageShortcutId : 'NULL');
+            }
+            if ($previousFollowUpSnapshotJson !== '' && urlUserRecordLogColumnExists($dbConnect, $tblName, 'previous_follow_up_info')) {
+                $reuseUpdateParts[] = "previous_follow_up_info='" . urlEsc($dbConnect, $previousFollowUpSnapshotJson) . "'";
+            }
+            if (urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_history')) {
+                $reuseHistoryJson = urlAppendFollowUpLogHistory($dbConnect, $tblName, $reusableLogId, array(
+                    'time' => date('Y-m-d H:i:s'),
+                    'action' => 'Updated from customer page',
+                    'changes' => $reuseChanges,
+                    'by' => (string) USER_NAME,
+                ));
+                $reuseUpdateParts[] = "follow_up_history='" . urlEsc($dbConnect, $reuseHistoryJson) . "'";
+            }
+            $reuseUpdateParts[] = "updated_by='" . urlEsc($dbConnect, USER_ID) . "'";
+            $reuseUpdateParts[] = "updated_at=NOW()";
+
+            $reuseSql = "UPDATE " . $tblName . " SET
+                " . implode(",
+                ", $reuseUpdateParts) . "
+                WHERE id='" . (int) $reusableLogId . "'";
+            $reuseOk = mysqli_query($dbConnect, $reuseSql);
+
+            if (function_exists('audit_log')) {
+                audit_log(array(
+                    'log_act' => 'Edit',
+                    'cdate' => $GLOBALS['cdate'],
+                    'ctime' => $GLOBALS['ctime'],
+                    'uid' => USER_ID,
+                    'cby' => USER_ID,
+                    'query_rec' => $reuseSql,
+                    'query_table' => $tblName,
+                    'oldval' => '',
+                    'changes' => 'next_follow_up_date=' . $nextFollowUpDate . ', follow_up_times=' . $followUpTimes,
+                    'newval' => '',
+                    'act_msg' => USER_NAME . ' updated the follow-up on User Record Log [ID=' . (int) $reusableLogId . '] instead of adding a duplicate entry.',
+                    'page' => $pageTitle,
+                    'connect' => $connect,
+                ));
+            }
+
+            if (!$reuseOk) {
+                if ($urlIsFallback) {
+                    urlFallbackResponse('Failed to update the existing follow-up record.', false, $context['return_url']);
+                }
+                urlJsonResponse(array('ok' => 0, 'message' => 'Failed to update the existing follow-up record.'));
+            }
+
+            if ($urlIsFallback) {
+                urlFallbackResponse(urlAppendFollowUpWarning('Existing follow-up record updated.', $followUpSync), true, $context['return_url']);
+            }
+            urlJsonResponse(array('ok' => 1, 'message' => urlAppendFollowUpWarning('Existing follow-up record updated.', $followUpSync)));
         }
 
         $insertColumns = array_merge($insertColumns, array('created_by', 'created_at', 'updated_by', 'updated_at', 'status'));
@@ -2294,9 +2774,9 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         }
 
         if ($urlIsFallback) {
-            urlFallbackResponse('Record added successfully.', true, $context['return_url']);
+            urlFallbackResponse(urlAppendFollowUpWarning('Record added successfully.', $followUpSync), true, $context['return_url']);
         }
-        urlJsonResponse(array('ok' => 1, 'message' => 'Record added successfully.'));
+        urlJsonResponse(array('ok' => 1, 'message' => urlAppendFollowUpWarning('Record added successfully.', $followUpSync)));
     }
 }
 
@@ -2764,6 +3244,87 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                     color: #4f5a6b;
                 }
 
+                .user-record-log-module .url-log-reschedule-note {
+                    margin-top: 0.5rem;
+                    padding: 0.5rem 0.75rem;
+                    border-left: 3px solid #f0ad4e;
+                    background-color: #fff8ec;
+                    border-radius: 4px;
+                    font-size: 0.9rem;
+                    color: #4f5a6b;
+                }
+
+                .user-record-log-module .url-log-reschedule-previous {
+                    margin-top: 0.25rem;
+                    font-style: italic;
+                }
+
+                .user-record-log-module .url-log-history {
+                    margin-top: 0.5rem;
+                    padding: 0.5rem 0.75rem;
+                    border-left: 3px solid #6c8ebf;
+                    background-color: #f4f7fb;
+                    border-radius: 4px;
+                    font-size: 0.85rem;
+                    color: #4f5a6b;
+                }
+
+                .user-record-log-module .url-log-history-title {
+                    font-weight: 600;
+                    margin-bottom: 0.25rem;
+                }
+
+                .user-record-log-module .url-log-history-row {
+                    padding: 0.25rem 0;
+                }
+
+                .user-record-log-module .url-log-history-row + .url-log-history-row {
+                    border-top: 1px solid #e3e9f2;
+                }
+
+                .user-record-log-module .url-log-history-time {
+                    color: #8a94a6;
+                }
+
+                .user-record-log-module .url-log-history-by {
+                    color: #8a94a6;
+                }
+
+                .user-record-log-module .url-log-history-change {
+                    display: flex;
+                    flex-wrap: wrap;
+                    align-items: center;
+                    gap: 0.4rem;
+                    margin-top: 0.2rem;
+                    padding-left: 0.25rem;
+                }
+
+                .user-record-log-module .url-log-history-field {
+                    color: #6b7688;
+                    min-width: 8.5rem;
+                }
+
+                .user-record-log-module .url-log-history-from {
+                    color: #99a1ae;
+                    text-decoration: line-through;
+                }
+
+                .user-record-log-module .url-log-history-arrow {
+                    color: #99a1ae;
+                }
+
+                .user-record-log-module .url-log-history-to {
+                    font-weight: 700;
+                    color: #1f6f43;
+                    background-color: #e4f6ea;
+                    border-radius: 4px;
+                    padding: 0.05rem 0.4rem;
+                }
+
+                .user-record-log-module .url-log-history-detail {
+                    color: #6b7688;
+                }
+
                 .user-record-log-module .url-log-extra-sep {
                     color: #93a0b4;
                 }
@@ -3000,6 +3561,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                         $followUpCaseOptions = urlGetUserRecordLogFollowUpCaseOptions($connect, $context);
                         $followUpModuleAvailable = urlGetUserRecordLogPlatformFromCustomerColumn(isset($context['customer_column']) ? $context['customer_column'] : '') !== ''
                             && (int) (isset($context['customer_id']) ? $context['customer_id'] : 0) > 0;
+                        $followUpCurrentRoundNo = urlGetUserRecordLogCurrentFollowUpRound($connect, $context);
                         ?>
                         <?php if ($followUpModuleAvailable) { ?>
                             <div class="mb-3">
@@ -3019,8 +3581,11 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
                                 <input type="date" class="form-control" id="url_next_follow_up_date" name="next_follow_up_date">
                             </div>
                             <div class="col-12 col-md-4">
-                                <label class="form-label" for="url_follow_up_times">Follow-Up Times</label>
-                                <input type="text" class="form-control" id="url_follow_up_times" name="follow_up_times">
+                                <label class="form-label" for="url_follow_up_times">Follow-Up Round</label>
+                                <input type="number" min="1" step="1" class="form-control" id="url_follow_up_times" name="follow_up_times"
+                                       value="<?php echo $followUpCurrentRoundNo > 0 ? (int) $followUpCurrentRoundNo : ''; ?>"
+                                       data-current-round="<?php echo (int) $followUpCurrentRoundNo; ?>">
+                                <div class="url-editor-note">This is the follow-up round on the customer's case. Lowering it moves the follow-up backwards and notifies the admins.</div>
                             </div>
                             <div class="col-12 col-md-4">
                                 <label class="form-label" for="url_follow_up_day">Follow-Up Day</label>

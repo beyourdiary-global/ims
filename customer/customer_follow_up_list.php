@@ -76,6 +76,9 @@ $pagePinIds = customerFollowUpPageGetAllowedPinIds($connect, $currentPagePin);
 $canViewLogsPermission = defined('USER_GROUP') && (int) USER_GROUP === 1;
 $canApprovePermission = in_array(11, $pagePinIds, true);
 $canRejectPermission = in_array(12, $pagePinIds, true);
+// Raising a cancel request is its own right; approving one stays with Approve/Reject, so
+// a supervisor is always the one who ends a follow-up.
+$canRequestCancelPermission = in_array(customerFollowUpGetCancelRequestPinId(), $pagePinIds, true);
 
 if (empty($_SESSION['customer_follow_up_csrf'])) {
     $_SESSION['customer_follow_up_csrf'] = bin2hex(random_bytes(32));
@@ -565,6 +568,30 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
             $result = customerFollowUpRequestPostponement($connect, $followUpId, postSpaceFilter('postpone_reason'), postSpaceFilter('requested_next_follow_up_date'), USER_ID, USER_GROUP);
             break;
 
+        case 'request_cancel_follow_up':
+            if (!$canRequestCancelPermission) {
+                $result = array('success' => false, 'message' => 'You do not have permission to request a follow-up cancellation.');
+                break;
+            }
+            $result = customerFollowUpRequestCancel($connect, $followUpId, postSpaceFilter('cancel_reason'), USER_ID, USER_GROUP);
+            break;
+
+        case 'approve_cancel_follow_up':
+            if (!$canApprovePermission) {
+                $result = array('success' => false, 'message' => 'You do not have permission to approve a follow-up cancellation.');
+                break;
+            }
+            $result = customerFollowUpApproveCancel($connect, $followUpId, postSpaceFilter('cancel_approval_comment'), USER_ID, USER_GROUP);
+            break;
+
+        case 'reject_cancel_follow_up':
+            if (!$canRejectPermission) {
+                $result = array('success' => false, 'message' => 'You do not have permission to reject a follow-up cancellation.');
+                break;
+            }
+            $result = customerFollowUpRejectCancel($connect, $followUpId, postSpaceFilter('cancel_reject_reason'), USER_ID, USER_GROUP);
+            break;
+
         case 'submit_missing_next_follow_up_date':
             $result = customerFollowUpSubmitMissingNextFollowUpDate($connect, $followUpId, postSpaceFilter('submitted_missing_next_follow_up_date'), USER_ID, USER_GROUP);
             break;
@@ -776,7 +803,11 @@ $listSql = "SELECT
         r.`contact_no` AS `round_contact_no`,
         r.`approval_status`,
         r.`reject_reason`,
-        r.`postpone_status`,
+        r.`postpone_status`,"
+    . (customerFollowUpSupportsCancelRequest($connect) ? "
+        r.`cancel_status`,
+        r.`cancel_reason`,
+        r.`cancel_reject_reason`," : "") . "
         r.`postpone_reason`,
         r.`postpone_reject_reason`,
         r.`delay_reason`,
@@ -788,6 +819,7 @@ $listSql = "SELECT
         ON r.`follow_up_id` = f.`id`
        AND r.`round_no` = f.`current_round_no`
        AND r.`status` = 'A'
+       " . customerFollowUpBuildCurrentRoundCondition($connect, 'r') . "
     WHERE " . implode(' AND ', $whereConditions) . "
     ORDER BY
         CASE WHEN r.`next_follow_up_date` IS NULL THEN 1 ELSE 0 END ASC,
@@ -1329,6 +1361,11 @@ if (!empty($customerTagLabelFilters)) {
                                 <h2 class="mb-1"><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></h2>
                                 <div class="follow-up-note">Follow-up workflow, missed/lost monitoring, and approval handling are managed from this page.</div>
                             </div>
+                            <div class="mt-auto mb-auto">
+                                <a class="btn btn-sm btn-rounded btn-warning" href="customer_follow_up_cleanup.php">
+                                    <i class="fa-solid fa-broom"></i> Follow-Up Cleanup
+                                </a>
+                            </div>
                         </div>
                     </div>
                 </div>
@@ -1618,12 +1655,12 @@ if (!empty($customerTagLabelFilters)) {
 
                                             $canManageOwnCase = customerFollowUpCanUserManageCase($row, USER_ID, USER_GROUP, $connect);
                                             $hasMissingNextFollowUpDate = customerFollowUpIsEmptyDateValue(isset($row['next_follow_up_date']) ? $row['next_follow_up_date'] : '');
-                                            $canAppeal = $canManageOwnCase && $roundStatus === 'Rejected' && $roundNo <= 6;
+                                            $canAppeal = $canManageOwnCase && $roundStatus === 'Rejected' && $roundNo <= customerFollowUpGetMaxRoundNo();
                                             $canViewAppeal = !empty($latestAppealLog);
                                             $canSubmit = !$canAppeal
                                                 && $canManageOwnCase
                                                 && !in_array($roundStatus, array('Pending Approval', 'Approved', 'Postponed', 'Missed Follow-Up', 'Done', 'Lost', 'Rejected'), true)
-                                                && $roundNo <= 6;
+                                                && $roundNo <= customerFollowUpGetMaxRoundNo();
                                             $canSaveDelayReason = $canManageOwnCase && customerFollowUpRequiresDelayReasonBeforeMissedAction($row);
                                             $canComplete = $canManageOwnCase && customerFollowUpCanCompleteRound($row);
                                             $canRescheduleFirstRound = $canManageOwnCase
@@ -1631,6 +1668,9 @@ if (!empty($customerTagLabelFilters)) {
                                                 && $normalizedPostponeStatus !== 'pending'
                                                 && !in_array($roundStatus, array('Done', 'Lost'), true);
                                             $canRequestPostpone = $canManageOwnCase && !in_array($roundStatus, array('Done', 'Lost'), true) && customerFollowUpCanRequestPostponement($row);
+                                            $rowCancelStatus = customerFollowUpNormalizeCancelStatus(isset($row['cancel_status']) ? $row['cancel_status'] : 'none');
+                                            $canRequestCancel = $canRequestCancelPermission && $canManageOwnCase && customerFollowUpCanRequestCancel($row, $row);
+                                            $hasPendingCancel = ($rowCancelStatus === 'pending');
                                             $canSubmitMissingNextFollowUpDate = $canManageOwnCase && $hasMissingNextFollowUpDate && !in_array($roundStatus, array('Done', 'Lost'), true);
                                             $canApprove = $canApprovePermission && $customerType === 'new' && $roundStatus === 'Pending Approval';
                                             $canReject = $canRejectPermission && $customerType === 'new' && $roundStatus === 'Pending Approval';
@@ -1832,6 +1872,48 @@ if (!empty($customerTagLabelFilters)) {
                                                         </button>
                                                     <?php } ?>
 
+                                                    <?php if ($canRequestCancel) { ?>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-rounded btn-danger"
+                                                            title="Request Follow-Up Cancellation"
+                                                            aria-label="Request Follow-Up Cancellation"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#requestCancelFollowUpModal"
+                                                            data-follow-up-id="<?= $followUpId ?>"
+                                                            data-round-no="<?= $roundNo ?>">
+                                                            <i class="fa-solid fa-ban"></i>
+                                                        </button>
+                                                    <?php } ?>
+
+                                                    <?php if ($hasPendingCancel && $canApprovePermission) { ?>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-rounded btn-success"
+                                                            title="Approve Follow-Up Cancellation"
+                                                            aria-label="Approve Follow-Up Cancellation"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#approveCancelFollowUpModal"
+                                                            data-follow-up-id="<?= $followUpId ?>"
+                                                            data-cancel-reason="<?= htmlspecialchars((string) (isset($row['cancel_reason']) ? $row['cancel_reason'] : ''), ENT_QUOTES, 'UTF-8') ?>">
+                                                            <i class="fa-solid fa-circle-check"></i> Cancel
+                                                        </button>
+                                                    <?php } ?>
+
+                                                    <?php if ($hasPendingCancel && $canRejectPermission) { ?>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-rounded btn-secondary"
+                                                            title="Reject Follow-Up Cancellation"
+                                                            aria-label="Reject Follow-Up Cancellation"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#rejectCancelFollowUpModal"
+                                                            data-follow-up-id="<?= $followUpId ?>"
+                                                            data-cancel-reason="<?= htmlspecialchars((string) (isset($row['cancel_reason']) ? $row['cancel_reason'] : ''), ENT_QUOTES, 'UTF-8') ?>">
+                                                            <i class="fa-solid fa-circle-xmark"></i> Cancel
+                                                        </button>
+                                                    <?php } ?>
+
                                                     <?php if ($canRescheduleFirstRound) { ?>
                                                         <button
                                                             type="button"
@@ -1974,6 +2056,24 @@ if (!empty($customerTagLabelFilters)) {
                                                     <div class="text-muted small">Round <?= $roundNo ?></div>
                                                     <?php if ($missedOriginalDate !== '') { ?>
                                                         <div class="delay-subtext">Missed Original Date: <?= htmlspecialchars($missedOriginalDate, ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <?php } ?>
+                                                    <?php
+                                                    // A newer order took this case over, so show the follow-up it replaced
+                                                    // instead of losing it along with the separate record it used to have.
+                                                    $previousFollowUpInfo = customerFollowUpDecodePreviousFollowUpInfo(isset($row['previous_follow_up_info']) ? $row['previous_follow_up_info'] : '');
+                                                    if (!empty($previousFollowUpInfo)) {
+                                                        $previousOrderLabel = trim((string) (isset($previousFollowUpInfo['order_no']) ? $previousFollowUpInfo['order_no'] : ''));
+                                                        if ($previousOrderLabel === '') {
+                                                            $previousOrderLabel = '#' . (int) (isset($previousFollowUpInfo['order_id']) ? $previousFollowUpInfo['order_id'] : 0);
+                                                        }
+                                                        $previousDateLabel = trim((string) (isset($previousFollowUpInfo['next_follow_up_date']) ? $previousFollowUpInfo['next_follow_up_date'] : ''));
+                                                        ?>
+                                                        <div class="delay-subtext">
+                                                            Overwrote previous follow-up:
+                                                            <?= htmlspecialchars($previousDateLabel !== '' ? $previousDateLabel : 'no date', ENT_QUOTES, 'UTF-8') ?>
+                                                            (Round <?= max(1, (int) (isset($previousFollowUpInfo['round_no']) ? $previousFollowUpInfo['round_no'] : 1)) ?>,
+                                                            Order <?= htmlspecialchars($previousOrderLabel, ENT_QUOTES, 'UTF-8') ?>)
+                                                        </div>
                                                     <?php } ?>
                                                 </td>
                                                 <td>
@@ -2188,10 +2288,10 @@ if (!empty($customerTagLabelFilters)) {
                         </div>
                         <div class="mb-3">
                             <label class="form-label" for="submit_message_shortcut_id">
-                                Message Shortcut<span class="customer-follow-up-required-star">*</span>
+                                New Next Follow-Up Message Shortcut
                             </label>
-                            <select class="form-select" id="submit_message_shortcut_id" name="message_shortcut_id" required>
-                                <option value="">Select Message Shortcut</option>
+                            <select class="form-select" id="submit_message_shortcut_id" name="message_shortcut_id">
+                                <option value="">Leave blank - decide the message later</option>
                                 <?php foreach ($messageShortcutOptions as $shortcutRow) {
                                     $shortcutId = isset($shortcutRow['id']) ? (int) $shortcutRow['id'] : 0;
                                     if ($shortcutId <= 0) {
@@ -2202,6 +2302,7 @@ if (!empty($customerTagLabelFilters)) {
                                     <option value="<?= $shortcutId ?>"><?= htmlspecialchars($shortcutLabel !== '' ? $shortcutLabel : ('Shortcut #' . $shortcutId), ENT_QUOTES, 'UTF-8') ?></option>
                                 <?php } ?>
                             </select>
+                            <div class="form-text">The message for the follow-up being scheduled below. Leave blank if it has not been decided yet.</div>
                             <div class="customer-follow-up-field-error" id="submit_message_shortcut_error">Message Shortcut is required.</div>
                         </div>
                         <div class="mb-3">
@@ -2370,6 +2471,105 @@ if (!empty($customerTagLabelFilters)) {
                     <div class="modal-footer">
                         <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
                         <button type="submit" class="btn btn-success" style="text-transform: none !important;">Approve</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="requestCancelFollowUpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" class="customer-follow-up-action-form">
+                    <div class="modal-header">
+                        <h5 class="modal-title" id="requestCancelFollowUpModalTitle">Request Follow-Up Cancellation</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="cfu_action" value="request_cancel_follow_up">
+                        <input type="hidden" name="follow_up_id" id="request_cancel_follow_up_id" value="">
+
+                        <div class="alert alert-warning">
+                            This does not cancel anything yet. The follow-up carries on until a supervisor approves the request.
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="cancel_reason">Cancel Reason<span class="customer-follow-up-required-star">*</span></label>
+                            <textarea class="form-control" id="cancel_reason" name="cancel_reason" rows="3" required placeholder="Why should this follow-up stop?"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-danger">Submit Cancel Request</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="approveCancelFollowUpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" class="customer-follow-up-action-form">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Approve Follow-Up Cancellation</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="cfu_action" value="approve_cancel_follow_up">
+                        <input type="hidden" name="follow_up_id" id="approve_cancel_follow_up_id" value="">
+
+                        <div class="alert alert-danger">
+                            Approving stops this follow-up for good. It leaves the list, is not reused for the customer's next order, and the reminder jobs skip it.
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label">Requested Reason</label>
+                            <div class="form-control" style="min-height:auto;background:#f8f9fa;" id="approve_cancel_reason_text">-</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="cancel_approval_comment">Comment</label>
+                            <textarea class="form-control" id="cancel_approval_comment" name="cancel_approval_comment" rows="2" placeholder="Optional"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-success">Approve Cancellation</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="rejectCancelFollowUpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" class="customer-follow-up-action-form">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Reject Follow-Up Cancellation</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="cfu_action" value="reject_cancel_follow_up">
+                        <input type="hidden" name="follow_up_id" id="reject_cancel_follow_up_id" value="">
+
+                        <div class="mb-3">
+                            <label class="form-label">Requested Reason</label>
+                            <div class="form-control" style="min-height:auto;background:#f8f9fa;" id="reject_cancel_reason_text">-</div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="cancel_reject_reason">Rejection Reason<span class="customer-follow-up-required-star">*</span></label>
+                            <textarea class="form-control" id="cancel_reject_reason" name="cancel_reject_reason" rows="3" required placeholder="Why should this follow-up continue?"></textarea>
+                        </div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-secondary" data-bs-dismiss="modal">Close</button>
+                        <button type="submit" class="btn btn-danger">Reject Cancellation</button>
                     </div>
                 </form>
             </div>
@@ -3196,7 +3396,9 @@ if (!empty($customerTagLabelFilters)) {
 
             var attachmentIsRequired = attachmentInput ? attachmentInput.required : true;
             var attachmentMissing = attachmentIsRequired && (!attachmentInput || !attachmentInput.files || attachmentInput.files.length === 0);
-            var shortcutMissing = !shortcutInput || shortcutInput.value.trim() === '';
+            // The shortcut names the message for the follow-up being scheduled, which may not
+            // be decided yet, so it is optional.
+            var shortcutMissing = false;
             var nextDateMissing = !nextDateInput || nextDateInput.value.trim() === '';
 
             customerFollowUpSetSubmitAttachmentError(attachmentMissing);
@@ -3754,6 +3956,37 @@ if (!empty($customerTagLabelFilters)) {
                 document.getElementById('rejectFollowUpModalTitle').textContent = 'Reject Follow-Up Round ' + (button.getAttribute('data-round-no') || '');
             });
         }
+
+        [
+            ['requestCancelFollowUpModal', 'request_cancel_follow_up_id', null],
+            ['approveCancelFollowUpModal', 'approve_cancel_follow_up_id', 'approve_cancel_reason_text'],
+            ['rejectCancelFollowUpModal', 'reject_cancel_follow_up_id', 'reject_cancel_reason_text']
+        ].forEach(function (config) {
+            var modalElement = document.getElementById(config[0]);
+            if (!modalElement) {
+                return;
+            }
+
+            modalElement.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                if (!button) {
+                    return;
+                }
+
+                var idField = document.getElementById(config[1]);
+                if (idField) {
+                    idField.value = button.getAttribute('data-follow-up-id') || '';
+                }
+
+                if (config[2]) {
+                    var reasonBox = document.getElementById(config[2]);
+                    if (reasonBox) {
+                        var reason = button.getAttribute('data-cancel-reason') || '';
+                        reasonBox.textContent = reason !== '' ? reason : '-';
+                    }
+                }
+            });
+        });
 
         var postponeFollowUpModal = document.getElementById('postponeFollowUpModal');
         if (postponeFollowUpModal) {
