@@ -1081,25 +1081,19 @@ if (!function_exists('campaignPurchaseExtractPackageIds')) {
                 // If it's a package name, try to look it up in the database
                 $safePart = $connect->real_escape_string($part);
                 $sql = "SELECT `id` FROM `" . PKG . "` WHERE `name`='" . $safePart . "' LIMIT 1";
-                error_log("DEBUG campaignPurchaseExtractPackageIds: looking up part='" . $part . "' sql=" . $sql);
                 $result = $connect->query($sql);
-                error_log("DEBUG campaignPurchaseExtractPackageIds: query result: " . ($result ? "got result, num_rows=" . $result->num_rows : "failed"));
                 if ($result && $result->num_rows > 0) {
                     $row = $result->fetch_assoc();
                     $packageId = (int) ($row['id'] ?? 0);
-                    error_log("DEBUG campaignPurchaseExtractPackageIds: found packageId=" . $packageId);
                     if ($packageId > 0) {
                         $ids[$packageId] = $packageId;
                     }
                 } else {
-                    error_log("DEBUG campaignPurchaseExtractPackageIds: NO MATCH for part='" . $part . "'");
                 }
             } else {
-                error_log("DEBUG campaignPurchaseExtractPackageIds: no connect or PKG not defined or table doesn't exist. connect=" . ($connect ? "yes" : "null") . " PKG=" . (defined('PKG') ? PKG : "undefined") . " exists=" . (defined('PKG') && $connect && campaignTableExists($connect, PKG) ? "yes" : "no"));
             }
         }
 
-        error_log("DEBUG campaignPurchaseExtractPackageIds: final result for '" . $packageValue . "' = " . json_encode(array_values($ids)));
         return array_values($ids);
     }
 }
@@ -1354,7 +1348,6 @@ if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
         // empty selection means "no package restriction" (existing campaigns keep
         // their old behavior of counting every purchase in the period).
         $campaignPackageIds = campaignFetchCampaignPackageIds($connect, (int) ($campaign['id'] ?? 0));
-        error_log("DEBUG campaignPurchaseFetchOrdersForCustomer: campaign_id=" . (int) ($campaign['id'] ?? 0) . " campaignPackageIds=" . json_encode($campaignPackageIds));
 
         $safeFromDate = $orderConn->real_escape_string(campaignDateValue($fromDate));
         $safeToDate = $orderConn->real_escape_string(campaignDateValue($toDate));
@@ -1525,6 +1518,250 @@ if (!function_exists('campaignBackfillPackageIds')) {
     }
 }
 
+if (!function_exists('campaignResolveBuyerDisplayName')) {
+    /**
+     * The buyer column on an order table is not always a name. Shopee, for one, stores the
+     * customer record id, so the raw value is resolved through the platform's customer
+     * lookup table. Results are cached for the run because the same buyer appears on many
+     * orders and this would otherwise be a query per order.
+     */
+    function campaignResolveBuyerDisplayName($config, $rawValue, &$cache)
+    {
+        $rawValue = trim((string) $rawValue);
+        if ($rawValue === '') {
+            return '';
+        }
+
+        // Only a bare id needs resolving; anything else is already a usable name.
+        if (!ctype_digit($rawValue) || empty($config['customer_lookup'])) {
+            return $rawValue;
+        }
+
+        $lookup = $config['customer_lookup'];
+        $lookupConn = isset($lookup['conn']) ? $lookup['conn'] : null;
+        $lookupTable = (string) ($lookup['table'] ?? '');
+        $idCol = (string) ($lookup['id_col'] ?? 'id');
+        if (!($lookupConn instanceof mysqli) || $lookupTable === '' || !campaignTableExists($lookupConn, $lookupTable)) {
+            return $rawValue;
+        }
+
+        $cacheKey = $lookupTable . '|' . $rawValue;
+        if (array_key_exists($cacheKey, $cache)) {
+            return $cache[$cacheKey];
+        }
+
+        $nameCol = campaignGetFirstExistingColumn($lookupConn, $lookupTable, array('buyer_username', 'customer_name', 'name'));
+        if ($nameCol === '') {
+            $cache[$cacheKey] = $rawValue;
+            return $rawValue;
+        }
+
+        $sql = "SELECT " . campaignPurchaseQuoteColumn($nameCol) . " AS `resolved_name`
+                FROM " . campaignTableName($lookupTable) . "
+                WHERE " . campaignPurchaseQuoteColumn($idCol) . " = '" . $lookupConn->real_escape_string($rawValue) . "'
+                LIMIT 1";
+        $result = mysqli_query($lookupConn, $sql);
+        $resolved = $rawValue;
+        if ($result && $result->num_rows > 0) {
+            $row = $result->fetch_assoc();
+            $candidate = trim((string) ($row['resolved_name'] ?? ''));
+            if ($candidate !== '') {
+                $resolved = $candidate;
+            }
+        }
+
+        $cache[$cacheKey] = $resolved;
+        return $resolved;
+    }
+}
+
+if (!function_exists('campaignScanCampaignOrders')) {
+    /**
+     * Every order that belongs to this campaign: placed inside the campaign period and for
+     * one of the campaign's packages. This is the campaign's order set, and who bought is
+     * decided afterwards from it.
+     *
+     * Reads each platform's order table once for the period, rather than once per customer,
+     * and checks the package by exact membership of the order's package list. The previous
+     * discovery step matched packages with LIKE '%id%', so package 1 also matched 10, 21 and
+     * 100 and dragged in customers who had bought none of them.
+     *
+     * An empty package selection means no package restriction, which is what existing
+     * campaigns without packages relied on.
+     */
+    function campaignScanCampaignOrders($connect, $financeConnect, $campaign, $packageIds, $fromDate, $toDate, &$summary = null)
+    {
+        $orders = array();
+        $nameCache = array();
+
+        $safeFromDate = campaignDateValue($fromDate);
+        $safeToDate = campaignDateValue($toDate);
+        if ($safeFromDate === '' || $safeToDate === '') {
+            return $orders;
+        }
+
+        foreach (campaignPurchasePlatformConfigs($connect, $financeConnect) as $platform => $config) {
+            $orderConn = isset($config['conn']) ? $config['conn'] : null;
+            $table = (string) ($config['table'] ?? '');
+            if (!($orderConn instanceof mysqli) || $table === '' || !campaignTableExists($orderConn, $table)) {
+                continue;
+            }
+
+            $dateCol = campaignGetFirstExistingColumn($orderConn, $table, $config['date_cols']);
+            if ($dateCol === '') {
+                continue;
+            }
+
+            $customerCol = campaignGetFirstExistingColumn($orderConn, $table, $config['customer_cols']);
+            if ($customerCol === '') {
+                continue;
+            }
+
+            $orderNoCol = campaignGetFirstExistingColumn($orderConn, $table, $config['order_no_cols']);
+            $timeCol = campaignGetFirstExistingColumn($orderConn, $table, $config['time_cols']);
+            $amountCol = campaignGetFirstExistingColumn($orderConn, $table, $config['amount_cols']);
+            $orderStatusCol = campaignGetFirstExistingColumn($orderConn, $table, isset($config['order_status_cols']) ? $config['order_status_cols'] : array('order_status', 'status'));
+            $packageCol = campaignGetFirstExistingColumn($orderConn, $table, $config['package_cols']);
+            $detailCol = campaignGetFirstExistingColumn($orderConn, $table, $config['detail_cols']);
+
+            $selectColumns = array('`id`');
+            foreach (array($orderNoCol, $dateCol, $timeCol, $amountCol, $orderStatusCol, $packageCol, $detailCol, $customerCol) as $column) {
+                $quotedCol = campaignPurchaseQuoteColumn($column);
+                if ($column !== '' && !in_array($quotedCol, $selectColumns, true)) {
+                    $selectColumns[] = $quotedCol;
+                }
+            }
+
+            $where = array(
+                campaignPurchaseRowStatusWhere($orderConn, $table, $config),
+                "DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") >= '" . $orderConn->real_escape_string($safeFromDate) . "'",
+                "DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") <= '" . $orderConn->real_escape_string($safeToDate) . "'",
+            );
+
+            $sql = "SELECT " . implode(',', $selectColumns) . "
+                    FROM " . campaignTableName($table) . "
+                    WHERE " . implode(' AND ', $where) . "
+                    ORDER BY DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") ASC, `id` ASC";
+            $result = mysqli_query($orderConn, $sql);
+            if (!$result) {
+                if (is_array($summary)) {
+                    $summary['notes'][] = 'Order query failed for ' . $platform . ': ' . mysqli_error($orderConn);
+                }
+                continue;
+            }
+
+            while ($row = $result->fetch_assoc()) {
+                $packageText = $packageCol !== '' ? campaignNormalizeTextValue($row[$packageCol] ?? '', 65535) : '';
+                $detailText = $detailCol !== '' ? campaignNormalizeTextValue($row[$detailCol] ?? '', 65535) : '';
+
+                // The package decides whether the order counts toward this campaign.
+                $orderPackageIds = campaignPurchaseExtractPackageIds($packageText, $connect);
+                $packageId = null;
+                if (!empty($packageIds)) {
+                    $matchingIds = array_intersect($orderPackageIds, $packageIds);
+                    if (empty($matchingIds)) {
+                        continue;
+                    }
+                    $packageId = reset($matchingIds);
+                } elseif (!empty($orderPackageIds)) {
+                    $packageId = reset($orderPackageIds);
+                }
+
+                $orderStatus = $orderStatusCol !== '' ? campaignNormalizeTextValue($row[$orderStatusCol] ?? '', 100) : '';
+                // Returned and closed-returned orders are not purchases.
+                if (in_array(strtoupper(trim($orderStatus)), array('R', 'CR'), true)) {
+                    continue;
+                }
+
+                $buyerRaw = trim((string) ($row[$customerCol] ?? ''));
+                if ($buyerRaw === '') {
+                    continue;
+                }
+
+                $orderId = campaignPurchaseReadCell($row, 'id');
+                $orderNo = $orderNoCol !== '' ? campaignPurchaseReadCell($row, $orderNoCol) : '';
+                if ($orderNo === '') {
+                    $orderNo = $orderId;
+                }
+
+                $orderDateRaw = campaignPurchaseReadCell($row, $dateCol);
+                $orderTimeRaw = $timeCol !== '' ? campaignPurchaseReadCell($row, $timeCol) : '';
+                $orderDateTime = trim($orderDateRaw . ' ' . $orderTimeRaw);
+
+                $orders[] = array(
+                    'platform' => $platform,
+                    'order_id' => $orderId,
+                    'order_no' => $orderNo,
+                    'buyer_id' => $buyerRaw,
+                    'buyer_name' => campaignResolveBuyerDisplayName($config, $buyerRaw, $nameCache),
+                    'order_detail' => $detailText !== '' ? $detailText : $packageText,
+                    'order_status' => $orderStatus,
+                    'order_amount' => ($amountCol !== '' && is_numeric($row[$amountCol] ?? null)) ? (float) $row[$amountCol] : 0.00,
+                    'order_date' => $orderDateTime !== '' ? $orderDateTime : null,
+                    'package_text' => $packageText !== '' ? $packageText : $detailText,
+                    'package_id' => $packageId,
+                );
+            }
+        }
+
+        return $orders;
+    }
+}
+
+if (!function_exists('campaignIndexSavedCustomers')) {
+    /**
+     * The customers saved on the campaign when it was set up, indexed by platform and
+     * customer id. Names are deliberately not used to match: they are free text, not
+     * unique per person, and matching on them puts one customer's orders against another.
+     */
+    function campaignIndexSavedCustomers($connect, $campaignId)
+    {
+        $index = array('by_id' => array(), 'rows' => array());
+
+        $result = mysqli_query($connect, "SELECT * FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . "
+            WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' ORDER BY `id` ASC");
+        if (!$result) {
+            return $index;
+        }
+
+        while ($row = $result->fetch_assoc()) {
+            $rowId = (int) ($row['id'] ?? 0);
+            if ($rowId <= 0) {
+                continue;
+            }
+
+            $platform = trim((string) ($row['platform'] ?? ''));
+            $index['rows'][$rowId] = $row;
+
+            $customerId = trim((string) ($row['customer_id'] ?? ''));
+            if ($customerId !== '') {
+                $index['by_id'][$platform . '|' . $customerId] = $rowId;
+            }
+
+        }
+
+        return $index;
+    }
+}
+
+if (!function_exists('campaignMatchOrderToSavedCustomer')) {
+    /**
+     * The saved customer this order belongs to, or 0 when the buyer was not on the
+     * campaign's list - which is what makes them a new customer.
+     */
+    function campaignMatchOrderToSavedCustomer($order, $savedIndex)
+    {
+        $platform = trim((string) ($order['platform'] ?? ''));
+
+        $buyerId = trim((string) ($order['buyer_id'] ?? ''));
+        if ($buyerId !== '' && isset($savedIndex['by_id'][$platform . '|' . $buyerId])) {
+            return (int) $savedIndex['by_id'][$platform . '|' . $buyerId];
+        }
+
+        return 0;
+    }
+}
+
 if (!function_exists('campaignRunPurchaseCheck')) {
     function campaignRunPurchaseCheck($connect, $financeConnect, $campaignId, $fromDate = '', $toDate = '')
     {
@@ -1535,6 +1772,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             'records_updated' => 0,
             'customers_purchased' => 0,
             'customers_not_purchased' => 0,
+            'new_customers' => 0,
             'notes' => array(),
             'skip_reasons' => array(),
             'campaign_package_ids' => array(),
@@ -1547,7 +1785,6 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             return $summary;
         }
 
-        // Store campaign package IDs for debugging
         $summary['campaign_package_ids'] = campaignFetchCampaignPackageIds($connect, $campaignId);
         $summary['debug_info'][] = 'Campaign ID: ' . $campaignId . ', Selected Package IDs: [' . implode(', ', $summary['campaign_package_ids']) . ']';
 
@@ -1565,208 +1802,108 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             return $summary;
         }
 
-        // Drop any previously-stored purchase rows that no longer fall inside the
-        // campaign's current period (e.g. the period dates were edited after an
-        // earlier refresh), or that were recorded before returned/closed-returned
-        // orders started being excluded, so the report never sums stale rows.
-        $safePeriodStart = $connect->real_escape_string($periodStart);
-        $safePeriodEnd = $connect->real_escape_string($periodEnd);
-        mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
-            SET `status`='D', `update_by`='" . $connect->real_escape_string((string) campaignCurrentUserId()) . "', `update_date`=CURDATE(), `update_time`=CURTIME()
-            WHERE `campaign_id`='" . (int) $campaignId . "'
-              AND `status`='A'
-              AND (
-                `order_date` IS NULL
-                OR DATE(`order_date`) < '" . $safePeriodStart . "'
-                OR DATE(`order_date`) > '" . $safePeriodEnd . "'
-                OR UPPER(TRIM(IFNULL(`order_status`, ''))) IN ('R', 'CR')
-              )");
-
-        $customers = array();
-
-        // Always auto-discover customers from Finance DB who bought campaign packages in the date range
-        if (!empty($summary['campaign_package_ids'])) {
-            $summary['debug_info'][] = 'Auto-discovering customers from Finance DB who purchased campaign packages...';
-            $customers = campaignAutoDiscoverCustomersForPackages($connect, $financeConnect, $campaign, $summary['campaign_package_ids'], $periodStart, $periodEnd);
-            $summary['debug_info'][] = 'Auto-discovered ' . count($customers) . ' customers';
+        $hasBuyerColumns = campaignColumnExists($connect, CAMPAIGN_PURCHASE_RECORD, 'buyer_platform_id');
+        if (!$hasBuyerColumns) {
+            $summary['notes'][] = 'Buyer columns are missing on the purchase record table, so new customers cannot be told apart. Please run insert_table.php.';
         }
 
-        // Also include manually added customers (for backward compatibility)
-        $manualCustomers = array();
-        $customerSql = "SELECT * FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' ORDER BY `id` ASC";
-        $customerResult = mysqli_query($connect, $customerSql);
-        if ($customerResult) {
-            while ($customerRow = $customerResult->fetch_assoc()) {
-                $manualCustomers[] = $customerRow;
-            }
-        }
+        // The campaign's own order set: inside the period, and for one of the campaign's
+        // packages. Who bought is decided from this, rather than guessing at a customer
+        // list first and then asking whether each one happened to buy.
+        $orders = campaignScanCampaignOrders($connect, $financeConnect, $campaign, $summary['campaign_package_ids'], $periodStart, $periodEnd, $summary);
+        $summary['orders_found'] = count($orders);
+        $summary['debug_info'][] = 'Orders in period matching campaign packages: ' . count($orders);
 
-        // Merge auto-discovered and manual customers. The key is platform plus name, not
-        // name alone: two customers with the same name on different platforms are two
-        // different people, and collapsing them lost one of them along with their orders.
-        // A manual row still overrides the auto-discovered one for the same platform and
-        // name, because it carries a real campaign_customer id.
-        $customersByKey = array();
-        $droppedUnnamed = 0;
-        foreach (array($customers, $manualCustomers) as $customerList) {
-            foreach ($customerList as $customer) {
-                $custName = trim((string) ($customer['customer_name'] ?? ''));
-                if ($custName === '') {
-                    // Orders are matched on the customer name, so a nameless row can never
-                    // match anything. Counted rather than dropped in silence.
-                    $droppedUnnamed++;
-                    continue;
-                }
+        // The customers saved on the campaign at set-up. A buyer found in here ordered
+        // during the campaign; a buyer not in here is new.
+        $savedIndex = campaignIndexSavedCustomers($connect, $campaignId);
+        $summary['checked_customers'] = count($savedIndex['rows']);
 
-                $customersByKey[trim((string) ($customer['platform'] ?? '')) . '|' . $custName] = $customer;
-            }
-        }
-        $customers = array_values($customersByKey);
-        if ($droppedUnnamed > 0) {
-            $summary['notes'][] = 'Skipped ' . $droppedUnnamed . ' customer row(s) with no customer name.';
-        }
-
-        $insertStmt = $connect->prepare("INSERT INTO " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " (`campaign_id`,`campaign_customer_id`,`package_id`,`platform`,`order_id`,`order_no`,`order_detail`,`order_status`,`order_amount`,`order_date`,`package_text`,`customer_type`,`create_by`,`create_date`,`create_time`,`status`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURDATE(),CURTIME(),'A')");
-        $updateRecordStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " SET `package_id`=?, `order_detail`=?, `order_status`=?, `order_amount`=?, `order_date`=?, `package_text`=?, `customer_type`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
         $userId = campaignCurrentUserId();
-        // Prepared once instead of per customer, which re-prepared and closed it on every
-        // iteration.
-        $customerStatusStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_CUSTOMER) . " SET `purchase_status`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=? AND `campaign_id`=?");
-        $autoConfirmedRecordIds = array();
+        $safeUserId = $connect->real_escape_string((string) $userId);
 
-        foreach ($customers as $customerRow) {
-            $summary['checked_customers']++;
-            $campaignCustomerId = (int) ($customerRow['id'] ?? 0);
-            $isAutoDiscovered = !empty($customerRow['_auto_discovered']);
+        $buyerColumnsSql = $hasBuyerColumns ? '`buyer_platform_id`,`buyer_name`,' : '';
+        $buyerPlaceholders = $hasBuyerColumns ? '?,?,' : '';
+        $insertStmt = $connect->prepare("INSERT INTO " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " (`campaign_id`,`campaign_customer_id`," . $buyerColumnsSql . "`package_id`,`platform`,`order_id`,`order_no`,`order_detail`,`order_status`,`order_amount`,`order_date`,`package_text`,`customer_type`,`create_by`,`create_date`,`create_time`,`status`) VALUES (?,?," . $buyerPlaceholders . "?,?,?,?,?,?,?,?,?,?,?,CURDATE(),CURTIME(),'A')");
 
-            // Skip only if not auto-discovered AND id is missing/invalid
-            if (!$isAutoDiscovered && $campaignCustomerId <= 0) {
+        $updateBuyerSql = $hasBuyerColumns ? '`buyer_platform_id`=?, `buyer_name`=?, ' : '';
+        $updateRecordStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " SET `campaign_customer_id`=?, " . $updateBuyerSql . "`package_id`=?, `order_detail`=?, `order_status`=?, `order_amount`=?, `order_date`=?, `package_text`=?, `customer_type`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
+
+        $confirmedRecordIds = array();
+        $purchasedCustomerIds = array();
+        $newBuyerKeys = array();
+
+        foreach ($orders as $order) {
+            $campaignCustomerId = campaignMatchOrderToSavedCustomer($order, $savedIndex);
+            $isSavedCustomer = $campaignCustomerId > 0;
+
+            // New customer means "was not on the campaign's list", which is the question
+            // the campaign is actually asking. It is not the same as "never bought before".
+            $customerType = $isSavedCustomer ? 'Return Customer' : 'New Customer';
+
+            $platform = (string) ($order['platform'] ?? '');
+            $buyerPlatformId = (string) ($order['buyer_id'] ?? '');
+            $buyerName = (string) ($order['buyer_name'] ?? '');
+
+            if ($isSavedCustomer) {
+                $purchasedCustomerIds[$campaignCustomerId] = $campaignCustomerId;
+            } else {
+                $newBuyerKeys[$platform . '|' . $buyerPlatformId] = true;
+            }
+
+            $safeOrderId = $connect->real_escape_string((string) ($order['order_id'] ?? ''));
+            $safeOrderNo = $connect->real_escape_string((string) ($order['order_no'] ?? ''));
+            $safePlatform = $connect->real_escape_string($platform);
+            $dupSql = "SELECT `id` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+                       WHERE `campaign_id`='" . (int) $campaignId . "'
+                         AND `platform`='" . $safePlatform . "'
+                         AND (`order_id`='" . $safeOrderId . "' OR `order_no`='" . $safeOrderNo . "')
+                         AND `status`='A' LIMIT 1";
+            $dupResult = mysqli_query($connect, $dupSql);
+            $existingRecordId = 0;
+            if ($dupResult && $dupResult->num_rows > 0) {
+                $existingRecordRow = $dupResult->fetch_assoc();
+                $existingRecordId = (int) ($existingRecordRow['id'] ?? 0);
+            }
+
+            $orderDetail = campaignNormalizeTextValue($order['order_detail'] ?? '', 65535);
+            $orderStatus = campaignNormalizeTextValue($order['order_status'] ?? '', 100);
+            $orderAmount = (float) ($order['order_amount'] ?? 0);
+            $orderDate = trim((string) ($order['order_date'] ?? ''));
+            $packageText = campaignNormalizeTextValue($order['package_text'] ?? '', 65535);
+            $packageIdForBind = isset($order['package_id']) && $order['package_id'] !== null ? (int) $order['package_id'] : 0;
+
+            if ($existingRecordId > 0) {
+                if ($updateRecordStmt) {
+                    if ($hasBuyerColumns) {
+                        $updateRecordStmt->bind_param('ississdssssi', $campaignCustomerId, $buyerPlatformId, $buyerName, $packageIdForBind, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId, $existingRecordId);
+                    } else {
+                        $updateRecordStmt->bind_param('iissdssssi', $campaignCustomerId, $packageIdForBind, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId, $existingRecordId);
+                    }
+                    if ($updateRecordStmt->execute()) {
+                        $summary['records_updated']++;
+                    }
+                }
+                $confirmedRecordIds[] = $existingRecordId;
                 continue;
             }
 
-            $fetchReason = '';
-            $orders = campaignPurchaseFetchOrdersForCustomer($connect, $financeConnect, $campaign, $customerRow, $periodStart, $periodEnd, $fetchReason);
-            $hasOldOrder = campaignPurchaseHasValidOrderBefore($connect, $financeConnect, $campaign, $customerRow, $periodStart);
-            $customerType = $hasOldOrder ? 'Return Customer' : 'New Customer';
-            $purchaseStatus = empty($orders) ? 'Not Purchased' : 'Purchased';
-
-            if (empty($orders)) {
-                $summary['customers_not_purchased']++;
-                if ($fetchReason !== '') {
-                    $reasonKey = explode(':', $fetchReason)[0];
-                    if (!isset($summary['skip_reasons'][$reasonKey])) {
-                        $summary['skip_reasons'][$reasonKey] = 0;
-                    }
-                    $summary['skip_reasons'][$reasonKey]++;
-                }
-            } else {
-                $summary['customers_purchased']++;
-            }
-
-            $confirmedRecordIds = array();
-
-            foreach ($orders as $order) {
-                $summary['orders_found']++;
-                $safeOrderId = $connect->real_escape_string((string) ($order['order_id'] ?? ''));
-                $safeOrderNo = $connect->real_escape_string((string) ($order['order_no'] ?? ''));
-                $safePlatform = $connect->real_escape_string((string) ($order['platform'] ?? ($customerRow['platform'] ?? '')));
-                $dupSql = "SELECT `id` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `campaign_customer_id`='" . $campaignCustomerId . "' AND `platform`='" . $safePlatform . "' AND (`order_id`='" . $safeOrderId . "' OR `order_no`='" . $safeOrderNo . "') AND `status`='A' LIMIT 1";
-                $dupResult = mysqli_query($connect, $dupSql);
-                $existingRecordId = 0;
-                if ($dupResult && $dupResult->num_rows > 0) {
-                    $existingRecordRow = $dupResult->fetch_assoc();
-                    $existingRecordId = (int) ($existingRecordRow['id'] ?? 0);
-                }
-
-                $orderDetail = campaignNormalizeTextValue($order['order_detail'] ?? '', 65535);
-                $orderStatus = campaignNormalizeTextValue($order['order_status'] ?? '', 100);
-                $orderAmount = (float) ($order['order_amount'] ?? 0);
-                $orderDate = trim((string) ($order['order_date'] ?? ''));
-                $packageText = campaignNormalizeTextValue($order['package_text'] ?? '', 65535);
-                $packageId = isset($order['package_id']) && $order['package_id'] !== null ? (int) $order['package_id'] : null;
-
-                if ($existingRecordId > 0) {
-                    if ($updateRecordStmt) {
-                        $packageIdForBind = is_null($packageId) ? 0 : (int) $packageId;
-                        $updateRecordStmt->bind_param('issdssssi', $packageIdForBind, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId, $existingRecordId);
-                        if ($updateRecordStmt->execute()) {
-                            $summary['records_updated']++;
-                        }
-                    }
-                    $confirmedRecordIds[] = $existingRecordId;
-                    continue;
-                }
-
-                if ($insertStmt) {
-                    $platform = (string) ($order['platform'] ?? ($customerRow['platform'] ?? ''));
-                    $orderId = (string) ($order['order_id'] ?? '');
-                    $orderNo = (string) ($order['order_no'] ?? '');
-                    $packageIdForBind = is_null($packageId) ? 0 : (int) $packageId;
+            if ($insertStmt) {
+                $orderId = (string) ($order['order_id'] ?? '');
+                $orderNo = (string) ($order['order_no'] ?? '');
+                if ($hasBuyerColumns) {
+                    $insertStmt->bind_param('iississsssdssss', $campaignId, $campaignCustomerId, $buyerPlatformId, $buyerName, $packageIdForBind, $platform, $orderId, $orderNo, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId);
+                } else {
                     $insertStmt->bind_param('iiisssssdssss', $campaignId, $campaignCustomerId, $packageIdForBind, $platform, $orderId, $orderNo, $orderDetail, $orderStatus, $orderAmount, $orderDate, $packageText, $customerType, $userId);
-                    if ($insertStmt->execute()) {
-                        $summary['records_inserted']++;
-                        $newRecordId = (int) $connect->insert_id;
-                        if ($newRecordId > 0) {
-                            $confirmedRecordIds[] = $newRecordId;
-                        }
+                }
+                if ($insertStmt->execute()) {
+                    $summary['records_inserted']++;
+                    $newRecordId = (int) $connect->insert_id;
+                    if ($newRecordId > 0) {
+                        $confirmedRecordIds[] = $newRecordId;
                     }
                 }
             }
-
-            // Reconcile: any purchase record still stored for this campaign customer
-            // that this run did NOT re-confirm is stale (e.g. it was only ever a
-            // false-positive match from a since-fixed matching rule, or the order fell
-            // out of the period). Retire it instead of leaving it to inflate the report.
-            //
-            // Only do this when the current run actually found at least one order for
-            // this customer. If it found none, that's ambiguous - it could genuinely be
-            // "no purchase this period", or it could be a lookup/config problem - and
-            // wiping previously-confirmed records on an ambiguous empty result risks
-            // silently destroying real data. Leave existing records untouched in that
-            // case; a later refresh that does find matches will still clean them up.
-            // Auto-discovered customers have no campaign_customer row, so they all carry
-            // campaign_customer_id = 0. Reconciling per customer against that shared id
-            // made each one retire the records the customers before it had just
-            // confirmed, leaving only the last customer's purchases behind - which is why
-            // the report under-counted. Their ids are collected and reconciled once, after
-            // every customer has been processed.
-            if ($campaignCustomerId > 0) {
-                if (!empty($confirmedRecordIds)) {
-                    $confirmedIdsSql = implode(',', array_map('intval', $confirmedRecordIds));
-                    mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
-                        SET `status`='D', `update_by`='" . $connect->real_escape_string((string) $userId) . "', `update_date`=CURDATE(), `update_time`=CURTIME()
-                        WHERE `campaign_id`='" . (int) $campaignId . "'
-                          AND `campaign_customer_id`='" . $campaignCustomerId . "'
-                          AND `status`='A'
-                          AND `id` NOT IN (" . $confirmedIdsSql . ")");
-                }
-            } else {
-                foreach ($confirmedRecordIds as $confirmedRecordId) {
-                    $autoConfirmedRecordIds[] = (int) $confirmedRecordId;
-                }
-            }
-
-            // Only a real campaign_customer row has a purchase_status to carry; an
-            // auto-discovered customer would just be an UPDATE ... WHERE id=0.
-            if ($campaignCustomerId > 0 && $customerStatusStmt) {
-                $customerStatusStmt->bind_param('ssii', $purchaseStatus, $userId, $campaignCustomerId, $campaignId);
-                $customerStatusStmt->execute();
-            }
-        }
-
-        // Now that every auto-discovered customer has been seen, anything still stored
-        // against campaign_customer_id = 0 that this run never re-confirmed is stale.
-        // Guarded the same way as the per-customer case: only reconcile when the run
-        // actually found orders, so an empty result from a lookup problem cannot wipe
-        // real data.
-        if (!empty($autoConfirmedRecordIds)) {
-            $autoConfirmedIdsSql = implode(',', array_map('intval', array_unique($autoConfirmedRecordIds)));
-            mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
-                SET `status`='D', `update_by`='" . $connect->real_escape_string((string) $userId) . "', `update_date`=CURDATE(), `update_time`=CURTIME()
-                WHERE `campaign_id`='" . (int) $campaignId . "'
-                  AND `campaign_customer_id`='0'
-                  AND `status`='A'
-                  AND `id` NOT IN (" . $autoConfirmedIdsSql . ")");
         }
 
         if ($insertStmt) {
@@ -1775,7 +1912,37 @@ if (!function_exists('campaignRunPurchaseCheck')) {
         if ($updateRecordStmt) {
             $updateRecordStmt->close();
         }
+
+        $summary['customers_purchased'] = count($purchasedCustomerIds);
+        $summary['customers_not_purchased'] = max(0, count($savedIndex['rows']) - count($purchasedCustomerIds));
+        $summary['new_customers'] = count($newBuyerKeys);
+        $summary['debug_info'][] = 'Saved customers who ordered: ' . $summary['customers_purchased']
+            . ', saved customers who did not: ' . $summary['customers_not_purchased']
+            . ', new customers: ' . $summary['new_customers'];
+
+        // The scan saw every order that qualifies, so anything still stored for this
+        // campaign that it did not re-confirm no longer belongs - the period was edited,
+        // the packages changed, or the order was returned. Skipped when the scan found
+        // nothing at all, because an empty result is ambiguous and could be a lookup
+        // problem rather than a genuinely empty campaign.
+        if (!empty($confirmedRecordIds)) {
+            $confirmedIdsSql = implode(',', array_map('intval', array_unique($confirmedRecordIds)));
+            mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+                SET `status`='D', `update_by`='" . $safeUserId . "', `update_date`=CURDATE(), `update_time`=CURTIME()
+                WHERE `campaign_id`='" . (int) $campaignId . "'
+                  AND `status`='A'
+                  AND `id` NOT IN (" . $confirmedIdsSql . ")");
+        }
+
+        // Purchase status on the saved customers: exactly those matched by an order in the
+        // scan have purchased, and the rest have not.
+        $customerStatusStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_CUSTOMER) . " SET `purchase_status`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=? AND `campaign_id`=?");
         if ($customerStatusStmt) {
+            foreach ($savedIndex['rows'] as $savedCustomerId => $savedCustomerRow) {
+                $purchaseStatus = isset($purchasedCustomerIds[$savedCustomerId]) ? 'Purchased' : 'Not Purchased';
+                $customerStatusStmt->bind_param('ssii', $purchaseStatus, $userId, $savedCustomerId, $campaignId);
+                $customerStatusStmt->execute();
+            }
             $customerStatusStmt->close();
         }
 
@@ -1783,6 +1950,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
 
         return $summary;
     }
+
 }
 
 if (!function_exists('campaignRuleDecodeJson')) {
