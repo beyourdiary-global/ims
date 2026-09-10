@@ -1278,9 +1278,13 @@ if (!function_exists('campaignAutoDiscoverCustomersForPackages')) {
             if ($result) {
                 while ($row = $result->fetch_assoc()) {
                     $custName = trim((string)($row['customer_name'] ?? ''));
-                    if ($custName !== '' && !isset($customers[$custName])) {
+                    // Keyed by platform as well as name: the same name on two platforms is
+                    // two different customers, and keying on the name alone silently
+                    // dropped whichever platform was read second.
+                    $customerKey = $platform . '|' . $custName;
+                    if ($custName !== '' && !isset($customers[$customerKey])) {
                         // Create synthetic customer record for auto-discovered customers
-                        $customers[$custName] = array(
+                        $customers[$customerKey] = array(
                             'id' => 0,  // No campaign_customer id - this is auto-discovered
                             'campaign_id' => $campaignId,
                             'customer_name' => $custName,
@@ -1597,25 +1601,38 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             }
         }
 
-        // Merge auto-discovered and manual customers, avoiding duplicates by customer_name
-        $customersByName = array();
-        foreach ($customers as $customer) {
-            $custName = trim((string)($customer['customer_name'] ?? ''));
-            if ($custName !== '') {
-                $customersByName[$custName] = $customer;
+        // Merge auto-discovered and manual customers. The key is platform plus name, not
+        // name alone: two customers with the same name on different platforms are two
+        // different people, and collapsing them lost one of them along with their orders.
+        // A manual row still overrides the auto-discovered one for the same platform and
+        // name, because it carries a real campaign_customer id.
+        $customersByKey = array();
+        $droppedUnnamed = 0;
+        foreach (array($customers, $manualCustomers) as $customerList) {
+            foreach ($customerList as $customer) {
+                $custName = trim((string) ($customer['customer_name'] ?? ''));
+                if ($custName === '') {
+                    // Orders are matched on the customer name, so a nameless row can never
+                    // match anything. Counted rather than dropped in silence.
+                    $droppedUnnamed++;
+                    continue;
+                }
+
+                $customersByKey[trim((string) ($customer['platform'] ?? '')) . '|' . $custName] = $customer;
             }
         }
-        foreach ($manualCustomers as $customer) {
-            $custName = trim((string)($customer['customer_name'] ?? ''));
-            if ($custName !== '') {
-                $customersByName[$custName] = $customer;  // Manual customer overrides auto-discovered
-            }
+        $customers = array_values($customersByKey);
+        if ($droppedUnnamed > 0) {
+            $summary['notes'][] = 'Skipped ' . $droppedUnnamed . ' customer row(s) with no customer name.';
         }
-        $customers = array_values($customersByName);
 
         $insertStmt = $connect->prepare("INSERT INTO " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " (`campaign_id`,`campaign_customer_id`,`package_id`,`platform`,`order_id`,`order_no`,`order_detail`,`order_status`,`order_amount`,`order_date`,`package_text`,`customer_type`,`create_by`,`create_date`,`create_time`,`status`) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,CURDATE(),CURTIME(),'A')");
         $updateRecordStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " SET `package_id`=?, `order_detail`=?, `order_status`=?, `order_amount`=?, `order_date`=?, `package_text`=?, `customer_type`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
         $userId = campaignCurrentUserId();
+        // Prepared once instead of per customer, which re-prepared and closed it on every
+        // iteration.
+        $customerStatusStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_CUSTOMER) . " SET `purchase_status`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=? AND `campaign_id`=?");
+        $autoConfirmedRecordIds = array();
 
         foreach ($customers as $customerRow) {
             $summary['checked_customers']++;
@@ -1707,22 +1724,49 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             // wiping previously-confirmed records on an ambiguous empty result risks
             // silently destroying real data. Leave existing records untouched in that
             // case; a later refresh that does find matches will still clean them up.
-            if (!empty($confirmedRecordIds)) {
-                $confirmedIdsSql = implode(',', array_map('intval', $confirmedRecordIds));
-                mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
-                    SET `status`='D', `update_by`='" . $connect->real_escape_string((string) $userId) . "', `update_date`=CURDATE(), `update_time`=CURTIME()
-                    WHERE `campaign_id`='" . (int) $campaignId . "'
-                      AND `campaign_customer_id`='" . $campaignCustomerId . "'
-                      AND `status`='A'
-                      AND `id` NOT IN (" . $confirmedIdsSql . ")");
+            // Auto-discovered customers have no campaign_customer row, so they all carry
+            // campaign_customer_id = 0. Reconciling per customer against that shared id
+            // made each one retire the records the customers before it had just
+            // confirmed, leaving only the last customer's purchases behind - which is why
+            // the report under-counted. Their ids are collected and reconciled once, after
+            // every customer has been processed.
+            if ($campaignCustomerId > 0) {
+                if (!empty($confirmedRecordIds)) {
+                    $confirmedIdsSql = implode(',', array_map('intval', $confirmedRecordIds));
+                    mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+                        SET `status`='D', `update_by`='" . $connect->real_escape_string((string) $userId) . "', `update_date`=CURDATE(), `update_time`=CURTIME()
+                        WHERE `campaign_id`='" . (int) $campaignId . "'
+                          AND `campaign_customer_id`='" . $campaignCustomerId . "'
+                          AND `status`='A'
+                          AND `id` NOT IN (" . $confirmedIdsSql . ")");
+                }
+            } else {
+                foreach ($confirmedRecordIds as $confirmedRecordId) {
+                    $autoConfirmedRecordIds[] = (int) $confirmedRecordId;
+                }
             }
 
-            $updateStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_CUSTOMER) . " SET `purchase_status`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=? AND `campaign_id`=?");
-            if ($updateStmt) {
-                $updateStmt->bind_param('ssii', $purchaseStatus, $userId, $campaignCustomerId, $campaignId);
-                $updateStmt->execute();
-                $updateStmt->close();
+            // Only a real campaign_customer row has a purchase_status to carry; an
+            // auto-discovered customer would just be an UPDATE ... WHERE id=0.
+            if ($campaignCustomerId > 0 && $customerStatusStmt) {
+                $customerStatusStmt->bind_param('ssii', $purchaseStatus, $userId, $campaignCustomerId, $campaignId);
+                $customerStatusStmt->execute();
             }
+        }
+
+        // Now that every auto-discovered customer has been seen, anything still stored
+        // against campaign_customer_id = 0 that this run never re-confirmed is stale.
+        // Guarded the same way as the per-customer case: only reconcile when the run
+        // actually found orders, so an empty result from a lookup problem cannot wipe
+        // real data.
+        if (!empty($autoConfirmedRecordIds)) {
+            $autoConfirmedIdsSql = implode(',', array_map('intval', array_unique($autoConfirmedRecordIds)));
+            mysqli_query($connect, "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+                SET `status`='D', `update_by`='" . $connect->real_escape_string((string) $userId) . "', `update_date`=CURDATE(), `update_time`=CURTIME()
+                WHERE `campaign_id`='" . (int) $campaignId . "'
+                  AND `campaign_customer_id`='0'
+                  AND `status`='A'
+                  AND `id` NOT IN (" . $autoConfirmedIdsSql . ")");
         }
 
         if ($insertStmt) {
@@ -1730,6 +1774,9 @@ if (!function_exists('campaignRunPurchaseCheck')) {
         }
         if ($updateRecordStmt) {
             $updateRecordStmt->close();
+        }
+        if ($customerStatusStmt) {
+            $customerStatusStmt->close();
         }
 
         campaignBackfillPackageIds($connect, $campaignId);
