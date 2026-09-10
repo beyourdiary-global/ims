@@ -1214,264 +1214,6 @@ if (!function_exists('campaignPurchaseResolveOrderStatusDisplayName')) {
     }
 }
 
-if (!function_exists('campaignAutoDiscoverCustomersForPackages')) {
-    function campaignAutoDiscoverCustomersForPackages($connect, $financeConnect, $campaign, $packageIds, $fromDate, $toDate)
-    {
-        $customers = array();
-        if (empty($packageIds) || !($financeConnect instanceof mysqli)) {
-            return $customers;
-        }
-
-        $campaignId = (int) ($campaign['id'] ?? 0);
-        $configs = campaignPurchasePlatformConfigs($connect, $financeConnect);
-
-        foreach ($configs as $platform => $config) {
-            if (empty($config['table']) || !($config['conn'] instanceof mysqli)) {
-                continue;
-            }
-
-            $table = (string) $config['table'];
-            if (!campaignTableExists($config['conn'], $table)) {
-                continue;
-            }
-
-            // Find all distinct customers who bought these packages
-            $packageConditions = array();
-            $packageCol = campaignGetFirstExistingColumn($config['conn'], $table, isset($config['package_cols']) ? $config['package_cols'] : array());
-            if ($packageCol === '') {
-                continue;
-            }
-
-            foreach ($packageIds as $pkgId) {
-                $escapedId = $config['conn']->real_escape_string((string)$pkgId);
-                $packageConditions[] = campaignPurchaseQuoteColumn($packageCol) . " LIKE '%" . $escapedId . "%'";
-            }
-
-            $dateCol = campaignGetFirstExistingColumn($config['conn'], $table, isset($config['date_cols']) ? $config['date_cols'] : array());
-            if ($dateCol === '') {
-                continue;
-            }
-
-            // For customer column, prioritize customer_name over other identifiers
-            $preferredCustomerCols = array('customer_name', 'buyer_username', 'buyer', 'customer_id', 'cust_id', 'name');
-            $customerCol = campaignGetFirstExistingColumn($config['conn'], $table, $preferredCustomerCols);
-            if ($customerCol === '') {
-                continue;
-            }
-
-            $safeFromDate = $config['conn']->real_escape_string(campaignDateValue($fromDate));
-            $safeToDate = $config['conn']->real_escape_string(campaignDateValue($toDate));
-
-            $sql = "SELECT DISTINCT " . campaignPurchaseQuoteColumn($customerCol) . " as customer_name FROM `" . $table . "`
-                    WHERE (" . implode(' OR ', $packageConditions) . ")
-                    AND DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") >= '" . $safeFromDate . "'
-                    AND DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") <= '" . $safeToDate . "'
-                    ORDER BY customer_name";
-
-            $result = $config['conn']->query($sql);
-            if ($result) {
-                while ($row = $result->fetch_assoc()) {
-                    $custName = trim((string)($row['customer_name'] ?? ''));
-                    // Keyed by platform as well as name: the same name on two platforms is
-                    // two different customers, and keying on the name alone silently
-                    // dropped whichever platform was read second.
-                    $customerKey = $platform . '|' . $custName;
-                    if ($custName !== '' && !isset($customers[$customerKey])) {
-                        // Create synthetic customer record for auto-discovered customers
-                        $customers[$customerKey] = array(
-                            'id' => 0,  // No campaign_customer id - this is auto-discovered
-                            'campaign_id' => $campaignId,
-                            'customer_name' => $custName,
-                            'customer_id' => '',
-                            'customer_contact' => '',
-                            'customer_label' => '',
-                            'email' => '',
-                            'phone' => '',
-                            'platform' => $platform,
-                            'status' => 'A',
-                            '_auto_discovered' => true,
-                        );
-                    }
-                }
-            }
-        }
-
-        return array_values($customers);
-    }
-}
-
-if (!function_exists('campaignPurchaseFetchOrdersForCustomer')) {
-    function campaignPurchaseFetchOrdersForCustomer($connect, $financeConnect, $campaign, $campaignCustomer, $fromDate, $toDate, &$reasonOut = null)
-    {
-        $orders = array();
-        $reasonOut = '';
-        $platform = trim((string) ($campaignCustomer['platform'] ?? ''));
-        $config = campaignPurchaseResolveConfig($connect, $financeConnect, $platform);
-        if (empty($config) || empty($config['conn']) || empty($config['table'])) {
-            $reasonOut = 'no_platform_config:' . $platform;
-            return $orders;
-        }
-
-        $orderConn = $config['conn'];
-        $table = (string) $config['table'];
-        if (!($orderConn instanceof mysqli)) {
-            $reasonOut = 'no_order_connection';
-            return $orders;
-        }
-        if (!campaignTableExists($orderConn, $table)) {
-            $reasonOut = 'order_table_missing:' . $table;
-            return $orders;
-        }
-
-        $orderNoCol = campaignGetFirstExistingColumn($orderConn, $table, $config['order_no_cols']);
-        $dateCol = campaignGetFirstExistingColumn($orderConn, $table, $config['date_cols']);
-        $timeCol = campaignGetFirstExistingColumn($orderConn, $table, $config['time_cols']);
-        $amountCol = campaignGetFirstExistingColumn($orderConn, $table, $config['amount_cols']);
-        $orderStatusCol = campaignGetFirstExistingColumn($orderConn, $table, isset($config['order_status_cols']) ? $config['order_status_cols'] : array('order_status', 'status'));
-        $packageCol = campaignGetFirstExistingColumn($orderConn, $table, $config['package_cols']);
-        $detailCol = campaignGetFirstExistingColumn($orderConn, $table, $config['detail_cols']);
-
-        if ($dateCol === '') {
-            $reasonOut = 'no_date_column:' . $table;
-            return $orders;
-        }
-
-        $matchParts = campaignPurchaseBuildCustomerMatchParts($orderConn, $table, $config, $campaignCustomer);
-        if (empty($matchParts)) {
-            $reasonOut = 'no_match_parts';
-            return $orders;
-        }
-
-        // If the campaign has specific packages selected, only orders for those
-        // packages should count toward this campaign's purchases/sales - otherwise a
-        // customer's unrelated purchases in the same date window get counted too. An
-        // empty selection means "no package restriction" (existing campaigns keep
-        // their old behavior of counting every purchase in the period).
-        $campaignPackageIds = campaignFetchCampaignPackageIds($connect, (int) ($campaign['id'] ?? 0));
-
-        $safeFromDate = $orderConn->real_escape_string(campaignDateValue($fromDate));
-        $safeToDate = $orderConn->real_escape_string(campaignDateValue($toDate));
-        if ($safeFromDate === '') {
-            $safeFromDate = date('Y-m-01');
-        }
-        if ($safeToDate === '') {
-            $safeToDate = date('Y-m-d');
-        }
-
-        $where = array(
-            campaignPurchaseRowStatusWhere($orderConn, $table, $config),
-            "DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") >= '" . $safeFromDate . "'",
-            "DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") <= '" . $safeToDate . "'",
-            '(' . implode(' OR ', $matchParts) . ')',
-        );
-
-        $selectColumns = array('`id`');
-        foreach (array($orderNoCol, $dateCol, $timeCol, $amountCol, $orderStatusCol, $packageCol, $detailCol) as $column) {
-            $quotedCol = campaignPurchaseQuoteColumn($column);
-            if ($column !== '' && !in_array($quotedCol, $selectColumns, true)) {
-                $selectColumns[] = $quotedCol;
-            }
-        }
-
-        $sql = "SELECT " . implode(',', $selectColumns) . " FROM " . campaignTableName($table) . " WHERE " . implode(' AND ', $where) . " ORDER BY DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") ASC, `id` ASC LIMIT 500";
-        $result = mysqli_query($orderConn, $sql);
-        if (!$result) {
-            $reasonOut = 'query_failed:' . mysqli_error($orderConn);
-            return $orders;
-        }
-        if ($result->num_rows === 0) {
-            $reasonOut = 'query_ran_zero_rows:' . count($matchParts) . '_match_parts';
-        }
-
-        while ($row = $result->fetch_assoc()) {
-            $orderId = campaignPurchaseReadCell($row, 'id');
-            $orderNo = $orderNoCol !== '' ? campaignPurchaseReadCell($row, $orderNoCol) : '';
-            if ($orderNo === '') {
-                $orderNo = $orderId;
-            }
-
-            $orderDateRaw = $dateCol !== '' ? campaignPurchaseReadCell($row, $dateCol) : '';
-            $orderTimeRaw = $timeCol !== '' ? campaignPurchaseReadCell($row, $timeCol) : '';
-            $orderDateTime = trim($orderDateRaw . ' ' . $orderTimeRaw);
-            if ($orderDateTime === '') {
-                $orderDateTime = null;
-            }
-
-            $amount = $amountCol !== '' && is_numeric($row[$amountCol] ?? null) ? (float) $row[$amountCol] : 0.00;
-            $detailText = $detailCol !== '' ? campaignNormalizeTextValue($row[$detailCol] ?? '', 65535) : '';
-            $packageText = $packageCol !== '' ? campaignNormalizeTextValue($row[$packageCol] ?? '', 65535) : '';
-
-            $orderPackageIds = campaignPurchaseExtractPackageIds($packageText, $connect);
-            $packageId = null;
-
-            if (!empty($campaignPackageIds)) {
-                if (empty($orderPackageIds) || empty(array_intersect($orderPackageIds, $campaignPackageIds))) {
-                    continue;
-                }
-                $matchingIds = array_intersect($orderPackageIds, $campaignPackageIds);
-                $packageId = !empty($matchingIds) ? reset($matchingIds) : null;
-            } elseif (!empty($orderPackageIds)) {
-                $packageId = reset($orderPackageIds);
-            }
-
-            $orders[] = array(
-                'platform' => $platform,
-                'order_id' => $orderId,
-                'order_no' => $orderNo,
-                'order_detail' => $detailText !== '' ? $detailText : $packageText,
-                'order_status' => $orderStatusCol !== '' ? campaignNormalizeTextValue($row[$orderStatusCol] ?? '', 100) : '',
-                'order_amount' => $amount,
-                'order_date' => $orderDateTime,
-                'package_text' => $packageText !== '' ? $packageText : $detailText,
-                'package_id' => $packageId,
-            );
-        }
-
-        if (empty($orders) && !empty($campaignPackageIds)) {
-            $reasonOut = 'no_orders_for_selected_packages';
-        }
-
-        return $orders;
-    }
-}
-
-if (!function_exists('campaignPurchaseHasValidOrderBefore')) {
-    function campaignPurchaseHasValidOrderBefore($connect, $financeConnect, $campaign, $campaignCustomer, $beforeDate)
-    {
-        $platform = trim((string) ($campaignCustomer['platform'] ?? ''));
-        $config = campaignPurchaseResolveConfig($connect, $financeConnect, $platform);
-        if (empty($config) || empty($config['conn']) || empty($config['table'])) {
-            return false;
-        }
-
-        $orderConn = $config['conn'];
-        $table = (string) $config['table'];
-        if (!($orderConn instanceof mysqli) || !campaignTableExists($orderConn, $table)) {
-            return false;
-        }
-
-        $dateCol = campaignGetFirstExistingColumn($orderConn, $table, $config['date_cols']);
-        if ($dateCol === '') {
-            return false;
-        }
-
-        $matchParts = campaignPurchaseBuildCustomerMatchParts($orderConn, $table, $config, $campaignCustomer);
-        if (empty($matchParts)) {
-            return false;
-        }
-
-        $safeBefore = $orderConn->real_escape_string(campaignDateValue($beforeDate));
-        if ($safeBefore === '') {
-            return false;
-        }
-
-        $sql = "SELECT `id` FROM " . campaignTableName($table) . " WHERE " . campaignPurchaseRowStatusWhere($orderConn, $table, $config) . " AND DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") < '" . $safeBefore . "' AND (" . implode(' OR ', $matchParts) . ") LIMIT 1";
-        $result = mysqli_query($orderConn, $sql);
-
-        return ($result && $result->num_rows > 0);
-    }
-}
-
 if (!function_exists('campaignBackfillPackageIds')) {
     function campaignBackfillPackageIds($connect, $campaignId)
     {
@@ -1572,6 +1314,29 @@ if (!function_exists('campaignResolveBuyerDisplayName')) {
 
         $cache[$cacheKey] = $resolved;
         return $resolved;
+    }
+}
+
+if (!function_exists('campaignBuyerIdentitySql')) {
+    /**
+     * SQL that identifies the buyer behind a purchase record, whichever kind they are: a
+     * customer saved on the campaign is identified by their campaign_customer id, and a
+     * new customer - who has no such row - by their platform and platform customer id.
+     * Counting on campaign_customer_id alone collapses every new customer into one,
+     * because they all carry 0.
+     */
+    function campaignBuyerIdentitySql($connect, $alias = '')
+    {
+        $prefix = $alias !== '' ? ('`' . $alias . '`.') : '';
+
+        if (!campaignColumnExists($connect, CAMPAIGN_PURCHASE_RECORD, 'buyer_platform_id')) {
+            return $prefix . '`campaign_customer_id`';
+        }
+
+        return "CASE WHEN " . $prefix . "`campaign_customer_id` > 0
+                     THEN CONCAT('C', " . $prefix . "`campaign_customer_id`)
+                     ELSE CONCAT('B', IFNULL(" . $prefix . "`platform`,''), '|', IFNULL(" . $prefix . "`buyer_platform_id`,''))
+                END";
     }
 }
 
