@@ -1975,12 +1975,74 @@ if (!function_exists('customerFollowUpBuildReadableLogMessage')) {
     }
 }
 
+if (!function_exists('customerFollowUpFormatStateValueLabel')) {
+    function customerFollowUpFormatStateValueLabel($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        // Stored as approval_status style values ("not_required"); round statuses are
+        // already written for reading and are left as they are.
+        return ucwords(str_replace('_', ' ', $value));
+    }
+}
+
+if (!function_exists('customerFollowUpBuildStateChangeList')) {
+    /**
+     * The workflow states an action moved, as from/to. Only fields the action actually
+     * carried and actually changed are returned, so the history line names what happened
+     * instead of restating the whole round.
+     */
+    function customerFollowUpBuildStateChangeList($oldValue, $newValue)
+    {
+        $fieldLabels = array(
+            'approval_status' => 'Approval',
+            'round_status' => 'Status',
+            'postpone_status' => 'Postponement',
+        );
+
+        $changes = array();
+        foreach ($fieldLabels as $field => $label) {
+            if (!isset($newValue[$field])) {
+                continue;
+            }
+
+            $to = trim((string) $newValue[$field]);
+            $from = trim((string) (isset($oldValue[$field]) ? $oldValue[$field] : ''));
+            if ($to === '' || strcasecmp($from, $to) === 0) {
+                continue;
+            }
+
+            $changes[] = array(
+                'field' => $label,
+                'from' => customerFollowUpFormatStateValueLabel($from),
+                'to' => customerFollowUpFormatStateValueLabel($to),
+            );
+        }
+
+        return $changes;
+    }
+}
+
 if (!function_exists('customerFollowUpCreateActionArtifacts')) {
     function customerFollowUpCreateActionArtifacts($connect, $followUpRow, $roundRow, $actionType, $actionLabel, $oldValue, $newValue, $remark = '', $attachment = '', $actorUserId = null)
     {
         $actorUserId = trim((string) ($actorUserId !== null ? $actorUserId : (defined('USER_ID') ? USER_ID : 'SYSTEM')));
         $actionDate = customerFollowUpNowDate();
         $actionTime = customerFollowUpNowTime();
+
+        // Work out what this action moved, so approving, rejecting or completing a round
+        // records the change rather than leaving the entry showing whatever the previous
+        // action reported - an approval that never appears reads as though it never
+        // happened. Callers that describe their own changes keep theirs.
+        $historyChanges = (is_array($newValue) && isset($newValue['history_changes']) && is_array($newValue['history_changes']))
+            ? $newValue['history_changes']
+            : customerFollowUpBuildStateChangeList(
+                is_array($oldValue) ? $oldValue : array(),
+                is_array($newValue) ? $newValue : array()
+            );
 
         customerFollowUpInsertActionLog($connect, array(
             'follow_up_id' => isset($followUpRow['id']) ? (int) $followUpRow['id'] : 0,
@@ -2035,9 +2097,7 @@ if (!function_exists('customerFollowUpCreateActionArtifacts')) {
             'upsert' => true,
             'action_label' => $actionLabel,
             'action_remark' => $remark,
-            'extra_changes' => (is_array($newValue) && isset($newValue['history_changes']) && is_array($newValue['history_changes']))
-                ? $newValue['history_changes']
-                : array(),
+            'extra_changes' => $historyChanges,
             'round_no' => isset($roundRow['round_no']) ? (int) $roundRow['round_no'] : 0,
             'actor_display_name' => (function_exists('customerFollowUpGetUserDisplayName') && ctype_digit(trim((string) $actorUserId)))
                 ? customerFollowUpGetUserDisplayName($connect, (int) $actorUserId)
