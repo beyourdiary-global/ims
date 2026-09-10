@@ -36,6 +36,45 @@ if (!function_exists('customerFollowUpNormalizePlatform')) {
     }
 }
 
+if (!function_exists('customerFollowUpNormalizeCaseSource')) {
+    /**
+     * 'order'    = case opened when an order was marked Received (the original flow).
+     * 'customer' = case opened straight from a customer page follow-up entry, no order.
+     */
+    function customerFollowUpNormalizeCaseSource($caseSource)
+    {
+        $caseSource = strtolower(trim((string) $caseSource));
+        return $caseSource === 'customer' ? 'customer' : 'order';
+    }
+}
+
+if (!function_exists('customerFollowUpSupportsCaseSource')) {
+    function customerFollowUpSupportsCaseSource($connect)
+    {
+        return $connect instanceof mysqli
+            && function_exists('shopeeOmsTableHasColumn')
+            && defined('dbname')
+            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP, 'case_source');
+    }
+}
+
+if (!function_exists('customerFollowUpIsOrderlessCase')) {
+    function customerFollowUpIsOrderlessCase($followUpRow)
+    {
+        if (!is_array($followUpRow) || empty($followUpRow)) {
+            return false;
+        }
+
+        if (isset($followUpRow['case_source'])
+            && customerFollowUpNormalizeCaseSource($followUpRow['case_source']) === 'customer'
+        ) {
+            return true;
+        }
+
+        return (int) (isset($followUpRow['order_id']) ? $followUpRow['order_id'] : 0) <= 0;
+    }
+}
+
 if (!function_exists('customerFollowUpNormalizeStatus')) {
     function customerFollowUpNormalizeStatus($status)
     {
@@ -626,7 +665,16 @@ if (!function_exists('customerFollowUpCreateFollowUpCase')) {
     {
         $platform = customerFollowUpNormalizePlatform(isset($data['platform']) ? $data['platform'] : '');
         $orderId = isset($data['order_id']) ? (int) $data['order_id'] : 0;
-        if ($platform === '' || $orderId <= 0) {
+        $caseSource = customerFollowUpNormalizeCaseSource(isset($data['case_source']) ? $data['case_source'] : '');
+        if ($platform === '') {
+            return 0;
+        }
+        // Customer-sourced cases are opened straight from a customer page and have no
+        // order behind them; order-sourced cases still require a real order.
+        if ($caseSource === 'order' && $orderId <= 0) {
+            return 0;
+        }
+        if ($caseSource === 'customer' && (int) (isset($data['customer_id']) ? $data['customer_id'] : 0) <= 0) {
             return 0;
         }
 
@@ -636,9 +684,11 @@ if (!function_exists('customerFollowUpCreateFollowUpCase')) {
         $createDate = isset($data['create_date']) ? (string) $data['create_date'] : customerFollowUpNowDate();
         $createTime = isset($data['create_time']) ? (string) $data['create_time'] : customerFollowUpNowTime();
 
+        $hasCaseSourceColumn = customerFollowUpSupportsCaseSource($connect);
+
         $sql = "INSERT INTO `" . CUSTOMER_FOLLOW_UP . "` (
                     `platform`,
-                    `order_id`,
+                    " . ($hasCaseSourceColumn ? "`case_source`,\n                    " : "") . "`order_id`,
                     `order_no`,
                     `customer_id`,
                     `customer_name`,
@@ -664,7 +714,7 @@ if (!function_exists('customerFollowUpCreateFollowUpCase')) {
                     `status`
                 ) VALUES (
                     '" . customerFollowUpEscape($connect, $platform) . "',
-                    " . $orderId . ",
+                    " . ($hasCaseSourceColumn ? ("'" . customerFollowUpEscape($connect, $caseSource) . "',\n                    ") : "") . $orderId . ",
                     '" . customerFollowUpEscape($connect, isset($data['order_no']) ? $data['order_no'] : '') . "',
                     " . (int) (isset($data['customer_id']) ? $data['customer_id'] : 0) . ",
                     '" . customerFollowUpEscape($connect, isset($data['customer_name']) ? $data['customer_name'] : '') . "',
@@ -781,6 +831,17 @@ if (!function_exists('customerFollowUpCalculateMaxAllowedNextFollowUpDate')) {
         $roundNo = max(1, (int) (isset($roundRow['round_no']) ? $roundRow['round_no'] : (isset($followUpRow['current_round_no']) ? $followUpRow['current_round_no'] : 1)));
         $customerType = strtolower(trim((string) (isset($followUpRow['customer_type']) ? $followUpRow['customer_type'] : 'new')));
 
+        // The round-based caps below are all measured from an order's received date.
+        // A customer-sourced case has no order, so there is nothing to measure from and
+        // the date the user picks on the customer page is taken as-is.
+        if (customerFollowUpIsOrderlessCase($followUpRow)) {
+            return array(
+                'success' => true,
+                'max_date' => '',
+                'rule_label' => 'Customer-sourced follow-up has no next follow-up date limit.',
+            );
+        }
+
         if ($customerType === 'return') {
             return array(
                 'success' => true,
@@ -859,6 +920,15 @@ if (!function_exists('customerFollowUpValidateNextFollowUpDateLimit')) {
         $limitInfo = customerFollowUpCalculateMaxAllowedNextFollowUpDate($followUpRow, $roundRow);
         if (empty($limitInfo['success'])) {
             return array('success' => false, 'message' => 'Unable to calculate follow-up date limit.');
+        }
+
+        if (trim((string) $limitInfo['max_date']) === '') {
+            return array(
+                'success' => true,
+                'message' => '',
+                'max_date' => '',
+                'rule_label' => isset($limitInfo['rule_label']) ? $limitInfo['rule_label'] : '',
+            );
         }
 
         if ($nextFollowUpDate > $limitInfo['max_date']) {
@@ -1074,6 +1144,33 @@ if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
 
             $insertColumns .= ", `summary`";
             $insertValues .= ",\n                    " . ($existingSummary !== '' ? ("'" . customerFollowUpEscape($connect, $existingSummary) . "'") : 'NULL');
+        }
+
+        // Carry the follow-up case, round and scheduled date onto the log row so the
+        // customer page shows the same follow-up the Follow Up List does, and can link
+        // back to it, instead of showing an unrelated note with an empty follow-up date.
+        $followUpId = isset($data['follow_up_id']) ? (int) $data['follow_up_id'] : 0;
+        $roundId = isset($data['round_id']) ? (int) $data['round_id'] : 0;
+        $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
+
+        if ($followUpId > 0 && function_exists('urlUserRecordLogColumnExists')) {
+            if (urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_id')) {
+                $insertColumns .= ", `follow_up_id`";
+                $insertValues .= ",\n                    " . $followUpId;
+            }
+            if ($roundId > 0 && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_round_id')) {
+                $insertColumns .= ", `follow_up_round_id`";
+                $insertValues .= ",\n                    " . $roundId;
+            }
+        }
+
+        if ($nextFollowUpDate !== ''
+            && customerFollowUpIsValidDateString($nextFollowUpDate)
+            && function_exists('urlUserRecordLogColumnExists')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'next_follow_up_date')
+        ) {
+            $insertColumns .= ", `next_follow_up_date`";
+            $insertValues .= ",\n                    '" . customerFollowUpEscape($connect, $nextFollowUpDate) . "'";
         }
 
         $sql = "INSERT INTO `" . USER_RECORD_LOG . "` (
@@ -1642,6 +1739,9 @@ if (!function_exists('customerFollowUpCreateActionArtifacts')) {
             'content' => customerFollowUpBuildReadableLogMessage($connect, $followUpRow, $roundRow, $actionType, $actionLabel, $newValue, $remark, $actorUserId, $actionDate, $actionTime),
             'attachment' => $attachment,
             'created_by' => $actorUserId,
+            'follow_up_id' => $followUpId,
+            'round_id' => isset($roundRow['id']) ? (int) $roundRow['id'] : 0,
+            'next_follow_up_date' => isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : '',
         ));
     }
 }
@@ -2262,6 +2362,8 @@ if (!function_exists('customerFollowUpProcessTagAssignmentExtras')) {
                 'content' => $manualUserRecordLog,
                 'attachment' => trim((string) $attachmentPath),
                 'created_by' => (string) $actorUserId,
+                'follow_up_id' => $followUpId,
+                'round_id' => $roundId,
             ));
 
             if ($userRecordLogId <= 0) {
@@ -4192,6 +4294,292 @@ if (!function_exists('customerFollowUpStartFromReceivedOrder')) {
         // This helper is used by the Confirm Received follow-up flow and can be reused by other received-order entry points.
         // Keep using purchase_count_snapshot captured at Confirm Received time so later order changes do not retroactively change customer_type.
         return $followUpId;
+    }
+}
+
+if (!function_exists('customerFollowUpStartFromCustomer')) {
+    /**
+     * Opens a follow-up case that belongs to a customer rather than to an order, for
+     * follow-ups entered straight from a customer page. The case carries order_id = 0
+     * and case_source = 'customer'; everything downstream (rounds, approvals, tags,
+     * notifications, the cron jobs) treats it like any other case.
+     */
+    function customerFollowUpStartFromCustomer($connect, $platform, $customerId, $currentUserId, $options = array())
+    {
+        $platform = customerFollowUpNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $currentUserId = (int) $currentUserId;
+
+        if ($platform === '' || $customerId <= 0 || $currentUserId <= 0) {
+            return 0;
+        }
+
+        $today = customerFollowUpNowDate();
+        $followUpId = customerFollowUpCreateFollowUpCase($connect, array(
+            'platform' => $platform,
+            'case_source' => 'customer',
+            'order_id' => 0,
+            'order_no' => '',
+            'customer_id' => $customerId,
+            'customer_name' => isset($options['customer_name']) ? $options['customer_name'] : '',
+            'customer_username' => isset($options['customer_username']) ? $options['customer_username'] : '',
+            'package_name' => '',
+            'received_date' => $today,
+            'customer_type' => isset($options['customer_type']) ? $options['customer_type'] : 'new',
+            'purchase_count_snapshot' => 0,
+            'current_round_no' => 1,
+            'current_status' => '',
+            'contact_no' => isset($options['contact_no']) ? $options['contact_no'] : '',
+            'assigned_user_id' => $currentUserId,
+            'follow_up_started' => 'Y',
+            'create_by' => (string) $currentUserId,
+        ));
+
+        if ($followUpId <= 0) {
+            return 0;
+        }
+
+        customerFollowUpCreateFollowUpRound($connect, array(
+            'follow_up_id' => $followUpId,
+            'round_no' => 1,
+            'stage_no' => 1,
+            'previous_follow_up_date' => $today,
+            'approval_status' => 'pending',
+            'postpone_status' => 'none',
+            'round_status' => '',
+            'create_by' => (string) $currentUserId,
+        ));
+
+        if (function_exists('audit_log')) {
+            $actorDisplayName = function_exists('customerFollowUpGetUserDisplayName')
+                ? customerFollowUpGetUserDisplayName($connect, $currentUserId)
+                : (string) $currentUserId;
+
+            audit_log(array(
+                'log_act'     => 'add',
+                'uid'         => $currentUserId,
+                'cby'         => $currentUserId,
+                'query_rec'   => $followUpId,
+                'query_table' => CUSTOMER_FOLLOW_UP,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'newval'      => "platform=$platform, customer_id=$customerId, case_source=customer",
+                'act_msg'     => $actorDisplayName . ' started a customer follow-up case [<b> ID = ' . $followUpId . '</b> ] from the customer page (' . $platform . ').',
+            ));
+        }
+
+        return $followUpId;
+    }
+}
+
+if (!function_exists('customerFollowUpResolveCaseForCustomerLog')) {
+    /**
+     * Picks which follow-up case a customer page entry belongs to:
+     *   1. an explicitly chosen case, when the user selected one;
+     *   2. the customer's only open case, when there is exactly one;
+     *   3. otherwise a new customer-sourced case.
+     * Cases that are already closed (Done / Lost) are never reused.
+     */
+    function customerFollowUpResolveCaseForCustomerLog($connect, $platform, $customerId, $requestedFollowUpId, $actorUserId, $options = array())
+    {
+        $platform = customerFollowUpNormalizePlatform($platform);
+        $customerId = (int) $customerId;
+        $requestedFollowUpId = (int) $requestedFollowUpId;
+
+        if ($platform === '' || $customerId <= 0) {
+            return array();
+        }
+
+        $actorUserGroupId = isset($options['actor_user_group_id'])
+            ? $options['actor_user_group_id']
+            : (defined('USER_GROUP') ? USER_GROUP : null);
+
+        if ($requestedFollowUpId > 0) {
+            $requestedRow = customerFollowUpReadFollowUpCase($connect, $requestedFollowUpId);
+            if (empty($requestedRow)
+                || customerFollowUpNormalizePlatform(isset($requestedRow['platform']) ? $requestedRow['platform'] : '') !== $platform
+                || (int) (isset($requestedRow['customer_id']) ? $requestedRow['customer_id'] : 0) !== $customerId
+            ) {
+                return array();
+            }
+
+            if (!customerFollowUpCanUserManageCase($requestedRow, $actorUserId, $actorUserGroupId, $connect)) {
+                return array();
+            }
+
+            return $requestedRow;
+        }
+
+        $openCases = array();
+        foreach (customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId) as $caseRow) {
+            $caseStatus = strtolower(trim((string) (isset($caseRow['current_status']) ? $caseRow['current_status'] : '')));
+            if (in_array($caseStatus, array('done', 'lost'), true)) {
+                continue;
+            }
+            // Cases belonging to somebody else are left alone; the entry opens its own
+            // customer-sourced case instead of quietly rescheduling another user's work.
+            if (!customerFollowUpCanUserManageCase($caseRow, $actorUserId, $actorUserGroupId, $connect)) {
+                continue;
+            }
+            $openCases[] = $caseRow;
+        }
+
+        if (count($openCases) === 1) {
+            return $openCases[0];
+        }
+
+        if (!empty($openCases)) {
+            // More than one open case and no explicit pick: fall back to the most recent
+            // customer-sourced case so repeated customer page entries stay on one case.
+            foreach ($openCases as $caseRow) {
+                if (customerFollowUpIsOrderlessCase($caseRow)) {
+                    return $caseRow;
+                }
+            }
+        }
+
+        $newFollowUpId = customerFollowUpStartFromCustomer($connect, $platform, $customerId, (int) $actorUserId, $options);
+
+        return $newFollowUpId > 0 ? customerFollowUpReadFollowUpCase($connect, $newFollowUpId) : array();
+    }
+}
+
+if (!function_exists('customerFollowUpSyncFromCustomerLog')) {
+    /**
+     * Bridge used by the customer page User Record Log: a log entry that carries a Next
+     * Follow-Up Date becomes a real follow-up round in the Follow Up List, instead of a
+     * note that only lives on the customer page.
+     *
+     * Returns array('follow_up_id' => int, 'round_id' => int, 'message' => string).
+     */
+    function customerFollowUpSyncFromCustomerLog($connect, $data)
+    {
+        $result = array('follow_up_id' => 0, 'round_id' => 0, 'message' => '');
+
+        if (!($connect instanceof mysqli)) {
+            return $result;
+        }
+
+        $platform = customerFollowUpNormalizePlatform(isset($data['platform']) ? $data['platform'] : '');
+        $customerId = (int) (isset($data['customer_id']) ? $data['customer_id'] : 0);
+        $nextFollowUpDate = trim((string) (isset($data['next_follow_up_date']) ? $data['next_follow_up_date'] : ''));
+        $actorUserId = (int) (isset($data['actor_user_id']) ? $data['actor_user_id'] : (defined('USER_ID') ? USER_ID : 0));
+
+        if ($platform === '' || $customerId <= 0 || $actorUserId <= 0) {
+            return $result;
+        }
+        if ($nextFollowUpDate === '' || !customerFollowUpIsValidDateString($nextFollowUpDate)) {
+            return $result;
+        }
+
+        $requestedFollowUpId = isset($data['follow_up_id']) ? (int) $data['follow_up_id'] : 0;
+        $followUpRow = customerFollowUpResolveCaseForCustomerLog(
+            $connect,
+            $platform,
+            $customerId,
+            $requestedFollowUpId,
+            $actorUserId,
+            array(
+                'customer_name' => isset($data['customer_name']) ? $data['customer_name'] : '',
+                'customer_username' => isset($data['customer_username']) ? $data['customer_username'] : '',
+                'contact_no' => isset($data['contact_no']) ? $data['contact_no'] : '',
+                'actor_user_group_id' => isset($data['actor_user_group_id'])
+                    ? $data['actor_user_group_id']
+                    : (defined('USER_GROUP') ? USER_GROUP : null),
+            )
+        );
+
+        if (empty($followUpRow)) {
+            $result['message'] = $requestedFollowUpId > 0
+                ? 'That follow-up case does not belong to this customer, or it is not assigned to you.'
+                : 'Unable to resolve a follow-up case for this customer.';
+            return $result;
+        }
+
+        $followUpId = (int) $followUpRow['id'];
+        $result['follow_up_id'] = $followUpId;
+
+        $roundRow = customerFollowUpCreateOrLoadCurrentRound($connect, $followUpRow);
+        if (empty($roundRow)) {
+            $result['message'] = 'Unable to prepare the follow-up round.';
+            return $result;
+        }
+
+        $roundId = (int) $roundRow['id'];
+        $result['round_id'] = $roundId;
+
+        $dateValidation = customerFollowUpValidateNextFollowUpDateLimit($followUpRow, $roundRow, $nextFollowUpDate);
+        if (empty($dateValidation['success'])) {
+            $result['message'] = isset($dateValidation['message']) ? $dateValidation['message'] : 'Next Follow-Up Date is invalid.';
+            return $result;
+        }
+
+        $previousNextFollowUpDate = trim((string) (isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : ''));
+        if ($previousNextFollowUpDate === $nextFollowUpDate) {
+            return $result;
+        }
+
+        $updateFields = array('next_follow_up_date' => $nextFollowUpDate);
+
+        $messageShortcutId = (int) (isset($data['message_shortcut_id']) ? $data['message_shortcut_id'] : 0);
+        if ($messageShortcutId > 0) {
+            $shortcutRow = customerFollowUpGetMessageShortcutById($connect, $messageShortcutId);
+            if (!empty($shortcutRow)) {
+                $updateFields['message_shortcut_id'] = $messageShortcutId;
+                $updateFields['message_shortcut_text'] = isset($shortcutRow['shortcuts_message_text'])
+                    ? $shortcutRow['shortcuts_message_text']
+                    : '';
+            }
+        }
+
+        // The attachment is deliberately not copied across: user record log rows store an
+        // encoded list of their own uploads, while a round stores one follow-up attachment
+        // path, and mixing the two formats would break the Follow Up List preview links.
+
+        $contactNo = trim((string) (isset($data['contact_no']) ? $data['contact_no'] : ''));
+        if ($contactNo !== '') {
+            $updateFields['contact_no'] = $contactNo;
+        }
+
+        $updateFields['update_by'] = (string) $actorUserId;
+        $updateFields['update_date'] = customerFollowUpNowDate();
+        $updateFields['update_time'] = customerFollowUpNowTime();
+
+        if (!customerFollowUpUpdateRoundRecord($connect, $roundId, $updateFields)) {
+            $result['message'] = 'Unable to save the next follow-up date on the follow-up round.';
+            return $result;
+        }
+
+        customerFollowUpInsertActionLog($connect, array(
+            'follow_up_id' => $followUpId,
+            'round_id' => $roundId,
+            'action_type' => 'schedule_next_follow_up_from_customer_page',
+            'old_value' => array('next_follow_up_date' => $previousNextFollowUpDate),
+            'new_value' => array('next_follow_up_date' => $nextFollowUpDate),
+            'remark' => trim((string) (isset($data['remark']) ? $data['remark'] : '')),
+            'action_by' => (string) $actorUserId,
+        ));
+
+        if (function_exists('audit_log')) {
+            $actorDisplayName = function_exists('customerFollowUpGetUserDisplayName')
+                ? customerFollowUpGetUserDisplayName($connect, $actorUserId)
+                : (string) $actorUserId;
+
+            audit_log(array(
+                'log_act'     => 'edit',
+                'uid'         => $actorUserId,
+                'cby'         => $actorUserId,
+                'query_rec'   => $followUpId,
+                'query_table' => CUSTOMER_FOLLOW_UP,
+                'page'        => 'Customer Follow-Up',
+                'connect'     => $connect,
+                'oldval'      => 'next_follow_up_date=' . $previousNextFollowUpDate,
+                'changes'     => 'next_follow_up_date=' . $nextFollowUpDate,
+                'act_msg'     => $actorDisplayName . ' scheduled the next follow-up date for case [<b> ID = ' . $followUpId . '</b> ] from the customer page.',
+            ));
+        }
+
+        return $result;
     }
 }
 

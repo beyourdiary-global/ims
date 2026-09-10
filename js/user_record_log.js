@@ -33,6 +33,7 @@
     var $messageShortcutLabel = $("#url_message_shortcut_label");
     var $content = $("#url_content");
     var $nextFollowUpDate = $("#url_next_follow_up_date");
+    var $followUpId = $("#url_follow_up_id");
     var $followUpTimes = $("#url_follow_up_times");
     var $followUpDay = $("#url_follow_up_day");
     var $existingAttachment = $("#url_existing_attachment");
@@ -915,6 +916,9 @@
       $nextFollowUpDate.val("");
       $followUpTimes.val("");
       $followUpDay.val("");
+      if ($followUpId.length) {
+        $followUpId.val("0");
+      }
       resetAttachmentInputs();
       setExistingAttachments([]);
       $submitBtn.text("Save User Log");
@@ -1621,6 +1625,9 @@
       var followUpDayValue = String(
         $card.find(".url-edit-follow-up-day").val() || "",
       );
+      var followUpIdValue = String(
+        $card.find(".url-edit-follow-up-id").val() || "0",
+      );
       var attachments = parseAttachmentList(attachmentsValue);
 
       $recordId.val(id);
@@ -1638,6 +1645,15 @@
       $nextFollowUpDate.val(nextFollowUpDateValue);
       $followUpTimes.val(followUpTimesValue);
       $followUpDay.val(followUpDayValue);
+      // Keep the entry on the follow-up case it already belongs to, when that case is
+      // still one this user can pick.
+      if ($followUpId.length) {
+        if (followUpIdValue !== "0" && $followUpId.find('option[value="' + followUpIdValue + '"]').length) {
+          $followUpId.val(followUpIdValue);
+        } else {
+          $followUpId.val("0");
+        }
+      }
       resetAttachmentInputs();
       setExistingAttachments(attachments);
       $submitBtn.text("Save User Log");
