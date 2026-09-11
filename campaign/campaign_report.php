@@ -358,6 +358,11 @@ if (post('actionBtn') === 'refreshReport') {
         (int) $summary['records_inserted'],
         (int) $summary['records_updated']
     );
+    // notes carries the failures - storage errors, missing tables, missing columns - and
+    // was never shown, so a check that stored nothing still reported success.
+    if (!empty($summary['notes']) && is_array($summary['notes'])) {
+        $refreshSummaryMessage .= ' ' . implode(' ', $summary['notes']);
+    }
     if (!empty($summary['skip_reasons']) && is_array($summary['skip_reasons'])) {
         $reasonParts = array();
         foreach ($summary['skip_reasons'] as $reasonKey => $reasonCount) {

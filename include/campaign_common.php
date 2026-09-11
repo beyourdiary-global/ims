@@ -1538,6 +1538,8 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             'customers_purchased' => 0,
             'customers_not_purchased' => 0,
             'new_customers' => 0,
+            'insert_errors' => 0,
+            'insert_error_sample' => '',
             'notes' => array(),
             'skip_reasons' => array(),
             'campaign_package_ids' => array(),
@@ -1592,7 +1594,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
         $insertStmt = $connect->prepare("INSERT INTO " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " (`campaign_id`,`campaign_customer_id`," . $buyerColumnsSql . "`package_id`,`platform`,`order_id`,`order_no`,`order_detail`,`order_status`,`order_amount`,`order_date`,`package_text`,`customer_type`,`create_by`,`create_date`,`create_time`,`status`) VALUES (?,?," . $buyerPlaceholders . "?,?,?,?,?,?,?,?,?,?,?,CURDATE(),CURTIME(),'A')");
 
         $updateBuyerSql = $hasBuyerColumns ? '`buyer_platform_id`=?, `buyer_name`=?, ' : '';
-        $updateRecordStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " SET `campaign_customer_id`=?, " . $updateBuyerSql . "`package_id`=?, `order_detail`=?, `order_status`=?, `order_amount`=?, `order_date`=?, `package_text`=?, `customer_type`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
+        $updateRecordStmt = $connect->prepare("UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " SET `campaign_customer_id`=?, " . $updateBuyerSql . "`package_id`=?, `order_detail`=?, `order_status`=?, `order_amount`=?, `order_date`=?, `package_text`=?, `customer_type`=?, `status`='A', `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
 
         $confirmedRecordIds = array();
         $purchasedCustomerIds = array();
@@ -1619,11 +1621,17 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             $safeOrderId = $connect->real_escape_string((string) ($order['order_id'] ?? ''));
             $safeOrderNo = $connect->real_escape_string((string) ($order['order_no'] ?? ''));
             $safePlatform = $connect->real_escape_string($platform);
+            // Deliberately not limited to status='A'. Reconciliation soft-deletes records it
+            // did not re-confirm, but a soft-deleted row still occupies
+            // idx_campaign_purchase_unique_order, so a scan that could not see it fell
+            // through to INSERT and hit a duplicate-key error - and the order could never
+            // come back. Matching regardless of status revives the row instead.
             $dupSql = "SELECT `id` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
                        WHERE `campaign_id`='" . (int) $campaignId . "'
                          AND `platform`='" . $safePlatform . "'
                          AND (`order_id`='" . $safeOrderId . "' OR `order_no`='" . $safeOrderNo . "')
-                         AND `status`='A' LIMIT 1";
+                       ORDER BY (`status`='A') DESC, `id` ASC
+                       LIMIT 1";
             $dupResult = mysqli_query($connect, $dupSql);
             $existingRecordId = 0;
             if ($dupResult && $dupResult->num_rows > 0) {
@@ -1667,6 +1675,13 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                     if ($newRecordId > 0) {
                         $confirmedRecordIds[] = $newRecordId;
                     }
+                } else {
+                    // Said nothing at all before, so an order that silently failed to store
+                    // just looked like an order that was never found.
+                    $summary['insert_errors']++;
+                    if ($summary['insert_error_sample'] === '') {
+                        $summary['insert_error_sample'] = (string) $insertStmt->error;
+                    }
                 }
             }
         }
@@ -1681,6 +1696,9 @@ if (!function_exists('campaignRunPurchaseCheck')) {
         $summary['customers_purchased'] = count($purchasedCustomerIds);
         $summary['customers_not_purchased'] = max(0, count($savedIndex['rows']) - count($purchasedCustomerIds));
         $summary['new_customers'] = count($newBuyerKeys);
+        if ($summary['insert_errors'] > 0) {
+            $summary['notes'][] = $summary['insert_errors'] . ' order(s) could not be stored: ' . $summary['insert_error_sample'];
+        }
         $summary['debug_info'][] = 'Saved customers who ordered: ' . $summary['customers_purchased']
             . ', saved customers who did not: ' . $summary['customers_not_purchased']
             . ', new customers: ' . $summary['new_customers'];
