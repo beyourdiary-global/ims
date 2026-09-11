@@ -52,6 +52,10 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             'participants' => 0,
             'purchase_rate' => 0,
             'purchased_customers' => 0,
+            'saved_customers' => 0,
+            'saved_purchased' => 0,
+            'saved_not_purchased' => 0,
+            'new_customers' => 0,
             'total_sales' => 0,
             'new_customer_amount' => 0,
             'return_customer_amount' => 0,
@@ -68,19 +72,18 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         'has_data' => false,
     );
 
-    $participantResult = mysqli_query($connect, "SELECT COUNT(DISTINCT `campaign_customer_id`) AS cnt FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $periodWhere);
-    if ($participantResult && $participantResult->num_rows > 0) {
-        $participantRow = $participantResult->fetch_assoc();
-        $data['metrics']['participants'] = (int) ($participantRow['cnt'] ?? 0);
-    }
-
     $periodStart = campaignDateValue($campaign['period_start_date'] ?? '');
     $periodEnd = campaignDateValue($campaign['period_end_date'] ?? '');
     $periodWhere = '';
     $periodWhereCpr = '';
+    // The new-customer branch of the customer list is aliased cpr2, so it needs its own
+    // copy of the period clause. It was given the cpr one, naming a table not in that
+    // branch, which made the whole customer list query fail once a period was set.
+    $periodWhereCpr2 = '';
     if ($periodStart !== '' && $periodEnd !== '') {
         $periodWhere = " AND DATE(`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
         $periodWhereCpr = " AND DATE(cpr.`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(cpr.`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
+        $periodWhereCpr2 = " AND DATE(cpr2.`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(cpr2.`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
     }
 
     $packageFilter = '';
@@ -89,7 +92,24 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         $packageFilter = " AND `package_id` IN (" . implode(',', $safePackageIds) . ")";
     }
 
-    $purchaseSql = "SELECT `campaign_customer_id`, `customer_type`, SUM(IFNULL(`order_amount`,0)) AS sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere . " GROUP BY `campaign_customer_id`, `customer_type`";
+    $buyerIdentitySql = campaignBuyerIdentitySql($connect);
+
+    // Counted after the period and package filters exist. This ran before they were built,
+    // so the participant figure was taken across every record ever stored for the campaign
+    // rather than the campaign's own period and packages.
+    $participantResult = mysqli_query($connect, "SELECT COUNT(DISTINCT " . $buyerIdentitySql . ") AS cnt FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere);
+    if ($participantResult && $participantResult->num_rows > 0) {
+        $participantRow = $participantResult->fetch_assoc();
+        $data['metrics']['participants'] = (int) ($participantRow['cnt'] ?? 0);
+    }
+
+    // Sales split by whether the buyer was on the campaign's saved list, counting buyers
+    // individually. Grouping by campaign_customer_id put every new customer in one group,
+    // so the new-customer figure could only ever be 1.
+    $purchaseSql = "SELECT " . $buyerIdentitySql . " AS buyer_key, MAX(`customer_type`) AS customer_type, SUM(IFNULL(`order_amount`,0)) AS sales
+        FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+        WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere . "
+        GROUP BY buyer_key";
     $purchaseResult = mysqli_query($connect, $purchaseSql);
     if ($purchaseResult) {
         while ($purchaseRow = $purchaseResult->fetch_assoc()) {
@@ -106,8 +126,28 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         }
     }
 
+    // How many customers the campaign was set up with, and how many of them ordered. The
+    // purchase rate is that ratio; it used to be hardcoded to 100%, which said nothing.
+    $savedCustomerTotal = 0;
+    $savedCustomerResult = mysqli_query($connect, "SELECT COUNT(*) AS cnt FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'");
+    if ($savedCustomerResult && $savedCustomerResult->num_rows > 0) {
+        $savedCustomerRow = $savedCustomerResult->fetch_assoc();
+        $savedCustomerTotal = (int) ($savedCustomerRow['cnt'] ?? 0);
+    }
+
+    $savedPurchasedTotal = 0;
+    $savedPurchasedResult = mysqli_query($connect, "SELECT COUNT(DISTINCT `campaign_customer_id`) AS cnt FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' AND `campaign_customer_id` > 0" . $packageFilter . $periodWhere);
+    if ($savedPurchasedResult && $savedPurchasedResult->num_rows > 0) {
+        $savedPurchasedRow = $savedPurchasedResult->fetch_assoc();
+        $savedPurchasedTotal = (int) ($savedPurchasedRow['cnt'] ?? 0);
+    }
+
+    $data['metrics']['saved_customers'] = $savedCustomerTotal;
+    $data['metrics']['saved_purchased'] = $savedPurchasedTotal;
+    $data['metrics']['saved_not_purchased'] = max(0, $savedCustomerTotal - $savedPurchasedTotal);
+    $data['metrics']['new_customers'] = max(0, $data['metrics']['participants'] - $savedPurchasedTotal);
     $data['metrics']['purchased_customers'] = $data['metrics']['participants'];
-    $data['metrics']['purchase_rate'] = 100;
+    $data['metrics']['purchase_rate'] = $savedCustomerTotal > 0 ? round(($savedPurchasedTotal / $savedCustomerTotal) * 100, 2) : 0;
     $data['metrics']['avg_spend_per_customer'] = $data['metrics']['purchased_customers'] > 0 ? round($data['metrics']['total_sales'] / $data['metrics']['purchased_customers'], 2) : 0;
 
     $followSql = "SELECT
@@ -162,7 +202,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     });
     $data['package_rows'] = $packageRows;
 
-    $platformSql = "SELECT `platform`, COUNT(*) AS order_count, COUNT(DISTINCT `campaign_customer_id`) AS customer_count, SUM(IFNULL(`order_amount`,0)) AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere . " GROUP BY `platform` ORDER BY total_sales DESC";
+    $platformSql = "SELECT `platform`, COUNT(*) AS order_count, COUNT(DISTINCT " . $buyerIdentitySql . ") AS customer_count, SUM(IFNULL(`order_amount`,0)) AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere . " GROUP BY `platform` ORDER BY total_sales DESC";
     $platformResult = mysqli_query($connect, $platformSql);
     if ($platformResult) {
         while ($platformRow = $platformResult->fetch_assoc()) {
@@ -191,22 +231,32 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         }
     }
 
+    // New customers are listed one row each, named where the buyer name was captured.
+    // They used to be rolled into a single "[Auto-Discovered]" row, because a record with
+    // campaign_customer_id = 0 carried nothing else to tell one buyer from another.
+    $hasBuyerColumns = campaignColumnExists($connect, CAMPAIGN_PURCHASE_RECORD, 'buyer_platform_id');
+    $newCustomerNameSql = $hasBuyerColumns
+        ? "IFNULL(NULLIF(TRIM(MAX(cpr2.`buyer_name`)), ''), CONCAT('New customer ', IFNULL(cpr2.`buyer_platform_id`, '')))"
+        : "'[New Customers]'";
+    $newCustomerKeySql = $hasBuyerColumns ? "cpr2.`buyer_platform_id`" : "cpr2.`campaign_customer_id`";
+    $newCustomerBuyerKeySql = $hasBuyerColumns ? "IFNULL(cpr2.`buyer_platform_id`,'')" : "''";
+
     $customerSql = "SELECT cc.`id`, cc.`customer_name`, cc.`customer_contact`, cc.`platform`,
             COUNT(cpr.`id`) AS order_count,
             SUM(IFNULL(cpr.`order_amount`,0)) AS total_amount,
-            MAX(cpr.`order_date`) AS last_order_date
+            MAX(cpr.`order_date`) AS last_order_date, '' AS buyer_key
         FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " cc
         LEFT JOIN " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " cpr ON cpr.`campaign_customer_id`=cc.`id` AND cpr.`campaign_id`=cc.`campaign_id` AND cpr.`status`='A'" . (empty($packageIds) ? '' : " AND cpr.`package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhereCpr . "
         WHERE cc.`campaign_id`='" . (int) $campaignId . "' AND cc.`status`='A'
         GROUP BY cc.`id`
         UNION ALL
-        SELECT 0, '[Auto-Discovered]', '', MAX(cpr2.`platform`) AS platform,
+        SELECT 0, " . $newCustomerNameSql . ", '', cpr2.`platform`,
             COUNT(cpr2.`id`) AS order_count,
             SUM(IFNULL(cpr2.`order_amount`,0)) AS total_amount,
-            MAX(cpr2.`order_date`) AS last_order_date
+            MAX(cpr2.`order_date`) AS last_order_date, " . $newCustomerBuyerKeySql . " AS buyer_key
         FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " cpr2
-        WHERE cpr2.`campaign_id`='" . (int) $campaignId . "' AND cpr2.`campaign_customer_id`=0 AND cpr2.`status`='A'" . (empty($packageIds) ? '' : " AND cpr2.`package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhereCpr . "
-        LIMIT 1
+        WHERE cpr2.`campaign_id`='" . (int) $campaignId . "' AND cpr2.`campaign_customer_id`=0 AND cpr2.`status`='A'" . (empty($packageIds) ? '' : " AND cpr2.`package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhereCpr2 . "
+        GROUP BY cpr2.`platform`, " . $newCustomerKeySql . "
         ORDER BY total_amount DESC, customer_name ASC";
     $customerResult = mysqli_query($connect, $customerSql);
     if ($customerResult) {
@@ -214,10 +264,18 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             $customerId = (int) ($customerRow['id'] ?? 0);
             $orderCount = (int) ($customerRow['order_count'] ?? 0);
 
+            $buyerKey = trim((string) ($customerRow['buyer_key'] ?? ''));
+
             $orders = array();
             if ($orderCount > 0) {
                 if ($customerId === 0) {
-                    $orderDetailSql = "SELECT `id`, `order_no`, `package_text`, `order_amount`, `order_date`, `order_status`, `platform` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_customer_id`=0 AND `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . (empty($packageIds) ? '' : " AND `package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhere . " ORDER BY `order_date` DESC";
+                    // Scoped to this buyer, otherwise every new customer's row would list
+                    // the orders of all of them.
+                    $newCustomerWhere = " AND `platform`='" . $connect->real_escape_string(trim((string) ($customerRow['platform'] ?? ''))) . "'";
+                    if ($hasBuyerColumns) {
+                        $newCustomerWhere .= " AND IFNULL(`buyer_platform_id`,'')='" . $connect->real_escape_string($buyerKey) . "'";
+                    }
+                    $orderDetailSql = "SELECT `id`, `order_no`, `package_text`, `order_amount`, `order_date`, `order_status`, `platform` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_customer_id`=0 AND `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $newCustomerWhere . (empty($packageIds) ? '' : " AND `package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhere . " ORDER BY `order_date` DESC";
                 } else {
                     $orderDetailSql = "SELECT `id`, `order_no`, `package_text`, `order_amount`, `order_date`, `order_status`, `platform` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_customer_id`='" . $customerId . "' AND `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . (empty($packageIds) ? '' : " AND `package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhere . " ORDER BY `order_date` DESC";
                 }
@@ -238,6 +296,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
 
             $data['customer_rows'][] = array(
                 'customer_id' => $customerId,
+                'is_new_customer' => $customerId === 0,
                 'customer_name' => trim((string) ($customerRow['customer_name'] ?? '')),
                 'customer_contact' => trim((string) ($customerRow['customer_contact'] ?? '')),
                 'platform' => trim((string) ($customerRow['platform'] ?? '')),
@@ -311,8 +370,10 @@ if (input('export') === '1') {
     fputcsv($output, array());
     fputcsv($output, array('Metric', 'Value'));
     fputcsv($output, array('Customer Total Participant', $metrics['participants']));
+    fputcsv($output, array('Saved Customer List', $metrics['saved_customers']));
+    fputcsv($output, array('Saved Customer Purchased', $metrics['saved_purchased']));
+    fputcsv($output, array('Saved Customer Not Purchased', $metrics['saved_not_purchased']));
     fputcsv($output, array('Purchase Rate', $metrics['purchase_rate'] . '%'));
-    fputcsv($output, array('Total Customer Purchase', $metrics['purchased_customers']));
     fputcsv($output, array('Total Sales', number_format((float) $metrics['total_sales'], 2, '.', '')));
     fputcsv($output, array('New Customer Amount', $metrics['new_customer_amount']));
     fputcsv($output, array('Return Customer Amount', $metrics['return_customer_amount']));
@@ -345,9 +406,9 @@ if (input('export') === '1') {
         fputcsv($output, array($bucket . ' order(s)', $count));
     }
     fputcsv($output, array());
-    fputcsv($output, array('Customer Name', 'Contact', 'Platform', 'Order Count', 'Total Amount', 'Last Order Date', 'Purchased'));
+    fputcsv($output, array('Customer Name', 'Contact', 'Platform', 'Customer Type', 'Order Count', 'Total Amount', 'Last Order Date', 'Purchased'));
     foreach ($reportData['customer_rows'] as $row) {
-        fputcsv($output, array($row['customer_name'], $row['customer_contact'], $row['platform'], $row['order_count'], number_format((float) $row['total_amount'], 2, '.', ''), $row['last_order_date'], $row['purchased'] ? 'Yes' : 'No'));
+        fputcsv($output, array($row['customer_name'], $row['customer_contact'], $row['platform'], empty($row['is_new_customer']) ? 'Saved Customer' : 'New Customer', $row['order_count'], number_format((float) $row['total_amount'], 2, '.', ''), $row['last_order_date'], $row['purchased'] ? 'Yes' : 'No'));
     }
     fclose($output);
     exit();
@@ -373,7 +434,7 @@ if (input('export') === '1') {
             createSortingTable('campaign_report_platform_table', { searching: false, order: [] });
         }
         if ($('#campaign_report_customer_table').length) {
-            createSortingTable('campaign_report_customer_table', { searching: true, order: [[4, 'desc']] });
+            createSortingTable('campaign_report_customer_table', { searching: true, order: [[5, 'desc']] });
         }
     });
 </script>
@@ -428,8 +489,10 @@ if (input('export') === '1') {
                     <?php
                     $metricCards = array(
                         'Customer Total Participant' => $metrics['participants'],
+                        'Saved Customer List' => $metrics['saved_customers'],
+                        'Saved Customer Purchased' => $metrics['saved_purchased'],
+                        'Saved Customer Not Purchased' => $metrics['saved_not_purchased'],
                         'Purchase Rate' => $metrics['purchase_rate'] . '%',
-                        'Total Customer Purchase' => $metrics['purchased_customers'],
                         'Total Sales' => number_format((float) $metrics['total_sales'], 2),
                         'New Customer Amount' => $metrics['new_customer_amount'],
                         'Return Customer Amount' => $metrics['return_customer_amount'],
@@ -590,6 +653,7 @@ if (input('export') === '1') {
                                         <th>Customer Name</th>
                                         <th>Contact</th>
                                         <th>Platform</th>
+                                        <th>Customer Type</th>
                                         <th>Order Count</th>
                                         <th>Total Amount</th>
                                         <th>Last Order Date</th>
@@ -610,6 +674,13 @@ if (input('export') === '1') {
                                             </td>
                                             <td><?= campaignH($row['customer_contact']) ?></td>
                                             <td><?= campaignH($row['platform']) ?></td>
+                                            <td>
+                                                <?php if (!empty($row['is_new_customer'])): ?>
+                                                    <span class="badge bg-info">New Customer</span>
+                                                <?php else: ?>
+                                                    <span class="badge bg-light text-dark">Saved Customer</span>
+                                                <?php endif; ?>
+                                            </td>
                                             <td><?= (int) $row['order_count'] ?></td>
                                             <td><?= number_format((float) $row['total_amount'], 2) ?></td>
                                             <td><?= campaignH($row['last_order_date']) ?></td>
@@ -675,11 +746,12 @@ if (input('export') === '1') {
         datatableAlignment('campaign_report_customer_table');
         setButtonColor();
 
-        document.querySelectorAll('.campaign-customer-detail-link').forEach(function (link) {
-            link.addEventListener('click', function (e) {
+        document.addEventListener('click', function (e) {
+            var link = e.target.closest ? e.target.closest('.campaign-customer-detail-link') : null;
+            if (link) {
                 e.preventDefault();
-                var customerName = this.getAttribute('data-customer-name');
-                var row = this.closest('tr');
+                var customerName = link.getAttribute('data-customer-name');
+                var row = link.closest('tr');
                 var ordersJson = row.getAttribute('data-customer-orders');
                 var orders = [];
                 try {
@@ -704,7 +776,7 @@ if (input('export') === '1') {
                 }
                 var modal = new bootstrap.Modal(document.getElementById('customerDetailModal'));
                 modal.show();
-            });
+            }
         });
 
         <?php if (!empty($reportData['trend_rows'])): ?>

@@ -4721,6 +4721,13 @@ if ($conn->select_db($db_cms)) {
 
     migrationEnsureColumn($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'package_id', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD COLUMN `package_id` INT DEFAULT NULL", "Added `package_id` column to `" . CAMPAIGN_PURCHASE_RECORD . "`.");
 
+    // Who placed the order, on the platform's own terms. A buyer who was not on the
+    // campaign's saved list has no campaign_customer row to point at, so without this the
+    // report cannot tell those new customers apart and counts them all as one.
+    migrationEnsureColumn($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'buyer_platform_id', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD COLUMN `buyer_platform_id` VARCHAR(100) DEFAULT NULL AFTER `campaign_customer_id`", "Added `buyer_platform_id` column to `" . CAMPAIGN_PURCHASE_RECORD . "`.");
+    migrationEnsureColumn($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'buyer_name', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD COLUMN `buyer_name` VARCHAR(255) DEFAULT NULL AFTER `buyer_platform_id`", "Added `buyer_name` column to `" . CAMPAIGN_PURCHASE_RECORD . "`.");
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_buyer', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD INDEX `idx_campaign_purchase_buyer` (`campaign_id`, `platform`, `buyer_platform_id`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` buyer lookup index.");
+
     migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_package_id', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD INDEX `idx_campaign_purchase_package_id` (`package_id`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` package_id index.");
 
     $createCampaignRuleSettingSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_RULE_SETTING . "` (
