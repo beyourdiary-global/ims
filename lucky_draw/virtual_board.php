@@ -208,7 +208,7 @@ include_once '../menuHeader.php';
 
                     <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
                         <?php if (!$isView) { ?>
-                            <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" name="save_board_row" id="actionBtn"><?= $isAdd ? 'Add Virtual Winner' : 'Edit Virtual Winner' ?></button>
+                            <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" name="save_board_row" value="1" id="actionBtn"><?= $isAdd ? 'Add Virtual Winner' : 'Edit Virtual Winner' ?></button>
                         <?php } ?>
                         <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel" type="button" id="backBtn" onclick='location.href=<?= json_encode(siteUrlPath(ROUTE_LUCKY_DRAW_ADMIN_VIRTUAL_BOARD_TABLE)) ?>'>Back</button>
                     </div>

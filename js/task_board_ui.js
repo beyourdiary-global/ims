@@ -544,7 +544,7 @@ function normalizeStatusLabels(list) {
     if (!id || !name) {
       continue;
     }
-    byId[id] = { id: id, name: name };
+    byId[id] = { id: id, name: name, color: item.color };
   }
 
   state.statusLabels = Object.keys(byId)
@@ -1788,12 +1788,13 @@ function renderStatusLabelOptions(keyword) {
         ? " checked"
         : "";
 
-    html +=
-      '<label class="task-item-detail-status-option">' +
+    var disabled = !canEdit ? " disabled" : "";
+    var itemHtml = '<label class="task-item-detail-status-option">' +
       '<input class="form-check-input task-item-detail-status-checkbox" type="checkbox" value="' +
       id +
       '"' +
       checked +
+      disabled +
       ">" +
       '<span class="task-item-detail-status-option-name task-label-pill" style="' +
       labelPillStyle(item.color, "#DCE8FF") +
@@ -1806,6 +1807,7 @@ function renderStatusLabelOptions(keyword) {
       '" title="Delete status label"><i class="fa-regular fa-trash-can"></i></button>'
         : "") +
       "</label>";
+    html += itemHtml;
   }
 
   $("#taskItemDetailStatusOptionList").html(
@@ -3176,6 +3178,16 @@ function applyItemDetailToModal(
   setSelectedStatusLabels(statusIds);
   $("#taskItemDetailStatusSearchInput").val("");
   renderStatusLabelOptions("");
+
+  // Initialize Bootstrap dropdown AFTER DOM is fully updated
+  setTimeout(function() {
+    var statusDropdownBtn = document.getElementById('taskItemDetailStatusDropdownBtn');
+    if (statusDropdownBtn && typeof bootstrap !== 'undefined' && bootstrap.Dropdown) {
+      var dropdownInstance = bootstrap.Dropdown.getOrCreateInstance(statusDropdownBtn);
+    }
+  }, 200);
+
+
   renderDetailAssigneeSelect(Number(info.assignee_user_id || 0));
   renderDetailReporterSelect(Number(info.reporter_user_id || 0));
   var effectiveParentOptions = Array.isArray(parentOptions)

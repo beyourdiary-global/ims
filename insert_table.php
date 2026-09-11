@@ -3798,6 +3798,7 @@ if ($conn->select_db($db_cms)) {
         `name` VARCHAR(120) NOT NULL,
         `color` VARCHAR(7) NOT NULL DEFAULT '#DCE8FF',
         `is_enabled` CHAR(1) NOT NULL DEFAULT 'Y',
+        `sort_order` INT NOT NULL DEFAULT 0,
         `remark` VARCHAR(255) DEFAULT NULL,
         `create_by` VARCHAR(30) DEFAULT NULL,
         `create_date` DATE DEFAULT NULL,
@@ -3822,6 +3823,15 @@ if ($conn->select_db($db_cms)) {
             echo "<p style='color:green;'>Added `color` column to `" . TASK_STATUS_LABEL . "`.</p>";
         } else {
             echo "<p style='color:red;'>Failed adding `color` to `" . TASK_STATUS_LABEL . "`: " . $conn->error . "</p>";
+        }
+    }
+
+    $taskStatusLabelSortRst = $conn->query("SHOW COLUMNS FROM `" . TASK_STATUS_LABEL . "` LIKE 'sort_order'");
+    if ($taskStatusLabelSortRst && $taskStatusLabelSortRst->num_rows === 0) {
+        if ($conn->query("ALTER TABLE `" . TASK_STATUS_LABEL . "` ADD COLUMN `sort_order` INT NOT NULL DEFAULT 0 AFTER `is_enabled`")) {
+            echo "<p style='color:green;'>Added `sort_order` column to `" . TASK_STATUS_LABEL . "`.</p>";
+        } else {
+            echo "<p style='color:red;'>Failed adding `sort_order` to `" . TASK_STATUS_LABEL . "`: " . $conn->error . "</p>";
         }
     }
 
@@ -4550,6 +4560,27 @@ if ($conn->select_db($db_cms)) {
         echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_PIC . "`: " . $conn->error . "</p>";
     }
 
+    $createCampaignPackageSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_PACKAGE . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `campaign_id` INT NOT NULL,
+        `package_id` INT NOT NULL,
+        `create_by` VARCHAR(30),
+        `create_date` DATE,
+        `create_time` TIME,
+        `update_by` VARCHAR(30),
+        `update_date` DATE,
+        `update_time` TIME,
+        `status` CHAR(1) DEFAULT 'A',
+        KEY `idx_campaign_package_campaign_id` (`campaign_id`),
+        KEY `idx_campaign_package_package_id` (`package_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+    if ($conn->query($createCampaignPackageSql)) {
+        echo "<p style='color:green;'>Verified table `" . CAMPAIGN_PACKAGE . "` for Campaign Package.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . CAMPAIGN_PACKAGE . "`: " . $conn->error . "</p>";
+    }
+
     $createCampaignCustomerSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_CUSTOMER . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `campaign_id` INT NOT NULL,
@@ -4649,6 +4680,7 @@ if ($conn->select_db($db_cms)) {
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `campaign_id` INT NOT NULL,
         `campaign_customer_id` INT NOT NULL,
+        `package_id` INT DEFAULT NULL,
         `platform` VARCHAR(30),
         `order_id` VARCHAR(100),
         `order_no` VARCHAR(150),
@@ -4667,7 +4699,8 @@ if ($conn->select_db($db_cms)) {
         `status` CHAR(1) DEFAULT 'A',
         KEY `idx_campaign_purchase_campaign_id` (`campaign_id`),
         KEY `idx_campaign_purchase_customer_id` (`campaign_customer_id`),
-        KEY `idx_campaign_purchase_platform` (`platform`)
+        KEY `idx_campaign_purchase_platform` (`platform`),
+        KEY `idx_campaign_purchase_package_id` (`package_id`)
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
 
     if ($conn->query($createCampaignPurchaseRecordSql)) {
@@ -4686,6 +4719,16 @@ if ($conn->select_db($db_cms)) {
     migrationEnsureIndex($conn, $db_cms, CAMPAIGN_FOLLOW_UP, 'idx_campaign_follow_up_status_campaign', "ALTER TABLE `" . CAMPAIGN_FOLLOW_UP . "` ADD INDEX `idx_campaign_follow_up_status_campaign` (`status`, `campaign_id`)", "Verified `" . CAMPAIGN_FOLLOW_UP . "` status/campaign index.");
     migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_status_campaign', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD INDEX `idx_campaign_purchase_status_campaign` (`status`, `campaign_id`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` status/campaign index.");
 
+    migrationEnsureColumn($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'package_id', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD COLUMN `package_id` INT DEFAULT NULL", "Added `package_id` column to `" . CAMPAIGN_PURCHASE_RECORD . "`.");
+
+    // Who placed the order, on the platform's own terms. A buyer who was not on the
+    // campaign's saved list has no campaign_customer row to point at, so without this the
+    // report cannot tell those new customers apart and counts them all as one.
+    migrationEnsureColumn($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'buyer_platform_id', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD COLUMN `buyer_platform_id` VARCHAR(100) DEFAULT NULL AFTER `campaign_customer_id`", "Added `buyer_platform_id` column to `" . CAMPAIGN_PURCHASE_RECORD . "`.");
+    migrationEnsureColumn($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'buyer_name', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD COLUMN `buyer_name` VARCHAR(255) DEFAULT NULL AFTER `buyer_platform_id`", "Added `buyer_name` column to `" . CAMPAIGN_PURCHASE_RECORD . "`.");
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_buyer', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD INDEX `idx_campaign_purchase_buyer` (`campaign_id`, `platform`, `buyer_platform_id`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` buyer lookup index.");
+
+    migrationEnsureIndex($conn, $db_cms, CAMPAIGN_PURCHASE_RECORD, 'idx_campaign_purchase_package_id', "ALTER TABLE `" . CAMPAIGN_PURCHASE_RECORD . "` ADD INDEX `idx_campaign_purchase_package_id` (`package_id`)", "Verified `" . CAMPAIGN_PURCHASE_RECORD . "` package_id index.");
 
     $createCampaignRuleSettingSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_RULE_SETTING . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
@@ -5981,6 +6024,117 @@ if ($conn->select_db($db_cms)) {
     }
 } else {
     echo "<p style='color:red;'>Failed selecting CMS database for leave pin cleanup.</p>";
+}
+
+// ===== CAMPAIGN2 新Campaign系统 =====
+
+// campaign2 表
+$createCampaign2Sql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN2 . "` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `campaign_name` VARCHAR(255) NOT NULL,
+    `period_start_date` DATE NOT NULL,
+    `period_end_date` DATE NOT NULL,
+    `description` TEXT DEFAULT NULL,
+    `create_by` VARCHAR(30),
+    `create_date` DATE,
+    `create_time` TIME,
+    `update_by` VARCHAR(30),
+    `update_date` DATE,
+    `update_time` TIME,
+    `status` CHAR(1) DEFAULT 'A',
+    KEY `idx_campaign2_period` (`period_start_date`, `period_end_date`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCampaign2Sql)) {
+    echo "<p style='color:green;'>Verified table `" . CAMPAIGN2 . "` for Campaign2.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `" . CAMPAIGN2 . "`: " . $conn->error . "</p>";
+}
+
+// campaign2_pic 表
+$createCampaign2PicSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN2_PIC . "` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `campaign_id` INT NOT NULL,
+    `user_id` INT NOT NULL,
+    `create_by` VARCHAR(30),
+    `create_date` DATE,
+    `create_time` TIME,
+    `update_by` VARCHAR(30),
+    `update_date` DATE,
+    `update_time` TIME,
+    `status` CHAR(1) DEFAULT 'A',
+    KEY `idx_campaign2_pic_campaign` (`campaign_id`, `status`),
+    KEY `idx_campaign2_pic_user` (`user_id`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCampaign2PicSql)) {
+    echo "<p style='color:green;'>Verified table `" . CAMPAIGN2_PIC . "` for Campaign2 PIC.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `" . CAMPAIGN2_PIC . "`: " . $conn->error . "</p>";
+}
+
+// campaign2_customer 表
+$createCampaign2CustomerSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN2_CUSTOMER . "` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `campaign_id` INT NOT NULL,
+    `platform` VARCHAR(30) NOT NULL,
+    `platform_customer_id` VARCHAR(100) NOT NULL,
+    `customer_name` VARCHAR(255),
+    `customer_contact` VARCHAR(100),
+    `assign_by` VARCHAR(30),
+    `assign_date` DATE,
+    `create_by` VARCHAR(30),
+    `create_date` DATE,
+    `create_time` TIME,
+    `update_by` VARCHAR(30),
+    `update_date` DATE,
+    `update_time` TIME,
+    `status` CHAR(1) DEFAULT 'A',
+    UNIQUE KEY `idx_campaign2_customer_unique` (`campaign_id`, `platform`, `platform_customer_id`),
+    KEY `idx_campaign2_customer_campaign` (`campaign_id`, `status`),
+    KEY `idx_campaign2_customer_platform` (`platform`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCampaign2CustomerSql)) {
+    echo "<p style='color:green;'>Verified table `" . CAMPAIGN2_CUSTOMER . "` for Campaign2 Customer.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `" . CAMPAIGN2_CUSTOMER . "`: " . $conn->error . "</p>";
+}
+
+// campaign2_follow_up 表
+$createCampaign2FollowUpSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN2_FOLLOW_UP . "` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `campaign_id` INT NOT NULL,
+    `campaign2_customer_id` INT NOT NULL,
+    `message_shortcut_id` INT DEFAULT NULL,
+    `message_title` VARCHAR(255),
+    `message_preview` TEXT,
+    `follow_up_date` DATE NOT NULL,
+    `pic_user_id` INT DEFAULT NULL,
+    `follow_up_status` VARCHAR(30) DEFAULT 'Pending',
+    `attachment_path` VARCHAR(255),
+    `remark` TEXT,
+    `completed_by` VARCHAR(30),
+    `completed_date` DATE,
+    `completed_time` TIME,
+    `failed_date` DATE,
+    `create_by` VARCHAR(30),
+    `create_date` DATE,
+    `create_time` TIME,
+    `update_by` VARCHAR(30),
+    `update_date` DATE,
+    `update_time` TIME,
+    `status` CHAR(1) DEFAULT 'A',
+    KEY `idx_campaign2_followup_campaign` (`campaign_id`, `status`),
+    KEY `idx_campaign2_followup_customer` (`campaign2_customer_id`, `status`),
+    KEY `idx_campaign2_followup_date` (`follow_up_date`, `follow_up_status`, `status`),
+    KEY `idx_campaign2_followup_status` (`follow_up_status`, `status`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+if ($conn->query($createCampaign2FollowUpSql)) {
+    echo "<p style='color:green;'>Verified table `" . CAMPAIGN2_FOLLOW_UP . "` for Campaign2 Follow-up.</p>";
+} else {
+    echo "<p style='color:red;'>Failed creating `" . CAMPAIGN2_FOLLOW_UP . "`: " . $conn->error . "</p>";
 }
 
 $conn->close();

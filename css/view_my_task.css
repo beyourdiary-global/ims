@@ -11,6 +11,12 @@
   color: #44546f;
 }
 
+.view-my-task-toolbar-right {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .view-my-task-wrap {
   border-radius: 6px;
 }
@@ -97,6 +103,12 @@
 }
 
 .is-hidden {
+  display: none !important;
+}
+
+.view-my-task-item-row.is-filtered-out,
+.view-my-task-date-row.is-hidden-by-filter,
+.view-my-task-status-row.is-hidden-by-filter {
   display: none !important;
 }
 

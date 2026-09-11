@@ -245,7 +245,18 @@ $menuList = array(
             array('Customer Follow-Up', 'mdi mdi-account-clock-outline', $SITEURL . '/customer/customer_follow_up_list.php', '151'),
             array('Daily Follow Up Report', 'mdi mdi-history', $SITEURL . '/customer/customer_daily_follow_up_report.php', '161'),
             array('Customer Daily Report', 'mdi mdi-file-chart-outline', $SITEURL . '/customer/customer_daily_report.php', '150'),
-            array('Campaign', 'mdi mdi-bullhorn-outline', $SITEURL . '/campaign/campaign_table.php', '153'),
+            array(
+                'Campaigns',
+                'mdi mdi-bullhorn-outline',
+                'javascript:void(0)',
+                'y',
+                'expand' => array(
+                    array('All Campaigns Dashboard', 'mdi mdi-view-dashboard-outline', $SITEURL . '/campaign2/campaign_unified_dashboard.php', '153'),
+                    array('Campaign (旧系统)', 'mdi mdi-history', $SITEURL . '/campaign/campaign_table.php', '153'),
+                    array('Campaign2 (新系统)', 'mdi mdi-bullhorn-check-outline', $SITEURL . '/campaign2/campaign2_list.php', '153'),
+                ),
+                'pin' => array('153'),
+            ),
             array(
                 'Lucky Draw',
                 'mdi mdi-gift-outline',

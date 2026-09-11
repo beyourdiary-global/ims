@@ -6,8 +6,16 @@ $pageTitle = 'View My Task';
 $taskParentTitle = 'Project Task';
 $taskPermissionPin = $taskParentPin;
 
+// Toolbar Refresh asks for the task table only; buffer the shared page chrome
+// (menu header, etc.) so the response carries just that fragment.
+$viewMyTaskAjax = isset($_GET['ajax']) && $_GET['ajax'] === 'table';
+if ($viewMyTaskAjax) {
+    ob_start();
+}
+
 include_once '../menuHeader.php';
 include_once './common_task.php';
+include_once './board_item_history.php';
 $pageTitle = 'View My Task';
 $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
@@ -47,10 +55,43 @@ if (function_exists('audit_log')) {
 }
 
 $boardPinAccess = taskGetPinAccessByGroupId($connect, $taskPermissionPin);
-$workItemCanAdd = taskIsActionAllowed('add', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'add');
-$workItemCanEdit = taskIsActionAllowed('edit', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'edit');
-$workItemCanDelete = taskIsActionAllowed('delete', $boardPinAccess) && taskUserCanWorkItemAction($connect, $currentProjectId, 'delete');
-$isProjectOwner = taskIsProjectOwner($connect, $currentProjectId, $currentUserId);
+$isProjectOwner = $currentProjectId > 0
+    && isset($currentProject['owner_user_id'])
+    && (int) $currentProject['owner_user_id'] === (int) $currentUserId;
+$hasFullProjectAccess = $isProjectOwner;
+$projectAccessRecord = array(
+    'work_item_add' => $hasFullProjectAccess ? 1 : 0,
+    'work_item_edit' => $hasFullProjectAccess ? 1 : 0,
+    'work_item_delete' => $hasFullProjectAccess ? 1 : 0,
+    'allowed_work_type_ids' => array(),
+    'allowed_status_ids' => array(),
+);
+if (!$hasFullProjectAccess) {
+    $projectAccessRecord = taskGetProjectUserAccessRecord($connect, $currentProjectId, $currentUserId);
+}
+$allowedWorkTypeIds = isset($projectAccessRecord['allowed_work_type_ids']) && is_array($projectAccessRecord['allowed_work_type_ids'])
+    ? $projectAccessRecord['allowed_work_type_ids']
+    : array();
+$allowedStatusIds = isset($projectAccessRecord['allowed_status_ids']) && is_array($projectAccessRecord['allowed_status_ids'])
+    ? $projectAccessRecord['allowed_status_ids']
+    : array();
+$workItemCanAdd = taskIsActionAllowed('add', $boardPinAccess) && !empty($projectAccessRecord['work_item_add']);
+$workItemCanEdit = taskIsActionAllowed('edit', $boardPinAccess) && !empty($projectAccessRecord['work_item_edit']);
+$workItemCanDelete = taskIsActionAllowed('delete', $boardPinAccess) && !empty($projectAccessRecord['work_item_delete']);
+$columnPermissions = $hasFullProjectAccess
+    ? array_reduce(taskGetProjectAccessFieldOptions(), function ($permissions, $field) {
+        $fieldKey = isset($field['key']) ? (string) $field['key'] : '';
+        if ($fieldKey !== '') {
+            $permissions[$fieldKey] = array(
+                'column_key' => $fieldKey,
+                'add' => 1,
+                'edit' => 1,
+                'delete' => 1,
+            );
+        }
+        return $permissions;
+    }, array())
+    : taskGetProjectColumnAccessMap($connect, $currentProjectId, $currentUserId);
 $workTypes = taskGetWorkTypes($connect, $currentProjectId);
 $workTypeIcons = taskGetSvgIconOptions();
 $projectKeySetting = taskGetProjectKeySetting($connect, $currentProjectId);
@@ -68,6 +109,18 @@ foreach ($myTaskGroups as $group) {
 if (empty($_SESSION['csrf_token'])) {
     $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
 }
+
+if ($viewMyTaskAjax) {
+    while (ob_get_level() > 0) {
+        ob_end_clean();
+    }
+    if (!headers_sent()) {
+        header('Content-Type: text/html; charset=utf-8');
+        header('Cache-Control: no-store, no-cache, must-revalidate');
+    }
+    include __DIR__ . '/view_my_task_content.php';
+    exit;
+}
 ?>
 <!DOCTYPE html>
 <html>
@@ -75,7 +128,7 @@ if (empty($_SESSION['csrf_token'])) {
     <link rel="stylesheet" href="../css/main.css">
     <link rel="stylesheet" href="../css/task.css">
     <link rel="stylesheet" href="../css/sheets.css">
-    <link rel="stylesheet" href="../css/view_my_task.css">
+    <link rel="stylesheet" href="../css/view_my_task.css?v=<?= (int) @filemtime(__DIR__ . '/../css/view_my_task.css') ?>">
 </head>
 <body>
 <div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
@@ -100,95 +153,8 @@ if (empty($_SESSION['csrf_token'])) {
 
             <div id="taskSidebarBackdrop" class="task-sidebar-backdrop"></div>
 
-            <div class="task-main-content">
-                <?php if ($currentProjectId <= 0): ?>
-                    <div class="task-empty-board-note">No project task found yet.</div>
-                <?php elseif (empty($myTaskGroups)): ?>
-                    <div class="task-empty-board-note">No work items are assigned to you in this project.</div>
-                <?php else: ?>
-                    <div class="view-my-task-toolbar">
-                        <span class="view-my-task-count"><?= (int) $totalMyTaskCount ?> work item<?= $totalMyTaskCount === 1 ? '' : 's' ?> assigned to you</span>
-                    </div>
-
-                    <div class="sheets-table-wrap view-my-task-wrap">
-                        <table class="sheets-table view-my-task-table">
-                            <colgroup>
-                                <col style="width:120px;">
-                                <col style="width:90px;">
-                                <col>
-                                <col style="width:110px;">
-                                <col style="width:130px;">
-                                <col style="width:150px;">
-                                <col style="width:130px;">
-                            </colgroup>
-                            <thead>
-                                <tr>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Key</span></div></th>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Type</span></div></th>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Summary</span></div></th>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Priority</span></div></th>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Due Date</span></div></th>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Assignee</span></div></th>
-                                    <th><div class="sheets-th-inner"><span class="sheets-th-label">Estimate Time</span></div></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                <?php foreach ($myTaskGroups as $group): ?>
-                                    <tr class="view-my-task-status-row<?= !empty($group['is_priority']) ? ' is-priority' : '' ?>" data-group-toggle>
-                                        <td colspan="7">
-                                            <i class="fa-solid fa-chevron-down view-my-task-toggle-icon"></i>
-                                            <span class="view-my-task-status-dot" style="background:<?= htmlspecialchars((string) $group['color'], ENT_QUOTES, 'UTF-8') ?>"></span>
-                                            <span class="view-my-task-status-name"><?= htmlspecialchars((string) $group['name'], ENT_QUOTES, 'UTF-8') ?></span>
-                                            <span class="view-my-task-status-count"><?= (int) $group['item_count'] ?></span>
-                                            <?php if (!empty($group['is_priority'])): ?>
-                                                <span class="view-my-task-priority-badge">Priority</span>
-                                            <?php endif; ?>
-                                        </td>
-                                    </tr>
-                                    <?php foreach ($group['date_groups'] as $dateGroup): ?>
-                                        <tr class="view-my-task-date-row" data-group-toggle>
-                                            <td colspan="7">
-                                                <i class="fa-solid fa-chevron-down view-my-task-toggle-icon"></i>
-                                                <span class="view-my-task-date-label"><?= htmlspecialchars((string) $dateGroup['label'], ENT_QUOTES, 'UTF-8') ?></span>
-                                                <span class="view-my-task-date-count"><?= count($dateGroup['items']) ?></span>
-                                            </td>
-                                        </tr>
-                                        <?php foreach ($dateGroup['items'] as $item): ?>
-                                            <tr class="view-my-task-item-row" data-item-id="<?= (int) $item['id'] ?>"
-                                                data-status-column-id="<?= (int) $item['column_id'] ?>"
-                                                data-work-type-id="<?= (int) $item['work_type_id'] ?>"
-                                                data-work-type-name="<?= htmlspecialchars((string) $item['work_type_name'], ENT_QUOTES, 'UTF-8') ?>"
-                                                data-work-type-icon="<?= htmlspecialchars((string) $item['work_type_svg_icon'], ENT_QUOTES, 'UTF-8') ?>"
-                                                data-work-item-key="<?= htmlspecialchars((string) $item['work_item_key'], ENT_QUOTES, 'UTF-8') ?>"
-                                                data-item-description="<?= htmlspecialchars((string) $item['description'], ENT_QUOTES, 'UTF-8') ?>"
-                                                data-priority="<?= htmlspecialchars((string) $item['priority'], ENT_QUOTES, 'UTF-8') ?>"
-                                                data-assignee-user-id="<?= (int) $item['assignee_user_id'] ?>"
-                                                data-assignee-name="<?= htmlspecialchars((string) $item['assignee_name'], ENT_QUOTES, 'UTF-8') ?>"
-                                                data-reporter-user-id="<?= (int) $item['reporter_user_id'] ?>"
-                                                data-reporter-name="<?= htmlspecialchars((string) $item['reporter_name'], ENT_QUOTES, 'UTF-8') ?>"
-                                                data-parent-item-id="<?= (int) $item['parent_item_id'] ?>">
-                                                <td><span class="sheets-cell-key"><?= htmlspecialchars((string) $item['work_item_key'], ENT_QUOTES, 'UTF-8') ?></span></td>
-                                                <td>
-                                                    <div class="sheets-cell-type">
-                                                        <?php if (trim((string) $item['work_type_svg_icon']) !== ''): ?>
-                                                            <img class="sheets-wt-icon" src="<?= htmlspecialchars((string) $item['work_type_svg_icon'], ENT_QUOTES, 'UTF-8') ?>" alt="">
-                                                        <?php endif; ?>
-                                                        <span><?= htmlspecialchars((string) $item['work_type_name'], ENT_QUOTES, 'UTF-8') ?></span>
-                                                    </div>
-                                                </td>
-                                                <td><?= htmlspecialchars((string) $item['title'], ENT_QUOTES, 'UTF-8') ?></td>
-                                                <td><?= htmlspecialchars((string) $item['priority'], ENT_QUOTES, 'UTF-8') ?></td>
-                                                <td><?= htmlspecialchars($dateGroup['due_date'] !== '' ? $dateGroup['due_date'] : '-', ENT_QUOTES, 'UTF-8') ?></td>
-                                                <td><?= htmlspecialchars($item['assignee_name'] !== '' ? $item['assignee_name'] : 'Unassigned', ENT_QUOTES, 'UTF-8') ?></td>
-                                                <td><?= (int) $item['original_estimate_value'] > 0 ? htmlspecialchars($item['original_estimate_value'] . ' ' . $item['original_estimate_unit'], ENT_QUOTES, 'UTF-8') : '-' ?></td>
-                                            </tr>
-                                        <?php endforeach; ?>
-                                    <?php endforeach; ?>
-                                <?php endforeach; ?>
-                            </tbody>
-                        </table>
-                    </div>
-                <?php endif; ?>
+            <div class="task-main-content" id="viewMyTaskContent">
+                <?php include __DIR__ . '/view_my_task_content.php'; ?>
             </div>
         </section>
     </div>
@@ -211,6 +177,9 @@ window.taskBoardConfig = {
     canEdit: <?= $workItemCanEdit ? 'true' : 'false' ?>,
     canDelete: <?= $workItemCanDelete ? 'true' : 'false' ?>,
     isProjectOwner: <?= $isProjectOwner ? 'true' : 'false' ?>,
+    allowedWorkTypeIds: <?= json_encode(array_values($allowedWorkTypeIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    allowedStatusIds: <?= json_encode(array_values($allowedStatusIds), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
+    columnPermissions: <?= json_encode($columnPermissions, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     projectKey: <?= json_encode($projectKeySetting, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     currentProject: <?= json_encode($currentProject, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     workTypes: <?= json_encode($workTypes, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
@@ -221,11 +190,11 @@ window.taskBoardConfig = {
     columns: <?= json_encode($columns, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
-<script src="../js/task_board_core.js"></script>
-<script src="../js/task_board_ui.js"></script>
-<script src="../js/task_board.js"></script>
+<script src="../js/task_board_core.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_core.js') ?>"></script>
+<script src="../js/task_board_ui.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_ui.js') ?>"></script>
+<script src="../js/task_board.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board.js') ?>"></script>
 <script src="<?= $SITEURL ?>/header/tinymce/tinymce.min.js"></script>
 <script src="../js/text_editor.js"></script>
-<script src="../js/view_my_task.js"></script>
+<script src="../js/view_my_task.js?v=<?= (int) @filemtime(__DIR__ . '/../js/view_my_task.js') ?>"></script>
 </body>
 </html>

@@ -8998,6 +8998,39 @@ if (!function_exists('shopeeOmsGetOrderCustomerNameText')) {
     }
 }
 
+if (!function_exists('shopeeOmsGetOrderRecipientNameText')) {
+    /**
+     * The name the parcel is addressed to, as opposed to the buyer/account identity that
+     * shopeeOmsGetOrderCustomerNameText() returns. Shopee keeps this in its own
+     * customer_name column and falls back to the delivery info remembered from the last
+     * warehouse scan; the other platforms already store a real name in their customer name
+     * field. Airbill PDFs are deliberately not parsed here, so this stays cheap enough to
+     * call once per row on a listing page.
+     */
+    function shopeeOmsGetOrderRecipientNameText($orderRow, $source = 'shopee')
+    {
+        $orderRow = is_array($orderRow) ? $orderRow : array();
+        $sourceConfig = shopeeOmsResolveOrderSourceConfig($source, shopeeOmsGetOrderSourcePlatform($orderRow, 'shopee'));
+        $platform = isset($sourceConfig['platform']) ? (string) $sourceConfig['platform'] : 'shopee';
+
+        if ($platform !== 'shopee') {
+            $fieldName = isset($sourceConfig['customer_name_field']) ? (string) $sourceConfig['customer_name_field'] : '';
+            return $fieldName !== '' && isset($orderRow[$fieldName]) ? trim((string) $orderRow[$fieldName]) : '';
+        }
+
+        // customer_name was added to the Shopee order table by migration, so an older
+        // schema simply leaves the key absent and we fall through to the session value.
+        $recipientName = isset($orderRow['customer_name']) ? trim((string) $orderRow['customer_name']) : '';
+        if ($recipientName !== '') {
+            return $recipientName;
+        }
+
+        $rememberedDeliveryInfo = shopeeOmsGetRememberedWarehouseDeliveryInfo($platform, isset($orderRow['id']) ? $orderRow['id'] : 0);
+
+        return isset($rememberedDeliveryInfo['customer_name']) ? trim((string) $rememberedDeliveryInfo['customer_name']) : '';
+    }
+}
+
 if (!function_exists('customerLabelGetPlatformConfig')) {
     function customerLabelGetPlatformConfig($platform)
     {

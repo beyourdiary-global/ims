@@ -13,6 +13,21 @@ $(document).ready(function ($) {
     updateCheckboxesOnOtherPages(isChecked);
   });
 
+  // Copying opens the Add form prefilled from the chosen package, so confirm first to
+  // make it obvious this is a new package rather than an edit of the existing one.
+  $(document).on("click", ".package-copy-btn", function (event) {
+    const packageName = String($(this).data("package-name") || "this package");
+    const confirmed = window.confirm(
+      'Copy "' +
+        packageName +
+        '" into a new package?\n\nThe Add form opens prefilled with its data. Nothing is saved until you review the details and click Add Package.',
+    );
+
+    if (!confirmed) {
+      event.preventDefault();
+    }
+  });
+
   $('a[name="exportBtn"]').on("click", function (event) {
     event.preventDefault();
     const checkboxValues = [];
