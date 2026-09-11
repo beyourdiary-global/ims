@@ -821,6 +821,25 @@ if (!function_exists('commonBuildFilteredQueueUrl')) {
     }
 }
 
+if (!function_exists('commonAssetVersion')) {
+    /**
+     * A cache-busting stamp for a CSS/JS file, taken from its last-modified time, so a
+     * browser holding an older copy fetches the new one after a deploy. Without this a
+     * change to a shared script simply does not reach anyone who has visited before.
+     *
+     * Falls back to the current hour, which still expires on its own, rather than to a
+     * fixed value that would cache forever.
+     */
+    function commonAssetVersion($relativePath)
+    {
+        $relativePath = '/' . ltrim((string) $relativePath, '/');
+        $rootPath = defined('ROOT') ? ROOT : dirname(__DIR__);
+        $timestamp = @filemtime($rootPath . $relativePath);
+
+        return $timestamp !== false ? (string) $timestamp : date('YmdH');
+    }
+}
+
 if (!function_exists('commonParseIdListFilter')) {
     /**
      * Reads a filter that holds several ids as one comma-separated query value, e.g.
@@ -914,16 +933,94 @@ if (!function_exists('commonRenderMultiSelectFilter')) {
         }
 
         $showSearch = count($options) > 8;
+
+        // Styles ship with the component rather than sitting in main.css, which 312 pages
+        // load without a cache-busting stamp - a browser holding an older copy would show
+        // this filter unstyled. Emitted once per page, however many filters are rendered.
+        static $stylesRendered = false;
+        if (!$stylesRendered) {
+            $stylesRendered = true;
+            ?>
+            <style>
+                .multi-filter {
+                    position: relative;
+                }
+
+                .multi-filter-toggle {
+                    overflow: hidden;
+                    white-space: nowrap;
+                    text-overflow: ellipsis;
+                }
+
+                /* Positioned by CSS, not Popper - multiFilterToggle() only adds/removes .show. */
+                .multi-filter-menu {
+                    position: absolute;
+                    top: 100%;
+                    left: 0;
+                    z-index: 1000;
+                    display: none;
+                    width: 100%;
+                    min-width: 260px;
+                    margin-top: 0.125rem;
+                    background-color: #fff;
+                    background-clip: padding-box;
+                    border: 1px solid rgba(0, 0, 0, 0.15);
+                    border-radius: 0.5rem;
+                    box-shadow: 0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04);
+                    padding: 0.5rem;
+                }
+
+                .multi-filter-menu.show {
+                    display: block;
+                }
+
+                .multi-filter-options {
+                    max-height: 260px;
+                    overflow-y: auto;
+                }
+
+                .multi-filter-option {
+                    display: flex;
+                    align-items: flex-start;
+                    gap: 0.5rem;
+                    margin: 0;
+                    padding: 0.25rem;
+                    cursor: pointer;
+                    border-radius: 0.25rem;
+                }
+
+                .multi-filter-option:hover {
+                    background-color: rgba(0, 0, 0, 0.04);
+                }
+
+                /* display:flex above would otherwise win over the [hidden] the search sets. */
+                .multi-filter-option[hidden] {
+                    display: none;
+                }
+
+                .multi-filter-option .form-check-input {
+                    flex-shrink: 0;
+                    margin: 0.2rem 0 0 0;
+                }
+
+                .multi-filter-option .form-check-label {
+                    cursor: pointer;
+                    word-break: break-word;
+                }
+            </style>
+            <?php
+        }
         ?>
         <label class="form-label"><?= htmlspecialchars((string) $label, ENT_QUOTES, 'UTF-8') ?></label>
-        <div class="dropdown multi-filter" id="<?= htmlspecialchars($wrapId, ENT_QUOTES, 'UTF-8') ?>" data-multi-filter-param="<?= htmlspecialchars($param, ENT_QUOTES, 'UTF-8') ?>" data-multi-filter-all-label="<?= htmlspecialchars((string) $allLabel, ENT_QUOTES, 'UTF-8') ?>">
-            <?php /* Opened by multiFilterToggle() rather than data-bs-toggle: this build ships
-                     Bootstrap 5.0.2, whose dropdown closes on any click that is not on an
-                     input element, so ticking an option by its text would shut the menu. */ ?>
+        <div class="multi-filter" id="<?= htmlspecialchars($wrapId, ENT_QUOTES, 'UTF-8') ?>" data-multi-filter-param="<?= htmlspecialchars($param, ENT_QUOTES, 'UTF-8') ?>" data-multi-filter-all-label="<?= htmlspecialchars((string) $allLabel, ENT_QUOTES, 'UTF-8') ?>">
+            <?php /* Deliberately not a Bootstrap/MDB dropdown - multiFilterToggle() drives it.
+                     This build loads Bootstrap CSS 5.3.0 against Bootstrap JS 5.0.2 plus MDB,
+                     and 5.0.2 predates data-bs-auto-close: it shuts the menu on any click that
+                     is not on an input, so ticking an option by its text would close it. */ ?>
             <button class="form-select text-start multi-filter-toggle" type="button" aria-expanded="false">
                 <span class="multi-filter-text"><?= htmlspecialchars($buttonText, ENT_QUOTES, 'UTF-8') ?></span>
             </button>
-            <div class="dropdown-menu multi-filter-menu p-2">
+            <div class="multi-filter-menu">
                 <?php if ($showSearch): ?>
                     <input type="search" class="form-control form-control-sm mb-2 multi-filter-search" placeholder="<?= htmlspecialchars((string) $searchPlaceholder, ENT_QUOTES, 'UTF-8') ?>" autocomplete="off">
                 <?php endif; ?>

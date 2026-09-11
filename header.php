@@ -23,7 +23,9 @@
 <!-- Functions -->
 <script src="<?= $SITEURL ?>/header/js/@popperjs_core@2.9.2_dist_umd_popper.min.js"></script>
 <script src="<?= $SITEURL ?>/header/bootstrap-5.0.2-dist/js/bootstrap.min.js"></script>
-<script src="<?= $SITEURL ?>/js/common.fun.js"></script>
+<?php /* index.php, changePassword.php and forgotPassword.php include this file directly and
+         may not have loaded common.php, so the stamp is optional rather than fatal. */ ?>
+<script src="<?= $SITEURL ?>/js/common.fun.js<?= function_exists('commonAssetVersion') ? '?v=' . commonAssetVersion('/js/common.fun.js') : '' ?>"></script>
 
 <!-- Google Fonts -->
 <link href="<?= $SITEURL ?>/header/font/Roboto.css" rel="stylesheet" />
