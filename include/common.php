@@ -821,6 +821,132 @@ if (!function_exists('commonBuildFilteredQueueUrl')) {
     }
 }
 
+if (!function_exists('commonParseIdListFilter')) {
+    /**
+     * Reads a filter that holds several ids as one comma-separated query value, e.g.
+     * `?pkg=407,408`. Kept as a single scalar parameter rather than `pkg[]` so it still
+     * survives commonBuildFilteredQueueUrl(), which only carries non-array query values.
+     *
+     * Read straight from $_GET rather than through input(), whose 256-character ceiling
+     * would silently drop the whole filter once enough ids were picked. Only digits get
+     * through here, so nothing else can reach a query built from the result.
+     */
+    function commonParseIdListFilter($key, $maxIds = 200)
+    {
+        if (!isset($_GET[$key]) || is_array($_GET[$key])) {
+            return array();
+        }
+
+        $ids = array();
+        foreach (explode(',', (string) $_GET[$key]) as $candidate) {
+            $candidate = trim($candidate);
+            if ($candidate === '' || !ctype_digit($candidate)) {
+                continue;
+            }
+
+            $id = (int) $candidate;
+            if ($id > 0 && !in_array($id, $ids, true)) {
+                $ids[] = $id;
+                if (count($ids) >= (int) $maxIds) {
+                    break;
+                }
+            }
+        }
+
+        return $ids;
+    }
+}
+
+if (!function_exists('commonBuildIdListFilterCondition')) {
+    /**
+     * An OR of FIND_IN_SET checks for a column that stores comma-separated ids, so a row
+     * matches when it contains any one of the selected ids. Returns '' for an empty
+     * selection, which callers treat as no filter at all.
+     */
+    function commonBuildIdListFilterCondition($connection, $column, $ids)
+    {
+        $ids = array_values(array_filter(array_map('intval', (array) $ids)));
+        if (empty($ids)) {
+            return '';
+        }
+
+        $conditions = array();
+        foreach ($ids as $id) {
+            $conditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($connection, (string) $id) . "', " . $column . ") > 0";
+        }
+
+        return '(' . implode(' OR ', $conditions) . ')';
+    }
+}
+
+if (!function_exists('commonRenderMultiSelectFilter')) {
+    /**
+     * A tick-box dropdown standing in for a single-choice <select>, for filters where
+     * picking several values at once is useful. Writes the chosen ids back as one
+     * comma-separated query parameter, so the page reads it with commonParseIdListFilter().
+     *
+     * $options is id => label. A search box appears once the list is long enough to make
+     * scrolling to a name tedious.
+     */
+    function commonRenderMultiSelectFilter($param, $label, $options, $selectedIds, $allLabel = 'All', $searchPlaceholder = 'Search...')
+    {
+        $param = trim((string) $param);
+        if ($param === '') {
+            return;
+        }
+
+        $selectedIds = array_values(array_filter(array_map('intval', (array) $selectedIds)));
+        $wrapId = 'multiFilter_' . preg_replace('/[^A-Za-z0-9_]/', '_', $param);
+
+        $selectedLabels = array();
+        foreach ($selectedIds as $selectedId) {
+            if (isset($options[$selectedId])) {
+                $selectedLabels[] = (string) $options[$selectedId];
+            }
+        }
+
+        if (empty($selectedLabels)) {
+            $buttonText = $allLabel;
+        } else if (count($selectedLabels) === 1) {
+            $buttonText = $selectedLabels[0];
+        } else {
+            $buttonText = count($selectedLabels) . ' selected';
+        }
+
+        $showSearch = count($options) > 8;
+        ?>
+        <label class="form-label"><?= htmlspecialchars((string) $label, ENT_QUOTES, 'UTF-8') ?></label>
+        <div class="dropdown multi-filter" id="<?= htmlspecialchars($wrapId, ENT_QUOTES, 'UTF-8') ?>" data-multi-filter-param="<?= htmlspecialchars($param, ENT_QUOTES, 'UTF-8') ?>" data-multi-filter-all-label="<?= htmlspecialchars((string) $allLabel, ENT_QUOTES, 'UTF-8') ?>">
+            <?php /* Opened by multiFilterToggle() rather than data-bs-toggle: this build ships
+                     Bootstrap 5.0.2, whose dropdown closes on any click that is not on an
+                     input element, so ticking an option by its text would shut the menu. */ ?>
+            <button class="form-select text-start multi-filter-toggle" type="button" aria-expanded="false">
+                <span class="multi-filter-text"><?= htmlspecialchars($buttonText, ENT_QUOTES, 'UTF-8') ?></span>
+            </button>
+            <div class="dropdown-menu multi-filter-menu p-2">
+                <?php if ($showSearch): ?>
+                    <input type="search" class="form-control form-control-sm mb-2 multi-filter-search" placeholder="<?= htmlspecialchars((string) $searchPlaceholder, ENT_QUOTES, 'UTF-8') ?>" autocomplete="off">
+                <?php endif; ?>
+                <div class="multi-filter-options">
+                    <?php foreach ($options as $optionId => $optionLabel): ?>
+                        <?php $optionId = (int) $optionId; ?>
+                        <label class="form-check multi-filter-option" data-multi-filter-label="<?= htmlspecialchars(strtolower((string) $optionLabel), ENT_QUOTES, 'UTF-8') ?>">
+                            <input class="form-check-input" type="checkbox" value="<?= $optionId ?>"<?= in_array($optionId, $selectedIds, true) ? ' checked' : '' ?>>
+                            <span class="form-check-label"><?= htmlspecialchars((string) $optionLabel, ENT_QUOTES, 'UTF-8') ?></span>
+                        </label>
+                    <?php endforeach; ?>
+                    <div class="text-muted small px-1 py-2 multi-filter-empty" hidden>No match</div>
+                </div>
+                <div class="d-flex gap-2 mt-2 pt-2 border-top">
+                    <button class="btn btn-sm btn-primary flex-fill multi-filter-apply" type="button">Apply</button>
+                    <button class="btn btn-sm btn-outline-secondary multi-filter-clear" type="button">Clear</button>
+                </div>
+            </div>
+        </div>
+        <?php
+    }
+}
+
 if (!function_exists('renderNotificationScript')) {
     function renderNotificationScript($message, $type = 'info', $redirectUrl = '', $delayMs = 1200, $useReplace = false, $reload = false)
     {

@@ -1550,6 +1550,217 @@ function applyFilterOrGroup(param, element) {
   window.location.href = url.toString();
 }
 
+// Tick-box dropdowns rendered by commonRenderMultiSelectFilter(). Unlike the plain
+// filters above these do not reload on every tick, since the point is to pick several
+// values before the page goes anywhere - Apply is what navigates.
+function multiFilterApply(wrap) {
+  if (!wrap) {
+    return;
+  }
+
+  let param = wrap.getAttribute("data-multi-filter-param");
+  if (!param) {
+    return;
+  }
+
+  let values = [];
+  wrap
+    .querySelectorAll(".multi-filter-options input[type=checkbox]:checked")
+    .forEach(function (box) {
+      values.push(box.value);
+    });
+
+  let url = new URL(window.location.href);
+  if (values.length > 0) {
+    url.searchParams.set(param, values.join(","));
+  } else {
+    url.searchParams.delete(param);
+  }
+
+  window.location.href = url.toString();
+}
+
+function multiFilterSearch(wrap, term) {
+  if (!wrap) {
+    return;
+  }
+
+  term = (term || "").trim().toLowerCase();
+  let visible = 0;
+
+  wrap.querySelectorAll(".multi-filter-option").forEach(function (option) {
+    let label = option.getAttribute("data-multi-filter-label") || "";
+    // A ticked option stays visible even when it does not match, so a search can
+    // never hide what is about to be applied.
+    let checked = option.querySelector("input[type=checkbox]:checked") !== null;
+    let show = term === "" || checked || label.indexOf(term) !== -1;
+    option.hidden = !show;
+    if (show) {
+      visible++;
+    }
+  });
+
+  let empty = wrap.querySelector(".multi-filter-empty");
+  if (empty) {
+    empty.hidden = visible > 0;
+  }
+}
+
+function multiFilterUpdateLabel(wrap) {
+  if (!wrap) {
+    return;
+  }
+
+  let text = wrap.querySelector(".multi-filter-text");
+  if (!text) {
+    return;
+  }
+
+  let checked = wrap.querySelectorAll(
+    ".multi-filter-options input[type=checkbox]:checked",
+  );
+
+  if (checked.length === 0) {
+    text.textContent = wrap.getAttribute("data-multi-filter-all-label") || "All";
+  } else if (checked.length === 1) {
+    let label = checked[0]
+      .closest(".multi-filter-option")
+      .querySelector(".form-check-label");
+    text.textContent = label ? label.textContent : "1 selected";
+  } else {
+    text.textContent = checked.length + " selected";
+  }
+}
+
+function multiFilterClose(wrap) {
+  if (!wrap) {
+    return;
+  }
+
+  let menu = wrap.querySelector(".multi-filter-menu");
+  let toggle = wrap.querySelector(".multi-filter-toggle");
+
+  if (menu) {
+    menu.classList.remove("show");
+  }
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", "false");
+  }
+}
+
+function multiFilterCloseAll(except) {
+  document.querySelectorAll(".multi-filter").forEach(function (wrap) {
+    if (wrap !== except) {
+      multiFilterClose(wrap);
+    }
+  });
+}
+
+function multiFilterToggle(wrap) {
+  if (!wrap) {
+    return;
+  }
+
+  let menu = wrap.querySelector(".multi-filter-menu");
+  if (!menu) {
+    return;
+  }
+
+  let opening = !menu.classList.contains("show");
+  multiFilterCloseAll(wrap);
+
+  menu.classList.toggle("show", opening);
+
+  let toggle = wrap.querySelector(".multi-filter-toggle");
+  if (toggle) {
+    toggle.setAttribute("aria-expanded", opening ? "true" : "false");
+  }
+
+  if (opening) {
+    let search = wrap.querySelector(".multi-filter-search");
+    if (search) {
+      search.focus();
+    }
+  }
+}
+
+// Delegated so filters rendered after load, or sitting inside a hidden section, still work.
+document.addEventListener("click", function (e) {
+  if (!e.target.closest) {
+    return;
+  }
+
+  let apply = e.target.closest(".multi-filter-apply");
+  if (apply) {
+    multiFilterApply(apply.closest(".multi-filter"));
+    return;
+  }
+
+  let clear = e.target.closest(".multi-filter-clear");
+  if (clear) {
+    let wrap = clear.closest(".multi-filter");
+    if (wrap) {
+      wrap
+        .querySelectorAll(".multi-filter-options input[type=checkbox]")
+        .forEach(function (box) {
+          box.checked = false;
+        });
+      multiFilterApply(wrap);
+    }
+    return;
+  }
+
+  let toggle = e.target.closest(".multi-filter-toggle");
+  if (toggle) {
+    multiFilterToggle(toggle.closest(".multi-filter"));
+    return;
+  }
+
+  // A click anywhere outside an open filter closes it, the way a dropdown should.
+  multiFilterCloseAll(e.target.closest(".multi-filter"));
+});
+
+document.addEventListener("keydown", function (e) {
+  if (e.key === "Escape") {
+    multiFilterCloseAll(null);
+  }
+});
+
+document.addEventListener("change", function (e) {
+  if (!e.target.closest) {
+    return;
+  }
+
+  let option = e.target.closest(".multi-filter-option");
+  if (option) {
+    multiFilterUpdateLabel(option.closest(".multi-filter"));
+  }
+});
+
+document.addEventListener("input", function (e) {
+  if (!e.target.closest) {
+    return;
+  }
+
+  let search = e.target.closest(".multi-filter-search");
+  if (search) {
+    multiFilterSearch(search.closest(".multi-filter"), search.value);
+  }
+});
+
+// Enter in the search box applies, matching what Enter does in a normal filter field.
+document.addEventListener("keydown", function (e) {
+  if (e.key !== "Enter" || !e.target.closest) {
+    return;
+  }
+
+  let search = e.target.closest(".multi-filter-search");
+  if (search) {
+    e.preventDefault();
+    multiFilterApply(search.closest(".multi-filter"));
+  }
+});
+
 function activatePlatformTab(platformKey, hiddenInputs) {
   document.querySelectorAll("[data-platform-tab]").forEach(function (button) {
     button.classList.toggle(
