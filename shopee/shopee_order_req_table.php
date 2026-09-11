@@ -84,7 +84,8 @@ if ($monthInput === 'All') {
 }
 $statusFilter = input('status');
 $brandFilter = numberInput('brand');
-$pkgFilter = numberInput('pkg');
+// Several packages can be filtered at once, carried as one comma-separated `pkg` value.
+$pkgFilterIds = commonParseIdListFilter('pkg');
 $accFilter = numberInput('acc');
 $monthGroupInput = input('month_gb');
 if ($monthGroupInput === 'All') {
@@ -314,7 +315,8 @@ if (!empty($statusFilterCode)) {
 }
 // Use FIND_IN_SET to correctly search inside comma-separated IDs
 if (!empty($brandFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $brandFilter) . "', brand) > 0"; }
-if (!empty($pkgFilter)) { $whereConditions[] = "FIND_IN_SET('" . mysqli_real_escape_string($finance_connect, $pkgFilter) . "', package) > 0"; }
+$pkgFilterCondition = commonBuildIdListFilterCondition($finance_connect, 'package', $pkgFilterIds);
+if ($pkgFilterCondition !== '') { $whereConditions[] = $pkgFilterCondition; }
 if (!empty($accFilter)) { $whereConditions[] = "shopee_acc = '" . mysqli_real_escape_string($finance_connect, $accFilter) . "'"; }
 
 $groupByFields = [];
@@ -449,18 +451,18 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                     </select>
                 </div>
                 <div class="col-md-3">
-                    <label for="pkgFilter" class="form-label">Filter by Package</label>
-                    <select id="pkgFilter" name="pkg" class="form-select" onchange="applyFilterOrGroup('pkg', this)">
-                        <option value="">All Packages</option>
-                        <?php
-                        $pkgSql = "SELECT id, name FROM " . PKG . " ORDER BY name ASC";
-                        $pkgResult = mysqli_query($connect, $pkgSql);
+                    <?php
+                    // Read once into an array: the tick-box filter and the Group By select
+                    // below both need this list, and a result set can only be walked once.
+                    $pkgOptions = array();
+                    $pkgResult = mysqli_query($connect, "SELECT id, name FROM " . PKG . " ORDER BY name ASC");
+                    if ($pkgResult) {
                         while ($pkgRow = mysqli_fetch_assoc($pkgResult)) {
-                            $selected = ($pkgFilter == $pkgRow['id']) ? 'selected' : '';
-                            echo "<option value='" . htmlspecialchars((string) $pkgRow['id'], ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $pkgRow['name'], ENT_QUOTES, 'UTF-8') . "</option>";
+                            $pkgOptions[(int) $pkgRow['id']] = (string) $pkgRow['name'];
                         }
-                        ?>
-                    </select>
+                    }
+                    commonRenderMultiSelectFilter('pkg', 'Filter by Package', $pkgOptions, $pkgFilterIds, 'All Packages', 'Search package...');
+                    ?>
                 </div>
                 <div class="col-md-3">
                     <label for="accFilter" class="form-label">Filter by Shopee Account</label>
@@ -528,10 +530,9 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                     <select id="pkgGroupBy" name="pkg_gb" class="form-select" onchange="applyFilterOrGroup('pkg_gb', this)">
                         <option value="">All Packages</option>
                         <?php
-                        mysqli_data_seek($pkgResult, 0); 
-                        while ($pkgRow = mysqli_fetch_assoc($pkgResult)) {
-                            $selected = ($pkgGroup == $pkgRow['id']) ? 'selected' : '';
-                            echo "<option value='" . htmlspecialchars((string) $pkgRow['id'], ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $pkgRow['name'], ENT_QUOTES, 'UTF-8') . "</option>";
+                        foreach ($pkgOptions as $pkgOptionId => $pkgOptionName) {
+                            $selected = ($pkgGroup == $pkgOptionId) ? 'selected' : '';
+                            echo "<option value='" . htmlspecialchars((string) $pkgOptionId, ENT_QUOTES, 'UTF-8') . "' $selected>" . htmlspecialchars((string) $pkgOptionName, ENT_QUOTES, 'UTF-8') . "</option>";
                         }
                         ?>
                     </select>
