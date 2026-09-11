@@ -75,15 +75,8 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     $periodStart = campaignDateValue($campaign['period_start_date'] ?? '');
     $periodEnd = campaignDateValue($campaign['period_end_date'] ?? '');
     $periodWhere = '';
-    $periodWhereCpr = '';
-    // The new-customer branch of the customer list is aliased cpr2, so it needs its own
-    // copy of the period clause. It was given the cpr one, naming a table not in that
-    // branch, which made the whole customer list query fail once a period was set.
-    $periodWhereCpr2 = '';
     if ($periodStart !== '' && $periodEnd !== '') {
         $periodWhere = " AND DATE(`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
-        $periodWhereCpr = " AND DATE(cpr.`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(cpr.`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
-        $periodWhereCpr2 = " AND DATE(cpr2.`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(cpr2.`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
     }
 
     $packageFilter = '';
@@ -128,12 +121,17 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
 
     // How many customers the campaign was set up with, and how many of them ordered. The
     // purchase rate is that ratio; it used to be hardcoded to 100%, which said nothing.
-    $savedCustomerTotal = 0;
-    $savedCustomerResult = mysqli_query($connect, "SELECT COUNT(*) AS cnt FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'");
-    if ($savedCustomerResult && $savedCustomerResult->num_rows > 0) {
-        $savedCustomerRow = $savedCustomerResult->fetch_assoc();
-        $savedCustomerTotal = (int) ($savedCustomerRow['cnt'] ?? 0);
+    // Read once and kept, because the Customer Detail List below needs these names too.
+    $savedCustomerMap = array();
+    $savedCustomerResult = mysqli_query($connect, "SELECT `id`, `customer_name`, `customer_contact`, `platform`
+        FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . "
+        WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'");
+    if ($savedCustomerResult) {
+        while ($savedCustomerRow = $savedCustomerResult->fetch_assoc()) {
+            $savedCustomerMap[(int) ($savedCustomerRow['id'] ?? 0)] = $savedCustomerRow;
+        }
     }
+    $savedCustomerTotal = count($savedCustomerMap);
 
     $savedPurchasedTotal = 0;
     $savedPurchasedResult = mysqli_query($connect, "SELECT COUNT(DISTINCT `campaign_customer_id`) AS cnt FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' AND `campaign_customer_id` > 0" . $packageFilter . $periodWhere);
@@ -231,89 +229,110 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         }
     }
 
-    // New customers are listed one row each, named where the buyer name was captured.
-    // They used to be rolled into a single "[Auto-Discovered]" row, because a record with
-    // campaign_customer_id = 0 carried nothing else to tell one buyer from another.
+    // The Customer Detail List is the campaign's buyers: whoever ordered inside the period
+    // and bought one of the campaign's packages. It is built from the orders themselves and
+    // grouped per buyer, so a customer who did not order simply does not appear.
+    //
+    // Replaces a UNION of "every saved customer, LEFT JOINed to their orders" and "the new
+    // customers", which listed saved customers with no orders at all, and then ran a second
+    // query per row to fetch that row's orders.
     $hasBuyerColumns = campaignColumnExists($connect, CAMPAIGN_PURCHASE_RECORD, 'buyer_platform_id');
-    $newCustomerNameSql = $hasBuyerColumns
-        ? "IFNULL(NULLIF(TRIM(MAX(cpr2.`buyer_name`)), ''), CONCAT('New customer ', IFNULL(cpr2.`buyer_platform_id`, '')))"
-        : "'[New Customers]'";
-    $newCustomerKeySql = $hasBuyerColumns ? "cpr2.`buyer_platform_id`" : "cpr2.`campaign_customer_id`";
-    $newCustomerBuyerKeySql = $hasBuyerColumns ? "IFNULL(cpr2.`buyer_platform_id`,'')" : "''";
+    $buyerSelectColumns = $hasBuyerColumns ? ", `buyer_platform_id`, `buyer_name`" : "";
 
-    $customerSql = "SELECT cc.`id`, cc.`customer_name`, cc.`customer_contact`, cc.`platform`,
-            COUNT(cpr.`id`) AS order_count,
-            SUM(IFNULL(cpr.`order_amount`,0)) AS total_amount,
-            MAX(cpr.`order_date`) AS last_order_date, '' AS buyer_key
-        FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " cc
-        LEFT JOIN " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " cpr ON cpr.`campaign_customer_id`=cc.`id` AND cpr.`campaign_id`=cc.`campaign_id` AND cpr.`status`='A'" . (empty($packageIds) ? '' : " AND cpr.`package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhereCpr . "
-        WHERE cc.`campaign_id`='" . (int) $campaignId . "' AND cc.`status`='A'
-        GROUP BY cc.`id`
-        UNION ALL
-        SELECT 0, " . $newCustomerNameSql . ", '', cpr2.`platform`,
-            COUNT(cpr2.`id`) AS order_count,
-            SUM(IFNULL(cpr2.`order_amount`,0)) AS total_amount,
-            MAX(cpr2.`order_date`) AS last_order_date, " . $newCustomerBuyerKeySql . " AS buyer_key
-        FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " cpr2
-        WHERE cpr2.`campaign_id`='" . (int) $campaignId . "' AND cpr2.`campaign_customer_id`=0 AND cpr2.`status`='A'" . (empty($packageIds) ? '' : " AND cpr2.`package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhereCpr2 . "
-        GROUP BY cpr2.`platform`, " . $newCustomerKeySql . "
-        ORDER BY total_amount DESC, customer_name ASC";
-    $customerResult = mysqli_query($connect, $customerSql);
-    if ($customerResult) {
-        while ($customerRow = $customerResult->fetch_assoc()) {
-            $customerId = (int) ($customerRow['id'] ?? 0);
-            $orderCount = (int) ($customerRow['order_count'] ?? 0);
+    $orderSql = "SELECT `id`, `campaign_customer_id`, `platform`, `order_no`, `package_text`,
+            `order_amount`, `order_date`, `order_status`" . $buyerSelectColumns . "
+        FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+        WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere . "
+        ORDER BY `order_date` DESC, `id` DESC";
 
-            $buyerKey = trim((string) ($customerRow['buyer_key'] ?? ''));
+    // campaignPurchaseResolvePackageDisplayName() queries PKG on every call and caches
+    // nothing, so the same package text is resolved once here rather than once per order.
+    $packageNameCache = array();
 
-            $orders = array();
-            if ($orderCount > 0) {
-                if ($customerId === 0) {
-                    // Scoped to this buyer, otherwise every new customer's row would list
-                    // the orders of all of them.
-                    $newCustomerWhere = " AND `platform`='" . $connect->real_escape_string(trim((string) ($customerRow['platform'] ?? ''))) . "'";
-                    if ($hasBuyerColumns) {
-                        $newCustomerWhere .= " AND IFNULL(`buyer_platform_id`,'')='" . $connect->real_escape_string($buyerKey) . "'";
-                    }
-                    $orderDetailSql = "SELECT `id`, `order_no`, `package_text`, `order_amount`, `order_date`, `order_status`, `platform` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_customer_id`=0 AND `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $newCustomerWhere . (empty($packageIds) ? '' : " AND `package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhere . " ORDER BY `order_date` DESC";
+    $buyerGroups = array();
+    $orderResult = mysqli_query($connect, $orderSql);
+    if ($orderResult) {
+        while ($orderRow = $orderResult->fetch_assoc()) {
+            $rowCustomerId = (int) ($orderRow['campaign_customer_id'] ?? 0);
+            $rowPlatform = trim((string) ($orderRow['platform'] ?? ''));
+            $rowBuyerId = $hasBuyerColumns ? trim((string) ($orderRow['buyer_platform_id'] ?? '')) : '';
+
+            // Same identity rule as campaignBuyerIdentitySql(), so the row count here agrees
+            // with the participant figure above.
+            $buyerKey = $rowCustomerId > 0
+                ? 'C' . $rowCustomerId
+                : 'B' . $rowPlatform . '|' . $rowBuyerId;
+
+            if (!isset($buyerGroups[$buyerKey])) {
+                $isSaved = $rowCustomerId > 0 && isset($savedCustomerMap[$rowCustomerId]);
+                $savedCustomer = $isSaved ? $savedCustomerMap[$rowCustomerId] : array();
+
+                if ($isSaved) {
+                    $displayName = trim((string) ($savedCustomer['customer_name'] ?? ''));
+                    $displayContact = trim((string) ($savedCustomer['customer_contact'] ?? ''));
                 } else {
-                    $orderDetailSql = "SELECT `id`, `order_no`, `package_text`, `order_amount`, `order_date`, `order_status`, `platform` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_customer_id`='" . $customerId . "' AND `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . (empty($packageIds) ? '' : " AND `package_id` IN (" . implode(',', array_map('intval', $packageIds)) . ")") . $periodWhere . " ORDER BY `order_date` DESC";
-                }
-                $orderDetailResult = mysqli_query($connect, $orderDetailSql);
-                if ($orderDetailResult) {
-                    while ($orderDetailRow = $orderDetailResult->fetch_assoc()) {
-                        $orders[] = array(
-                            'order_no' => trim((string) ($orderDetailRow['order_no'] ?? '')),
-                            'package_text' => campaignPurchaseResolvePackageDisplayName($connect, trim((string) ($orderDetailRow['package_text'] ?? ''))),
-                            'order_amount' => is_numeric($orderDetailRow['order_amount'] ?? null) ? (float) $orderDetailRow['order_amount'] : 0,
-                            'order_date' => (string) ($orderDetailRow['order_date'] ?? ''),
-                            'order_status' => trim((string) ($orderDetailRow['order_status'] ?? '')),
-                            'platform' => trim((string) ($orderDetailRow['platform'] ?? '')),
-                        );
+                    $displayName = $hasBuyerColumns ? trim((string) ($orderRow['buyer_name'] ?? '')) : '';
+                    $displayContact = '';
+                    if ($displayName === '') {
+                        $displayName = $rowBuyerId !== '' ? 'New customer ' . $rowBuyerId : 'New customer';
                     }
                 }
+
+                $buyerGroups[$buyerKey] = array(
+                    'customer_id' => $rowCustomerId,
+                    'is_new_customer' => !$isSaved,
+                    'customer_name' => $displayName,
+                    'customer_contact' => $displayContact,
+                    'platform' => $rowPlatform,
+                    'order_count' => 0,
+                    'total_amount' => 0.0,
+                    'last_order_date' => '',
+                    'orders' => array(),
+                );
             }
 
-            $data['customer_rows'][] = array(
-                'customer_id' => $customerId,
-                'is_new_customer' => $customerId === 0,
-                'customer_name' => trim((string) ($customerRow['customer_name'] ?? '')),
-                'customer_contact' => trim((string) ($customerRow['customer_contact'] ?? '')),
-                'platform' => trim((string) ($customerRow['platform'] ?? '')),
-                'order_count' => $orderCount,
-                'total_amount' => is_numeric($customerRow['total_amount'] ?? null) ? (float) $customerRow['total_amount'] : 0,
-                'last_order_date' => (string) ($customerRow['last_order_date'] ?? ''),
-                'purchased' => $orderCount > 0,
-                'orders' => $orders,
+            $orderAmount = is_numeric($orderRow['order_amount'] ?? null) ? (float) $orderRow['order_amount'] : 0;
+            $orderDate = (string) ($orderRow['order_date'] ?? '');
+
+            $rawPackageText = trim((string) ($orderRow['package_text'] ?? ''));
+            if (!array_key_exists($rawPackageText, $packageNameCache)) {
+                $packageNameCache[$rawPackageText] = campaignPurchaseResolvePackageDisplayName($connect, $rawPackageText);
+            }
+
+            $buyerGroups[$buyerKey]['order_count']++;
+            $buyerGroups[$buyerKey]['total_amount'] += $orderAmount;
+            if ($orderDate !== '' && $orderDate > $buyerGroups[$buyerKey]['last_order_date']) {
+                $buyerGroups[$buyerKey]['last_order_date'] = $orderDate;
+            }
+            $buyerGroups[$buyerKey]['orders'][] = array(
+                'order_no' => trim((string) ($orderRow['order_no'] ?? '')),
+                'package_text' => $packageNameCache[$rawPackageText],
+                'order_amount' => $orderAmount,
+                'order_date' => $orderDate,
+                'order_status' => trim((string) ($orderRow['order_status'] ?? '')),
+                'platform' => trim((string) ($orderRow['platform'] ?? '')),
             );
+        }
+    }
 
-            if ($orderCount === 1) {
-                $data['repeat_distribution']['1']++;
-            } elseif ($orderCount === 2) {
-                $data['repeat_distribution']['2']++;
-            } elseif ($orderCount >= 3) {
-                $data['repeat_distribution']['3+']++;
-            }
+    $customerRows = array_values($buyerGroups);
+    usort($customerRows, function ($a, $b) {
+        if ($a['total_amount'] === $b['total_amount']) {
+            return strcasecmp($a['customer_name'], $b['customer_name']);
+        }
+
+        return $b['total_amount'] <=> $a['total_amount'];
+    });
+    $data['customer_rows'] = $customerRows;
+
+    foreach ($customerRows as $customerRow) {
+        $orderCount = (int) $customerRow['order_count'];
+        if ($orderCount === 1) {
+            $data['repeat_distribution']['1']++;
+        } elseif ($orderCount === 2) {
+            $data['repeat_distribution']['2']++;
+        } elseif ($orderCount >= 3) {
+            $data['repeat_distribution']['3+']++;
         }
     }
 
@@ -406,9 +425,9 @@ if (input('export') === '1') {
         fputcsv($output, array($bucket . ' order(s)', $count));
     }
     fputcsv($output, array());
-    fputcsv($output, array('Customer Name', 'Contact', 'Platform', 'Customer Type', 'Order Count', 'Total Amount', 'Last Order Date', 'Purchased'));
+    fputcsv($output, array('Customer Name', 'Contact', 'Platform', 'Customer Type', 'Order Count', 'Total Amount', 'Last Order Date'));
     foreach ($reportData['customer_rows'] as $row) {
-        fputcsv($output, array($row['customer_name'], $row['customer_contact'], $row['platform'], empty($row['is_new_customer']) ? 'Saved Customer' : 'New Customer', $row['order_count'], number_format((float) $row['total_amount'], 2, '.', ''), $row['last_order_date'], $row['purchased'] ? 'Yes' : 'No'));
+        fputcsv($output, array($row['customer_name'], $row['customer_contact'], $row['platform'], empty($row['is_new_customer']) ? 'Saved Customer' : 'New Customer', $row['order_count'], number_format((float) $row['total_amount'], 2, '.', ''), $row['last_order_date']));
     }
     fclose($output);
     exit();
@@ -657,20 +676,15 @@ if (input('export') === '1') {
                                         <th>Order Count</th>
                                         <th>Total Amount</th>
                                         <th>Last Order Date</th>
-                                        <th>Purchased</th>
                                     </tr>
                                 </thead>
                                 <tbody>
                                     <?php foreach ($reportData['customer_rows'] as $row): ?>
                                         <tr data-customer-orders="<?= campaignH(json_encode($row['orders'] ?? array())) ?>">
                                             <td>
-                                                <?php if ($row['order_count'] > 0): ?>
-                                                    <a href="javascript:void(0)" class="campaign-customer-detail-link" data-customer-id="<?= (int) $row['customer_id'] ?>" data-customer-name="<?= campaignH($row['customer_name']) ?>" style="color: inherit; text-decoration: none; cursor: pointer;">
-                                                        <?= campaignH($row['customer_name']) ?>
-                                                    </a>
-                                                <?php else: ?>
+                                                <a href="javascript:void(0)" class="campaign-customer-detail-link" data-customer-id="<?= (int) $row['customer_id'] ?>" data-customer-name="<?= campaignH($row['customer_name']) ?>" style="color: inherit; text-decoration: none; cursor: pointer;">
                                                     <?= campaignH($row['customer_name']) ?>
-                                                <?php endif; ?>
+                                                </a>
                                             </td>
                                             <td><?= campaignH($row['customer_contact']) ?></td>
                                             <td><?= campaignH($row['platform']) ?></td>
@@ -684,13 +698,6 @@ if (input('export') === '1') {
                                             <td><?= (int) $row['order_count'] ?></td>
                                             <td><?= number_format((float) $row['total_amount'], 2) ?></td>
                                             <td><?= campaignH($row['last_order_date']) ?></td>
-                                            <td>
-                                                <?php if ($row['purchased']): ?>
-                                                    <span class="badge bg-success">Yes</span>
-                                                <?php else: ?>
-                                                    <span class="badge bg-secondary">No</span>
-                                                <?php endif; ?>
-                                            </td>
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
