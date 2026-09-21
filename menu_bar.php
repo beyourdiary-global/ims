@@ -251,9 +251,7 @@ $menuList = array(
                 'javascript:void(0)',
                 'y',
                 'expand' => array(
-                    array('All Campaigns Dashboard', 'mdi mdi-view-dashboard-outline', $SITEURL . '/campaign2/campaign_unified_dashboard.php', '153'),
-                    array('Campaign (旧系统)', 'mdi mdi-history', $SITEURL . '/campaign/campaign_table.php', '153'),
-                    array('Campaign2 (新系统)', 'mdi mdi-bullhorn-check-outline', $SITEURL . '/campaign2/campaign2_list.php', '153'),
+                    array('Campaign', 'mdi mdi-bullhorn-outline', $SITEURL . '/campaign/campaign_table.php', '153'),
                 ),
                 'pin' => array('153'),
             ),

@@ -730,6 +730,10 @@ if (!function_exists('campaignPurchasePlatformConfigs')) {
                 'row_status_cols' => array('status'),
                 'package_cols' => array('package', 'pkg'),
                 'detail_cols' => array('package', 'remark'),
+                // Shopee-specific metadata used for the Customer Detail List:
+                // which Shopee account the order came from, and its source currency.
+                'shopee_acc_cols' => array('shopee_acc'),
+                'currency_cols' => array('currency'),
             ),
             'Lazada' => array(
                 'conn' => $financeConnect,
@@ -1388,9 +1392,11 @@ if (!function_exists('campaignScanCampaignOrders')) {
             $orderStatusCol = campaignGetFirstExistingColumn($orderConn, $table, isset($config['order_status_cols']) ? $config['order_status_cols'] : array('order_status', 'status'));
             $packageCol = campaignGetFirstExistingColumn($orderConn, $table, $config['package_cols']);
             $detailCol = campaignGetFirstExistingColumn($orderConn, $table, $config['detail_cols']);
+            $shopeeAccCol = isset($config['shopee_acc_cols']) ? campaignGetFirstExistingColumn($orderConn, $table, $config['shopee_acc_cols']) : '';
+            $currencyCol = isset($config['currency_cols']) ? campaignGetFirstExistingColumn($orderConn, $table, $config['currency_cols']) : '';
 
             $selectColumns = array('`id`');
-            foreach (array($orderNoCol, $dateCol, $timeCol, $amountCol, $orderStatusCol, $packageCol, $detailCol, $customerCol) as $column) {
+            foreach (array($orderNoCol, $dateCol, $timeCol, $amountCol, $orderStatusCol, $packageCol, $detailCol, $customerCol, $shopeeAccCol, $currencyCol) as $column) {
                 $quotedCol = campaignPurchaseQuoteColumn($column);
                 if ($column !== '' && !in_array($quotedCol, $selectColumns, true)) {
                     $selectColumns[] = $quotedCol;
@@ -1465,6 +1471,8 @@ if (!function_exists('campaignScanCampaignOrders')) {
                     'order_date' => $orderDateTime !== '' ? $orderDateTime : null,
                     'package_text' => $packageText !== '' ? $packageText : $detailText,
                     'package_id' => $packageId,
+                    'shopee_acc' => $shopeeAccCol !== '' ? (int) ($row[$shopeeAccCol] ?? 0) : 0,
+                    'currency' => $currencyCol !== '' ? (int) ($row[$currencyCol] ?? 0) : 0,
                 );
             }
         }
@@ -1574,6 +1582,11 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             $summary['notes'][] = 'Buyer columns are missing on the purchase record table, so new customers cannot be told apart. Please run insert_table.php.';
         }
 
+        // Currency + Shopee account metadata columns. When present, each purchase record
+        // is tagged with the source currency id and the originating Shopee account id.
+        $hasPurchaseMeta = campaignColumnExists($connect, CAMPAIGN_PURCHASE_RECORD, 'currency')
+            && campaignColumnExists($connect, CAMPAIGN_PURCHASE_RECORD, 'shopee_acc');
+
         // The campaign's own order set: inside the period, and for one of the campaign's
         // packages. Who bought is decided from this, rather than guessing at a customer
         // list first and then asking whether each one happened to buy.
@@ -1645,6 +1658,8 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             $orderDate = trim((string) ($order['order_date'] ?? ''));
             $packageText = campaignNormalizeTextValue($order['package_text'] ?? '', 65535);
             $packageIdForBind = isset($order['package_id']) && $order['package_id'] !== null ? (int) $order['package_id'] : 0;
+            $orderCurrency = (int) ($order['currency'] ?? 0);
+            $orderShopeeAcc = (int) ($order['shopee_acc'] ?? 0);
 
             if ($existingRecordId > 0) {
                 if ($updateRecordStmt) {
@@ -1656,6 +1671,13 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                     if ($updateRecordStmt->execute()) {
                         $summary['records_updated']++;
                     }
+                }
+                if ($hasPurchaseMeta) {
+                    $metaSql = "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+                                SET `currency`=" . ($orderCurrency > 0 ? (int) $orderCurrency : 'NULL') . ",
+                                    `shopee_acc`=" . ($orderShopeeAcc > 0 ? (int) $orderShopeeAcc : 'NULL') . "
+                                WHERE `id`='" . (int) $existingRecordId . "'";
+                    mysqli_query($connect, $metaSql);
                 }
                 $confirmedRecordIds[] = $existingRecordId;
                 continue;
@@ -1674,6 +1696,13 @@ if (!function_exists('campaignRunPurchaseCheck')) {
                     $newRecordId = (int) $connect->insert_id;
                     if ($newRecordId > 0) {
                         $confirmedRecordIds[] = $newRecordId;
+                        if ($hasPurchaseMeta) {
+                            $metaSql = "UPDATE " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
+                                        SET `currency`=" . ($orderCurrency > 0 ? (int) $orderCurrency : 'NULL') . ",
+                                            `shopee_acc`=" . ($orderShopeeAcc > 0 ? (int) $orderShopeeAcc : 'NULL') . "
+                                        WHERE `id`='" . $newRecordId . "'";
+                            mysqli_query($connect, $metaSql);
+                        }
                     }
                 } else {
                     // Said nothing at all before, so an order that silently failed to store
