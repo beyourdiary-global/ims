@@ -45,20 +45,6 @@ if (!empty($reportPackageIds) && defined('PKG') && campaignTableExists($connect,
     }
 }
 
-if (!function_exists('campaignReportFormatAmount')) {
-    // Formats a money cell as the RM total, prefixed with the original amount in parentheses when
-    // the customer paid in a non-RM currency: "SGD 131.07 (RM 393.21)".
-    function campaignReportFormatAmount($rmAmount, $original)
-    {
-        $rmText = 'RM ' . number_format((float) $rmAmount, 2);
-        if (is_array($original) && isset($original['code']) && $original['code'] !== '') {
-            return $original['code'] . ' ' . number_format((float) ($original['amount'] ?? 0), 2) . ' (' . $rmText . ')';
-        }
-
-        return $rmText;
-    }
-}
-
 function campaignReportBuildData($connect, $campaignId, $campaign = array(), $packageIds = array())
 {
     $data = array(
@@ -83,6 +69,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         'platform_rows' => array(),
         'trend_rows' => array(),
         'repeat_distribution' => array('1' => 0, '2' => 0, '3+' => 0),
+        'currency_columns' => array(),
         'has_data' => false,
     );
 
@@ -119,6 +106,9 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             break;
         }
     }
+    $rmCurrencyCode = isset($currencyCodeMap[$rmCurrencyId]) && $currencyCodeMap[$rmCurrencyId] !== ''
+        ? $currencyCodeMap[$rmCurrencyId]
+        : 'RM';
 
     // SQL snippet that multiplies an order_amount by its currency's rate to RM, built from the
     // same lookup so the SQL aggregates (platform / trend) agree with the PHP-side conversion.
@@ -388,13 +378,9 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
                     'total_amount' => 0.0,
                     'last_order_date' => '',
                     'shopee_acc_name' => '',
-                    'currency_codes' => array(),
+                    'amounts_by_currency' => array(),
                     'order_nos' => array(),
                     'orders' => array(),
-                    'original_amount' => 0.0,
-                    'original_currency' => '',
-                    'has_rm_order' => false,
-                    'has_non_rm_order' => false,
                 );
             }
 
@@ -424,22 +410,13 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             if ($orderShopeeAccName !== '' && ($buyerGroups[$buyerKey]['shopee_acc_name'] ?? '') === '') {
                 $buyerGroups[$buyerKey]['shopee_acc_name'] = $orderShopeeAccName;
             }
-            if ($orderCurrencyCode !== '') {
-                $buyerGroups[$buyerKey]['currency_codes'][$orderCurrencyCode] = true;
+            // Keep the original (pre-conversion) amount under its own currency, so the report can
+            // show one column per currency plus the converted RM total at the end.
+            $orderAmountCurrencyCode = $orderCurrencyCode !== '' ? $orderCurrencyCode : $rmCurrencyCode;
+            if (!isset($buyerGroups[$buyerKey]['amounts_by_currency'][$orderAmountCurrencyCode])) {
+                $buyerGroups[$buyerKey]['amounts_by_currency'][$orderAmountCurrencyCode] = 0.0;
             }
-            // Track the original (pre-conversion) amounts so a customer whose orders are all in
-            // one non-RM currency can be shown as "<original> (RM <converted>)".
-            if ($isNonRm) {
-                $buyerGroups[$buyerKey]['has_non_rm_order'] = true;
-                $buyerGroups[$buyerKey]['original_amount'] += $orderAmount;
-                if (($buyerGroups[$buyerKey]['original_currency'] ?? '') === '') {
-                    $buyerGroups[$buyerKey]['original_currency'] = $orderCurrencyCode;
-                } elseif (($buyerGroups[$buyerKey]['original_currency'] ?? '') !== $orderCurrencyCode) {
-                    $buyerGroups[$buyerKey]['original_currency'] = '__mixed__';
-                }
-            } else {
-                $buyerGroups[$buyerKey]['has_rm_order'] = true;
-            }
+            $buyerGroups[$buyerKey]['amounts_by_currency'][$orderAmountCurrencyCode] += $orderAmount;
             if ($orderDate !== '' && $orderDate > $buyerGroups[$buyerKey]['last_order_date']) {
                 $buyerGroups[$buyerKey]['last_order_date'] = $orderDate;
             }
@@ -467,26 +444,30 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
 
         return $b['total_amount'] <=> $a['total_amount'];
     });
-    foreach ($customerRows as &$cRowRef) {
-        $codes = array_keys($cRowRef['currency_codes'] ?? array());
-        $cRowRef['currency_display'] = count($codes) === 1 ? $codes[0] : (count($codes) > 1 ? 'Mixed' : '');
-        unset($cRowRef['currency_codes']);
-
-        // "SGD 131.07 (RM 393.21)" when every order is in one non-RM currency, otherwise the RM
-        // total on its own (already RM, nothing to distinguish).
-        $originalDisplay = null;
-        if (!empty($cRowRef['has_non_rm_order'])
-            && empty($cRowRef['has_rm_order'])
-            && ($cRowRef['original_currency'] ?? '') !== ''
-            && ($cRowRef['original_currency'] ?? '') !== '__mixed__') {
-            $originalDisplay = array(
-                'code' => $cRowRef['original_currency'],
-                'amount' => (float) $cRowRef['original_amount'],
-            );
+    // One column per currency that actually appears in this report, RM first then the rest
+    // alphabetically. Each row shows the original amount in that currency; the final column is
+    // always the RM total (every non-RM amount converted through the Currency System).
+    $currencyColumnSet = array();
+    foreach ($customerRows as $cRowRef) {
+        foreach (array_keys($cRowRef['amounts_by_currency'] ?? array()) as $cCode) {
+            $currencyColumnSet[$cCode] = true;
         }
-        $cRowRef['total_amount_display'] = campaignReportFormatAmount((float) $cRowRef['total_amount'], $originalDisplay);
     }
-    unset($cRowRef);
+    $currencyColumns = array_keys($currencyColumnSet);
+    usort($currencyColumns, function ($a, $b) use ($rmCurrencyCode) {
+        if ($a === $b) {
+            return 0;
+        }
+        if ($a === $rmCurrencyCode) {
+            return -1;
+        }
+        if ($b === $rmCurrencyCode) {
+            return 1;
+        }
+
+        return strcasecmp($a, $b);
+    });
+    $data['currency_columns'] = $currencyColumns;
 
     $data['customer_rows'] = $customerRows;
 
@@ -595,19 +576,30 @@ if (input('export') === '1') {
         fputcsv($output, array($bucket . ' order(s)', $count));
     }
     fputcsv($output, array());
-    fputcsv($output, array('Customer Name', 'Contact', 'Platform', 'Shopee Account', 'Customer Type', 'Order Count', 'Currency', 'Total Amount (RM)', 'Last Order Date'));
+    $customerHeader = array('Customer Name', 'Contact', 'Platform', 'Shopee Account', 'Customer Type', 'Order Count');
+    foreach ($reportData['currency_columns'] as $currencyColumnCode) {
+        $customerHeader[] = 'Amount (' . $currencyColumnCode . ')';
+    }
+    $customerHeader[] = 'Total (RM)';
+    $customerHeader[] = 'Last Order Date';
+    fputcsv($output, $customerHeader);
     foreach ($reportData['customer_rows'] as $row) {
-        fputcsv($output, array(
+        $customerCsvRow = array(
             $row['customer_name'],
             $row['customer_contact'],
             $row['platform'],
             $row['shopee_acc_name'] ?? '',
             empty($row['is_new_customer']) ? 'Saved Customer' : 'New Customer',
             $row['order_count'],
-            $row['currency_display'] ?? '',
-            $row['total_amount_display'] ?? number_format((float) $row['total_amount'], 2, '.', ''),
-            $row['last_order_date'],
-        ));
+        );
+        foreach ($reportData['currency_columns'] as $currencyColumnCode) {
+            $customerCsvRow[] = isset($row['amounts_by_currency'][$currencyColumnCode])
+                ? number_format((float) $row['amounts_by_currency'][$currencyColumnCode], 2, '.', '')
+                : '';
+        }
+        $customerCsvRow[] = number_format((float) $row['total_amount'], 2, '.', '');
+        $customerCsvRow[] = $row['last_order_date'];
+        fputcsv($output, $customerCsvRow);
     }
     fclose($output);
     exit();
@@ -855,8 +847,10 @@ if (input('export') === '1') {
                                         <th>Order ID</th>
                                         <th>Customer Type</th>
                                         <th>Order Count</th>
-                                        <th>Currency</th>
-                                        <th>Total Amount (RM)</th>
+                                        <?php foreach ($reportData['currency_columns'] as $currencyColumnCode): ?>
+                                            <th><?= campaignH($currencyColumnCode) ?></th>
+                                        <?php endforeach; ?>
+                                        <th>Total (RM)</th>
                                         <th>Last Order Date</th>
                                     </tr>
                                 </thead>
@@ -900,8 +894,10 @@ if (input('export') === '1') {
                                                 <?php endif; ?>
                                             </td>
                                             <td><?= (int) $row['order_count'] ?></td>
-                                            <td><?= campaignH($row['currency_display'] ?? '') ?></td>
-                                            <td><?= campaignH($row['total_amount_display'] ?? number_format((float) $row['total_amount'], 2)) ?></td>
+                                            <?php foreach ($reportData['currency_columns'] as $currencyColumnCode): ?>
+                                                <td><?= isset($row['amounts_by_currency'][$currencyColumnCode]) ? number_format((float) $row['amounts_by_currency'][$currencyColumnCode], 2) : '' ?></td>
+                                            <?php endforeach; ?>
+                                            <td><?= number_format((float) $row['total_amount'], 2) ?></td>
                                             <td><?= campaignH($row['last_order_date']) ?></td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -926,7 +922,8 @@ if (input('export') === '1') {
                                                     <th>Order No</th>
                                                     <th>Package</th>
                                                     <th>Currency</th>
-                                                    <th>Amount</th>
+                                                    <th>Original Amount</th>
+                                                    <th>Amount (RM)</th>
                                                     <th>Order Date</th>
                                                     <th>Status</th>
                                                     <th>Platform</th>
@@ -985,16 +982,11 @@ if (input('export') === '1') {
                         }
                         var originalAmount = parseFloat(order.order_amount || 0).toFixed(2);
                         var rmAmount = parseFloat(order.order_amount_rm || order.order_amount || 0).toFixed(2);
-                        var amountCell;
-                        if (order.is_non_rm && currencyCode !== '') {
-                            amountCell = currencyCode + ' ' + originalAmount + ' (RM ' + rmAmount + ')';
-                        } else {
-                            amountCell = 'RM ' + rmAmount;
-                        }
                         row.innerHTML = '<td>' + (order.order_no || '') + '</td>' +
                             '<td>' + (order.package_text || '') + '</td>' +
                             '<td>' + (currencyCode || 'RM') + '</td>' +
-                            '<td>' + amountCell + '</td>' +
+                            '<td>' + originalAmount + '</td>' +
+                            '<td>' + rmAmount + '</td>' +
                             '<td>' + (order.order_date || '') + '</td>' +
                             '<td>' + (order.order_status || '') + '</td>' +
                             '<td>' + platformLabel + '</td>';
