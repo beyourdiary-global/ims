@@ -343,6 +343,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
                     'last_order_date' => '',
                     'shopee_acc_name' => '',
                     'currency_codes' => array(),
+                    'order_nos' => array(),
                     'orders' => array(),
                 );
             }
@@ -376,6 +377,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             if ($orderDate !== '' && $orderDate > $buyerGroups[$buyerKey]['last_order_date']) {
                 $buyerGroups[$buyerKey]['last_order_date'] = $orderDate;
             }
+            $buyerGroups[$buyerKey]['order_nos'][] = trim((string) ($orderRow['order_no'] ?? ''));
             $buyerGroups[$buyerKey]['orders'][] = array(
                 'order_no' => trim((string) ($orderRow['order_no'] ?? '')),
                 'package_text' => $packageNameCache[$rawPackageText],
@@ -770,6 +772,7 @@ if (input('export') === '1') {
                                         <th>Customer Name</th>
                                         <th>Contact</th>
                                         <th>Platform</th>
+                                        <th>Order ID</th>
                                         <th>Customer Type</th>
                                         <th>Order Count</th>
                                         <th>Currency</th>
@@ -787,6 +790,28 @@ if (input('export') === '1') {
                                             </td>
                                             <td><?= campaignH($row['customer_contact']) ?></td>
                                             <td><?= campaignH($row['platform'] . ($row['shopee_acc_name'] !== '' ? ' - ' . $row['shopee_acc_name'] : '')) ?></td>
+                                            <td>
+                                                <?php
+                                                $orderNoLinks = array();
+                                                foreach (($row['order_nos'] ?? array()) as $onoItem) {
+                                                    $onoItem = trim((string) $onoItem);
+                                                    if ($onoItem === '') {
+                                                        continue;
+                                                    }
+                                                    $orderLink = campaignBuildOrderViewUrl($SITEURL, $row['platform'], $onoItem);
+                                                    if ($orderLink === '') {
+                                                        $orderNoLinks[] = '<span>' . campaignH($onoItem) . '</span>';
+                                                    } else {
+                                                        $orderNoLinks[] = '<a href="' . campaignH($orderLink) . '" target="_blank" rel="noopener">' . campaignH($onoItem) . '</a>';
+                                                    }
+                                                }
+                                                if (empty($orderNoLinks)) {
+                                                    echo '&nbsp;';
+                                                } else {
+                                                    echo implode(', ', $orderNoLinks);
+                                                }
+                                                ?>
+                                            </td>
                                             <td>
                                                 <?php if (!empty($row['is_new_customer'])): ?>
                                                     <span class="badge bg-info">New Customer</span>
