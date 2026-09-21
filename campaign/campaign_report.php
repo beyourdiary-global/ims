@@ -45,6 +45,20 @@ if (!empty($reportPackageIds) && defined('PKG') && campaignTableExists($connect,
     }
 }
 
+if (!function_exists('campaignReportFormatAmount')) {
+    // Formats a money cell as the RM total, prefixed with the original amount in parentheses when
+    // the customer paid in a non-RM currency: "SGD 131.07 (RM 393.21)".
+    function campaignReportFormatAmount($rmAmount, $original)
+    {
+        $rmText = 'RM ' . number_format((float) $rmAmount, 2);
+        if (is_array($original) && isset($original['code']) && $original['code'] !== '') {
+            return $original['code'] . ' ' . number_format((float) ($original['amount'] ?? 0), 2) . ' (' . $rmText . ')';
+        }
+
+        return $rmText;
+    }
+}
+
 function campaignReportBuildData($connect, $campaignId, $campaign = array(), $packageIds = array())
 {
     $data = array(
@@ -74,23 +88,16 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
 
     // Currency System + Shopee account metadata, so the Customer Detail List (and the money
     // totals below) can show the source currency and which Shopee account each order came
-    // from, and convert SGD amounts to RM.
+    // from, and convert every non-RM amount to RM.
     $hasPurchaseMeta = campaignColumnExists($connect, CAMPAIGN_PURCHASE_RECORD, 'currency')
         && campaignColumnExists($connect, CAMPAIGN_PURCHASE_RECORD, 'shopee_acc');
 
-    // SGD -> RM rate from the Currency System. default_currency_unit is the "from" currency
-    // (SGD) and exchange_currency_rate is how many RM one unit of it is worth.
-    $sgdCurrencyId = 0;
-    $rmRate = 1.0;
-    $currencyRateResult = mysqli_query($connect, "SELECT `default_currency_unit`, `exchange_currency_unit`, `exchange_currency_rate` FROM `" . CURRENCIES . "` WHERE `status`='A' ORDER BY `id` ASC LIMIT 1");
-    if ($currencyRateResult && $currencyRateResult->num_rows > 0) {
-        $currencyRateRow = $currencyRateResult->fetch_assoc();
-        $sgdCurrencyId = (int) ($currencyRateRow['default_currency_unit'] ?? 0);
-        $rmRate = is_numeric($currencyRateRow['exchange_currency_rate'] ?? null) ? (float) $currencyRateRow['exchange_currency_rate'] : 1.0;
-    }
-    if ($rmRate <= 0) {
-        $rmRate = 1.0;
-    }
+    // Currency System: the canonical rate lookup ([fromCurrencyUnitId][toCurrencyUnitId] => rate)
+    // that the rest of the system converts with, so campaign money totals use the same rates and
+    // every non-RM order is converted instead of only the ones that happened to match one row.
+    $currencyRateLookup = function_exists('customerLabelGetCurrencyRateLookup')
+        ? customerLabelGetCurrencyRateLookup($connect)
+        : array();
 
     // currency_unit id -> code (e.g. SGD / MYR), used for the Currency column.
     $currencyCodeMap = array();
@@ -99,6 +106,40 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         while ($ccRow = $currencyCodeResult->fetch_assoc()) {
             $currencyCodeMap[(int) ($ccRow['id'] ?? 0)] = trim((string) ($ccRow['unit'] ?? ''));
         }
+    }
+
+    // RM is the system default currency and the target every amount is converted to. Resolve its
+    // currency_unit id from the currency list by code, falling back to 1 (the id the rest of the
+    // system hardcodes for the default currency).
+    $rmCurrencyId = 1;
+    foreach ($currencyCodeMap as $ccId => $ccCode) {
+        $ccUpper = strtoupper((string) $ccCode);
+        if ($ccUpper === 'MYR' || $ccUpper === 'RM') {
+            $rmCurrencyId = (int) $ccId;
+            break;
+        }
+    }
+
+    // SQL snippet that multiplies an order_amount by its currency's rate to RM, built from the
+    // same lookup so the SQL aggregates (platform / trend) agree with the PHP-side conversion.
+    $rateToRmSql = '1';
+    $rateToRmCases = array();
+    foreach ($currencyRateLookup as $fromCurrencyId => $toMap) {
+        $fromCurrencyId = (int) $fromCurrencyId;
+        if ($fromCurrencyId <= 0 || $fromCurrencyId === (int) $rmCurrencyId) {
+            continue;
+        }
+        if (!isset($toMap[$rmCurrencyId])) {
+            continue;
+        }
+        $fromRate = (float) $toMap[$rmCurrencyId];
+        if ($fromRate <= 0) {
+            continue;
+        }
+        $rateToRmCases[] = "WHEN `currency` = '" . $fromCurrencyId . "' THEN " . $fromRate;
+    }
+    if (!empty($rateToRmCases)) {
+        $rateToRmSql = '(CASE ' . implode(' ', $rateToRmCases) . ' ELSE 1 END)';
     }
 
     // shopee_account id -> name. The shopee_account table lives in the finance database.
@@ -141,7 +182,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     // individually. Grouping by campaign_customer_id put every new customer in one group,
     // so the new-customer figure could only ever be 1.
     $currencyRateExpr = $hasPurchaseMeta
-        ? "SUM(IFNULL(`order_amount`,0) * (CASE WHEN `currency` = '" . (int) $sgdCurrencyId . "' THEN " . (float) $rmRate . " ELSE 1 END))"
+        ? "SUM(IFNULL(`order_amount`,0) * " . $rateToRmSql . ")"
         : "SUM(IFNULL(`order_amount`,0))";
     $purchaseSql = "SELECT " . $buyerIdentitySql . " AS buyer_key, MAX(`customer_type`) AS customer_type, " . $currencyRateExpr . " AS sales
         FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . "
@@ -217,7 +258,8 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     }
 
     $packageMap = array();
-    $packageSql = "SELECT `package_text`, `order_detail`, `order_amount`, `currency` FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere;
+    $packageMetaSelect = $hasPurchaseMeta ? ", `currency`" : "";
+    $packageSql = "SELECT `package_text`, `order_detail`, `order_amount`" . $packageMetaSelect . " FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere;
     $packageResult = mysqli_query($connect, $packageSql);
     if ($packageResult) {
         while ($packageRow = $packageResult->fetch_assoc()) {
@@ -231,8 +273,12 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             }
             $packageText = preg_replace('/\s+/', ' ', $packageText);
             $amount = is_numeric($packageRow['order_amount'] ?? null) ? (float) $packageRow['order_amount'] : 0;
-            if ($hasPurchaseMeta && (int) ($packageRow['currency'] ?? 0) === $sgdCurrencyId) {
-                $amount = round($amount * $rmRate, 2);
+            $packageCurrencyId = $hasPurchaseMeta ? (int) ($packageRow['currency'] ?? 0) : 0;
+            if ($packageCurrencyId <= 0) {
+                $packageCurrencyId = (int) $rmCurrencyId;
+            }
+            if (function_exists('customerLabelConvertAmount')) {
+                $amount = round(customerLabelConvertAmount($amount, $packageCurrencyId, $rmCurrencyId, $currencyRateLookup), 2);
             }
             if (!isset($packageMap[$packageText])) {
                 $packageMap[$packageText] = array('package' => $packageText, 'purchase_amount' => 0, 'purchase_sales' => 0);
@@ -248,7 +294,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     $data['package_rows'] = $packageRows;
 
     $platformSalesExpr = $hasPurchaseMeta
-        ? "SUM(IFNULL(`order_amount`,0) * (CASE WHEN `currency` = '" . (int) $sgdCurrencyId . "' THEN " . (float) $rmRate . " ELSE 1 END))"
+        ? "SUM(IFNULL(`order_amount`,0) * " . $rateToRmSql . ")"
         : "SUM(IFNULL(`order_amount`,0))";
     $platformSql = "SELECT `platform`, COUNT(*) AS order_count, COUNT(DISTINCT " . $buyerIdentitySql . ") AS customer_count, " . $platformSalesExpr . " AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere . " GROUP BY `platform` ORDER BY total_sales DESC";
     $platformResult = mysqli_query($connect, $platformSql);
@@ -268,7 +314,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     }
 
     $trendSalesExpr = $hasPurchaseMeta
-        ? "SUM(IFNULL(`order_amount`,0) * (CASE WHEN `currency` = '" . (int) $sgdCurrencyId . "' THEN " . (float) $rmRate . " ELSE 1 END))"
+        ? "SUM(IFNULL(`order_amount`,0) * " . $rateToRmSql . ")"
         : "SUM(IFNULL(`order_amount`,0))";
     $trendSql = "SELECT DATE(`order_date`) AS order_day, COUNT(*) AS order_count, " . $trendSalesExpr . " AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' AND `order_date` IS NOT NULL" . $packageFilter . $periodWhere . " GROUP BY DATE(`order_date`) ORDER BY order_day ASC";
     $trendResult = mysqli_query($connect, $trendSql);
@@ -345,6 +391,10 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
                     'currency_codes' => array(),
                     'order_nos' => array(),
                     'orders' => array(),
+                    'original_amount' => 0.0,
+                    'original_currency' => '',
+                    'has_rm_order' => false,
+                    'has_non_rm_order' => false,
                 );
             }
 
@@ -352,14 +402,17 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             $orderDate = (string) ($orderRow['order_date'] ?? '');
 
             // Resolve the order's currency and originating Shopee account, then convert the
-            // amount to RM. SGD (the Currency System's default "from" currency) is multiplied
-            // by the exchange rate; everything else is treated as already being in RM.
+            // amount to RM using the Currency System rate for that exact currency_unit (SGD and
+            // any other non-RM currency included). Orders with no recorded currency are assumed
+            // to already be in RM.
             $orderCurrencyId = $hasPurchaseMeta ? (int) ($orderRow['currency'] ?? 0) : 0;
             $orderShopeeAccId = $hasPurchaseMeta ? (int) ($orderRow['shopee_acc'] ?? 0) : 0;
             $orderCurrencyCode = isset($currencyCodeMap[$orderCurrencyId]) ? $currencyCodeMap[$orderCurrencyId] : '';
             $orderShopeeAccName = isset($shopeeAccMap[$orderShopeeAccId]) ? $shopeeAccMap[$orderShopeeAccId] : '';
-            $isSgd = $orderCurrencyId > 0 && $orderCurrencyId === $sgdCurrencyId;
-            $orderAmountRm = $isSgd ? round($orderAmount * $rmRate, 2) : $orderAmount;
+            $isNonRm = $orderCurrencyId > 0 && $orderCurrencyId !== (int) $rmCurrencyId;
+            $orderAmountRm = function_exists('customerLabelConvertAmount')
+                ? round(customerLabelConvertAmount($orderAmount, $orderCurrencyId > 0 ? $orderCurrencyId : $rmCurrencyId, $rmCurrencyId, $currencyRateLookup), 2)
+                : $orderAmount;
 
             $rawPackageText = trim((string) ($orderRow['package_text'] ?? ''));
             if (!array_key_exists($rawPackageText, $packageNameCache)) {
@@ -374,6 +427,19 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             if ($orderCurrencyCode !== '') {
                 $buyerGroups[$buyerKey]['currency_codes'][$orderCurrencyCode] = true;
             }
+            // Track the original (pre-conversion) amounts so a customer whose orders are all in
+            // one non-RM currency can be shown as "<original> (RM <converted>)".
+            if ($isNonRm) {
+                $buyerGroups[$buyerKey]['has_non_rm_order'] = true;
+                $buyerGroups[$buyerKey]['original_amount'] += $orderAmount;
+                if (($buyerGroups[$buyerKey]['original_currency'] ?? '') === '') {
+                    $buyerGroups[$buyerKey]['original_currency'] = $orderCurrencyCode;
+                } elseif (($buyerGroups[$buyerKey]['original_currency'] ?? '') !== $orderCurrencyCode) {
+                    $buyerGroups[$buyerKey]['original_currency'] = '__mixed__';
+                }
+            } else {
+                $buyerGroups[$buyerKey]['has_rm_order'] = true;
+            }
             if ($orderDate !== '' && $orderDate > $buyerGroups[$buyerKey]['last_order_date']) {
                 $buyerGroups[$buyerKey]['last_order_date'] = $orderDate;
             }
@@ -383,7 +449,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
                 'package_text' => $packageNameCache[$rawPackageText],
                 'order_amount' => $orderAmount,
                 'order_amount_rm' => $orderAmountRm,
-                'is_sgd' => $isSgd,
+                'is_non_rm' => $isNonRm,
                 'currency_code' => $orderCurrencyCode,
                 'shopee_acc_name' => $orderShopeeAccName,
                 'order_date' => $orderDate,
@@ -405,6 +471,20 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         $codes = array_keys($cRowRef['currency_codes'] ?? array());
         $cRowRef['currency_display'] = count($codes) === 1 ? $codes[0] : (count($codes) > 1 ? 'Mixed' : '');
         unset($cRowRef['currency_codes']);
+
+        // "SGD 131.07 (RM 393.21)" when every order is in one non-RM currency, otherwise the RM
+        // total on its own (already RM, nothing to distinguish).
+        $originalDisplay = null;
+        if (!empty($cRowRef['has_non_rm_order'])
+            && empty($cRowRef['has_rm_order'])
+            && ($cRowRef['original_currency'] ?? '') !== ''
+            && ($cRowRef['original_currency'] ?? '') !== '__mixed__') {
+            $originalDisplay = array(
+                'code' => $cRowRef['original_currency'],
+                'amount' => (float) $cRowRef['original_amount'],
+            );
+        }
+        $cRowRef['total_amount_display'] = campaignReportFormatAmount((float) $cRowRef['total_amount'], $originalDisplay);
     }
     unset($cRowRef);
 
@@ -486,9 +566,9 @@ if (input('export') === '1') {
     fputcsv($output, array('Total Sales (RM)', number_format((float) $metrics['total_sales'], 2, '.', '')));
     fputcsv($output, array('New Customer Amount', $metrics['new_customer_amount']));
     fputcsv($output, array('Return Customer Amount', $metrics['return_customer_amount']));
-    fputcsv($output, array('New Customer Sales', number_format((float) $metrics['new_customer_sales'], 2, '.', '')));
-    fputcsv($output, array('Return Customer Sales', number_format((float) $metrics['return_customer_sales'], 2, '.', '')));
-    fputcsv($output, array('Avg. Spend per Purchasing Customer', number_format((float) $metrics['avg_spend_per_customer'], 2, '.', '')));
+    fputcsv($output, array('New Customer Sales (RM)', number_format((float) $metrics['new_customer_sales'], 2, '.', '')));
+    fputcsv($output, array('Return Customer Sales (RM)', number_format((float) $metrics['return_customer_sales'], 2, '.', '')));
+    fputcsv($output, array('Avg. Spend per Purchasing Customer (RM)', number_format((float) $metrics['avg_spend_per_customer'], 2, '.', '')));
     fputcsv($output, array());
     fputcsv($output, array('Message Shortcut', 'Total Assigned', 'Followed Up', 'Follow-Up Rate'));
     foreach ($reportData['follow_up_rows'] as $row) {
@@ -525,7 +605,7 @@ if (input('export') === '1') {
             empty($row['is_new_customer']) ? 'Saved Customer' : 'New Customer',
             $row['order_count'],
             $row['currency_display'] ?? '',
-            number_format((float) $row['total_amount'], 2, '.', ''),
+            $row['total_amount_display'] ?? number_format((float) $row['total_amount'], 2, '.', ''),
             $row['last_order_date'],
         ));
     }
@@ -615,9 +695,9 @@ if (input('export') === '1') {
                         'Total Sales (RM)' => number_format((float) $metrics['total_sales'], 2),
                         'New Customer Amount' => $metrics['new_customer_amount'],
                         'Return Customer Amount' => $metrics['return_customer_amount'],
-                        'New Customer Sales' => number_format((float) $metrics['new_customer_sales'], 2),
-                        'Return Customer Sales' => number_format((float) $metrics['return_customer_sales'], 2),
-                        'Avg. Spend per Purchasing Customer' => number_format((float) $metrics['avg_spend_per_customer'], 2),
+                        'New Customer Sales (RM)' => number_format((float) $metrics['new_customer_sales'], 2),
+                        'Return Customer Sales (RM)' => number_format((float) $metrics['return_customer_sales'], 2),
+                        'Avg. Spend per Purchasing Customer (RM)' => number_format((float) $metrics['avg_spend_per_customer'], 2),
                     );
                     ?>
                     <?php foreach ($metricCards as $label => $value): ?>
@@ -821,7 +901,7 @@ if (input('export') === '1') {
                                             </td>
                                             <td><?= (int) $row['order_count'] ?></td>
                                             <td><?= campaignH($row['currency_display'] ?? '') ?></td>
-                                            <td><?= number_format((float) $row['total_amount'], 2) ?></td>
+                                            <td><?= campaignH($row['total_amount_display'] ?? number_format((float) $row['total_amount'], 2)) ?></td>
                                             <td><?= campaignH($row['last_order_date']) ?></td>
                                         </tr>
                                     <?php endforeach; ?>
@@ -846,8 +926,7 @@ if (input('export') === '1') {
                                                     <th>Order No</th>
                                                     <th>Package</th>
                                                     <th>Currency</th>
-                                                    <th>Amount (RM)</th>
-                                                    <th>Original</th>
+                                                    <th>Amount</th>
                                                     <th>Order Date</th>
                                                     <th>Status</th>
                                                     <th>Platform</th>
@@ -904,18 +983,18 @@ if (input('export') === '1') {
                         if (order.shopee_acc_name) {
                             platformLabel = platformLabel + ' - ' + order.shopee_acc_name;
                         }
+                        var originalAmount = parseFloat(order.order_amount || 0).toFixed(2);
                         var rmAmount = parseFloat(order.order_amount_rm || order.order_amount || 0).toFixed(2);
-                        var originalCell = '';
-                        if (order.is_sgd) {
-                            originalCell = 'SGD ' + parseFloat(order.order_amount || 0).toFixed(2);
-                        } else if (currencyCode !== '' && currencyCode !== 'MYR' && currencyCode !== 'RM') {
-                            originalCell = currencyCode + ' ' + parseFloat(order.order_amount || 0).toFixed(2);
+                        var amountCell;
+                        if (order.is_non_rm && currencyCode !== '') {
+                            amountCell = currencyCode + ' ' + originalAmount + ' (RM ' + rmAmount + ')';
+                        } else {
+                            amountCell = 'RM ' + rmAmount;
                         }
                         row.innerHTML = '<td>' + (order.order_no || '') + '</td>' +
                             '<td>' + (order.package_text || '') + '</td>' +
-                            '<td>' + currencyCode + '</td>' +
-                            '<td>RM ' + rmAmount + '</td>' +
-                            '<td>' + originalCell + '</td>' +
+                            '<td>' + (currencyCode || 'RM') + '</td>' +
+                            '<td>' + amountCell + '</td>' +
                             '<td>' + (order.order_date || '') + '</td>' +
                             '<td>' + (order.order_status || '') + '</td>' +
                             '<td>' + platformLabel + '</td>';
