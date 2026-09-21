@@ -70,6 +70,11 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         'trend_rows' => array(),
         'repeat_distribution' => array('1' => 0, '2' => 0, '3+' => 0),
         'currency_columns' => array(),
+        'customer_totals' => array(
+            'order_count' => 0,
+            'total_amount' => 0,
+            'amounts_by_currency' => array(),
+        ),
         'has_data' => false,
     );
 
@@ -469,6 +474,27 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     });
     $data['currency_columns'] = $currencyColumns;
 
+    // Footer totals: the sum of every currency column plus the RM grand total, so the table can
+    // show a Total row at the bottom.
+    $customerTotals = array(
+        'order_count' => 0,
+        'total_amount' => 0.0,
+        'amounts_by_currency' => array(),
+    );
+    foreach ($currencyColumns as $cCode) {
+        $customerTotals['amounts_by_currency'][$cCode] = 0.0;
+    }
+    foreach ($customerRows as $cRowRef) {
+        $customerTotals['order_count'] += (int) ($cRowRef['order_count'] ?? 0);
+        $customerTotals['total_amount'] += (float) ($cRowRef['total_amount'] ?? 0);
+        foreach ($currencyColumns as $cCode) {
+            if (isset($cRowRef['amounts_by_currency'][$cCode])) {
+                $customerTotals['amounts_by_currency'][$cCode] += (float) $cRowRef['amounts_by_currency'][$cCode];
+            }
+        }
+    }
+    $data['customer_totals'] = $customerTotals;
+
     $data['customer_rows'] = $customerRows;
 
     foreach ($customerRows as $customerRow) {
@@ -601,6 +627,13 @@ if (input('export') === '1') {
         $customerCsvRow[] = $row['last_order_date'];
         fputcsv($output, $customerCsvRow);
     }
+    $customerTotalRow = array('Total', '', '', '', '', (int) ($reportData['customer_totals']['order_count'] ?? 0));
+    foreach ($reportData['currency_columns'] as $currencyColumnCode) {
+        $customerTotalRow[] = number_format((float) ($reportData['customer_totals']['amounts_by_currency'][$currencyColumnCode] ?? 0), 2, '.', '');
+    }
+    $customerTotalRow[] = number_format((float) ($reportData['customer_totals']['total_amount'] ?? 0), 2, '.', '');
+    $customerTotalRow[] = '';
+    fputcsv($output, $customerTotalRow);
     fclose($output);
     exit();
 }
@@ -902,6 +935,21 @@ if (input('export') === '1') {
                                         </tr>
                                     <?php endforeach; ?>
                                 </tbody>
+                                <tfoot>
+                                    <tr>
+                                        <th>Total</th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th></th>
+                                        <th><?= (int) ($reportData['customer_totals']['order_count'] ?? 0) ?></th>
+                                        <?php foreach ($reportData['currency_columns'] as $currencyColumnCode): ?>
+                                            <th><?= number_format((float) ($reportData['customer_totals']['amounts_by_currency'][$currencyColumnCode] ?? 0), 2) ?></th>
+                                        <?php endforeach; ?>
+                                        <th><?= number_format((float) ($reportData['customer_totals']['total_amount'] ?? 0), 2) ?></th>
+                                        <th></th>
+                                    </tr>
+                                </tfoot>
                             </table>
                         </div>
                     </div>
