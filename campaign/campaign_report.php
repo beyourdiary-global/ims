@@ -575,7 +575,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     //   - CUSTOMER LEVEL: from customerLabelGetCustomerLabelMap() (segmentation system).
     //   - LAST FOLLOW UP DATE / LAST Promotion message: latest customer_follow_up row for the
     //     campaign-side customer_id.
-    //   - PREVIOUS LAST PURCHASE DATE / PRIOR ORDER AMOUNT / VOUCHER: from the platform order
+    //   - PREVIOUS LAST PURCHASE DATE / PRIOR ORDER AMOUNT: from the platform order
     //     table (Shopee: SHOPEE_SG_ORDER_REQ keyed by buyer). Non-Shopee / missing finance => ''.
     $conclusionRows = array();
 
@@ -630,7 +630,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         }
     }
 
-    // Previous last purchase date + prior order count + prior amount + voucher per buyer (Shopee).
+    // Previous last purchase date + prior order count + prior amount per buyer (Shopee).
     $buyerFinanceLookup = array();
     $financeConn = isset($GLOBALS['finance_connect']) ? $GLOBALS['finance_connect'] : null;
     $buyerIdsByPlatform = array();
@@ -669,25 +669,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
                     'previous_last_purchase_date' => (string) ($pRow['prev_date'] ?? ''),
                     'prior_order_count' => (int) ($pRow['prior_order_count'] ?? 0),
                     'prior_amount' => (float) ($pRow['prior_amount'] ?? 0),
-                    'voucher' => '',
                 );
-            }
-        }
-        $voucherSql = "SELECT `buyer`, `voucher` FROM " . SHOPEE_SG_ORDER_REQ . " WHERE `status`='A' AND `buyer` IN (" . implode(',', $idInList) . ") ORDER BY `date` DESC, `id` DESC";
-        $voucherResult = mysqli_query($financeConn, $voucherSql);
-        if ($voucherResult) {
-            while ($vRow = $voucherResult->fetch_assoc()) {
-                $buyerIdVal = (string) ($vRow['buyer'] ?? '');
-                if ($buyerIdVal === '') {
-                    continue;
-                }
-                $lookupKey = $pKey . '|' . $buyerIdVal;
-                if (!isset($buyerFinanceLookup[$lookupKey])) {
-                    $buyerFinanceLookup[$lookupKey] = array('previous_last_purchase_date' => '', 'prior_order_count' => 0, 'prior_amount' => 0.0, 'voucher' => '');
-                }
-                if (empty($buyerFinanceLookup[$lookupKey]['voucher']) && isset($vRow['voucher'])) {
-                    $buyerFinanceLookup[$lookupKey]['voucher'] = (string) $vRow['voucher'];
-                }
             }
         }
     }
@@ -701,7 +683,6 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         $priorOrderCount = isset($financeInfo['prior_order_count']) ? (int) $financeInfo['prior_order_count'] : 0;
         $priorAmount = isset($financeInfo['prior_amount']) ? (float) $financeInfo['prior_amount'] : 0.0;
         $previousPurchaseDate = isset($financeInfo['previous_last_purchase_date']) ? (string) $financeInfo['previous_last_purchase_date'] : '';
-        $voucher = isset($financeInfo['voucher']) ? (string) $financeInfo['voucher'] : '';
         // CUSTOMER TYPE: return if the buyer already had purchases before this campaign.
         $customerType = $priorOrderCount > 0 ? 'Return Customer' : 'New Customer';
         // CUSTOMER LEVEL via segmentation (prefer buyer-level, fallback to saved-contact key).
@@ -747,7 +728,6 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             'this_time_package' => $thisTimePackage,
             'second_package' => $secondPackage,
             'remark' => (string) ($cRow['customer_contact'] ?? ''),
-            'voucher' => $voucher,
         );
     }
     $data['conclusion_customer_rows'] = $conclusionRows;
@@ -987,7 +967,7 @@ if (input('export') === '1') {
         'LAST FOLLOW UP DATE (Not include previous)',
         'LAST Promotion message',
         'This time Purchase PACKAGE', 'second package',
-        'REMARK', 'VOUCHER',
+        'REMARK',
     );
     fputcsv($output, $conclusionHeader);
     $ccCsvSn = 0;
@@ -1007,7 +987,6 @@ if (input('export') === '1') {
             $ccRow['this_time_package'],
             $ccRow['second_package'],
             $ccRow['remark'],
-            $ccRow['voucher'],
         ));
     }
     fclose($output);
@@ -1460,7 +1439,6 @@ if (input('export') === '1') {
                                 <th>This time Purchase PACKAGE</th>
                                 <th>second package</th>
                                 <th>REMARK</th>
-                                <th>VOUCHER</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -1479,11 +1457,10 @@ if (input('export') === '1') {
                                     <td><?= htmlspecialchars((string) ($ccRow['this_time_package'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                     <td><?= htmlspecialchars((string) ($ccRow['second_package'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                     <td><?= htmlspecialchars((string) ($ccRow['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
-                                    <td><?= htmlspecialchars((string) ($ccRow['voucher'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                 </tr>
                             <?php endforeach; ?>
                             <?php if (empty($reportData['conclusion_customer_rows'])): ?>
-                                <tr><td colspan="14" class="text-center">No conclusion data.</td></tr>
+                                <tr><td colspan="13" class="text-center">No conclusion data.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
