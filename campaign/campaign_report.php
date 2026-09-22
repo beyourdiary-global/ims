@@ -63,11 +63,12 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             'return_customer_sales' => 0,
             'avg_spend_per_customer' => 0,
         ),
-        'follow_up_rows' => array(),
+        'follow_up_summary' => array('submitted' => 0, 'total_customers' => 0, 'rate' => 0),
         'package_rows' => array(),
         'customer_rows' => array(),
         'platform_rows' => array(),
         'trend_rows' => array(),
+        'trend_platform_rows' => array(),
         'repeat_distribution' => array('1' => 0, '2' => 0, '3+' => 0),
         'currency_columns' => array(),
         'customer_totals' => array(
@@ -228,65 +229,44 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     $data['metrics']['purchase_rate'] = $savedCustomerTotal > 0 ? round(($savedPurchasedTotal / $savedCustomerTotal) * 100, 2) : 0;
     $data['metrics']['avg_spend_per_customer'] = $data['metrics']['purchased_customers'] > 0 ? round($data['metrics']['total_sales'] / $data['metrics']['purchased_customers'], 2) : 0;
 
-    $followSql = "SELECT
-            cm.`message_title`,
-            COUNT(cf.`id`) AS total_assigned,
-            SUM(CASE WHEN cf.`follow_up_status`='Completed' THEN 1 ELSE 0 END) AS followed_up
-        FROM " . campaignTableName(CAMPAIGN_MESSAGE) . " cm
-        LEFT JOIN " . campaignTableName(CAMPAIGN_FOLLOW_UP) . " cf ON cf.`campaign_message_id`=cm.`id` AND cf.`status`='A'
-        WHERE cm.`campaign_id`='" . (int) $campaignId . "' AND cm.`status`='A'
-        GROUP BY cm.`id`, cm.`message_title`
-        HAVING total_assigned > 0
-        ORDER BY cm.`sequence_no` ASC, cm.`id` ASC";
-    $followResult = mysqli_query($connect, $followSql);
-    if ($followResult) {
-        while ($followRow = $followResult->fetch_assoc()) {
-            $totalAssigned = (int) ($followRow['total_assigned'] ?? 0);
-            $followedUp = (int) ($followRow['followed_up'] ?? 0);
-            $data['follow_up_rows'][] = array(
-                'message_title' => trim((string) ($followRow['message_title'] ?? '')),
-                'total_assigned' => $totalAssigned,
-                'followed_up' => $followedUp,
-                'rate' => $totalAssigned > 0 ? round(($followedUp / $totalAssigned) * 100, 2) : 0,
-            );
+    // Campaign-level Follow-Up Rate. Definition (boss): of all campaign customers, how many
+    // submitted a customer follow-up request during the campaign period. The request is the
+    // customer-initiated follow-up case (customer_follow_up, case_source='customer'), linked to
+    // the campaign customer through the shared customer master id. Rate = submitted / total.
+    //
+    // The previous per-message rate counted the staff-side CAMPAIGN_FOLLOW_UP tasks, which are
+    // auto-generated per customer x message and say nothing about whether the customer engaged.
+    $followUpSubmitted = 0;
+    if (defined('CUSTOMER_FOLLOW_UP') && campaignTableExists($connect, CUSTOMER_FOLLOW_UP) && $savedCustomerTotal > 0) {
+        $caseSourceFilter = '';
+        if (campaignColumnExists($connect, CUSTOMER_FOLLOW_UP, 'case_source')) {
+            $caseSourceFilter = " AND `case_source` = 'customer'";
+        }
+        $followUpPeriodFilter = '';
+        if ($periodStart !== '' && $periodEnd !== '') {
+            $followUpPeriodFilter = " AND DATE(`create_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(`create_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
+        }
+        $followUpSql = "SELECT COUNT(DISTINCT cc.`customer_id`) AS submitted
+            FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . " cc
+            WHERE cc.`campaign_id`='" . (int) $campaignId . "' AND cc.`status`='A' AND cc.`customer_id` > 0
+              AND cc.`customer_id` IN (
+                SELECT DISTINCT f.`customer_id` FROM " . campaignTableName(CUSTOMER_FOLLOW_UP) . " f
+                WHERE f.`status`='A' AND f.`customer_id` = cc.`customer_id`" . $caseSourceFilter . $followUpPeriodFilter . "
+              )";
+        $followUpResult = mysqli_query($connect, $followUpSql);
+        if ($followUpResult && $followUpResult->num_rows > 0) {
+            $followUpSubmitted = (int) ($followUpResult->fetch_assoc()['submitted'] ?? 0);
         }
     }
+    $data['follow_up_summary'] = array(
+        'submitted' => $followUpSubmitted,
+        'total_customers' => $savedCustomerTotal,
+        'rate' => $savedCustomerTotal > 0 ? round(($followUpSubmitted / $savedCustomerTotal) * 100, 2) : 0,
+    );
 
-    $packageMap = array();
-    $packageMetaSelect = $hasPurchaseMeta ? ", `currency`" : "";
-    $packageSql = "SELECT `package_text`, `order_detail`, `order_amount`" . $packageMetaSelect . " FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'" . $packageFilter . $periodWhere;
-    $packageResult = mysqli_query($connect, $packageSql);
-    if ($packageResult) {
-        while ($packageRow = $packageResult->fetch_assoc()) {
-            $packageText = trim((string) ($packageRow['package_text'] ?? ''));
-            if ($packageText === '') {
-                $packageText = trim((string) ($packageRow['order_detail'] ?? ''));
-            }
-            $packageText = campaignPurchaseResolvePackageDisplayName($connect, $packageText);
-            if ($packageText === '') {
-                $packageText = 'Unknown Package';
-            }
-            $packageText = preg_replace('/\s+/', ' ', $packageText);
-            $amount = is_numeric($packageRow['order_amount'] ?? null) ? (float) $packageRow['order_amount'] : 0;
-            $packageCurrencyId = $hasPurchaseMeta ? (int) ($packageRow['currency'] ?? 0) : 0;
-            if ($packageCurrencyId <= 0) {
-                $packageCurrencyId = (int) $rmCurrencyId;
-            }
-            if (function_exists('customerLabelConvertAmount')) {
-                $amount = round(customerLabelConvertAmount($amount, $packageCurrencyId, $rmCurrencyId, $currencyRateLookup), 2);
-            }
-            if (!isset($packageMap[$packageText])) {
-                $packageMap[$packageText] = array('package' => $packageText, 'purchase_amount' => 0, 'purchase_sales' => 0);
-            }
-            $packageMap[$packageText]['purchase_amount']++;
-            $packageMap[$packageText]['purchase_sales'] += $amount;
-        }
-    }
-    $packageRows = array_values($packageMap);
-    usort($packageRows, function ($a, $b) {
-        return $b['purchase_sales'] <=> $a['purchase_sales'];
-    });
-    $data['package_rows'] = $packageRows;
+    // Each Package Purchase is now derived from the Customer Detail List order loop below, so it
+    // always agrees with the customer rows (same orders, same currency conversion, same package
+    // resolution). The package accumulation lives inside that loop.
 
     $platformSalesExpr = $hasPurchaseMeta
         ? "SUM(IFNULL(`order_amount`,0) * " . $rateToRmSql . ")"
@@ -323,6 +303,23 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         }
     }
 
+    // Per-platform sales trend, so the chart can draw one line per platform instead of only the
+    // blended total. Uses the same RM conversion as the rest of the report.
+    $trendPlatformSql = "SELECT DATE(`order_date`) AS order_day, `platform`, " . $trendSalesExpr . " AS total_sales FROM " . campaignTableName(CAMPAIGN_PURCHASE_RECORD) . " WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A' AND `order_date` IS NOT NULL" . $packageFilter . $periodWhere . " GROUP BY DATE(`order_date`), `platform` ORDER BY order_day ASC";
+    $trendPlatformResult = mysqli_query($connect, $trendPlatformSql);
+    $trendPlatformRows = array();
+    if ($trendPlatformResult) {
+        while ($tpRow = $trendPlatformResult->fetch_assoc()) {
+            $tpPlatform = trim((string) ($tpRow['platform'] ?? ''));
+            if ($tpPlatform === '') {
+                $tpPlatform = 'Unknown';
+            }
+            $tpDay = (string) ($tpRow['order_day'] ?? '');
+            $trendPlatformRows[$tpPlatform][$tpDay] = is_numeric($tpRow['total_sales'] ?? null) ? (float) $tpRow['total_sales'] : 0;
+        }
+    }
+    $data['trend_platform_rows'] = $trendPlatformRows;
+
     // The Customer Detail List is the campaign's buyers: whoever ordered inside the period
     // and bought one of the campaign's packages. It is built from the orders themselves and
     // grouped per buyer, so a customer who did not order simply does not appear.
@@ -343,6 +340,8 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     // campaignPurchaseResolvePackageDisplayName() queries PKG on every call and caches
     // nothing, so the same package text is resolved once here rather than once per order.
     $packageNameCache = array();
+    $packageMap = array();
+    $singlePackageNameCache = array();
 
     $buyerGroups = array();
     $orderResult = mysqli_query($connect, $orderSql);
@@ -438,10 +437,83 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
                 'order_status' => trim((string) ($orderRow['order_status'] ?? '')),
                 'platform' => trim((string) ($orderRow['platform'] ?? '')),
             );
+
+            // Package purchase derived from the SAME order rows as the Customer Detail List, so the
+            // package table always agrees with it. Split multi-package orders into the individual
+            // packages and apportion the order's RM amount equally across them, so the package sales
+            // grand total equals the Customer Detail List grand total.
+            $orderPackageIds = function_exists('campaignPurchaseExtractPackageIds')
+                ? campaignPurchaseExtractPackageIds($rawPackageText, $connect)
+                : array();
+            $orderPackageNames = array();
+            foreach ($orderPackageIds as $pid) {
+                if (!isset($singlePackageNameCache[$pid])) {
+                    $singlePackageNameCache[$pid] = function_exists('commonResolvePackageNamesFromCsv')
+                        ? commonResolvePackageNamesFromCsv((string) $pid, $connect)
+                        : '';
+                }
+                $pName = trim((string) ($singlePackageNameCache[$pid] ?? ''));
+                if ($pName !== '') {
+                    $orderPackageNames[] = $pName;
+                }
+            }
+            if (empty($orderPackageNames)) {
+                $fallbackName = isset($packageNameCache[$rawPackageText]) ? $packageNameCache[$rawPackageText] : campaignPurchaseResolvePackageDisplayName($connect, $rawPackageText);
+                $fallbackName = trim((string) $fallbackName);
+                if ($fallbackName === '') {
+                    $fallbackName = 'Unknown Package';
+                }
+                $orderPackageNames[] = $fallbackName;
+            }
+            $orderPackageNames = array_unique(array_map(function ($n) {
+                $n = preg_replace('/\s+/', ' ', trim($n));
+                return $n === '' ? 'Unknown Package' : $n;
+            }, $orderPackageNames));
+            $perPackageRm = $orderAmountRm;
+            if (count($orderPackageNames) > 1) {
+                $perPackageRm = $orderAmountRm > 0 ? round($orderAmountRm / count($orderPackageNames), 2) : 0;
+            }
+            foreach ($orderPackageNames as $pkgName) {
+                if (!isset($packageMap[$pkgName])) {
+                    $packageMap[$pkgName] = array('package' => $pkgName, 'purchase_amount' => 0, 'purchase_sales' => 0.0);
+                }
+                $packageMap[$pkgName]['purchase_amount']++;
+                $packageMap[$pkgName]['purchase_sales'] += $perPackageRm;
+            }
         }
     }
 
     $customerRows = array_values($buyerGroups);
+
+    // Each Package Purchase: built from the order rows accumulated above, ranked by RM sales
+    // (highest first), ties broken by package name. Because it reuses the exact same order rows
+    // as the Customer Detail List, the package table always agrees with it.
+    $packageRows = array_values($packageMap);
+    usort($packageRows, function ($a, $b) {
+        if (abs($a['purchase_sales'] - $b['purchase_sales']) < 0.005) {
+            return strcasecmp($a['package'], $b['package']);
+        }
+        return $b['purchase_sales'] <=> $a['purchase_sales'];
+    });
+    $data['package_rows'] = $packageRows;
+
+    // Per-platform repeat-purchase distribution: how many customers on each platform placed more
+    // than one order in the period. Derived from the same buyer groups, so it agrees with the
+    // Customer Detail List and the Platform table.
+    $platformRepeatCustomers = array();
+    foreach ($customerRows as $cRow) {
+        $pName = $cRow['platform'] === '' ? 'Unknown' : $cRow['platform'];
+        if ((int) ($cRow['order_count'] ?? 0) > 1) {
+            $platformRepeatCustomers[$pName] = ($platformRepeatCustomers[$pName] ?? 0) + 1;
+        }
+    }
+    foreach ($data['platform_rows'] as $pIdx => $pRow) {
+        $pName = $pRow['platform'];
+        $pCust = (int) ($pRow['customer_count'] ?? 0);
+        $pRepeat = (int) ($platformRepeatCustomers[$pName] ?? 0);
+        $data['platform_rows'][$pIdx]['repeat_customers'] = $pRepeat;
+        $data['platform_rows'][$pIdx]['repeat_rate'] = $pCust > 0 ? round(($pRepeat / $pCust) * 100, 2) : 0;
+    }
     usort($customerRows, function ($a, $b) {
         if ($a['total_amount'] === $b['total_amount']) {
             return strcasecmp($a['customer_name'], $b['customer_name']);
@@ -508,7 +580,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         }
     }
 
-    $data['has_data'] = $data['metrics']['participants'] > 0 || !empty($data['follow_up_rows']) || !empty($data['package_rows']);
+    $data['has_data'] = $data['metrics']['participants'] > 0 || !empty($data['follow_up_summary']) || !empty($data['package_rows']);
     return $data;
 }
 
@@ -577,19 +649,19 @@ if (input('export') === '1') {
     fputcsv($output, array('Return Customer Sales (RM)', number_format((float) $metrics['return_customer_sales'], 2, '.', '')));
     fputcsv($output, array('Avg. Spend per Purchasing Customer (RM)', number_format((float) $metrics['avg_spend_per_customer'], 2, '.', '')));
     fputcsv($output, array());
-    fputcsv($output, array('Message Shortcut', 'Total Assigned', 'Followed Up', 'Follow-Up Rate'));
-    foreach ($reportData['follow_up_rows'] as $row) {
-        fputcsv($output, array($row['message_title'], $row['total_assigned'], $row['followed_up'], $row['rate'] . '%'));
-    }
+    fputcsv($output, array('Follow-Up Rate (Customer Submitted)', 'Value'));
+    fputcsv($output, array('Customers Who Submitted a Request', (int) ($reportData['follow_up_summary']['submitted'] ?? 0)));
+    fputcsv($output, array('Total Campaign Customers', (int) ($reportData['follow_up_summary']['total_customers'] ?? 0)));
+    fputcsv($output, array('Follow-Up Rate', ($reportData['follow_up_summary']['rate'] ?? 0) . '%'));
     fputcsv($output, array());
     fputcsv($output, array('Package', 'Purchase Amount', 'Purchase Sales (RM)'));
     foreach ($reportData['package_rows'] as $row) {
         fputcsv($output, array($row['package'], $row['purchase_amount'], number_format((float) $row['purchase_sales'], 2, '.', '')));
     }
     fputcsv($output, array());
-    fputcsv($output, array('Platform', 'Order Count', 'Customer Count', 'Total Sales (RM)'));
+    fputcsv($output, array('Platform', 'Order Count', 'Customer Count', 'Repeat Customers', 'Repeat Rate', 'Total Sales (RM)'));
     foreach ($reportData['platform_rows'] as $row) {
-        fputcsv($output, array($row['platform'], $row['order_count'], $row['customer_count'], number_format((float) $row['total_sales'], 2, '.', '')));
+        fputcsv($output, array($row['platform'], $row['order_count'], $row['customer_count'], (int) ($row['repeat_customers'] ?? 0), ($row['repeat_rate'] ?? 0) . '%', number_format((float) $row['total_sales'], 2, '.', '')));
     }
     fputcsv($output, array());
     fputcsv($output, array('Date', 'Order Count', 'Total Sales (RM)'));
@@ -739,7 +811,7 @@ if (input('export') === '1') {
 
                 <?php if (!empty($reportData['trend_rows'])): ?>
                     <div class="card mb-4">
-                        <div class="card-header bg-white"><strong>Sales Trend</strong></div>
+                        <div class="card-header bg-white"><strong>Sales Trend (by Platform)</strong></div>
                         <div class="card-body">
                             <canvas id="campaign_report_trend_chart" height="90"></canvas>
                         </div>
@@ -758,6 +830,8 @@ if (input('export') === '1') {
                                                 <th>Platform</th>
                                                 <th>Order Count</th>
                                                 <th>Customer Count</th>
+                                                <th>Repeat Customers</th>
+                                                <th>Repeat Rate</th>
                                                 <th>Total Sales (RM)</th>
                                             </tr>
                                         </thead>
@@ -767,6 +841,8 @@ if (input('export') === '1') {
                                                     <td><?= campaignH($row['platform']) ?></td>
                                                     <td><?= (int) $row['order_count'] ?></td>
                                                     <td><?= (int) $row['customer_count'] ?></td>
+                                                    <td><?= (int) ($row['repeat_customers'] ?? 0) ?></td>
+                                                    <td><?= (float) ($row['repeat_rate'] ?? 0) ?>%</td>
                                                     <td><?= number_format((float) $row['total_sales'], 2) ?></td>
                                                 </tr>
                                             <?php endforeach; ?>
@@ -808,30 +884,27 @@ if (input('export') === '1') {
                     </div>
                 </div>
 
-                <?php if (!empty($reportData['follow_up_rows'])): ?>
+                <?php if (!empty($reportData['follow_up_summary'])): ?>
                     <div class="card mb-4">
-                        <div class="card-header bg-white"><strong>Message Follow-Up Rate</strong></div>
+                        <div class="card-header bg-white"><strong>Follow-Up Rate (Customer Submitted)</strong></div>
                         <div class="card-body table-responsive">
                             <table id="campaign_report_follow_up_table" class="table table-striped w-100">
                                 <thead>
                                     <tr>
-                                        <th>Message Shortcut</th>
-                                        <th>Total Assigned</th>
-                                        <th>Followed Up</th>
+                                        <th>Customers Who Submitted a Request</th>
+                                        <th>Total Campaign Customers</th>
                                         <th>Follow-Up Rate</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($reportData['follow_up_rows'] as $row): ?>
-                                        <tr>
-                                            <td><?= campaignH($row['message_title']) ?></td>
-                                            <td><?= (int) $row['total_assigned'] ?></td>
-                                            <td><?= (int) $row['followed_up'] ?></td>
-                                            <td><?= campaignH($row['rate']) ?>%</td>
-                                        </tr>
-                                    <?php endforeach; ?>
+                                    <tr>
+                                        <td><?= (int) ($reportData['follow_up_summary']['submitted'] ?? 0) ?></td>
+                                        <td><?= (int) ($reportData['follow_up_summary']['total_customers'] ?? 0) ?></td>
+                                        <td><?= campaignH((float) ($reportData['follow_up_summary']['rate'] ?? 0)) ?>%</td>
+                                    </tr>
                                 </tbody>
                             </table>
+                            <div class="text-muted small mt-2">Rate = customers who submitted a customer follow-up request during the campaign period &divide; total campaign customers. Linked via the shared customer id to <code>customer_follow_up</code> (<code>case_source = 'customer'</code>).</div>
                         </div>
                     </div>
                 <?php endif; ?>
@@ -1053,39 +1126,47 @@ if (input('export') === '1') {
                     return;
                 }
                 var trendLabels = <?= json_encode(array_column($reportData['trend_rows'], 'date')) ?>;
-                var trendSales = <?= json_encode(array_map(function ($row) {
-                    return round((float) $row['total_sales'], 2);
-                }, $reportData['trend_rows'])) ?>;
                 var trendOrders = <?= json_encode(array_column($reportData['trend_rows'], 'order_count')) ?>;
+                var trendPlatformData = <?= json_encode($reportData['trend_platform_rows'] ?? array()) ?>;
+                var trendPlatformColors = ['#0d6efd', '#198754', '#dc3545', '#fd7e14', '#6f42c1', '#20c997', '#0dcaf0', '#d63384'];
+                var trendDatasets = [];
+                var trendColorIdx = 0;
+                Object.keys(trendPlatformData).forEach(function (platform) {
+                    var series = trendLabels.map(function (day) {
+                        var v = trendPlatformData[platform][day];
+                        return (typeof v === 'number') ? Math.round(v * 100) / 100 : 0;
+                    });
+                    var color = trendPlatformColors[trendColorIdx % trendPlatformColors.length];
+                    trendColorIdx++;
+                    trendDatasets.push({
+                        type: 'line',
+                        label: platform,
+                        data: series,
+                        borderColor: color,
+                        backgroundColor: color,
+                        tension: 0.25,
+                        fill: false,
+                        yAxisID: 'ySales',
+                    });
+                });
+                trendDatasets.push({
+                    type: 'bar',
+                    label: 'Order Count',
+                    data: trendOrders,
+                    backgroundColor: 'rgba(108, 117, 125, 0.45)',
+                    yAxisID: 'yOrders',
+                });
                 new Chart(trendCanvas.getContext('2d'), {
                     type: 'bar',
                     data: {
                         labels: trendLabels,
-                        datasets: [
-                            {
-                                type: 'line',
-                                label: 'Total Sales',
-                                data: trendSales,
-                                borderColor: '#0d6efd',
-                                backgroundColor: '#0d6efd',
-                                yAxisID: 'ySales',
-                                tension: 0.25,
-                                fill: false,
-                            },
-                            {
-                                type: 'bar',
-                                label: 'Order Count',
-                                data: trendOrders,
-                                backgroundColor: 'rgba(25, 135, 84, 0.5)',
-                                yAxisID: 'yOrders',
-                            },
-                        ],
+                        datasets: trendDatasets,
                     },
                     options: {
                         responsive: true,
                         interaction: { mode: 'index', intersect: false },
                         scales: {
-                            ySales: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: 'Sales' } },
+                            ySales: { type: 'linear', position: 'left', beginAtZero: true, title: { display: true, text: 'Sales (RM)' } },
                             yOrders: { type: 'linear', position: 'right', beginAtZero: true, ticks: { precision: 0 }, title: { display: true, text: 'Orders' }, grid: { drawOnChartArea: false } },
                         },
                     },
