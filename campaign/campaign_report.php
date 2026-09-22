@@ -57,10 +57,6 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             'saved_not_purchased' => 0,
             'new_customers' => 0,
             'total_sales' => 0,
-            'new_customer_amount' => 0,
-            'return_customer_amount' => 0,
-            'new_customer_sales' => 0,
-            'return_customer_sales' => 0,
             'avg_spend_per_customer' => 0,
         ),
         'follow_up_summary' => array('submitted' => 0, 'total_customers' => 0, 'rate' => 0),
@@ -190,16 +186,8 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     $purchaseResult = mysqli_query($connect, $purchaseSql);
     if ($purchaseResult) {
         while ($purchaseRow = $purchaseResult->fetch_assoc()) {
-            $customerType = trim((string) ($purchaseRow['customer_type'] ?? ''));
             $sales = is_numeric($purchaseRow['sales'] ?? null) ? (float) $purchaseRow['sales'] : 0;
             $data['metrics']['total_sales'] += $sales;
-            if ($customerType === 'Return Customer') {
-                $data['metrics']['return_customer_amount']++;
-                $data['metrics']['return_customer_sales'] += $sales;
-            } else {
-                $data['metrics']['new_customer_amount']++;
-                $data['metrics']['new_customer_sales'] += $sales;
-            }
         }
     }
 
@@ -893,10 +881,6 @@ if (input('export') === '1') {
     fputcsv($output, array('Saved Customer Not Purchased', $metrics['saved_not_purchased']));
     fputcsv($output, array('Purchase Rate', $metrics['purchase_rate'] . '%'));
     fputcsv($output, array('Total Sales (RM)', number_format((float) $metrics['total_sales'], 2, '.', '')));
-    fputcsv($output, array('New Customer Amount', $metrics['new_customer_amount']));
-    fputcsv($output, array('Return Customer Amount', $metrics['return_customer_amount']));
-    fputcsv($output, array('New Customer Sales (RM)', number_format((float) $metrics['new_customer_sales'], 2, '.', '')));
-    fputcsv($output, array('Return Customer Sales (RM)', number_format((float) $metrics['return_customer_sales'], 2, '.', '')));
     fputcsv($output, array('Avg. Spend per Purchasing Customer (RM)', number_format((float) $metrics['avg_spend_per_customer'], 2, '.', '')));
     fputcsv($output, array());
     fputcsv($output, array('Follow-Up Rate (Customer Submitted)', 'Value'));
@@ -1105,10 +1089,6 @@ if (input('export') === '1') {
                         'Saved Customer Not Purchased' => $metrics['saved_not_purchased'],
                         'Purchase Rate' => $metrics['purchase_rate'] . '%',
                         'Total Sales (RM)' => number_format((float) $metrics['total_sales'], 2),
-                        'New Customer Amount' => $metrics['new_customer_amount'],
-                        'Return Customer Amount' => $metrics['return_customer_amount'],
-                        'New Customer Sales (RM)' => number_format((float) $metrics['new_customer_sales'], 2),
-                        'Return Customer Sales (RM)' => number_format((float) $metrics['return_customer_sales'], 2),
                         'Avg. Spend per Purchasing Customer (RM)' => number_format((float) $metrics['avg_spend_per_customer'], 2),
                     );
                     ?>
