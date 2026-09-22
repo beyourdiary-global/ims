@@ -77,6 +77,9 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             'amounts_by_currency' => array(),
         ),
         'has_data' => false,
+        'final_report_rows' => array(),
+        'package_customer_distribution' => array(),
+        'conclusion_customer_rows' => array(),
     );
 
     // Currency System + Shopee account metadata, so the Customer Detail List (and the money
@@ -514,6 +517,253 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         $data['platform_rows'][$pIdx]['repeat_customers'] = $pRepeat;
         $data['platform_rows'][$pIdx]['repeat_rate'] = $pCust > 0 ? round(($pRepeat / $pCust) * 100, 2) : 0;
     }
+
+    // ===== ADDED 2026-09-22: FINAL Report / Per-Package distribution / Conclusion Customer List =====
+
+    // FINAL Report: one row per platform that appears in platform_rows, ordered as produced
+    // (by total sales desc). SN is just the 1..N row counter (how many slots / platforms).
+    // The sample's NEW CUSTOMER / RETURN SALES / RETURN CUSTOMER / RETURN CUSTOMER SALES columns
+    // were dropped per boss (2026-09-22) to keep this a clean per-platform summary.
+    $finalReportRows = array();
+    $snCounter = 1;
+    foreach ($data['platform_rows'] as $pRow) {
+        $finalReportRows[] = array(
+            'sn' => $snCounter++,
+            'platform' => (string) ($pRow['platform'] ?? ''),
+            'order_count' => (int) ($pRow['order_count'] ?? 0),
+            'customer_count' => (int) ($pRow['customer_count'] ?? 0),
+            'total_sales' => (float) ($pRow['total_sales'] ?? 0),
+        );
+    }
+    $data['final_report_rows'] = $finalReportRows;
+
+    // Per-package repeat/new customer distribution: for each package, count how many of the
+    // buyers who purchased it were repeat buyers within this campaign (order_count > 1) vs
+    // first-time buyers (order_count == 1). Also tally the matching order counts.
+    $perPackageRepeatMap = array();
+    $perPackageNewMap = array();
+    $perPackageRepeatOrderSum = array();
+    $perPackageNewOrderSum = array();
+    foreach ($customerRows as $cRow) {
+        $cOrderCount = (int) ($cRow['order_count'] ?? 0);
+        $isRepeatInCampaign = $cOrderCount > 1;
+        foreach (($cRow['orders'] ?? array()) as $cOrder) {
+            $pkgKeyRaw = isset($cOrder['package_text']) ? trim((string) $cOrder['package_text']) : '';
+            $pkgKey = $pkgKeyRaw === '' ? 'Unknown Package' : $pkgKeyRaw;
+            if (!isset($perPackageRepeatMap[$pkgKey])) {
+                $perPackageRepeatMap[$pkgKey] = array();
+                $perPackageNewMap[$pkgKey] = array();
+                $perPackageRepeatOrderSum[$pkgKey] = 0;
+                $perPackageNewOrderSum[$pkgKey] = 0;
+            }
+            if ($isRepeatInCampaign) {
+                $perPackageRepeatMap[$pkgKey][($cRow['customer_id'] ?? 0) . '|' . ($cRow['customer_name'] ?? '')] = true;
+                $perPackageRepeatOrderSum[$pkgKey]++;
+            } else {
+                $perPackageNewMap[$pkgKey][($cRow['customer_id'] ?? 0) . '|' . ($cRow['customer_name'] ?? '')] = true;
+                $perPackageNewOrderSum[$pkgKey]++;
+            }
+        }
+    }
+    $packageCustomerDistribution = array();
+    foreach ($packageRows as $pRow) {
+        $pName = isset($pRow['package']) ? (string) $pRow['package'] : '';
+        $packageCustomerDistribution[] = array(
+            'package' => $pName,
+            'repeat_customers' => isset($perPackageRepeatMap[$pName]) ? count($perPackageRepeatMap[$pName]) : 0,
+            'new_customers' => isset($perPackageNewMap[$pName]) ? count($perPackageNewMap[$pName]) : 0,
+            'repeat_orders' => isset($perPackageRepeatOrderSum[$pName]) ? (int) $perPackageRepeatOrderSum[$pName] : 0,
+            'new_orders' => isset($perPackageNewOrderSum[$pName]) ? (int) $perPackageNewOrderSum[$pName] : 0,
+            'purchase_amount' => (int) ($pRow['purchase_amount'] ?? 0),
+            'purchase_sales' => (float) ($pRow['purchase_sales'] ?? 0),
+        );
+    }
+    $data['package_customer_distribution'] = $packageCustomerDistribution;
+
+    // CONCLUSION CUSTOMER LIST: enrich every campaign buyer with customer-system attributes.
+    // Column mapping (boss definies, 2026-09-22):
+    //   - CUSTOMER TYPE: New Customer / Return Customer, based on whether the buyer had any
+    //     purchase record BEFORE this campaign (prior_order_count > 0 => Return).
+    //   - CUSTOMER LEVEL: from customerLabelGetCustomerLabelMap() (segmentation system).
+    //   - LAST FOLLOW UP DATE / LAST Promotion message: latest customer_follow_up row for the
+    //     campaign-side customer_id.
+    //   - PREVIOUS LAST PURCHASE DATE / PRIOR ORDER AMOUNT / VOUCHER: from the platform order
+    //     table (Shopee: SHOPEE_SG_ORDER_REQ keyed by buyer). Non-Shopee / missing finance => ''.
+    $conclusionRows = array();
+
+    // Build level map per platform from segmentation.
+    $levelByBuyer = array();
+    if (function_exists('customerLabelGetCustomerLabelMap')) {
+        $byPlatformBuyerIds = array();
+        foreach ($customerRows as $cRow) {
+            $pKey = trim((string) ($cRow['platform'] ?? ''));
+            $bKey = isset($cRow['orders'][0]) ? trim((string) ($cRow['orders'][0]['buyer_platform_id'] ?? '')) : '';
+            if ($pKey !== '' && $bKey !== '') {
+                $byPlatformBuyerIds[$pKey][] = $bKey;
+            }
+        }
+        foreach ($byPlatformBuyerIds as $pKey => $idList) {
+            $labelMap = customerLabelGetCustomerLabelMap($connect, $pKey, array_values(array_unique($idList)));
+            foreach ($labelMap as $cid => $labelMeta) {
+                $levelName = isset($labelMeta['level']['name']) ? trim((string) $labelMeta['level']['name']) : '';
+                if ($levelName !== '') {
+                    $levelByBuyer[$pKey . '|' . $cid] = $levelName;
+                }
+            }
+        }
+    }
+
+    // Last follow-up date + latest promotion message per customer, via customer_follow_up.
+    $customerFollowUpLookup = array();
+    if (defined('CUSTOMER_FOLLOW_UP') && function_exists('campaignTableExists') && campaignTableExists($connect, CUSTOMER_FOLLOW_UP)) {
+        $cfSelect = "SELECT `customer_id`, `create_date`";
+        if (function_exists('campaignColumnExists') && campaignColumnExists($connect, CUSTOMER_FOLLOW_UP, 'msg')) {
+            $cfSelect .= ", `msg`";
+        } elseif (function_exists('campaignColumnExists') && campaignColumnExists($connect, CUSTOMER_FOLLOW_UP, 'content')) {
+            $cfSelect .= ", `content`";
+        }
+        $cfSelect .= " FROM " . campaignTableName(CUSTOMER_FOLLOW_UP) . " WHERE `status`='A' AND `customer_id` > 0";
+        if ($periodStart !== '' && $periodEnd !== '') {
+            $cfSelect .= " AND DATE(`create_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(`create_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
+        }
+        $cfSelect .= " ORDER BY `create_date` DESC, `id` DESC";
+        $cfResult = mysqli_query($connect, $cfSelect);
+        if ($cfResult) {
+            while ($cfRow = $cfResult->fetch_assoc()) {
+                $cfCustId = (int) ($cfRow['customer_id'] ?? 0);
+                if ($cfCustId <= 0 || isset($customerFollowUpLookup[$cfCustId])) {
+                    continue;
+                }
+                $customerFollowUpLookup[$cfCustId] = array(
+                    'last_follow_up_date' => (string) ($cfRow['create_date'] ?? ''),
+                    'last_promotion_message' => isset($cfRow['msg']) ? (string) $cfRow['msg'] : (isset($cfRow['content']) ? (string) $cfRow['content'] : ''),
+                );
+            }
+        }
+    }
+
+    // Previous last purchase date + prior order count + prior amount + voucher per buyer (Shopee).
+    $buyerFinanceLookup = array();
+    $financeConn = isset($GLOBALS['finance_connect']) ? $GLOBALS['finance_connect'] : null;
+    $buyerIdsByPlatform = array();
+    foreach ($customerRows as $cRow) {
+        $pKey = trim((string) ($cRow['platform'] ?? ''));
+        $firstOrder = isset($cRow['orders'][0]) ? $cRow['orders'][0] : array();
+        $bKey = trim((string) ($firstOrder['buyer_platform_id'] ?? ''));
+        if ($pKey !== '' && $bKey !== '') {
+            $buyerIdsByPlatform[$pKey][] = $bKey;
+        }
+    }
+    foreach ($buyerIdsByPlatform as $pKey => $idList) {
+        $uniqueIds = array_values(array_unique(array_filter($idList, function ($v) { return $v !== ''; })));
+        if (empty($uniqueIds)) {
+            continue;
+        }
+        // Only Shopee has the finance-side order table we can query here. Other platforms stay ''.
+        if (!($financeConn instanceof mysqli) || stripos($pKey, 'shopee') === false || !defined('SHOPEE_SG_ORDER_REQ')) {
+            continue;
+        }
+        $idInList = array_map(function ($v) use ($financeConn) { return "'" . $financeConn->real_escape_string((string) $v) . "'"; }, $uniqueIds);
+        $periodStartEsc = $financeConn->real_escape_string($periodStart);
+        $priorSql = "SELECT `buyer`, "
+            . "MAX(CASE WHEN DATE(`date`) < '" . $periodStartEsc . "' THEN `date` ELSE NULL END) AS prev_date, "
+            . "COUNT(CASE WHEN DATE(`date`) < '" . $periodStartEsc . "' THEN 1 END) AS prior_order_count, "
+            . "SUM(CASE WHEN DATE(`date`) < '" . $periodStartEsc . "' THEN `final_amt` ELSE 0 END) AS prior_amount "
+            . "FROM " . SHOPEE_SG_ORDER_REQ . " WHERE `status`='A' AND `buyer` IN (" . implode(',', $idInList) . ") GROUP BY `buyer`";
+        $priorResult = mysqli_query($financeConn, $priorSql);
+        if ($priorResult) {
+            while ($pRow = $priorResult->fetch_assoc()) {
+                $buyerIdVal = (string) ($pRow['buyer'] ?? '');
+                if ($buyerIdVal === '') {
+                    continue;
+                }
+                $buyerFinanceLookup[$pKey . '|' . $buyerIdVal] = array(
+                    'previous_last_purchase_date' => (string) ($pRow['prev_date'] ?? ''),
+                    'prior_order_count' => (int) ($pRow['prior_order_count'] ?? 0),
+                    'prior_amount' => (float) ($pRow['prior_amount'] ?? 0),
+                    'voucher' => '',
+                );
+            }
+        }
+        $voucherSql = "SELECT `buyer`, `voucher` FROM " . SHOPEE_SG_ORDER_REQ . " WHERE `status`='A' AND `buyer` IN (" . implode(',', $idInList) . ") ORDER BY `date` DESC, `id` DESC";
+        $voucherResult = mysqli_query($financeConn, $voucherSql);
+        if ($voucherResult) {
+            while ($vRow = $voucherResult->fetch_assoc()) {
+                $buyerIdVal = (string) ($vRow['buyer'] ?? '');
+                if ($buyerIdVal === '') {
+                    continue;
+                }
+                $lookupKey = $pKey . '|' . $buyerIdVal;
+                if (!isset($buyerFinanceLookup[$lookupKey])) {
+                    $buyerFinanceLookup[$lookupKey] = array('previous_last_purchase_date' => '', 'prior_order_count' => 0, 'prior_amount' => 0.0, 'voucher' => '');
+                }
+                if (empty($buyerFinanceLookup[$lookupKey]['voucher']) && isset($vRow['voucher'])) {
+                    $buyerFinanceLookup[$lookupKey]['voucher'] = (string) $vRow['voucher'];
+                }
+            }
+        }
+    }
+
+    foreach ($customerRows as $cRow) {
+        $firstOrder = isset($cRow['orders'][0]) ? $cRow['orders'][0] : array();
+        $pKey = trim((string) ($cRow['platform'] ?? ''));
+        $buyerIdKey = trim((string) ($firstOrder['buyer_platform_id'] ?? ''));
+        $customerId = isset($cRow['customer_id']) ? (int) $cRow['customer_id'] : 0;
+        $financeInfo = isset($buyerFinanceLookup[$pKey . '|' . $buyerIdKey]) ? $buyerFinanceLookup[$pKey . '|' . $buyerIdKey] : array();
+        $priorOrderCount = isset($financeInfo['prior_order_count']) ? (int) $financeInfo['prior_order_count'] : 0;
+        $priorAmount = isset($financeInfo['prior_amount']) ? (float) $financeInfo['prior_amount'] : 0.0;
+        $previousPurchaseDate = isset($financeInfo['previous_last_purchase_date']) ? (string) $financeInfo['previous_last_purchase_date'] : '';
+        $voucher = isset($financeInfo['voucher']) ? (string) $financeInfo['voucher'] : '';
+        // CUSTOMER TYPE: return if the buyer already had purchases before this campaign.
+        $customerType = $priorOrderCount > 0 ? 'Return Customer' : 'New Customer';
+        // CUSTOMER LEVEL via segmentation (prefer buyer-level, fallback to saved-contact key).
+        $levelName = '';
+        if ($pKey !== '' && $buyerIdKey !== '' && isset($levelByBuyer[$pKey . '|' . $buyerIdKey])) {
+            $levelName = $levelByBuyer[$pKey . '|' . $buyerIdKey];
+        } elseif ($customerId > 0 && isset($savedCustomerMap[$customerId]['customer_contact'])) {
+            $savedContact = trim((string) $savedCustomerMap[$customerId]['customer_contact']);
+            if ($pKey !== '' && $savedContact !== '' && isset($levelByBuyer[$pKey . '|' . $savedContact])) {
+                $levelName = $levelByBuyer[$pKey . '|' . $savedContact];
+            }
+        }
+        // Last Follow Up Date / Last Promotion message from customer_follow_up.
+        $followUpInfo = $customerId > 0 && isset($customerFollowUpLookup[$customerId]) ? $customerFollowUpLookup[$customerId] : array();
+        $lastFollowUpDate = isset($followUpInfo['last_follow_up_date']) ? (string) $followUpInfo['last_follow_up_date'] : '';
+        $lastPromotionMessage = isset($followUpInfo['last_promotion_message']) ? (string) $followUpInfo['last_promotion_message'] : '';
+        // This time Purchase Package: most frequent package among the buyer's orders.
+        $packageFrequency = array();
+        foreach (($cRow['orders'] ?? array()) as $cOrder) {
+            $pkgDisplay = isset($cOrder['package_text']) ? (string) $cOrder['package_text'] : '';
+            if ($pkgDisplay === '') {
+                continue;
+            }
+            if (!isset($packageFrequency[$pkgDisplay])) {
+                $packageFrequency[$pkgDisplay] = 0;
+            }
+            $packageFrequency[$pkgDisplay]++;
+        }
+        arsort($packageFrequency);
+        $packageNamesOrdered = array_keys($packageFrequency);
+        $thisTimePackage = isset($packageNamesOrdered[0]) ? $packageNamesOrdered[0] : '';
+        $secondPackage = isset($packageNamesOrdered[1]) ? $packageNamesOrdered[1] : '';
+        $conclusionRows[] = array(
+            'customer_type' => $customerType,
+            'customer_name' => (string) ($cRow['customer_name'] ?? ''),
+            'prior_amount' => $priorAmount,
+            'order_count' => (int) ($cRow['order_count'] ?? 0),
+            'total_amount' => (float) ($cRow['total_amount'] ?? 0),
+            'previous_purchase_date' => $previousPurchaseDate,
+            'customer_level' => $levelName,
+            'last_follow_up_date' => $lastFollowUpDate,
+            'last_promotion_message' => $lastPromotionMessage,
+            'this_time_package' => $thisTimePackage,
+            'second_package' => $secondPackage,
+            'remark' => isset($savedCustomerMap[$customerId]['customer_contact']) ? (string) $savedCustomerMap[$customerId]['customer_contact'] : '',
+            'voucher' => $voucher,
+        );
+    }
+    $data['conclusion_customer_rows'] = $conclusionRows;
+
     usort($customerRows, function ($a, $b) {
         if ($a['total_amount'] === $b['total_amount']) {
             return strcasecmp($a['customer_name'], $b['customer_name']);
@@ -706,6 +956,62 @@ if (input('export') === '1') {
     $customerTotalRow[] = number_format((float) ($reportData['customer_totals']['total_amount'] ?? 0), 2, '.', '');
     $customerTotalRow[] = '';
     fputcsv($output, $customerTotalRow);
+    fputcsv($output, array());
+    fputcsv($output, array('FINAL Report', 'Platform', 'TOTAL ORDER', 'TOTAL CUSTOMER', 'TOTAL SALES (RM)'));
+    foreach ($reportData['final_report_rows'] as $frRow) {
+        fputcsv($output, array(
+            $frRow['sn'],
+            $frRow['platform'],
+            $frRow['order_count'],
+            $frRow['customer_count'],
+            number_format((float) $frRow['total_sales'], 2, '.', ''),
+        ));
+    }
+    fputcsv($output, array());
+    fputcsv($output, array('Per-Package Repeat / New Customer Distribution'));
+    fputcsv($output, array('Package', 'Repeat Customers', 'New Customers', 'Repeat Orders', 'New Orders', 'Total Purchase Amount', 'Total Purchase Sales (RM)'));
+    foreach ($reportData['package_customer_distribution'] as $pkgDistRow) {
+        fputcsv($output, array(
+            $pkgDistRow['package'],
+            $pkgDistRow['repeat_customers'],
+            $pkgDistRow['new_customers'],
+            $pkgDistRow['repeat_orders'],
+            $pkgDistRow['new_orders'],
+            $pkgDistRow['purchase_amount'],
+            number_format((float) $pkgDistRow['purchase_sales'], 2, '.', ''),
+        ));
+    }
+    fputcsv($output, array());
+    fputcsv($output, array('CONCLUSION CUSTOMER LIST'));
+    $conclusionHeader = array(
+        'CUSTOMER TYPE', 'CUSTOMER NAME',
+        'CUSTOMER ORDER AMOUNT (Not include this time promo) (RM)',
+        'ORDER AMOUNT (in this promotion)',
+        'PURCHASE AMOUNT (MYR)',
+        'PREVIOUS LAST PURCHASE DATE', 'CUSTOMER LEVEL',
+        'LAST FOLLOW UP DATE (Not include previous)',
+        'LAST Promotion message',
+        'This time Purchase PACKAGE', 'second package',
+        'REMARK', 'VOUCHER',
+    );
+    fputcsv($output, $conclusionHeader);
+    foreach ($reportData['conclusion_customer_rows'] as $ccRow) {
+        fputcsv($output, array(
+            $ccRow['customer_type'],
+            $ccRow['customer_name'],
+            number_format((float) $ccRow['prior_amount'], 2, '.', ''),
+            $ccRow['order_count'],
+            number_format((float) $ccRow['total_amount'], 2, '.', ''),
+            $ccRow['previous_purchase_date'],
+            $ccRow['customer_level'],
+            $ccRow['last_follow_up_date'],
+            $ccRow['last_promotion_message'],
+            $ccRow['this_time_package'],
+            $ccRow['second_package'],
+            $ccRow['remark'],
+            $ccRow['voucher'],
+        ));
+    }
     fclose($output);
     exit();
 }
@@ -731,6 +1037,15 @@ if (input('export') === '1') {
         }
         if ($('#campaign_report_customer_table').length) {
             createSortingTable('campaign_report_customer_table', { searching: true, order: [[5, 'desc']] });
+        }
+        if ($('#campaign_report_final_report_table').length) {
+            createSortingTable('campaign_report_final_report_table', { searching: false, order: [] });
+        }
+        if ($('#campaign_report_package_distribution_table').length) {
+            createSortingTable('campaign_report_package_distribution_table', { searching: false, order: [] });
+        }
+        if ($('#campaign_report_conclusion_customer_table').length) {
+            createSortingTable('campaign_report_conclusion_customer_table', { searching: true, order: [[1, 'asc']] });
         }
     });
 </script>
@@ -1059,6 +1374,117 @@ if (input('export') === '1') {
                         </div>
                     </div>
                 <?php endif; ?>
+            <div class="card mb-3">
+                <div class="card-header bg-white"><strong>FINAL Report</strong></div>
+                <div class="table-responsive">
+                    <table class="table table-striped mb-0" id="campaign_report_final_report_table">
+                        <thead>
+                            <tr>
+                                <th>SN</th>
+                                <th>Platform</th>
+                                <th>TOTAL ORDER</th>
+                                <th>TOTAL CUSTOMER</th>
+                                <th>TOTAL SALES (RM)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach (($reportData['final_report_rows'] ?? array()) as $frRow): ?>
+                                <tr>
+                                    <td><?= (int) ($frRow['sn'] ?? 0) ?></td>
+                                    <td><?= htmlspecialchars((string) ($frRow['platform'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= (int) ($frRow['order_count'] ?? 0) ?></td>
+                                    <td><?= (int) ($frRow['customer_count'] ?? 0) ?></td>
+                                    <td><?= number_format((float) ($frRow['total_sales'] ?? 0), 2, '.', '') ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            <?php if (empty($reportData['final_report_rows'])): ?>
+                                <tr><td colspan="5" class="text-center">No platform data.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card mb-3">
+                <div class="card-header bg-white"><strong>Per-Package Repeat / New Customer Distribution</strong></div>
+                <div class="table-responsive">
+                    <table class="table table-striped mb-0" id="campaign_report_package_distribution_table">
+                        <thead>
+                            <tr>
+                                <th>Package</th>
+                                <th>Repeat Customers</th>
+                                <th>New Customers</th>
+                                <th>Repeat Orders</th>
+                                <th>New Orders</th>
+                                <th>Total Purchase Amount</th>
+                                <th>Total Purchase Sales (RM)</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach (($reportData['package_customer_distribution'] ?? array()) as $pkgDistRow): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars((string) ($pkgDistRow['package'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= (int) ($pkgDistRow['repeat_customers'] ?? 0) ?></td>
+                                    <td><?= (int) ($pkgDistRow['new_customers'] ?? 0) ?></td>
+                                    <td><?= (int) ($pkgDistRow['repeat_orders'] ?? 0) ?></td>
+                                    <td><?= (int) ($pkgDistRow['new_orders'] ?? 0) ?></td>
+                                    <td><?= (int) ($pkgDistRow['purchase_amount'] ?? 0) ?></td>
+                                    <td><?= number_format((float) ($pkgDistRow['purchase_sales'] ?? 0), 2, '.', '') ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            <?php if (empty($reportData['package_customer_distribution'])): ?>
+                                <tr><td colspan="7" class="text-center">No package data.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+            <div class="card mb-3">
+                <div class="card-header bg-white"><strong>CONCLUSION CUSTOMER LIST</strong></div>
+                <div class="table-responsive">
+                    <table class="table table-striped mb-0" id="campaign_report_conclusion_customer_table">
+                        <thead>
+                            <tr>
+                                <th>CUSTOMER TYPE</th>
+                                <th>CUSTOMER NAME</th>
+                                <th>CUSTOMER ORDER AMOUNT<br><small>(Not include this time promo) (RM)</small></th>
+                                <th>ORDER AMOUNT<br><small>(in this promotion)</small></th>
+                                <th>PURCHASE AMOUNT (MYR)</th>
+                                <th>PREVIOUS LAST PURCHASE DATE</th>
+                                <th>CUSTOMER LEVEL</th>
+                                <th>LAST FOLLOW UP DATE<br><small>(Not include previous)</small></th>
+                                <th>LAST Promotion message</th>
+                                <th>This time Purchase PACKAGE</th>
+                                <th>second package</th>
+                                <th>REMARK</th>
+                                <th>VOUCHER</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <?php foreach (($reportData['conclusion_customer_rows'] ?? array()) as $ccRow): ?>
+                                <tr>
+                                    <td><?= htmlspecialchars((string) ($ccRow['customer_type'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string) ($ccRow['customer_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= number_format((float) ($ccRow['prior_amount'] ?? 0), 2, '.', '') ?></td>
+                                    <td><?= (int) ($ccRow['order_count'] ?? 0) ?></td>
+                                    <td><?= number_format((float) ($ccRow['total_amount'] ?? 0), 2, '.', '') ?></td>
+                                    <td><?= htmlspecialchars((string) ($ccRow['previous_purchase_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string) ($ccRow['customer_level'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string) ($ccRow['last_follow_up_date'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string) ($ccRow['last_promotion_message'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string) ($ccRow['this_time_package'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string) ($ccRow['second_package'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string) ($ccRow['remark'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                    <td><?= htmlspecialchars((string) ($ccRow['voucher'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                                </tr>
+                            <?php endforeach; ?>
+                            <?php if (empty($reportData['conclusion_customer_rows'])): ?>
+                                <tr><td colspan="13" class="text-center">No conclusion data.</td></tr>
+                            <?php endif; ?>
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
             <?php endif; ?>
 
             <?php campaignRenderBackButton($backUrl); ?>
