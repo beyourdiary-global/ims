@@ -195,7 +195,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     // purchase rate is that ratio; it used to be hardcoded to 100%, which said nothing.
     // Read once and kept, because the Customer Detail List below needs these names too.
     $savedCustomerMap = array();
-    $savedCustomerResult = mysqli_query($connect, "SELECT `id`, `customer_name`, `customer_contact`, `platform`
+    $savedCustomerResult = mysqli_query($connect, "SELECT `id`, `customer_id`, `customer_name`, `customer_contact`, `platform`
         FROM " . campaignTableName(CAMPAIGN_CUSTOMER) . "
         WHERE `campaign_id`='" . (int) $campaignId . "' AND `status`='A'");
     if ($savedCustomerResult) {
@@ -579,23 +579,91 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     //     table (Shopee: SHOPEE_SG_ORDER_REQ keyed by buyer). Non-Shopee / missing finance => ''.
     $conclusionRows = array();
 
-    // Build level map per platform from segmentation.
-    $levelByBuyer = array();
-    if (function_exists('customerLabelGetCustomerLabelMap')) {
-        $byPlatformBuyerIds = array();
-        foreach ($customerRows as $cRow) {
-            $pKey = trim((string) ($cRow['platform'] ?? ''));
-            $bKey = isset($cRow['orders'][0]) ? trim((string) ($cRow['orders'][0]['buyer_platform_id'] ?? '')) : '';
-            if ($pKey !== '' && $bKey !== '') {
-                $byPlatformBuyerIds[$pKey][] = $bKey;
+    // ---------------------------------------------------------------------
+    // Buyer identity resolution (shared by LEVEL / FOLLOW-UP / FINANCE).
+    //
+    // The purchase record's buyer value is normally a Shopee USERNAME, because
+    // campaignGetFirstExistingColumn() prefers `buyer_username` over the numeric id
+    // (see campaignPurchasePlatformConfigs). But the customer system keys on the
+    // NUMERIC customer id: customerLabelGetCustomerLabelMap() casts every id through
+    // intval() and silently drops anything that is not a positive integer, and
+    // customer_follow_up.customer_id is numeric too. Feeding the username in returned
+    // nothing at all -- which is why LEVEL and FOLLOW-UP came out empty.
+    // Resolve username -> numeric id once here and reuse it downstream.
+    // ---------------------------------------------------------------------
+    $financeConn = isset($GLOBALS['finance_connect']) && $GLOBALS['finance_connect'] instanceof mysqli
+        ? $GLOBALS['finance_connect']
+        : null;
+
+    $shopeeCustomerMetaMap = array();
+    if (function_exists('customerLabelGetShopeeCustomerMetaMap') && ($financeConn instanceof mysqli)) {
+        $buyerValuesForMeta = array();
+        foreach ($customerRows as $cRowMeta) {
+            $firstOrderMeta = isset($cRowMeta['orders'][0]) ? $cRowMeta['orders'][0] : array();
+            $buyerValMeta = trim((string) ($firstOrderMeta['buyer_platform_id'] ?? ''));
+            if ($buyerValMeta !== '') {
+                $buyerValuesForMeta[] = $buyerValMeta;
+            }
+            $buyerNameMetaVal = trim((string) ($firstOrderMeta['buyer_name'] ?? ''));
+            if ($buyerNameMetaVal !== '') {
+                $buyerValuesForMeta[] = $buyerNameMetaVal;
             }
         }
-        foreach ($byPlatformBuyerIds as $pKey => $idList) {
-            $labelMap = customerLabelGetCustomerLabelMap($connect, $pKey, array_values(array_unique($idList)));
+        if (!empty($buyerValuesForMeta)) {
+            $shopeeCustomerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $financeConn, array_values(array_unique($buyerValuesForMeta)));
+        }
+    }
+
+    // Numeric customer id per buyer group ('platform|buyer'), resolved once.
+    $numericIdByBuyerKey = array();
+    foreach ($customerRows as $cRowId) {
+        $pKeyId = trim((string) ($cRowId['platform'] ?? ''));
+        $firstOrderId = isset($cRowId['orders'][0]) ? $cRowId['orders'][0] : array();
+        $buyerValId = trim((string) ($firstOrderId['buyer_platform_id'] ?? ''));
+        $buyerNameId = trim((string) ($firstOrderId['buyer_name'] ?? ''));
+        $groupKeyId = $pKeyId . '|' . $buyerValId;
+
+        $resolvedId = 0;
+        if (!empty($shopeeCustomerMetaMap) && function_exists('customerLabelResolveShopeeCustomerMeta')) {
+            $buyerMeta = customerLabelResolveShopeeCustomerMeta($connect, $financeConn, $buyerValId, $buyerNameId, $shopeeCustomerMetaMap);
+            $resolvedId = isset($buyerMeta['id']) ? (int) $buyerMeta['id'] : 0;
+        }
+        // Fallback 1: the campaign's own customer row carries the platform customer id.
+        if ($resolvedId <= 0) {
+            $savedKeyId = isset($cRowId['customer_id']) ? (int) $cRowId['customer_id'] : 0;
+            if ($savedKeyId > 0 && isset($savedCustomerMap[$savedKeyId]['customer_id'])) {
+                $savedPlatformId = trim((string) $savedCustomerMap[$savedKeyId]['customer_id']);
+                if ($savedPlatformId !== '' && ctype_digit($savedPlatformId)) {
+                    $resolvedId = (int) $savedPlatformId;
+                }
+            }
+        }
+        // Fallback 2: the buyer value itself is already a numeric id.
+        if ($resolvedId <= 0 && $buyerValId !== '' && ctype_digit($buyerValId)) {
+            $resolvedId = (int) $buyerValId;
+        }
+        if ($resolvedId > 0 && !isset($numericIdByBuyerKey[$groupKeyId])) {
+            $numericIdByBuyerKey[$groupKeyId] = $resolvedId;
+        }
+    }
+
+    // Build level map per platform from segmentation, keyed by the numeric id.
+    $levelByBuyer = array();
+    if (function_exists('customerLabelGetCustomerLabelMap')) {
+        $byPlatformNumericIds = array();
+        foreach ($numericIdByBuyerKey as $groupKey => $numericId) {
+            $parts = explode('|', $groupKey, 2);
+            $pKeyLabel = isset($parts[0]) ? $parts[0] : '';
+            if ($pKeyLabel !== '' && $numericId > 0) {
+                $byPlatformNumericIds[$pKeyLabel][$numericId] = $numericId;
+            }
+        }
+        foreach ($byPlatformNumericIds as $pKeyLabel => $idList) {
+            $labelMap = customerLabelGetCustomerLabelMap($connect, $pKeyLabel, array_values($idList));
             foreach ($labelMap as $cid => $labelMeta) {
                 $levelName = isset($labelMeta['segmentation']['name']) ? trim((string) $labelMeta['segmentation']['name']) : '';
                 if ($levelName !== '') {
-                    $levelByBuyer[$pKey . '|' . $cid] = $levelName;
+                    $levelByBuyer[$pKeyLabel . '|' . $cid] = $levelName;
                 }
             }
         }
@@ -631,19 +699,19 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
     }
 
     // Previous last purchase date + prior order count + prior amount per buyer (Shopee).
+    // SHOPEE_SG_ORDER_REQ.buyer holds the NUMERIC customer id, so query with the ids
+    // resolved above rather than with the raw buyer username.
     $buyerFinanceLookup = array();
-    $financeConn = isset($GLOBALS['finance_connect']) ? $GLOBALS['finance_connect'] : null;
     $buyerIdsByPlatform = array();
-    foreach ($customerRows as $cRow) {
-        $pKey = trim((string) ($cRow['platform'] ?? ''));
-        $firstOrder = isset($cRow['orders'][0]) ? $cRow['orders'][0] : array();
-        $bKey = trim((string) ($firstOrder['buyer_platform_id'] ?? ''));
-        if ($pKey !== '' && $bKey !== '') {
-            $buyerIdsByPlatform[$pKey][] = $bKey;
+    foreach ($numericIdByBuyerKey as $groupKey => $numericId) {
+        $partsFin = explode('|', $groupKey, 2);
+        $pKeyFin = isset($partsFin[0]) ? $partsFin[0] : '';
+        if ($pKeyFin !== '' && $numericId > 0) {
+            $buyerIdsByPlatform[$pKeyFin][$numericId] = $numericId;
         }
     }
     foreach ($buyerIdsByPlatform as $pKey => $idList) {
-        $uniqueIds = array_values(array_unique(array_filter($idList, function ($v) { return $v !== ''; })));
+        $uniqueIds = array_values(array_unique(array_filter(array_map('intval', $idList), function ($v) { return $v > 0; })));
         if (empty($uniqueIds)) {
             continue;
         }
@@ -651,7 +719,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         if (!($financeConn instanceof mysqli) || stripos($pKey, 'shopee') === false || !defined('SHOPEE_SG_ORDER_REQ')) {
             continue;
         }
-        $idInList = array_map(function ($v) use ($financeConn) { return "'" . $financeConn->real_escape_string((string) $v) . "'"; }, $uniqueIds);
+        $idInList = array_map(function ($v) { return (string) (int) $v; }, $uniqueIds);
         $periodStartEsc = $financeConn->real_escape_string($periodStart);
         $priorSql = "SELECT `buyer`, "
             . "MAX(CASE WHEN DATE(`date`) < '" . $periodStartEsc . "' THEN `date` ELSE NULL END) AS prev_date, "
@@ -674,42 +742,88 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         }
     }
 
+    $conclusionPackageNameCache = array();
     foreach ($customerRows as $cRow) {
         $firstOrder = isset($cRow['orders'][0]) ? $cRow['orders'][0] : array();
         $pKey = trim((string) ($cRow['platform'] ?? ''));
         $buyerIdKey = trim((string) ($firstOrder['buyer_platform_id'] ?? ''));
-        $customerId = isset($cRow['customer_id']) ? (int) $cRow['customer_id'] : 0;
-        $financeInfo = isset($buyerFinanceLookup[$pKey . '|' . $buyerIdKey]) ? $buyerFinanceLookup[$pKey . '|' . $buyerIdKey] : array();
+        $campaignCustomerRowId = isset($cRow['customer_id']) ? (int) $cRow['customer_id'] : 0;
+        $buyerGroupKey = $pKey . '|' . $buyerIdKey;
+        // The numeric customer id everything else keys on (see the resolver above).
+        $numericCustomerId = isset($numericIdByBuyerKey[$buyerGroupKey]) ? (int) $numericIdByBuyerKey[$buyerGroupKey] : 0;
+        // The platform customer id on the campaign's own saved-customer row. This is the
+        // value customer_follow_up.customer_id links to.
+        $savedPlatformCustomerId = 0;
+        if ($campaignCustomerRowId > 0 && isset($savedCustomerMap[$campaignCustomerRowId]['customer_id'])) {
+            $savedPlatformIdRaw = trim((string) $savedCustomerMap[$campaignCustomerRowId]['customer_id']);
+            if ($savedPlatformIdRaw !== '' && ctype_digit($savedPlatformIdRaw)) {
+                $savedPlatformCustomerId = (int) $savedPlatformIdRaw;
+            }
+        }
+        if ($savedPlatformCustomerId <= 0) {
+            $savedPlatformCustomerId = $numericCustomerId;
+        }
+
+        $financeInfo = $numericCustomerId > 0 && isset($buyerFinanceLookup[$pKey . '|' . $numericCustomerId])
+            ? $buyerFinanceLookup[$pKey . '|' . $numericCustomerId]
+            : array();
         $priorOrderCount = isset($financeInfo['prior_order_count']) ? (int) $financeInfo['prior_order_count'] : 0;
         $priorAmount = isset($financeInfo['prior_amount']) ? (float) $financeInfo['prior_amount'] : 0.0;
         $previousPurchaseDate = isset($financeInfo['previous_last_purchase_date']) ? (string) $financeInfo['previous_last_purchase_date'] : '';
-        // CUSTOMER TYPE: return if the buyer already had purchases before this campaign.
-        $customerType = $priorOrderCount > 0 ? 'Return Customer' : 'New Customer';
-        // CUSTOMER LEVEL via segmentation (prefer buyer-level, fallback to saved-contact key).
+        // CUSTOMER TYPE: kept identical to the Customer Detail List and to the importer
+        // (campaignRunPurchaseCheck): a buyer on the campaign's saved list is a Return
+        // Customer, anyone else is New. The two tables must agree, so this uses the exact
+        // same test as buyerGroups' is_new_customer above.
+        $isSavedCustomerHere = $campaignCustomerRowId > 0 && isset($savedCustomerMap[$campaignCustomerRowId]);
+        $customerType = $isSavedCustomerHere ? 'Return Customer' : 'New Customer';
+        // CUSTOMER LEVEL via segmentation, keyed by the numeric customer id.
         $levelName = '';
-        if ($pKey !== '' && $buyerIdKey !== '' && isset($levelByBuyer[$pKey . '|' . $buyerIdKey])) {
-            $levelName = $levelByBuyer[$pKey . '|' . $buyerIdKey];
-        } elseif ($customerId > 0 && isset($savedCustomerMap[$customerId]['customer_contact'])) {
-            $savedContact = trim((string) $savedCustomerMap[$customerId]['customer_contact']);
-            if ($pKey !== '' && $savedContact !== '' && isset($levelByBuyer[$pKey . '|' . $savedContact])) {
-                $levelName = $levelByBuyer[$pKey . '|' . $savedContact];
-            }
+        if ($pKey !== '' && $numericCustomerId > 0 && isset($levelByBuyer[$pKey . '|' . $numericCustomerId])) {
+            $levelName = $levelByBuyer[$pKey . '|' . $numericCustomerId];
         }
-        // Last Follow Up Date / Last Promotion message from customer_follow_up.
-        $followUpInfo = $customerId > 0 && isset($customerFollowUpLookup[$customerId]) ? $customerFollowUpLookup[$customerId] : array();
+        // Last Follow Up Date / Last Promotion message from customer_follow_up, keyed by the
+        // platform customer id carried on the campaign's saved-customer row.
+        $followUpInfo = $savedPlatformCustomerId > 0 && isset($customerFollowUpLookup[$savedPlatformCustomerId])
+            ? $customerFollowUpLookup[$savedPlatformCustomerId]
+            : array();
         $lastFollowUpDate = isset($followUpInfo['last_follow_up_date']) ? (string) $followUpInfo['last_follow_up_date'] : '';
         $lastPromotionMessage = isset($followUpInfo['last_promotion_message']) ? (string) $followUpInfo['last_promotion_message'] : '';
-        // This time Purchase Package: most frequent package among the buyer's orders.
+        // This time / second Purchase Package: split multi-package order text into the
+        // individual package names first (same splitter the Each Package table uses), so a
+        // 'A, B' order contributes A and B rather than one merged 'A, B' entry.
         $packageFrequency = array();
         foreach (($cRow['orders'] ?? array()) as $cOrder) {
-            $pkgDisplay = isset($cOrder['package_text']) ? (string) $cOrder['package_text'] : '';
-            if ($pkgDisplay === '') {
+            $rawPkgText = isset($cOrder['package_text']) ? trim((string) $cOrder['package_text']) : '';
+            if ($rawPkgText === '') {
                 continue;
             }
-            if (!isset($packageFrequency[$pkgDisplay])) {
-                $packageFrequency[$pkgDisplay] = 0;
+            $pkgNames = array();
+            if (function_exists('campaignPurchaseExtractPackageIds')) {
+                foreach (campaignPurchaseExtractPackageIds($rawPkgText, $connect) as $pkgIdItem) {
+                    if (!isset($conclusionPackageNameCache[$pkgIdItem])) {
+                        $conclusionPackageNameCache[$pkgIdItem] = function_exists('commonResolvePackageNamesFromCsv')
+                            ? trim((string) commonResolvePackageNamesFromCsv((string) $pkgIdItem, $connect))
+                            : '';
+                    }
+                    $resolvedPkgName = $conclusionPackageNameCache[$pkgIdItem];
+                    if ($resolvedPkgName !== '') {
+                        $pkgNames[] = $resolvedPkgName;
+                    }
+                }
             }
-            $packageFrequency[$pkgDisplay]++;
+            if (empty($pkgNames)) {
+                $pkgNames[] = $rawPkgText;
+            }
+            foreach (array_unique($pkgNames) as $pkgNameItem) {
+                $pkgNameItem = trim((string) $pkgNameItem);
+                if ($pkgNameItem === '') {
+                    continue;
+                }
+                if (!isset($packageFrequency[$pkgNameItem])) {
+                    $packageFrequency[$pkgNameItem] = 0;
+                }
+                $packageFrequency[$pkgNameItem]++;
+            }
         }
         arsort($packageFrequency);
         $packageNamesOrdered = array_keys($packageFrequency);
@@ -908,7 +1022,7 @@ if (input('export') === '1') {
             $row['customer_contact'],
             $row['platform'],
             $row['shopee_acc_name'] ?? '',
-            empty($row['is_new_customer']) ? 'Saved Customer' : 'New Customer',
+            empty($row['is_new_customer']) ? 'Return Customer' : 'New Customer',
             $row['order_count'],
         );
         foreach ($reportData['currency_columns'] as $currencyColumnCode) {
@@ -1290,7 +1404,7 @@ if (input('export') === '1') {
                                                 <?php if (!empty($row['is_new_customer'])): ?>
                                                     <span class="badge bg-info">New Customer</span>
                                                 <?php else: ?>
-                                                    <span class="badge bg-light text-dark">Saved Customer</span>
+                                                    <span class="badge bg-light text-dark">Return Customer</span>
                                                 <?php endif; ?>
                                             </td>
                                             <td><?= (int) $row['order_count'] ?></td>
