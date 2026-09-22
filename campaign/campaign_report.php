@@ -593,7 +593,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         foreach ($byPlatformBuyerIds as $pKey => $idList) {
             $labelMap = customerLabelGetCustomerLabelMap($connect, $pKey, array_values(array_unique($idList)));
             foreach ($labelMap as $cid => $labelMeta) {
-                $levelName = isset($labelMeta['level']['name']) ? trim((string) $labelMeta['level']['name']) : '';
+                $levelName = isset($labelMeta['segmentation']['name']) ? trim((string) $labelMeta['segmentation']['name']) : '';
                 if ($levelName !== '') {
                     $levelByBuyer[$pKey . '|' . $cid] = $levelName;
                 }
@@ -611,8 +611,8 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             $cfSelect .= ", `content`";
         }
         $cfSelect .= " FROM " . campaignTableName(CUSTOMER_FOLLOW_UP) . " WHERE `status`='A' AND `customer_id` > 0";
-        if ($periodStart !== '' && $periodEnd !== '') {
-            $cfSelect .= " AND DATE(`create_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(`create_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
+        if ($periodStart !== '') {
+            $cfSelect .= " AND DATE(`create_date`) < '" . $connect->real_escape_string($periodStart) . "'";
         }
         $cfSelect .= " ORDER BY `create_date` DESC, `id` DESC";
         $cfResult = mysqli_query($connect, $cfSelect);
@@ -746,7 +746,7 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
             'last_promotion_message' => $lastPromotionMessage,
             'this_time_package' => $thisTimePackage,
             'second_package' => $secondPackage,
-            'remark' => isset($savedCustomerMap[$customerId]['customer_contact']) ? (string) $savedCustomerMap[$customerId]['customer_contact'] : '',
+            'remark' => (string) ($cRow['customer_contact'] ?? ''),
             'voucher' => $voucher,
         );
     }
@@ -888,14 +888,18 @@ if (input('export') === '1') {
     fputcsv($output, array('Total Campaign Customers', (int) ($reportData['follow_up_summary']['total_customers'] ?? 0)));
     fputcsv($output, array('Follow-Up Rate', ($reportData['follow_up_summary']['rate'] ?? 0) . '%'));
     fputcsv($output, array());
-    fputcsv($output, array('Package', 'Purchase Amount', 'Purchase Sales (RM)'));
+    fputcsv($output, array('SN', 'Package', 'Purchase Amount', 'Purchase Sales (RM)'));
+    $packageCsvSn = 0;
     foreach ($reportData['package_rows'] as $row) {
-        fputcsv($output, array($row['package'], $row['purchase_amount'], number_format((float) $row['purchase_sales'], 2, '.', '')));
+        $packageCsvSn++;
+        fputcsv($output, array($packageCsvSn, $row['package'], $row['purchase_amount'], number_format((float) $row['purchase_sales'], 2, '.', '')));
     }
     fputcsv($output, array());
-    fputcsv($output, array('Platform', 'Order Count', 'Customer Count', 'Repeat Customers', 'Repeat Rate', 'Total Sales (RM)'));
+    fputcsv($output, array('SN', 'Platform', 'Order Count', 'Customer Count', 'Repeat Customers', 'Repeat Rate', 'Total Sales (RM)'));
+    $platformCsvSn = 0;
     foreach ($reportData['platform_rows'] as $row) {
-        fputcsv($output, array($row['platform'], $row['order_count'], $row['customer_count'], (int) ($row['repeat_customers'] ?? 0), ($row['repeat_rate'] ?? 0) . '%', number_format((float) $row['total_sales'], 2, '.', '')));
+        $platformCsvSn++;
+        fputcsv($output, array($platformCsvSn, $row['platform'], $row['order_count'], $row['customer_count'], (int) ($row['repeat_customers'] ?? 0), ($row['repeat_rate'] ?? 0) . '%', number_format((float) $row['total_sales'], 2, '.', '')));
     }
     fputcsv($output, array());
     fputcsv($output, array('Date', 'Order Count', 'Total Sales (RM)'));
@@ -908,15 +912,18 @@ if (input('export') === '1') {
         fputcsv($output, array($bucket . ' order(s)', $count));
     }
     fputcsv($output, array());
-    $customerHeader = array('Customer Name', 'Contact', 'Platform', 'Shopee Account', 'Customer Type', 'Order Count');
+    $customerHeader = array('SN', 'Customer Name', 'Contact', 'Platform', 'Shopee Account', 'Customer Type', 'Order Count');
     foreach ($reportData['currency_columns'] as $currencyColumnCode) {
         $customerHeader[] = 'Amount (' . $currencyColumnCode . ')';
     }
     $customerHeader[] = 'Total (RM)';
     $customerHeader[] = 'Last Order Date';
     fputcsv($output, $customerHeader);
+    $customerCsvSn = 0;
     foreach ($reportData['customer_rows'] as $row) {
+        $customerCsvSn++;
         $customerCsvRow = array(
+            $customerCsvSn,
             $row['customer_name'],
             $row['customer_contact'],
             $row['platform'],
@@ -933,7 +940,7 @@ if (input('export') === '1') {
         $customerCsvRow[] = $row['last_order_date'];
         fputcsv($output, $customerCsvRow);
     }
-    $customerTotalRow = array('Total', '', '', '', '', (int) ($reportData['customer_totals']['order_count'] ?? 0));
+    $customerTotalRow = array('', 'Total', '', '', '', '', (int) ($reportData['customer_totals']['order_count'] ?? 0));
     foreach ($reportData['currency_columns'] as $currencyColumnCode) {
         $customerTotalRow[] = number_format((float) ($reportData['customer_totals']['amounts_by_currency'][$currencyColumnCode] ?? 0), 2, '.', '');
     }
@@ -941,7 +948,8 @@ if (input('export') === '1') {
     $customerTotalRow[] = '';
     fputcsv($output, $customerTotalRow);
     fputcsv($output, array());
-    fputcsv($output, array('FINAL Report', 'Platform', 'TOTAL ORDER', 'TOTAL CUSTOMER', 'TOTAL SALES (RM)'));
+    fputcsv($output, array('FINAL Report'));
+    fputcsv($output, array('SN', 'Platform', 'TOTAL ORDER', 'TOTAL CUSTOMER', 'TOTAL SALES (RM)'));
     foreach ($reportData['final_report_rows'] as $frRow) {
         fputcsv($output, array(
             $frRow['sn'],
@@ -953,9 +961,12 @@ if (input('export') === '1') {
     }
     fputcsv($output, array());
     fputcsv($output, array('Per-Package Repeat / New Customer Distribution'));
-    fputcsv($output, array('Package', 'Repeat Customers', 'New Customers', 'Repeat Orders', 'New Orders', 'Total Purchase Amount', 'Total Purchase Sales (RM)'));
+    fputcsv($output, array('SN', 'Package', 'Repeat Customers', 'New Customers', 'Repeat Orders', 'New Orders', 'Total Purchase Amount', 'Total Purchase Sales (RM)'));
+    $pkgDistCsvSn = 0;
     foreach ($reportData['package_customer_distribution'] as $pkgDistRow) {
+        $pkgDistCsvSn++;
         fputcsv($output, array(
+            $pkgDistCsvSn,
             $pkgDistRow['package'],
             $pkgDistRow['repeat_customers'],
             $pkgDistRow['new_customers'],
@@ -968,7 +979,7 @@ if (input('export') === '1') {
     fputcsv($output, array());
     fputcsv($output, array('CONCLUSION CUSTOMER LIST'));
     $conclusionHeader = array(
-        'CUSTOMER TYPE', 'CUSTOMER NAME',
+        'SN', 'CUSTOMER TYPE', 'CUSTOMER NAME',
         'CUSTOMER ORDER AMOUNT (Not include this time promo) (RM)',
         'ORDER AMOUNT (in this promotion)',
         'PURCHASE AMOUNT (MYR)',
@@ -979,8 +990,11 @@ if (input('export') === '1') {
         'REMARK', 'VOUCHER',
     );
     fputcsv($output, $conclusionHeader);
+    $ccCsvSn = 0;
     foreach ($reportData['conclusion_customer_rows'] as $ccRow) {
+        $ccCsvSn++;
         fputcsv($output, array(
+            $ccCsvSn,
             $ccRow['customer_type'],
             $ccRow['customer_name'],
             number_format((float) $ccRow['prior_amount'], 2, '.', ''),
@@ -1122,6 +1136,7 @@ if (input('export') === '1') {
                                     <table id="campaign_report_platform_table" class="table table-striped w-100">
                                         <thead>
                                             <tr>
+                                                <th>SN</th>
                                                 <th>Platform</th>
                                                 <th>Order Count</th>
                                                 <th>Customer Count</th>
@@ -1131,8 +1146,9 @@ if (input('export') === '1') {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            <?php foreach ($reportData['platform_rows'] as $row): ?>
+                                            <?php $platformSn = 0; foreach ($reportData['platform_rows'] as $row): $platformSn++; ?>
                                                 <tr>
+                                                    <td><?= (int) $platformSn ?></td>
                                                     <td><?= campaignH($row['platform']) ?></td>
                                                     <td><?= (int) $row['order_count'] ?></td>
                                                     <td><?= (int) $row['customer_count'] ?></td>
@@ -1211,14 +1227,16 @@ if (input('export') === '1') {
                             <table id="campaign_report_package_table" class="table table-striped w-100">
                                 <thead>
                                     <tr>
+                                        <th>SN</th>
                                         <th>Package</th>
                                         <th>Purchase Amount</th>
                                         <th>Purchase Sales (RM)</th>
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($reportData['package_rows'] as $packageIndex => $row): ?>
+                                    <?php $packageSn = 0; foreach ($reportData['package_rows'] as $packageIndex => $row): $packageSn++; ?>
                                         <tr>
+                                            <td><?= (int) $packageSn ?></td>
                                             <td>
                                                 <?= campaignH($row['package']) ?>
                                                 <?php if ($packageIndex === 0): ?>
@@ -1242,6 +1260,7 @@ if (input('export') === '1') {
                             <table id="campaign_report_customer_table" class="table table-striped w-100">
                                 <thead>
                                     <tr>
+                                        <th>SN</th>
                                         <th>Customer Name</th>
                                         <th>Contact</th>
                                         <th>Platform</th>
@@ -1256,8 +1275,9 @@ if (input('export') === '1') {
                                     </tr>
                                 </thead>
                                 <tbody>
-                                    <?php foreach ($reportData['customer_rows'] as $row): ?>
+                                    <?php $customerSn = 0; foreach ($reportData['customer_rows'] as $row): $customerSn++; ?>
                                         <tr data-customer-orders="<?= campaignH(json_encode($row['orders'] ?? array())) ?>">
+                                            <td><?= (int) $customerSn ?></td>
                                             <td>
                                                 <a href="javascript:void(0)" class="campaign-customer-detail-link" data-customer-id="<?= (int) $row['customer_id'] ?>" data-customer-name="<?= campaignH($row['customer_name']) ?>" style="color: inherit; text-decoration: none; cursor: pointer;">
                                                     <?= campaignH($row['customer_name']) ?>
@@ -1305,6 +1325,7 @@ if (input('export') === '1') {
                                 </tbody>
                                 <tfoot>
                                     <tr>
+                                        <th></th>
                                         <th>Total</th>
                                         <th></th>
                                         <th></th>
@@ -1390,6 +1411,7 @@ if (input('export') === '1') {
                     <table class="table table-striped mb-0" id="campaign_report_package_distribution_table">
                         <thead>
                             <tr>
+                                <th>SN</th>
                                 <th>Package</th>
                                 <th>Repeat Customers</th>
                                 <th>New Customers</th>
@@ -1400,8 +1422,9 @@ if (input('export') === '1') {
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach (($reportData['package_customer_distribution'] ?? array()) as $pkgDistRow): ?>
+                            <?php $pkgDistSn = 0; foreach (($reportData['package_customer_distribution'] ?? array()) as $pkgDistRow): $pkgDistSn++; ?>
                                 <tr>
+                                    <td><?= (int) $pkgDistSn ?></td>
                                     <td><?= htmlspecialchars((string) ($pkgDistRow['package'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                     <td><?= (int) ($pkgDistRow['repeat_customers'] ?? 0) ?></td>
                                     <td><?= (int) ($pkgDistRow['new_customers'] ?? 0) ?></td>
@@ -1412,7 +1435,7 @@ if (input('export') === '1') {
                                 </tr>
                             <?php endforeach; ?>
                             <?php if (empty($reportData['package_customer_distribution'])): ?>
-                                <tr><td colspan="7" class="text-center">No package data.</td></tr>
+                                <tr><td colspan="8" class="text-center">No package data.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
@@ -1424,6 +1447,7 @@ if (input('export') === '1') {
                     <table class="table table-striped mb-0" id="campaign_report_conclusion_customer_table">
                         <thead>
                             <tr>
+                                <th>SN</th>
                                 <th>CUSTOMER TYPE</th>
                                 <th>CUSTOMER NAME</th>
                                 <th>CUSTOMER ORDER AMOUNT<br><small>(Not include this time promo) (RM)</small></th>
@@ -1440,8 +1464,9 @@ if (input('export') === '1') {
                             </tr>
                         </thead>
                         <tbody>
-                            <?php foreach (($reportData['conclusion_customer_rows'] ?? array()) as $ccRow): ?>
+                            <?php $ccSn = 0; foreach (($reportData['conclusion_customer_rows'] ?? array()) as $ccRow): $ccSn++; ?>
                                 <tr>
+                                    <td><?= (int) $ccSn ?></td>
                                     <td><?= htmlspecialchars((string) ($ccRow['customer_type'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                     <td><?= htmlspecialchars((string) ($ccRow['customer_name'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
                                     <td><?= number_format((float) ($ccRow['prior_amount'] ?? 0), 2, '.', '') ?></td>
@@ -1458,7 +1483,7 @@ if (input('export') === '1') {
                                 </tr>
                             <?php endforeach; ?>
                             <?php if (empty($reportData['conclusion_customer_rows'])): ?>
-                                <tr><td colspan="13" class="text-center">No conclusion data.</td></tr>
+                                <tr><td colspan="14" class="text-center">No conclusion data.</td></tr>
                             <?php endif; ?>
                         </tbody>
                     </table>
