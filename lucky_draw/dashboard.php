@@ -30,9 +30,9 @@ foreach ((array) ($readiness['items'] ?? array()) as $readinessItem) {
         continue;
     }
 
-    if ($readinessKey === 'urban_customer_source') {
-        $readinessItem['label'] = 'URBANISM Member IC';
-        $readinessItem['detail'] = preg_replace('/\s+with IC found\.$/i', ' found.', (string) ($readinessItem['detail'] ?? ''));
+    if ($readinessKey === 'customer_birthday_source') {
+        $readinessItem['label'] = 'Customer Birthday Records';
+        $readinessItem['detail'] = preg_replace('/^No customer birthday rows found\.$/', 'No customer birthday record found.', (string) ($readinessItem['detail'] ?? ''));
     }
 
     $visibleReadinessItems[] = $readinessItem;
@@ -47,7 +47,7 @@ foreach ($visibleReadinessItems as $readinessItem) {
 }
 
 $stats = array(
-    'members' => luckyDrawUrbanRegisteredCount($connect),
+    'members' => luckyDrawCustomerBirthdayCount($connect),
     'prizes' => luckyDrawCountRows($connect, LUCKY_DRAW_PRIZE, "status = 'A'"),
     'draws' => luckyDrawCountRows($connect, LUCKY_DRAW_DRAW_LOG, "status = 'A'"),
     'pending_claims' => luckyDrawCountRows($connect, LUCKY_DRAW_DRAW_LOG, "status = 'A' AND claim_state = 'awaiting_claim'"),
@@ -73,7 +73,7 @@ luckyDrawAdminRenderPageStart($pageTitle, 'dashboard');
 ?>
 <div class="lucky-draw-admin-grid mb-4">
     <div class="lucky-draw-stat-card">
-        <small class="text-uppercase text-muted fw-bold">URBAN IC Rows</small>
+        <small class="text-uppercase text-muted fw-bold">Customers With Birthday</small>
         <h3><?= (int) $stats['members'] ?></h3>
     </div>
     <div class="lucky-draw-stat-card">

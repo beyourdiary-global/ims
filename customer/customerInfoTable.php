@@ -236,8 +236,16 @@ $customerTagActivityMap = customerTagGetAssignmentActivityMap($connect, 'custome
                                             </td>
                                             <td scope="row"><?php if (isset($row['gender']))
                                                 echo htmlspecialchars((string) $row['gender'], ENT_QUOTES, 'UTF-8') ?></td>
-                                            <td scope="row"><?php if (isset($row['birthday']))
-                                                echo htmlspecialchars((string) $row['birthday'], ENT_QUOTES, 'UTF-8') ?></td>
+                                            <td scope="row"><?php
+                                                $rowBdYear = isset($row['birthday_year']) ? trim((string) $row['birthday_year']) : '';
+                                                $rowBdMonth = isset($row['birthday_month']) ? trim((string) $row['birthday_month']) : '';
+                                                $rowBdDay = isset($row['birthday_day']) ? trim((string) $row['birthday_day']) : '';
+                                                if ($rowBdYear !== '' || $rowBdMonth !== '' || $rowBdDay !== '') {
+                                                    echo htmlspecialchars(($rowBdDay !== '' ? str_pad($rowBdDay, 2, '0', STR_PAD_LEFT) : '--') . '-' . ($rowBdMonth !== '' ? str_pad($rowBdMonth, 2, '0', STR_PAD_LEFT) : '--') . '-' . ($rowBdYear !== '' ? $rowBdYear : '----'), ENT_QUOTES, 'UTF-8');
+                                                } else if (isset($row['birthday']) && substr((string) $row['birthday'], 0, 4) !== '0000') {
+                                                    echo htmlspecialchars((string) $row['birthday'], ENT_QUOTES, 'UTF-8');
+                                                }
+                                                ?></td>
                                         </tr>
                                     <?php
                                 }

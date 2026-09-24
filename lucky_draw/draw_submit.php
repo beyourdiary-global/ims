@@ -25,17 +25,18 @@ if (!luckyDrawValidateCsrfToken($csrfToken)) {
     ), 419);
 }
 
-$identityInput = luckyDrawNormalizeFullId(post('member_identity'));
-$submittedYymmdd = luckyDrawExtractYymmddFromId($identityInput);
+$customerUsername = trim((string) post('customer_username'));
+$birthYear = (int) post('birth_year');
+$birthMonth = (int) post('birth_month');
 $remoteIp = luckyDrawGetRemoteIp();
 $ipHmac = luckyDrawIpHmac($remoteIp);
-$requestMemberHmac = $identityInput !== '' ? luckyDrawMemberIdHmac($identityInput) : '';
+$requestMemberHmac = $customerUsername !== '' ? luckyDrawUsernameHmac($customerUsername) : '';
 
-if ($submittedYymmdd === '') {
-    luckyDrawRecordRequestLog($connect, 'draw_attempt', $requestMemberHmac, $ipHmac, 'invalid_identity');
+if ($customerUsername === '') {
+    luckyDrawRecordRequestLog($connect, 'draw_attempt', $requestMemberHmac, $ipHmac, 'invalid_username');
     luckyDrawJsonResponse(array(
         'success' => false,
-        'message' => 'Please enter your full IC number.',
+        'message' => 'Please enter your username.',
     ), 422);
 }
 
@@ -58,17 +59,17 @@ if (empty($recaptchaResult['success'])) {
     ), 422);
 }
 
-$memberLookup = luckyDrawLookupUrbanMemberByIdentity($connect, $identityInput);
+$memberLookup = luckyDrawLookupCustomerByUsername($connect, $finance_connect, $customerUsername);
 if (empty($memberLookup['success']) || empty($memberLookup['member'])) {
     luckyDrawRecordRequestLog($connect, 'draw_attempt', $requestMemberHmac, $ipHmac, 'member_not_found');
     luckyDrawJsonResponse(array(
         'success' => false,
-        'message' => isset($memberLookup['message']) ? (string) $memberLookup['message'] : 'This member is not eligible for the birthday draw.',
+        'message' => isset($memberLookup['message']) ? (string) $memberLookup['message'] : 'We could not find this username.',
     ), 403);
 }
 
 $memberRow = (array) $memberLookup['member'];
-$eligibility = luckyDrawValidateEligibility($memberRow, $submittedYymmdd);
+$eligibility = luckyDrawValidateBirthdayYearMonth($memberRow, $birthYear, $birthMonth);
 if (empty($eligibility['success'])) {
     luckyDrawRecordRequestLog($connect, 'draw_attempt', (string) $memberRow['member_id_hmac'], $ipHmac, 'eligibility_failed');
     luckyDrawJsonResponse(array(
@@ -83,7 +84,6 @@ $reservationResult = luckyDrawCreateReservation(
     $finance_connect,
     $memberRow,
     (string) $memberRow['member_id_hmac'],
-    $submittedYymmdd,
     $ipHmac
 );
 

@@ -9,6 +9,52 @@ $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CUS_INFO;
 
+if (!function_exists('cusInfoResolveUrbanismIcByName')) {
+    function cusInfoResolveUrbanismIcByName($connect, $customerName)
+    {
+        $customerName = strtolower(trim((string) $customerName));
+        if (!($connect instanceof mysqli) || $customerName === '') {
+            return '';
+        }
+
+        $safeName = mysqli_real_escape_string($connect, $customerName);
+        $sql = "SELECT `ic` FROM `" . URBAN_CUST_REG . "`
+            WHERE LOWER(TRIM(`name`)) = '" . $safeName . "'
+              AND `status` = 'A'
+            ORDER BY `id` DESC
+            LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if (!$result || !($row = mysqli_fetch_assoc($result))) {
+            return '';
+        }
+
+        return trim((string) ($row['ic'] ?? ''));
+    }
+}
+
+if (!function_exists('cusInfoParseIcBirthday')) {
+    function cusInfoParseIcBirthday($icValue)
+    {
+        $digits = preg_replace('/\D+/', '', (string) $icValue);
+        if (strlen($digits) < 6) {
+            return null;
+        }
+
+        $yy = (int) substr($digits, 0, 2);
+        $month = (int) substr($digits, 2, 2);
+        $day = (int) substr($digits, 4, 2);
+        if ($month < 1 || $month > 12 || $day < 1 || $day > 31) {
+            return null;
+        }
+
+        return array(
+            'year' => $yy >= 30 ? (1900 + $yy) : (2000 + $yy),
+            'month' => $month,
+            'day' => $day,
+        );
+    }
+}
+
 //Current Page Action And Data ID
 $dataId = !empty(input('id')) ? (int) input('id') : (int) post('id');
 $act = !empty(input('act')) ? input('act') : post('act');
@@ -90,7 +136,28 @@ if (post('actionBtn')) {
             $cusLastName = postSpaceFilter('cusLastName');
             $cusGender = postSpaceFilter('cusGender');
             $cusEmail = postSpaceFilter('cusEmail');
-            $cusBirthday = (!empty(postSpaceFilter('cusBirthday'))) ? postSpaceFilter('cusBirthday') : '0000-00-00';
+            $cusBirthdayYear = trim((string) postSpaceFilter('cusBirthdayYear'));
+            $cusBirthdayMonth = trim((string) postSpaceFilter('cusBirthdayMonth'));
+            $cusBirthdayDay = trim((string) postSpaceFilter('cusBirthdayDay'));
+
+            // 三个字段都为空时，按姓名去 Urbanism Member 取 IC，用 IC 前 6 位自动带出生日
+            if ($cusBirthdayYear === '' && $cusBirthdayMonth === '' && $cusBirthdayDay === '') {
+                $autoIc = cusInfoResolveUrbanismIcByName($connect, $cusFirstName);
+                if ($autoIc !== '') {
+                    $autoBirthday = cusInfoParseIcBirthday($autoIc);
+                    if (is_array($autoBirthday)) {
+                        $cusBirthdayYear = (string) $autoBirthday['year'];
+                        $cusBirthdayMonth = (string) $autoBirthday['month'];
+                        $cusBirthdayDay = (string) $autoBirthday['day'];
+                    }
+                }
+            }
+
+            // 兼容旧的 birthday(DATE) 字段：三件齐全时才拼日期，否则置零日期
+            $cusBirthday = '0000-00-00';
+            if ($cusBirthdayYear !== '' && $cusBirthdayMonth !== '' && $cusBirthdayDay !== '') {
+                $cusBirthday = sprintf('%04d-%02d-%02d', (int) $cusBirthdayYear, (int) $cusBirthdayMonth, (int) $cusBirthdayDay);
+            }
             $cusPhoneCode2 = postSpaceFilter('cusPhoneCode');
             $cusPhoneCode = str_replace('+', '', $cusPhoneCode2);
             $cusPhoneNum = postSpaceFilter('cusPhoneNum');
@@ -113,6 +180,9 @@ if (post('actionBtn')) {
             $sqlCusGender = mysqli_real_escape_string($connect, trim((string) $cusGender));
             $sqlCusEmail = mysqli_real_escape_string($connect, trim((string) $cusEmail));
             $sqlCusBirthday = mysqli_real_escape_string($connect, trim((string) $cusBirthday));
+            $sqlCusBirthdayYear = mysqli_real_escape_string($connect, trim((string) $cusBirthdayYear));
+            $sqlCusBirthdayMonth = mysqli_real_escape_string($connect, trim((string) $cusBirthdayMonth));
+            $sqlCusBirthdayDay = mysqli_real_escape_string($connect, trim((string) $cusBirthdayDay));
             $sqlCusPhoneCode = mysqli_real_escape_string($connect, trim((string) $cusPhoneCode));
             $sqlCusPhoneNum = mysqli_real_escape_string($connect, trim((string) $cusPhoneNum));
             $sqlShippingFirstName = mysqli_real_escape_string($connect, trim((string) $shippingFirstName));
@@ -135,6 +205,9 @@ if (post('actionBtn')) {
                 'gender' => $cusGender,
                 'email' => $cusEmail,
                 'birthday' => $cusBirthday,
+                'birthday_year' => $cusBirthdayYear,
+                'birthday_month' => $cusBirthdayMonth,
+                'birthday_day' => $cusBirthdayDay,
                 'phone_country' => $cusPhoneCode,
                 'phone_number' => $cusPhoneNum,
                 'shipping_name' => $shippingFirstName,
@@ -185,7 +258,7 @@ if (post('actionBtn')) {
                         }
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,last_name,gender,email,birthday,phone_country,phone_number,shipping_name,shipping_last_name,shipping_contact_number,shipping_company,shipping_address_1,shipping_address_2,shipping_country_region,shipping_city,shipping_state_province,shipping_zip_code,default_segmentation,tags,person_in_charges,create_by,create_date,create_time) VALUES ('$sqlCusFirstName','$sqlCusLastName','$sqlCusGender','$sqlCusEmail','$sqlCusBirthday','$sqlCusPhoneCode','$sqlCusPhoneNum','$sqlShippingFirstName','$sqlShippingLastName','$sqlShippingContactNum','$sqlCompany','$sqlAddress1','$sqlAddress2','$sqlCountry','$sqlCity','$sqlState','$sqlZipcode','$sqlCurSegmentation','$sqlTag','$sqlPersonIncharges','" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,last_name,gender,email,birthday,birthday_year,birthday_month,birthday_day,phone_country,phone_number,shipping_name,shipping_last_name,shipping_contact_number,shipping_company,shipping_address_1,shipping_address_2,shipping_country_region,shipping_city,shipping_state_province,shipping_zip_code,default_segmentation,tags,person_in_charges,create_by,create_date,create_time) VALUES ('$sqlCusFirstName','$sqlCusLastName','$sqlCusGender','$sqlCusEmail','$sqlCusBirthday','$sqlCusBirthdayYear','$sqlCusBirthdayMonth','$sqlCusBirthdayDay','$sqlCusPhoneCode','$sqlCusPhoneNum','$sqlShippingFirstName','$sqlShippingLastName','$sqlShippingContactNum','$sqlCompany','$sqlAddress1','$sqlAddress2','$sqlCountry','$sqlCity','$sqlState','$sqlZipcode','$sqlCurSegmentation','$sqlTag','$sqlPersonIncharges','" . USER_ID . "',curdate(),curtime())";
                  
                     $returnData = mysqli_query($connect, $query);
                     $dataId = $connect->insert_id;
@@ -206,7 +279,7 @@ if (post('actionBtn')) {
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if ($oldvalarr && $chgvalarr) {
-                        $query = "UPDATE $tblName SET name = '$sqlCusFirstName', last_name = '$sqlCusLastName', gender = '$sqlCusGender', email = '$sqlCusEmail', birthday = '$sqlCusBirthday', phone_country = '$sqlCusPhoneCode', phone_number = '$sqlCusPhoneNum', shipping_name = '$sqlShippingFirstName', shipping_last_name = '$sqlShippingLastName', shipping_contact_number = '$sqlShippingContactNum', shipping_company = '$sqlCompany', shipping_address_1 = '$sqlAddress1', shipping_address_2 = '$sqlAddress2', shipping_country_region = '$sqlCountry', shipping_city = '$sqlCity', shipping_state_province = '$sqlState', shipping_zip_code = '$sqlZipcode', default_segmentation = '$sqlCurSegmentation', tags = '$sqlTag', person_in_charges = '$sqlPersonIncharges', update_date = CURDATE(), update_time = CURTIME(), update_by = '" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE $tblName SET name = '$sqlCusFirstName', last_name = '$sqlCusLastName', gender = '$sqlCusGender', email = '$sqlCusEmail', birthday = '$sqlCusBirthday', birthday_year = '$sqlCusBirthdayYear', birthday_month = '$sqlCusBirthdayMonth', birthday_day = '$sqlCusBirthdayDay', phone_country = '$sqlCusPhoneCode', phone_number = '$sqlCusPhoneNum', shipping_name = '$sqlShippingFirstName', shipping_last_name = '$sqlShippingLastName', shipping_contact_number = '$sqlShippingContactNum', shipping_company = '$sqlCompany', shipping_address_1 = '$sqlAddress1', shipping_address_2 = '$sqlAddress2', shipping_country_region = '$sqlCountry', shipping_city = '$sqlCity', shipping_state_province = '$sqlState', shipping_zip_code = '$sqlZipcode', default_segmentation = '$sqlCurSegmentation', tags = '$sqlTag', person_in_charges = '$sqlPersonIncharges', update_date = CURDATE(), update_time = CURTIME(), update_by = '" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
                     } else {
                         $act = 'NC';
@@ -333,8 +406,40 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                                     </div>
 
                                     <div class="col-sm-4">
-                                        <label class="form-label" for="cusBirthday">Birthday <span class="requireRed">*</span></label>
-                                        <input class="form-control" type="date" name="cusBirthday" id="cusBirthday" required value="<?php if (isset($row['birthday'])) echo $row['birthday'] ?>" placeholder="YYYY-MM-DD" pattern="\d{4}-\d{2}-\d{2}" <?php if ($act == '') echo 'readonly' ?>>
+                                        <label class="form-label" for="cusBirthdayDay">Birthday <span class="requireRed">*</span></label>
+                                        <?php
+                                        $bdYearValue = isset($row['birthday_year']) ? trim((string) $row['birthday_year']) : '';
+                                        $bdMonthValue = isset($row['birthday_month']) ? trim((string) $row['birthday_month']) : '';
+                                        $bdDayValue = isset($row['birthday_day']) ? trim((string) $row['birthday_day']) : '';
+                                        if ($bdYearValue === '' && $bdMonthValue === '' && $bdDayValue === '' && !empty($row['birthday']) && substr((string) $row['birthday'], 0, 4) !== '0000') {
+                                            $bdParts = explode('-', (string) $row['birthday']);
+                                            if (count($bdParts) === 3) {
+                                                $bdYearValue = (string) (int) $bdParts[0];
+                                                $bdMonthValue = (string) (int) $bdParts[1];
+                                                $bdDayValue = (string) (int) $bdParts[2];
+                                            }
+                                        }
+                                        ?>
+                                        <div class="d-flex gap-2">
+                                            <select class="form-select" name="cusBirthdayDay" id="cusBirthdayDay" required <?php if ($act == '') echo 'disabled' ?>>
+                                                <option value="">Day</option>
+                                                <?php for ($d = 1; $d <= 31; $d++) { ?>
+                                                    <option value="<?= $d ?>" <?= ((string) $d === $bdDayValue) ? 'selected' : '' ?>><?= $d ?></option>
+                                                <?php } ?>
+                                            </select>
+                                            <select class="form-select" name="cusBirthdayMonth" id="cusBirthdayMonth" required <?php if ($act == '') echo 'disabled' ?>>
+                                                <option value="">Month</option>
+                                                <?php for ($m = 1; $m <= 12; $m++) { ?>
+                                                    <option value="<?= $m ?>" <?= ((string) $m === $bdMonthValue) ? 'selected' : '' ?>><?= $m ?></option>
+                                                <?php } ?>
+                                            </select>
+                                            <select class="form-select" name="cusBirthdayYear" id="cusBirthdayYear" required <?php if ($act == '') echo 'disabled' ?>>
+                                                <option value="">Year</option>
+                                                <?php for ($y = (int) date('Y'); $y >= 1900; $y--) { ?>
+                                                    <option value="<?= $y ?>" <?= ((string) $y === $bdYearValue) ? 'selected' : '' ?>><?= $y ?></option>
+                                                <?php } ?>
+                                            </select>
+                                        </div>
                                     </div>
                                 </div>
                             </div>

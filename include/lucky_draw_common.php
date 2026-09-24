@@ -669,15 +669,15 @@ if (!function_exists('luckyDrawReadiness')) {
             'detail' => ($siteKeyReady && $secretReady) ? 'Site key and secret key found.' : 'Missing reCAPTCHA env config.',
         );
 
-        $registeredCount = luckyDrawUrbanRegisteredCount($connect);
-        if ($registeredCount <= 0) {
+        $birthdayCount = luckyDrawCustomerBirthdayCount($connect);
+        if ($birthdayCount <= 0) {
             $hasErrors = true;
         }
         $items[] = array(
-            'key' => 'urban_customer_source',
-            'label' => 'URBAN customer IC source',
-            'success' => $registeredCount > 0,
-            'detail' => $registeredCount > 0 ? ($registeredCount . ' row(s) with IC found.') : 'No URBAN customer IC rows found.',
+            'key' => 'customer_birthday_source',
+            'label' => 'Customer birthday source',
+            'success' => $birthdayCount > 0,
+            'detail' => $birthdayCount > 0 ? ($birthdayCount . ' customer(s) with birthday found.') : 'No customer birthday rows found.',
         );
 
         $prizeRows = luckyDrawFetchPrizeRows($connect, true);
@@ -1019,6 +1019,195 @@ if (!function_exists('luckyDrawGetParticipationSessionState')) {
     }
 }
 
+if (!function_exists('luckyDrawUsernameHmac')) {
+    function luckyDrawUsernameHmac($username)
+    {
+        $username = strtolower(trim((string) $username));
+        if ($username === '') {
+            return '';
+        }
+
+        return hash('sha256', $username);
+    }
+}
+
+if (!function_exists('luckyDrawResolveCustomerBirthdayParts')) {
+    function luckyDrawResolveCustomerBirthdayParts($customerRow)
+    {
+        $customerRow = is_array($customerRow) ? $customerRow : array();
+        $year = isset($customerRow['birthday_year']) ? (int) $customerRow['birthday_year'] : 0;
+        $month = isset($customerRow['birthday_month']) ? (int) $customerRow['birthday_month'] : 0;
+        $day = isset($customerRow['birthday_day']) ? (int) $customerRow['birthday_day'] : 0;
+
+        if ($year <= 0 || $month <= 0) {
+            // Fallback: legacy birthday(DATE) column.
+            $legacy = trim((string) (isset($customerRow['birthday']) ? $customerRow['birthday'] : ''));
+            if ($legacy !== '' && substr($legacy, 0, 4) !== '0000' && strpos($legacy, '-') !== false) {
+                $parts = explode('-', $legacy);
+                if (count($parts) === 3) {
+                    $year = (int) $parts[0];
+                    $month = (int) $parts[1];
+                    $day = (int) $parts[2];
+                }
+            }
+        }
+
+        return array('year' => $year, 'month' => $month, 'day' => $day);
+    }
+}
+
+if (!function_exists('luckyDrawCustomerBirthdayCount')) {
+    function luckyDrawCustomerBirthdayCount($connect)
+    {
+        if (!($connect instanceof mysqli)) {
+            return 0;
+        }
+
+        $sql = "SELECT COUNT(*) AS total_count FROM `" . CUS_INFO . "`
+            WHERE status = 'A'
+              AND birthday_year IS NOT NULL AND birthday_year > 0
+              AND birthday_month IS NOT NULL AND birthday_month > 0";
+        $result = mysqli_query($connect, $sql);
+        if ($result && ($row = mysqli_fetch_assoc($result))) {
+            return (int) (isset($row['total_count']) ? $row['total_count'] : 0);
+        }
+
+        return 0;
+    }
+}
+
+if (!function_exists('luckyDrawFindCustomerInfoByName')) {
+    function luckyDrawFindCustomerInfoByName($connect, $customerName)
+    {
+        $customerName = trim((string) $customerName);
+        if (!($connect instanceof mysqli) || $customerName === '') {
+            return null;
+        }
+
+        $safeName = mysqli_real_escape_string($connect, $customerName);
+        $sql = "SELECT * FROM `" . CUS_INFO . "`
+            WHERE LOWER(TRIM(`name`)) = LOWER('" . $safeName . "')
+              AND `status` = 'A'
+            ORDER BY `id` DESC
+            LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && ($row = mysqli_fetch_assoc($result))) {
+            return (array) $row;
+        }
+
+        return null;
+    }
+}
+
+if (!function_exists('luckyDrawLookupCustomerByUsername')) {
+    function luckyDrawLookupCustomerByUsername($connect, $financeConnect, $username)
+    {
+        $username = trim((string) $username);
+        if (!($connect instanceof mysqli) || $username === '') {
+            return array('success' => false, 'message' => 'Please enter your username.', 'member' => array());
+        }
+
+        $row = null;
+        $source = '';
+
+        // 1) The username typed is the Customer Info name.
+        $row = luckyDrawFindCustomerInfoByName($connect, $username);
+        if ($row !== null) {
+            $source = 'customer_info';
+        }
+
+        // 2) The username typed is a Shopee buyer username. Resolve it to the Shopee
+        //    customer's display name first, then match Customer Info on that name.
+        if ($row === null && ($financeConnect instanceof mysqli)) {
+            $safeUsernameFinance = mysqli_real_escape_string($financeConnect, $username);
+            $shopeeSql = "SELECT * FROM `" . SHOPEE_CUST_INFO . "`
+                WHERE LOWER(TRIM(`buyer_username`)) = LOWER('" . $safeUsernameFinance . "')
+                  AND `status` = 'A'
+                LIMIT 1";
+            $shopeeResult = mysqli_query($financeConnect, $shopeeSql);
+            if ($shopeeResult && ($shopeeRow = mysqli_fetch_assoc($shopeeResult))) {
+                $nameCandidates = array();
+                foreach (array('customer_name', 'name', 'buyer_username') as $nameColumn) {
+                    if (isset($shopeeRow[$nameColumn])) {
+                        $nameCandidates[] = trim((string) $shopeeRow[$nameColumn]);
+                    }
+                }
+
+                foreach ($nameCandidates as $candidateName) {
+                    if ($candidateName === '') {
+                        continue;
+                    }
+                    $matchedRow = luckyDrawFindCustomerInfoByName($connect, $candidateName);
+                    if ($matchedRow !== null) {
+                        $row = $matchedRow;
+                        $source = 'shopee';
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($row === null) {
+            return array('success' => false, 'message' => 'We could not find this username.', 'member' => array());
+        }
+
+        $birthday = luckyDrawResolveCustomerBirthdayParts($row);
+        if ($birthday['year'] <= 0 || $birthday['month'] <= 0) {
+            return array('success' => false, 'message' => 'This customer does not have a birthday record yet.', 'member' => array());
+        }
+
+        $displayName = trim((string) (isset($row['name']) ? $row['name'] : ''));
+        if ($displayName === '') {
+            $displayName = $username;
+        }
+
+        // The draw key is the canonical Customer Info name, so a member who types their
+        // Shopee username one day and their name the next still only gets one draw.
+        return array(
+            'success' => true,
+            'message' => '',
+            'source' => $source,
+            'member' => array(
+                'source_id' => (int) (isset($row['id']) ? $row['id'] : 0),
+                'customer_username' => luckyDrawSafePublicText($username, 190),
+                'member_name' => luckyDrawSafePublicText($displayName, 190),
+                'member_id_hmac' => luckyDrawUsernameHmac($displayName),
+                'birthday_year' => (int) $birthday['year'],
+                'birthday_month' => (int) $birthday['month'],
+                'birthday_day' => (int) $birthday['day'],
+            ),
+        );
+    }
+}
+
+if (!function_exists('luckyDrawValidateBirthdayYearMonth')) {
+    function luckyDrawValidateBirthdayYearMonth($memberRow, $inputYear, $inputMonth)
+    {
+        if (empty($memberRow)) {
+            return array('success' => false, 'message' => 'This member is not eligible for the birthday draw.');
+        }
+
+        $inputYear = (int) $inputYear;
+        $inputMonth = (int) $inputMonth;
+        if ($inputYear < 1900 || $inputYear > 2200 || $inputMonth < 1 || $inputMonth > 12) {
+            return array('success' => false, 'message' => 'Please select a valid birth year and month.');
+        }
+
+        $storedYear = (int) (isset($memberRow['birthday_year']) ? $memberRow['birthday_year'] : 0);
+        $storedMonth = (int) (isset($memberRow['birthday_month']) ? $memberRow['birthday_month'] : 0);
+        if ($storedYear !== $inputYear || $storedMonth !== $inputMonth) {
+            return array('success' => false, 'message' => 'The birth year and month do not match our record.');
+        }
+
+        // The draw only opens during the member's birthday month.
+        if ($storedMonth !== (int) date('n')) {
+            return array('success' => false, 'message' => 'This Lucky Draw is only available during your birthday month.');
+        }
+
+        return array('success' => true, 'message' => '');
+    }
+}
+
 if (!function_exists('luckyDrawUrbanIcSqlExpression')) {
     function luckyDrawUrbanIcSqlExpression()
     {
@@ -1114,21 +1303,35 @@ if (!function_exists('luckyDrawFindUrbanMemberByDisplayName')) {
 if (!function_exists('luckyDrawFetchHistoryByMemberName')) {
     function luckyDrawFetchHistoryByMemberName($connect, $displayName)
     {
+        $displayName = trim((string) $displayName);
+        if ($displayName === '') {
+            return array();
+        }
+
+        // Draw records are keyed by the username typed at draw time. Keep the legacy
+        // IC-derived hash as a fallback so older rows still resolve.
         $memberRow = luckyDrawFindUrbanMemberByDisplayName($connect, $displayName);
-        if (empty($memberRow)) {
-            return array();
+        $hmacCandidates = array();
+        if (!empty($memberRow)) {
+            $legacyHmac = luckyDrawMemberIdHmac(luckyDrawNormalizeFullId(isset($memberRow['ic']) ? $memberRow['ic'] : ''));
+            if ($legacyHmac !== '') {
+                $hmacCandidates[] = mysqli_real_escape_string($connect, $legacyHmac);
+            }
+        }
+        $usernameHmac = luckyDrawUsernameHmac($displayName);
+        if ($usernameHmac !== '') {
+            $hmacCandidates[] = mysqli_real_escape_string($connect, $usernameHmac);
         }
 
-        $normalizedId = luckyDrawNormalizeFullId(isset($memberRow['ic']) ? $memberRow['ic'] : '');
-        $memberIdHmac = luckyDrawMemberIdHmac($normalizedId);
-        if ($memberIdHmac === '') {
-            return array();
-        }
-
-        $safeMemberIdHmac = mysqli_real_escape_string($connect, $memberIdHmac);
+        $safeDisplayName = mysqli_real_escape_string($connect, $displayName);
+        $hmacList = !empty($hmacCandidates) ? ("'" . implode("', '", $hmacCandidates) . "'") : "''";
         $sql = "SELECT *
             FROM `" . LUCKY_DRAW_DRAW_LOG . "`
-            WHERE `member_id_hmac` = '" . $safeMemberIdHmac . "'
+            WHERE (
+                    `member_id_hmac` IN (" . $hmacList . ")
+                    OR LOWER(TRIM(`customer_username`)) = LOWER('" . $safeDisplayName . "')
+                    OR LOWER(TRIM(`member_display_name`)) = LOWER('" . $safeDisplayName . "')
+                )
               AND `status` = 'A'
             ORDER BY `id` DESC";
         $result = mysqli_query($connect, $sql);
@@ -1279,7 +1482,7 @@ if (!function_exists('luckyDrawPrizeReservationTransactionReady')) {
 }
 
 if (!function_exists('luckyDrawCreateReservation')) {
-    function luckyDrawCreateReservation($connect, $financeConnect, $memberRow, $memberHmac, $submittedYymmdd, $ipHmac)
+    function luckyDrawCreateReservation($connect, $financeConnect, $memberRow, $memberHmac, $ipHmac)
     {
         if (!($connect instanceof mysqli) || !($financeConnect instanceof mysqli) || empty($memberRow)) {
             return array('success' => false, 'message' => 'Lucky Draw is unavailable right now.');
@@ -1372,7 +1575,9 @@ if (!function_exists('luckyDrawCreateReservation')) {
             $redeemReference = 'LD-' . date('YmdHis') . '-' . bin2hex(random_bytes(3));
 
             $safeMemberName = mysqli_real_escape_string($connect, luckyDrawSafePublicText(isset($memberRow['member_name']) ? $memberRow['member_name'] : '', 190));
-            $safeBirthdayYymmdd = mysqli_real_escape_string($connect, trim((string) $submittedYymmdd));
+            $safeCustomerUsername = mysqli_real_escape_string($connect, luckyDrawSafePublicText(isset($memberRow['customer_username']) ? $memberRow['customer_username'] : '', 190));
+            $birthdayYearValue = isset($memberRow['birthday_year']) ? (int) $memberRow['birthday_year'] : 0;
+            $birthdayMonthValue = isset($memberRow['birthday_month']) ? (int) $memberRow['birthday_month'] : 0;
             $safeIpHmac = mysqli_real_escape_string($connect, trim((string) $ipHmac));
             $safePrizeName = mysqli_real_escape_string($connect, luckyDrawSafePublicText(isset($selectedPrize['prize_name']) ? $selectedPrize['prize_name'] : '', 255));
             $safePrizeType = mysqli_real_escape_string($connect, $prizeType);
@@ -1384,9 +1589,9 @@ if (!function_exists('luckyDrawCreateReservation')) {
             $safeEmailState = mysqli_real_escape_string($connect, $prizeType === 'voucher' ? 'awaiting_claim' : 'not_applicable');
 
             $insertSql = "INSERT INTO `" . LUCKY_DRAW_DRAW_LOG . "`
-                (`member_id_hmac`, `member_display_name`, `birthday_yymmdd`, `ip_hmac`, `prize_id`, `prize_name_snapshot`, `prize_type_snapshot`, `redeem_reference`, `draw_state`, `claim_state`, `email_state`, `claim_token_hash`, `reservation_expires_at`, `create_by`, `create_date`, `create_time`, `status`)
+                (`member_id_hmac`, `member_display_name`, `customer_username`, `birthday_year`, `birthday_month`, `ip_hmac`, `prize_id`, `prize_name_snapshot`, `prize_type_snapshot`, `redeem_reference`, `draw_state`, `claim_state`, `email_state`, `claim_token_hash`, `reservation_expires_at`, `create_by`, `create_date`, `create_time`, `status`)
                 VALUES
-                ('" . $safeMemberHmac . "', '" . $safeMemberName . "', '" . $safeBirthdayYymmdd . "', '" . $safeIpHmac . "', " . $prizeId . ", '" . $safePrizeName . "', '" . $safePrizeType . "', '" . $safeRedeemReference . "', 'won', '" . $safeClaimState . "', '" . $safeEmailState . "', '" . $safeClaimTokenHash . "', '" . $safeReservationExpiry . "', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+                ('" . $safeMemberHmac . "', '" . $safeMemberName . "', '" . $safeCustomerUsername . "', " . $birthdayYearValue . ", " . $birthdayMonthValue . ", '" . $safeIpHmac . "', " . $prizeId . ", '" . $safePrizeName . "', '" . $safePrizeType . "', '" . $safeRedeemReference . "', 'won', '" . $safeClaimState . "', '" . $safeEmailState . "', '" . $safeClaimTokenHash . "', '" . $safeReservationExpiry . "', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
             if (!mysqli_query($connect, $insertSql)) {
                 throw new Exception('Unable to save the draw result.');
             }

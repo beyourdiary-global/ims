@@ -5675,6 +5675,11 @@ if ($conn->select_db($db_fin)) {
     migrationEnsureIndex($conn, $db_fin, WEB_ORDER_REQ, 'idx_web_order_code', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD INDEX `idx_web_order_code` (`order_id`)", "Verified `" . WEB_ORDER_REQ . "` order code index.");
     migrationEnsureIndex($conn, $db_fin, WEB_ORDER_REQ, 'idx_web_order_airbill', "ALTER TABLE `" . WEB_ORDER_REQ . "` ADD INDEX `idx_web_order_airbill` (`airbill_no`)", "Verified `" . WEB_ORDER_REQ . "` airbill index.");
 
+    // --- Customer Info: birthday split into separate year / month / day fields ---
+    migrationEnsureColumn($conn, $db_cms, CUS_INFO, 'birthday_year', "ALTER TABLE `" . CUS_INFO . "` ADD COLUMN `birthday_year` SMALLINT DEFAULT NULL AFTER `birthday`", "Verified `" . CUS_INFO . "` includes `birthday_year`.");
+    migrationEnsureColumn($conn, $db_cms, CUS_INFO, 'birthday_month', "ALTER TABLE `" . CUS_INFO . "` ADD COLUMN `birthday_month` TINYINT DEFAULT NULL AFTER `birthday_year`", "Verified `" . CUS_INFO . "` includes `birthday_month`.");
+    migrationEnsureColumn($conn, $db_cms, CUS_INFO, 'birthday_day', "ALTER TABLE `" . CUS_INFO . "` ADD COLUMN `birthday_day` TINYINT DEFAULT NULL AFTER `birthday_month`", "Verified `" . CUS_INFO . "` includes `birthday_day`.");
+
     $createLuckyDrawPrizeSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . LUCKY_DRAW_PRIZE . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `prize_name` VARCHAR(190) NOT NULL,
@@ -5757,6 +5762,10 @@ if ($conn->select_db($db_fin)) {
     } else {
         echo "<p style='color:red;'>Failed creating `" . LUCKY_DRAW_DRAW_LOG . "`: " . $conn->error . "</p>";
     }
+
+    migrationEnsureColumn($conn, $db_cms, LUCKY_DRAW_DRAW_LOG, 'customer_username', "ALTER TABLE `" . LUCKY_DRAW_DRAW_LOG . "` ADD COLUMN `customer_username` VARCHAR(190) DEFAULT NULL AFTER `member_display_name`", "Verified `" . LUCKY_DRAW_DRAW_LOG . "` includes `customer_username`.");
+    migrationEnsureColumn($conn, $db_cms, LUCKY_DRAW_DRAW_LOG, 'birthday_year', "ALTER TABLE `" . LUCKY_DRAW_DRAW_LOG . "` ADD COLUMN `birthday_year` SMALLINT DEFAULT NULL AFTER `birthday_yymmdd`", "Verified `" . LUCKY_DRAW_DRAW_LOG . "` includes `birthday_year`.");
+    migrationEnsureColumn($conn, $db_cms, LUCKY_DRAW_DRAW_LOG, 'birthday_month', "ALTER TABLE `" . LUCKY_DRAW_DRAW_LOG . "` ADD COLUMN `birthday_month` TINYINT DEFAULT NULL AFTER `birthday_year`", "Verified `" . LUCKY_DRAW_DRAW_LOG . "` includes `birthday_month`.");
 
     $createLuckyDrawVirtualWinnerSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . LUCKY_DRAW_VIRTUAL_WINNER . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,

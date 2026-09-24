@@ -216,7 +216,7 @@ $hasParticipated = !empty($participationState['participated']);
 $wheelNoteText = $hasParticipated ? 'You already participated the lucky draw.' : 'You have 1 verified birthday-month chance';
 
 $heroTitle = 'Lucky Draw';
-$heroSubtitle = 'Spin once during your birthday month to unlock a verified reward. Enter your full IC number, pass reCAPTCHA, and complete the claim flow if you win.';
+$heroSubtitle = 'Spin once during your birthday month to unlock a verified reward. Enter your username with your birth month and year, pass reCAPTCHA, and complete the claim flow if you win.';
 
 $wheelPrizes = array_values(array_filter($prizeRows, function ($row) {
     return (float) ($row['weight'] ?? 0) > 0;
@@ -274,8 +274,8 @@ foreach ($wheelPrizes as $row) {
 
 $howItWorks = array(
     array(
-        'title' => 'Enter Full IC',
-        'description' => 'Fill in your full IC number and complete reCAPTCHA to verify the request.',
+        'title' => 'Enter Your Username',
+        'description' => 'Fill in your Shopee username or your name, pick your birth month and year, then complete reCAPTCHA.',
     ),
     array(
         'title' => 'Spin the Wheel',
@@ -354,12 +354,33 @@ $howItWorks = array(
                             <p>You already participated the lucky draw. If your claim is still pending, continue below to complete it.</p>
                             <div class="ld-empty-state">You already participated the lucky draw.</div>
                         <?php } else { ?>
-                            <p>Fill in your full IC number and complete the verification to spin the wheel.</p>
+                            <p>Fill in your username, pick your birth month and year, then complete the verification to spin the wheel.</p>
                             <form class="ld-form" id="luckyDrawForm">
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
                                 <div>
-                                    <label for="member_identity">IC Number</label>
-                                    <input type="text" id="member_identity" name="member_identity" placeholder="e.g. 901234145678" required>
+                                    <label for="customer_username">Username</label>
+                                    <input type="text" id="customer_username" name="customer_username" placeholder="Shopee username or your name" autocomplete="username" required>
+                                </div>
+
+                                <div class="ld-birthday-grid">
+                                    <div>
+                                        <label for="birth_month">Birth Month</label>
+                                        <select id="birth_month" name="birth_month" required>
+                                            <option value="">Select month</option>
+                                            <?php for ($monthOption = 1; $monthOption <= 12; $monthOption++) { ?>
+                                                <option value="<?= (int) $monthOption ?>"><?= htmlspecialchars(date('F', mktime(0, 0, 0, $monthOption, 1, 2000)), ENT_QUOTES, 'UTF-8') ?></option>
+                                            <?php } ?>
+                                        </select>
+                                    </div>
+                                    <div>
+                                        <label for="birth_year">Birth Year</label>
+                                        <select id="birth_year" name="birth_year" required>
+                                            <option value="">Select year</option>
+                                            <?php $luckyDrawYearNow = (int) date('Y'); for ($yearOption = $luckyDrawYearNow; $yearOption >= $luckyDrawYearNow - 100; $yearOption--) { ?>
+                                                <option value="<?= (int) $yearOption ?>"><?= (int) $yearOption ?></option>
+                                            <?php } ?>
+                                        </select>
+                                    </div>
                                 </div>
 
                                 <?php if ($recaptchaSiteKey !== '') { ?>
