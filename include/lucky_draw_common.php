@@ -2000,7 +2000,6 @@ if (!function_exists('luckyDrawReleaseExpiredReservations')) {
             WHERE status = 'A'
               AND claim_state = 'awaiting_claim'
               AND reservation_expires_at IS NOT NULL
-              AND reservation_expires_at <> ''
               AND reservation_expires_at < NOW()
             ORDER BY id ASC
             LIMIT " . max(1, (int) $limit));
