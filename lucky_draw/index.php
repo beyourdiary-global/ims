@@ -253,18 +253,13 @@ $wheelColors = array(
     '#d8c5a5',
 );
 
-// Wheel segments are drawn proportional to weight, and each segment is labelled with
-// the real win chance so the odds on screen always match the odds the server uses.
-$wheelWeightTotal = 0.0;
-foreach ($wheelPrizes as $wheelPrizeRow) {
-    $wheelWeightTotal += max(0.0, (float) ($wheelPrizeRow['weight'] ?? 0));
-}
-
+// Segments are drawn equal in size on purpose. The real win chance is a backend setting,
+// so the wheel must never let a customer read how the odds were configured.
 $gradientParts = array();
-if ($segmentCount > 0 && $wheelWeightTotal > 0) {
+if ($segmentCount > 0) {
+    $segmentAngle = 360 / $segmentCount;
     $angleCursor = 0.0;
     foreach ($wheelPrizes as $wheelIndex => $wheelPrizeRow) {
-        $segmentAngle = (max(0.0, (float) ($wheelPrizeRow['weight'] ?? 0)) / $wheelWeightTotal) * 360;
         $segmentStart = number_format($angleCursor, 3, '.', '');
         $angleCursor += $segmentAngle;
         $segmentEnd = number_format($angleCursor, 3, '.', '');
@@ -298,8 +293,8 @@ foreach ($wheelPrizes as $row) {
             ),
         'color' => luckyDrawThemeSanitizeHex(isset($row['label_color']) ? (string) $row['label_color'] : $fallbackColor, $fallbackColor),
         'available' => $availableCount,
-        'weight' => max(0.0, (float) ($row['weight'] ?? 0)),
-        'percent' => $wheelWeightTotal > 0 ? round((max(0.0, (float) ($row['weight'] ?? 0)) / $wheelWeightTotal) * 100, 1) : 0,
+        // `weight` is deliberately not exposed to the browser: the wheel draws every segment
+        // the same size, and the real odds must stay a server-side secret.
     );
 }
 

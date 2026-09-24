@@ -366,19 +366,11 @@
         return luminance >= 186 ? '#111827' : '#ffffff';
     }
 
-    function formatWheelPercent(value) {
-        const percent = Number(value);
-        if (!isFinite(percent) || percent <= 0) {
-            return '';
-        }
-
-        const rounded = percent >= 10 ? percent.toFixed(0) : percent.toFixed(1);
-        return `${String(rounded).replace(/\.0$/, '')}%`;
-    }
-
     function getWheelPrizeLabel(value) {
+        // Prize names are longer than the old percentage labels, so keep them short enough
+        // to stay inside the wheel instead of spilling over the rim.
         const label = String(value || 'Prize').trim();
-        return label.length > 18 ? `${label.slice(0, 17)}…` : label;
+        return label.length > 14 ? `${label.slice(0, 13)}…` : label;
     }
 
     function escapeSvgText(value) {
@@ -654,14 +646,16 @@
             );
 
             return {
-                label: formatWheelPercent(row && row.percent),
+                label: getWheelPrizeLabel(row && row.name ? row.name : 'Prize'),
                 value: row && row.id ? row.id : 0,
-                weight: Math.max(0, Number(row && row.weight !== undefined && row.weight !== null ? row.weight : 1)),
+                // Equal weight keeps every sector the same size, so the odds we configured
+                // in the backend can never be read off the wheel.
+                weight: 1,
                 backgroundColor,
                 labelColor: getWheelLabelColor(backgroundColor),
                 image: prizeImage,
-                imageRadius: prizeImage ? (useDenseWheelMode ? 0.46 : (useCompactWheelMode ? 0.48 : (isVoucherPrize ? 0.40 : 0.42))) : 0,
-                imageScale: prizeImage ? (useDenseWheelMode ? (isVoucherPrize ? 0.14 : 0.13) : (useCompactWheelMode ? (isVoucherPrize ? 0.20 : 0.16) : (isVoucherPrize ? 0.22 : 0.16))) : 0,
+                imageRadius: prizeImage ? (useDenseWheelMode ? 0.42 : (useCompactWheelMode ? 0.44 : (isVoucherPrize ? 0.46 : 0.48))) : 0,
+                imageScale: prizeImage ? (useDenseWheelMode ? (isVoucherPrize ? 0.13 : 0.12) : (useCompactWheelMode ? (isVoucherPrize ? 0.16 : 0.15) : (isVoucherPrize ? 0.24 : 0.18))) : 0,
                 imageRotation: 0,
             };
         });
@@ -674,10 +668,10 @@
             lineColor: 'rgba(255, 255, 255, 0.56)',
             lineWidth: useDenseWheelMode ? 2 : 3,
             itemLabelFont: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
-            itemLabelFontSizeMax: useCompactWheelMode ? 14 : 20,
-            itemLabelRadius: useCompactWheelMode ? 0.86 : 0.84,
-            itemLabelRadiusMax: useCompactWheelMode ? 0.18 : 0.26,
-            itemLabelAlign: 'center',
+            itemLabelFontSizeMax: useCompactWheelMode ? 11 : 14,
+            itemLabelRadius: useCompactWheelMode ? 0.92 : 0.90,
+            itemLabelRadiusMax: useCompactWheelMode ? 0.20 : 0.28,
+            itemLabelAlign: 'right',
             itemLabelRotation: 0,
             itemLabelColors: ['#ffffff'],
             itemLabelStrokeColor: 'rgba(0, 0, 0, 0.42)',
