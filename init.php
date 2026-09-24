@@ -85,7 +85,7 @@ $SITEURL = SITEURL;
 define('ROOT', dirname(__FILE__));
 define('email_cc', 'report@beyourdiary.com');
 // Lucky Draw no longer uses Google reCAPTCHA. Its bot protection is built into the draw itself
-// (honeypot + single-use form token + rate limits), so there is no per-domain key to register and
+// (single-use form token + rate limits), so there is no per-domain key to register and
 // nothing that can black out the campaign when Google is unreachable or the domain list is wrong.
 // The admin pages keep their own reCAPTCHA via js/common.fun.js and are not affected.
 

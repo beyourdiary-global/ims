@@ -628,16 +628,6 @@ img {
     gap: 14px;
 }
 
-/* Honeypot field: off-screen rather than display:none, because some bots check for that.
-   Customers never see or tab into it, so a filled value means the form was submitted by a script. */
-.ld-honeypot {
-    position: absolute;
-    left: -9999px;
-    top: auto;
-    width: 1px;
-    height: 1px;
-    overflow: hidden;
-}
 
 .ld-draw-btn {
     width: 100%;

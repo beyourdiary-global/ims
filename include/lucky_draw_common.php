@@ -162,10 +162,9 @@ if (!function_exists('luckyDrawConsumeFormToken')) {
 
 if (!function_exists('luckyDrawValidateBotGuard')) {
     /**
-     * Cheap bot checks that run before anything touches the database.
+     * Cheap bot check that runs before anything touches the database.
      *
-     * 1. Honeypot: a field hidden with CSS. Customers never see it, so anything in it is a bot.
-     * 2. Single-use form nonce: proves the form was loaded and that time passed since it was.
+     * Single-use form nonce: proves the form was loaded and that time passed since it was.
      *
      * The rejection message never says which check failed, so a scripted attacker gets no signal
      * to tune against. This replaces the Google reCAPTCHA dependency: no third-party call, no
@@ -175,11 +174,6 @@ if (!function_exists('luckyDrawValidateBotGuard')) {
     function luckyDrawValidateBotGuard($post = null)
     {
         $post = is_array($post) ? $post : $_POST;
-
-        $honeypot = isset($post['ld_website']) ? trim((string) $post['ld_website']) : '';
-        if ($honeypot !== '') {
-            return array('success' => false, 'message' => 'Your submission could not be verified. Please refresh the page and try again.');
-        }
 
         return luckyDrawConsumeFormToken(isset($post['ld_form_token']) ? $post['ld_form_token'] : '');
     }
@@ -1156,13 +1150,13 @@ if (!function_exists('luckyDrawReadiness')) {
                 : ('Current engine: ' . ($fbEngine !== '' ? $fbEngine : 'missing') . '. Physical prize claims need this table; the public draw is unaffected.'),
         );
 
-        // Bot protection is built in (honeypot + single-use form token + rate limits), so there
+        // Bot protection is built in (single-use form token + rate limits), so there
         // is no third-party key to configure and nothing here can lock the public page.
         $items[] = array(
             'key' => 'bot_protection',
             'label' => 'Built-in bot protection',
             'success' => true,
-            'detail' => 'Honeypot field, single-use form token, and per-IP / per-member rate limits are active.',
+            'detail' => 'Single-use form token, minimum fill time, and per-IP / per-member rate limits are active.',
         );
         $items[] = array(
             'key' => 'identity_hashing',

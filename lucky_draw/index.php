@@ -383,11 +383,6 @@ $howItWorks = array(
                             <form class="ld-form" id="luckyDrawForm">
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
                                 <input type="hidden" name="ld_form_token" value="<?= htmlspecialchars($formToken, ENT_QUOTES, 'UTF-8') ?>">
-                                <!-- Honeypot: hidden from customers with CSS, so any value in it means a bot filled the form. -->
-                                <div class="ld-honeypot" aria-hidden="true" style="position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden;">
-                                    <label for="ld_website">Website</label>
-                                    <input type="text" id="ld_website" name="ld_website" value="" tabindex="-1" autocomplete="off">
-                                </div>
                                 <div>
                                     <label for="customer_username">Username</label>
                                     <input type="text" id="customer_username" name="customer_username" placeholder="Shopee username or your name" autocomplete="username" required>

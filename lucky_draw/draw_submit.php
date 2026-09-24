@@ -49,7 +49,7 @@ if (empty($rateLimit['success'])) {
     ), 429);
 }
 
-// Built-in bot protection: honeypot field + single-use form token minted when the page rendered.
+// Built-in bot protection: single-use form token minted when the page rendered.
 $botGuard = luckyDrawValidateBotGuard($_POST);
 if (empty($botGuard['success'])) {
     luckyDrawRecordRequestLog($connect, 'draw_attempt', $requestMemberHmac, $ipHmac, 'bot_guard_failed');
