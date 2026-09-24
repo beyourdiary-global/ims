@@ -1025,28 +1025,36 @@ if (!function_exists('luckyDrawReadiness')) {
 
         foreach (luckyDrawRequiredTableList() as $tableName) {
             $engine = luckyDrawTableEngine($connect, dbname, $tableName);
-            $tableReady = $engine === 'INNODB';
-            if (!$tableReady) {
+            // A missing table genuinely breaks the draw, so it stays a hard error. A table that
+            // exists but is not InnoDB is a deployment-hygiene warning only: the draw is written
+            // to be safe without row locks (conditional UPDATE + affected_rows checks), so a
+            // storage-engine choice must never black out a live campaign.
+            $tableMissing = ($engine === '');
+            if ($tableMissing) {
                 $hasErrors = true;
             }
             $items[] = array(
                 'key' => 'table_' . $tableName,
                 'label' => $tableName . ' engine',
-                'success' => $tableReady,
-                'detail' => $tableReady ? 'InnoDB ready.' : ('Current engine: ' . ($engine !== '' ? $engine : 'missing')),
+                'success' => ($engine === 'INNODB'),
+                'detail' => ($engine === 'INNODB')
+                    ? 'InnoDB ready.'
+                    : ($tableMissing
+                        ? 'Table is missing. Run insert_table.php to migrate.'
+                        : ('Current engine: ' . $engine . '. The draw still works; converting to InnoDB is recommended for row-level locking.')),
             );
         }
 
         $fbEngine = luckyDrawTableEngine($financeConnect, dbFinance, FB_ORDER_REQ);
-        $fbReady = $fbEngine === 'INNODB';
-        if (!$fbReady) {
-            $hasErrors = true;
-        }
+        // The finance order table is only touched when a physical prize is claimed, and that flow
+        // reports its own error to the customer. It must not black out the public draw either.
         $items[] = array(
             'key' => 'facebook_order_request_engine',
             'label' => FB_ORDER_REQ . ' engine',
-            'success' => $fbReady,
-            'detail' => $fbReady ? 'InnoDB ready.' : ('Current engine: ' . ($fbEngine !== '' ? $fbEngine : 'missing')),
+            'success' => ($fbEngine === 'INNODB'),
+            'detail' => ($fbEngine === 'INNODB')
+                ? 'InnoDB ready.'
+                : ('Current engine: ' . ($fbEngine !== '' ? $fbEngine : 'missing') . '. Physical prize claims need this table; the public draw is unaffected.'),
         );
 
         $siteKeyReady = luckyDrawGetRecaptchaSiteKey() !== '';
