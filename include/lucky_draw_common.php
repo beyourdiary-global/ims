@@ -19,7 +19,8 @@ if (!defined('LUCKY_DRAW_RATE_LIMIT_MAX_PER_MEMBER')) {
 // Bot protection is built in, so the public draw never depends on a third-party service that can
 // fail, rate-limit us, or be misconfigured for a single domain.
 if (!defined('LUCKY_DRAW_FORM_TOKEN_MAX_AGE_SEC')) {
-    define('LUCKY_DRAW_FORM_TOKEN_MAX_AGE_SEC', 1800);
+    // 6 hours: a customer who leaves the page open must still be able to submit.
+    define('LUCKY_DRAW_FORM_TOKEN_MAX_AGE_SEC', 21600);
 }
 
 if (!defined('LUCKY_DRAW_FORM_MIN_FILL_SEC')) {
@@ -27,7 +28,15 @@ if (!defined('LUCKY_DRAW_FORM_MIN_FILL_SEC')) {
 }
 
 if (!defined('LUCKY_DRAW_FORM_NONCE_KEEP')) {
-    define('LUCKY_DRAW_FORM_NONCE_KEEP', 8);
+    // 20: refreshing other tabs must not push the token of the page being filled out of the ring.
+    define('LUCKY_DRAW_FORM_NONCE_KEEP', 20);
+}
+
+if (!defined('LUCKY_DRAW_FORM_TOKEN_MAX_USES')) {
+    // A nonce is no longer burned by the first submit: a customer who mistypes a username has to
+    // be able to fix it and press the button again without reloading. The per-IP / per-member rate
+    // limits are the real defence; this cap is only a backstop.
+    define('LUCKY_DRAW_FORM_TOKEN_MAX_USES', 20);
 }
 
 if (!defined('LUCKY_DRAW_CLAIM_EXPIRY_HOURS')) {
@@ -80,13 +89,35 @@ if (!function_exists('luckyDrawResolveConfigValue')) {
     }
 }
 
+if (!function_exists('luckyDrawFormTokenIssuedAt')) {
+    /**
+     * Reads the issue time from a ring entry, tolerating the older plain-integer format so
+     * sessions created before the use counter existed keep working.
+     */
+    function luckyDrawFormTokenIssuedAt($entry)
+    {
+        if (is_array($entry)) {
+            return (int) (isset($entry['issued']) ? $entry['issued'] : 0);
+        }
+
+        return (int) $entry;
+    }
+}
+
+if (!function_exists('luckyDrawFormTokenUseCount')) {
+    function luckyDrawFormTokenUseCount($entry)
+    {
+        return is_array($entry) ? (int) (isset($entry['uses']) ? $entry['uses'] : 0) : 0;
+    }
+}
+
 if (!function_exists('luckyDrawIssueFormToken')) {
     /**
-     * Mints a single-use nonce for the draw form and records when it was handed out.
+     * Mints a nonce for the draw form and records when it was handed out.
      *
      * The nonce proves the submitter actually loaded the form, and the recorded issue time lets
      * the server reject submissions that arrive faster than a human could possibly fill the form.
-     * A small ring of nonces is kept so opening a second tab does not invalidate the first one.
+     * A ring of nonces is kept so opening a second tab does not invalidate the first one.
      */
     function luckyDrawIssueFormToken()
     {
@@ -98,14 +129,14 @@ if (!function_exists('luckyDrawIssueFormToken')) {
             ? $_SESSION['lucky_draw_form_nonces']
             : array();
 
-        foreach ($ring as $storedNonce => $issuedAt) {
-            if (($now - (int) $issuedAt) > $maxAge) {
+        foreach ($ring as $storedNonce => $storedEntry) {
+            if (($now - luckyDrawFormTokenIssuedAt($storedEntry)) > $maxAge) {
                 unset($ring[$storedNonce]);
             }
         }
 
         $nonce = bin2hex(random_bytes(16));
-        $ring[$nonce] = $now;
+        $ring[$nonce] = array('issued' => $now, 'uses' => 0);
 
         while (count($ring) > $keep) {
             array_shift($ring);
@@ -119,8 +150,12 @@ if (!function_exists('luckyDrawIssueFormToken')) {
 
 if (!function_exists('luckyDrawConsumeFormToken')) {
     /**
-     * Validates a form nonce. The nonce is burned only when the submission is accepted, so a
-     * customer who trips the timing check can simply submit again without reloading the page.
+     * Validates a form nonce.
+     *
+     * The nonce is NOT burned on submit any more (2026-09-24). Burning it meant a customer who
+     * mistyped a username, or whose birthday did not match, got "Your form has expired" on every
+     * later click and had to reload the whole page before they could try again. Each nonce may now
+     * be used a bounded number of times inside its lifetime.
      */
     function luckyDrawConsumeFormToken($token)
     {
@@ -137,11 +172,14 @@ if (!function_exists('luckyDrawConsumeFormToken')) {
             return array('success' => false, 'message' => 'Your form has expired. Please refresh the page and try again.');
         }
 
-        $elapsed = time() - (int) $ring[$token];
+        $issuedAt = luckyDrawFormTokenIssuedAt($ring[$token]);
+        $uses = luckyDrawFormTokenUseCount($ring[$token]);
+        $elapsed = time() - $issuedAt;
         $maxAge = max(60, (int) LUCKY_DRAW_FORM_TOKEN_MAX_AGE_SEC);
         $minFill = max(0, (int) LUCKY_DRAW_FORM_MIN_FILL_SEC);
+        $maxUses = max(1, (int) LUCKY_DRAW_FORM_TOKEN_MAX_USES);
 
-        if ($elapsed > $maxAge) {
+        if ($elapsed > $maxAge || $uses >= $maxUses) {
             unset($ring[$token]);
             $_SESSION['lucky_draw_form_nonces'] = $ring;
             return array('success' => false, 'message' => 'Your form has expired. Please refresh the page and try again.');
@@ -153,7 +191,8 @@ if (!function_exists('luckyDrawConsumeFormToken')) {
             return array('success' => false, 'message' => 'That was a little too quick. Please try again.');
         }
 
-        unset($ring[$token]);
+        // Count the use instead of dropping the nonce, so the same page can be submitted again.
+        $ring[$token] = array('issued' => $issuedAt, 'uses' => $uses + 1);
         $_SESSION['lucky_draw_form_nonces'] = $ring;
 
         return array('success' => true, 'message' => '');
