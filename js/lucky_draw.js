@@ -366,6 +366,16 @@
         return luminance >= 186 ? '#111827' : '#ffffff';
     }
 
+    function formatWheelPercent(value) {
+        const percent = Number(value);
+        if (!isFinite(percent) || percent <= 0) {
+            return '';
+        }
+
+        const rounded = percent >= 10 ? percent.toFixed(0) : percent.toFixed(1);
+        return `${String(rounded).replace(/\.0$/, '')}%`;
+    }
+
     function getWheelPrizeLabel(value) {
         const label = String(value || 'Prize').trim();
         return label.length > 18 ? `${label.slice(0, 17)}…` : label;
@@ -644,14 +654,14 @@
             );
 
             return {
-                label: useCompactWheelMode ? '' : (isVoucherPrize ? '' : getWheelPrizeLabel(row && row.name ? row.name : 'Prize')),
+                label: formatWheelPercent(row && row.percent),
                 value: row && row.id ? row.id : 0,
-                weight: Math.max(1, Number(row && row.weight ? row.weight : 1)),
+                weight: Math.max(0, Number(row && row.weight !== undefined && row.weight !== null ? row.weight : 1)),
                 backgroundColor,
                 labelColor: getWheelLabelColor(backgroundColor),
                 image: prizeImage,
-                imageRadius: prizeImage ? (useDenseWheelMode ? 0.76 : (useCompactWheelMode ? 0.70 : (isVoucherPrize ? 0.58 : 0.60))) : 0,
-                imageScale: prizeImage ? (useDenseWheelMode ? (isVoucherPrize ? 0.18 : 0.17) : (useCompactWheelMode ? (isVoucherPrize ? 0.28 : 0.26) : (isVoucherPrize ? 0.36 : 0.22))) : 0,
+                imageRadius: prizeImage ? (useDenseWheelMode ? 0.46 : (useCompactWheelMode ? 0.48 : (isVoucherPrize ? 0.40 : 0.42))) : 0,
+                imageScale: prizeImage ? (useDenseWheelMode ? (isVoucherPrize ? 0.14 : 0.13) : (useCompactWheelMode ? (isVoucherPrize ? 0.20 : 0.16) : (isVoucherPrize ? 0.22 : 0.16))) : 0,
                 imageRotation: 0,
             };
         });
@@ -664,14 +674,14 @@
             lineColor: 'rgba(255, 255, 255, 0.56)',
             lineWidth: useDenseWheelMode ? 2 : 3,
             itemLabelFont: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
-            itemLabelFontSizeMax: useCompactWheelMode ? 10 : 14,
-            itemLabelRadius: useCompactWheelMode ? 0.90 : 0.84,
-            itemLabelRadiusMax: useCompactWheelMode ? 0.18 : 0.28,
+            itemLabelFontSizeMax: useCompactWheelMode ? 14 : 20,
+            itemLabelRadius: useCompactWheelMode ? 0.86 : 0.84,
+            itemLabelRadiusMax: useCompactWheelMode ? 0.18 : 0.26,
             itemLabelAlign: 'center',
             itemLabelRotation: 0,
             itemLabelColors: ['#ffffff'],
-            itemLabelStrokeColor: 'rgba(0, 0, 0, 0.24)',
-            itemLabelStrokeWidth: useCompactWheelMode ? 1 : 2,
+            itemLabelStrokeColor: 'rgba(0, 0, 0, 0.42)',
+            itemLabelStrokeWidth: useCompactWheelMode ? 2 : 3,
             pointerAngle: 0,
             isInteractive: false,
             rotationSpeedMax: 520,

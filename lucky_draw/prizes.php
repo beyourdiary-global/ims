@@ -259,6 +259,17 @@ if ($requestedPrizeId > 0) {
     }
 }
 
+// The pool textarea only ever shows codes that are still available, so the operator can edit
+// or withdraw them freely without ever touching a code that is already in use.
+$editingPrizePoolCount = array('available' => 0, 'reserved' => 0, 'assigned' => 0, 'total' => 0);
+if ($requestedPrizeId > 0 && !empty($editingPrize)) {
+    $editingPrize['voucher_codes'] = implode("\n", luckyDrawVoucherAvailableCodeList($connect, $requestedPrizeId));
+    $editingPrizePoolRows = luckyDrawVoucherPoolCounts($connect, array($requestedPrizeId));
+    if (isset($editingPrizePoolRows[$requestedPrizeId])) {
+        $editingPrizePoolCount = $editingPrizePoolRows[$requestedPrizeId];
+    }
+}
+
 if ($isAdd) {
     luckyDrawRequireAdminAction($connect, 'Add', $pinAccess);
 } elseif ($isEdit) {
@@ -283,6 +294,7 @@ if ($isView && !empty($editingPrize)) {
 }
 
 $formError = '';
+$poolConflictMessage = '';
 $submittedFormValues = array();
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') {
@@ -294,9 +306,11 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
     $prizeName = luckyDrawSafePublicText(post('prize_name'), 190);
     $prizeType = strtolower(trim((string) (post('prize_type') !== '' ? post('prize_type') : 'voucher')));
     $prizeType = in_array($prizeType, array('voucher', 'physical'), true) ? $prizeType : 'voucher';
-    $voucherCode = $prizeType === 'voucher'
-        ? luckyDrawSafePublicText(post('voucher_code'), 255)
-        : '';
+    // One winner, one code: voucher codes are a per-prize pool now (one per line).
+    // The legacy single `voucher_code` column is left untouched and no longer issued.
+    $voucherCodeList = $prizeType === 'voucher'
+        ? luckyDrawVoucherParseCodeList(post('voucher_codes'))
+        : array();
     $rawWeightInput = trim((string) post('weight'));
     $weight = luckyDrawNormalizePositiveFloat(post('weight'), 0);
     $displayOrder = max(0, luckyDrawNormalizePositiveInt(post('display_order'), 0));
@@ -317,7 +331,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
         'id' => $prizeId,
         'prize_name' => $prizeName,
         'prize_type' => $prizeType,
-        'voucher_code' => $voucherCode,
+        'voucher_codes' => $prizeType === 'voucher' ? (string) post('voucher_codes') : '',
         'weight' => $rawWeightInput !== '' ? $rawWeightInput : $weight,
         'display_order' => $displayOrder,
         'total_stock' => $totalStock,
@@ -335,8 +349,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
         $formError = 'Weight must be numeric and 0 or greater.';
     } elseif ($rawPriceInput === '') {
         $formError = 'Price is required.';
-    } elseif ($prizeType === 'voucher' && $voucherCode === '') {
-        $formError = 'Voucher code is required for voucher prizes.';
+    } elseif ($prizeType === 'voucher' && empty($voucherCodeList)) {
+        $formError = 'At least one voucher code is required for voucher prizes (one code per line).';
     } elseif ($prizeType === 'physical' && $postedPackageId <= 0) {
         $formError = 'Package is required for physical prizes.';
     } elseif (luckyDrawPrizeColorExists($connect, $labelColor, $prizeId)) {
@@ -386,14 +400,13 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
     $safeRemark = mysqli_real_escape_string($connect, $remark);
     $safeIsEnabled = mysqli_real_escape_string($connect, $isEnabled);
     $safeLabelColor = mysqli_real_escape_string($connect, $labelColor);
-    $safeVoucherCode = mysqli_real_escape_string($connect, $voucherCode);
     $safeActor = mysqli_real_escape_string($connect, (string) USER_ID);
 
     if ($prizeId > 0) {
         $normalizedCurrentPrize = array(
             'prize_name' => trim((string) ($editingPrize['prize_name'] ?? '')),
             'prize_type' => strtolower(trim((string) ($editingPrize['prize_type'] ?? ''))),
-            'voucher_code' => trim((string) ($editingPrize['voucher_code'] ?? '')),
+            'voucher_codes' => implode("\n", luckyDrawVoucherAvailableCodeList($connect, $prizeId)),
             'weight' => number_format((float) ($editingPrize['weight'] ?? 0), 4, '.', ''),
             'total_stock' => (int) ($editingPrize['total_stock'] ?? 0),
             'display_order' => (int) ($editingPrize['display_order'] ?? 0),
@@ -414,7 +427,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
         $normalizedSubmittedPrize = array(
             'prize_name' => $prizeName,
             'prize_type' => $prizeType,
-            'voucher_code' => $voucherCode,
+            'voucher_codes' => implode("\n", $voucherCodeList),
             'weight' => number_format($weight, 4, '.', ''),
             'total_stock' => $totalStock,
             'display_order' => $displayOrder,
@@ -451,7 +464,6 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
         $sql = "UPDATE `" . LUCKY_DRAW_PRIZE . "`
             SET prize_name = '" . $safePrizeName . "',
                 prize_type = '" . $safePrizeType . "',
-                voucher_code = " . ($voucherCode !== '' ? ("'" . $safeVoucherCode . "'") : 'NULL') . ",
                 weight = " . number_format($weight, 4, '.', '') . ",
                 total_stock = " . $totalStock . ",
                 display_order = " . $displayOrder . ",
@@ -486,9 +498,9 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
         }
     } else {
         $sql = "INSERT INTO `" . LUCKY_DRAW_PRIZE . "`
-            (prize_name, prize_type, voucher_code, prize_image, weight, total_stock, reserved_stock, assigned_stock, display_order, is_enabled, label_color, package_id, country_id, brand_id, series_id, fb_page_id, channel_id, pay_method_id, stock_out_warehouse_id, sales_pic_user_id, price, remark, create_by, create_date, create_time, status)
+            (prize_name, prize_type, prize_image, weight, total_stock, reserved_stock, assigned_stock, display_order, is_enabled, label_color, package_id, country_id, brand_id, series_id, fb_page_id, channel_id, pay_method_id, stock_out_warehouse_id, sales_pic_user_id, price, remark, create_by, create_date, create_time, status)
             VALUES
-            ('" . $safePrizeName . "', '" . $safePrizeType . "', " . ($voucherCode !== '' ? ("'" . $safeVoucherCode . "'") : 'NULL') . ", " . ($prizeType === 'physical' && $prizeImagePath !== '' ? ("'" . mysqli_real_escape_string($connect, $prizeImagePath) . "'") : 'NULL') . ", " . number_format($weight, 4, '.', '') . ", " . $totalStock . ", 0, 0, " . $displayOrder . ", '" . $safeIsEnabled . "', '" . $safeLabelColor . "', " . ($physicalFields['package_id'] > 0 ? $physicalFields['package_id'] : 'NULL') . ", " . ($physicalFields['country_id'] > 0 ? $physicalFields['country_id'] : 'NULL') . ", " . ($physicalFields['brand_id'] > 0 ? $physicalFields['brand_id'] : 'NULL') . ", " . ($physicalFields['series_id'] > 0 ? $physicalFields['series_id'] : 'NULL') . ", " . ($physicalFields['fb_page_id'] > 0 ? $physicalFields['fb_page_id'] : 'NULL') . ", " . ($physicalFields['channel_id'] > 0 ? $physicalFields['channel_id'] : 'NULL') . ", " . ($physicalFields['pay_method_id'] > 0 ? $physicalFields['pay_method_id'] : 'NULL') . ", " . ($stockOutWarehouseId > 0 ? $stockOutWarehouseId : 'NULL') . ", " . ($physicalFields['sales_pic_user_id'] > 0 ? $physicalFields['sales_pic_user_id'] : 'NULL') . ", " . number_format($price, 2, '.', '') . ", '" . $safeRemark . "', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
+            ('" . $safePrizeName . "', '" . $safePrizeType . "', " . ($prizeType === 'physical' && $prizeImagePath !== '' ? ("'" . mysqli_real_escape_string($connect, $prizeImagePath) . "'") : 'NULL') . ", " . number_format($weight, 4, '.', '') . ", " . $totalStock . ", 0, 0, " . $displayOrder . ", '" . $safeIsEnabled . "', '" . $safeLabelColor . "', " . ($physicalFields['package_id'] > 0 ? $physicalFields['package_id'] : 'NULL') . ", " . ($physicalFields['country_id'] > 0 ? $physicalFields['country_id'] : 'NULL') . ", " . ($physicalFields['brand_id'] > 0 ? $physicalFields['brand_id'] : 'NULL') . ", " . ($physicalFields['series_id'] > 0 ? $physicalFields['series_id'] : 'NULL') . ", " . ($physicalFields['fb_page_id'] > 0 ? $physicalFields['fb_page_id'] : 'NULL') . ", " . ($physicalFields['channel_id'] > 0 ? $physicalFields['channel_id'] : 'NULL') . ", " . ($physicalFields['pay_method_id'] > 0 ? $physicalFields['pay_method_id'] : 'NULL') . ", " . ($stockOutWarehouseId > 0 ? $stockOutWarehouseId : 'NULL') . ", " . ($physicalFields['sales_pic_user_id'] > 0 ? $physicalFields['sales_pic_user_id'] : 'NULL') . ", " . number_format($price, 2, '.', '') . ", '" . $safeRemark . "', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')";
         $insertResult = mysqli_query($connect, $sql);
         if (!$insertResult) {
             $formError = 'Unable to add this Lucky Draw prize. DB error: ' . mysqli_error($connect);
@@ -517,17 +529,28 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && post('save_prize') !== '') 
         }
     }
 
+    if ($prizeType === 'voucher' && $prizeId > 0) {
+        $poolSync = luckyDrawVoucherSyncAvailableCodes($connect, $prizeId, $voucherCodeList, (string) USER_ID);
+        if (!empty($poolSync['conflicts'])) {
+            $poolConflictMessage = 'Saved, but these voucher codes already belong to another prize and were skipped: ' . implode(', ', $poolSync['conflicts']);
+        }
+    }
+
     luckyDrawInsertAdminLog($connect, 'save_prize', LUCKY_DRAW_PRIZE, $prizeId, $prizeName, USER_ID, array(
         'page_title' => $pageTitle,
         'audit_action' => $isEditSave ? 'edit' : 'add',
         'entity_label' => 'prize',
         'use_standard_crud_message' => true,
     ));
-    luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, array(
+    $prizeRedirectParams = array(
         'act' => $isEditSave ? 'E' : 'I',
         'id' => $isEditSave ? $prizeId : null,
         'result_act' => $isEditSave ? 'E' : 'I',
-    ));
+    );
+    if ($poolConflictMessage !== '') {
+        luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, $prizeRedirectParams, 'warning', $poolConflictMessage);
+    }
+    luckyDrawAdminRedirect(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, $prizeRedirectParams);
 }
 
 renderPrizeForm:
@@ -678,9 +701,15 @@ include_once '../menuHeader.php';
                                     </div>
                                     <span id="labelColorError" class="text-danger d-block mt-1" style="display:none;"></span>
                                 </div>
-                                <div class="col-md-6 mb-3" id="voucherCodeField">
-                                    <label class="form-label form_lbl" for="voucher_code">Voucher Code*</label>
-                                    <input type="text" class="form-control" name="voucher_code" id="voucher_code" value="<?= htmlspecialchars((string) ($editingPrize['voucher_code'] ?? ''), ENT_QUOTES, 'UTF-8') ?>" <?= $readonlyAttr ?>>
+                                <div class="col-md-12 mb-3" id="voucherCodeField">
+                                    <label class="form-label form_lbl" for="voucher_codes">Voucher Codes (one per line)</label>
+                                    <textarea class="form-control" name="voucher_codes" id="voucher_codes" rows="6" placeholder="One voucher code per line" <?= $readonlyAttr ?>><?= htmlspecialchars((string) ($editingPrize['voucher_codes'] ?? ''), ENT_QUOTES, 'UTF-8') ?></textarea>
+                                    <small class="text-muted d-block mt-1">
+                                        Every winner is issued their own code from this pool, so voucher stock equals the number of unused codes listed here.
+                                        <?php if ((int) ($editingPrizePoolCount['total'] ?? 0) > 0) { ?>
+                                            Currently <?= (int) $editingPrizePoolCount['available'] ?> available, <?= (int) $editingPrizePoolCount['reserved'] ?> reserved, <?= (int) $editingPrizePoolCount['assigned'] ?> assigned.
+                                        <?php } ?>
+                                    </small>
                                 </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label form_lbl" for="display_order">Display Order</label>
@@ -689,6 +718,7 @@ include_once '../menuHeader.php';
                                     <div class="col-md-6 mb-3">
                                         <label class="form-label form_lbl" for="total_stock">Total Stock</label>
                                         <input type="number" class="form-control" id="total_stock" min="0" name="total_stock" value="<?= (int) ($editingPrize['total_stock'] ?? 0) ?>" <?= $readonlyAttr ?>>
+                                        <small class="text-muted" id="totalStockHint" style="display:none;">Voucher stock is the number of unused codes in the pool above.</small>
                                     </div>
                                 <div class="col-md-6 mb-3">
                                     <label class="form-label form_lbl" for="price">Price*</label>
@@ -763,7 +793,9 @@ include_once '../menuHeader.php';
         const prizeType = document.getElementById('prize_type');
         const physicalFields = document.getElementById('physicalPrizeFields');
         const voucherCodeField = document.getElementById('voucherCodeField');
-        const voucherCodeInput = document.getElementById('voucher_code');
+        const voucherCodesInput = document.getElementById('voucher_codes');
+        const totalStockInput = document.getElementById('total_stock');
+        const totalStockHint = document.getElementById('totalStockHint');
         const prizeImageField = document.getElementById('prizeImageField');
         const labelColorInput = document.getElementById('label_color');
         const labelColorError = document.getElementById('labelColorError');
@@ -814,8 +846,15 @@ include_once '../menuHeader.php';
             if (prizeImageField) {
                 prizeImageField.style.display = isPhysical ? '' : 'none';
             }
-            if (voucherCodeInput) {
-                voucherCodeInput.required = !isPhysical;
+            if (voucherCodesInput) {
+                voucherCodesInput.required = !isPhysical;
+            }
+            // Voucher stock is derived from the code pool, so the number is not hand-edited.
+            if (totalStockInput) {
+                totalStockInput.readOnly = !isPhysical;
+            }
+            if (totalStockHint) {
+                totalStockHint.style.display = isPhysical ? 'none' : '';
             }
             if (packageSelect) {
                 packageSelect.required = isPhysical;

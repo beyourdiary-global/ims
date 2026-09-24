@@ -218,9 +218,29 @@ $wheelNoteText = $hasParticipated ? 'You already participated the lucky draw.' :
 $heroTitle = 'Lucky Draw';
 $heroSubtitle = 'Spin once during your birthday month to unlock a verified reward. Enter your username with your birth month and year, pass reCAPTCHA, and complete the claim flow if you win.';
 
-$wheelPrizes = array_values(array_filter($prizeRows, function ($row) {
-    return (float) ($row['weight'] ?? 0) > 0;
-}));
+// Only prizes that are enabled, weighted, and actually in stock make it onto the wheel.
+// Zero stock means the prize does not exist, so it is dropped instead of blocking the draw.
+$wheelPrizes = array();
+foreach ($prizeRows as $prizeRowCandidate) {
+    if ((float) ($prizeRowCandidate['weight'] ?? 0) <= 0) {
+        continue;
+    }
+
+    $candidatePrizeId = isset($prizeRowCandidate['id']) ? (int) $prizeRowCandidate['id'] : 0;
+    $candidateReservedCount = (int) ($voucherStateCounts[$candidatePrizeId]['reserved'] ?? 0);
+    $candidateAssignedCount = (int) (($voucherStateCounts[$candidatePrizeId]['assigned'] ?? 0) + ($voucherStateCounts[$candidatePrizeId]['sent'] ?? 0));
+    $candidateAvailable = luckyDrawPrizeAvailableUnits(
+        $prizeRowCandidate,
+        (int) ($voucherAvailableCounts[$candidatePrizeId] ?? 0),
+        $candidateReservedCount,
+        $candidateAssignedCount
+    );
+    if ($candidateAvailable <= 0) {
+        continue;
+    }
+
+    $wheelPrizes[] = $prizeRowCandidate;
+}
 
 $featuredPrizes = array_slice($wheelPrizes, 0, 4);
 $segmentCount = count($wheelPrizes);
@@ -232,13 +252,23 @@ $wheelColors = array(
     '#e7b45c',
     '#d8c5a5',
 );
+
+// Wheel segments are drawn proportional to weight, and each segment is labelled with
+// the real win chance so the odds on screen always match the odds the server uses.
+$wheelWeightTotal = 0.0;
+foreach ($wheelPrizes as $wheelPrizeRow) {
+    $wheelWeightTotal += max(0.0, (float) ($wheelPrizeRow['weight'] ?? 0));
+}
+
 $gradientParts = array();
-if ($segmentCount > 0) {
-    $segmentSize = 360 / $segmentCount;
-    for ($i = 0; $i < $segmentCount; $i++) {
-        $start = number_format($i * $segmentSize, 3, '.', '');
-        $end = number_format(($i + 1) * $segmentSize, 3, '.', '');
-        $gradientParts[] = $wheelColors[$i % count($wheelColors)] . ' ' . $start . 'deg ' . $end . 'deg';
+if ($segmentCount > 0 && $wheelWeightTotal > 0) {
+    $angleCursor = 0.0;
+    foreach ($wheelPrizes as $wheelIndex => $wheelPrizeRow) {
+        $segmentAngle = (max(0.0, (float) ($wheelPrizeRow['weight'] ?? 0)) / $wheelWeightTotal) * 360;
+        $segmentStart = number_format($angleCursor, 3, '.', '');
+        $angleCursor += $segmentAngle;
+        $segmentEnd = number_format($angleCursor, 3, '.', '');
+        $gradientParts[] = $wheelColors[$wheelIndex % count($wheelColors)] . ' ' . $segmentStart . 'deg ' . $segmentEnd . 'deg';
     }
 }
 $wheelGradient = !empty($gradientParts) ? ('conic-gradient(' . implode(', ', $gradientParts) . ')') : ('conic-gradient(' . $themeColor . ' 0deg 360deg)');
@@ -268,7 +298,8 @@ foreach ($wheelPrizes as $row) {
             ),
         'color' => luckyDrawThemeSanitizeHex(isset($row['label_color']) ? (string) $row['label_color'] : $fallbackColor, $fallbackColor),
         'available' => $availableCount,
-        'weight' => max(1, (float) ($row['weight'] ?? 1)),
+        'weight' => max(0.0, (float) ($row['weight'] ?? 0)),
+        'percent' => $wheelWeightTotal > 0 ? round((max(0.0, (float) ($row['weight'] ?? 0)) / $wheelWeightTotal) * 100, 1) : 0,
     );
 }
 

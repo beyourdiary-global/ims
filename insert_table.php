@@ -5723,6 +5723,79 @@ if ($conn->select_db($db_fin)) {
 
     migrationEnsureColumn($conn, $db_cms, LUCKY_DRAW_PRIZE, 'voucher_code', "ALTER TABLE `" . LUCKY_DRAW_PRIZE . "` ADD COLUMN `voucher_code` VARCHAR(255) DEFAULT NULL AFTER `prize_type`", "Verified `" . LUCKY_DRAW_PRIZE . "` includes `voucher_code`.");
 
+    // --- Lucky Draw voucher codes: one winner, one code (per-prize code pool) ---
+    $createLuckyDrawVoucherCodeSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . LUCKY_DRAW_VOUCHER_CODE . "` (
+        `id` INT AUTO_INCREMENT PRIMARY KEY,
+        `prize_id` INT NOT NULL,
+        `voucher_code` VARCHAR(255) NOT NULL,
+        `code_state` VARCHAR(20) NOT NULL DEFAULT 'available',
+        `draw_log_id` INT DEFAULT NULL,
+        `reserved_at` DATETIME DEFAULT NULL,
+        `assigned_at` DATETIME DEFAULT NULL,
+        `create_by` VARCHAR(30) DEFAULT NULL,
+        `create_date` DATE DEFAULT NULL,
+        `create_time` TIME DEFAULT NULL,
+        `update_by` VARCHAR(30) DEFAULT NULL,
+        `update_date` DATE DEFAULT NULL,
+        `update_time` TIME DEFAULT NULL,
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        UNIQUE KEY `uniq_lucky_draw_voucher_code` (`voucher_code`),
+        KEY `idx_lucky_draw_voucher_prize_state` (`prize_id`, `code_state`, `status`),
+        KEY `idx_lucky_draw_voucher_draw_log` (`draw_log_id`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+    if ($conn->query($createLuckyDrawVoucherCodeSql)) {
+        echo "<p style='color:green;'>Verified table `" . LUCKY_DRAW_VOUCHER_CODE . "` for the one-code-per-winner voucher pool.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed creating `" . LUCKY_DRAW_VOUCHER_CODE . "`: " . $conn->error . "</p>";
+    }
+
+    // A voucher prize that only carried the legacy single shared code gets that code seeded as
+    // its first pool entry, so it keeps working for exactly one winner instead of everybody.
+    $legacyVoucherResult = $conn->query("SELECT id, voucher_code
+        FROM `" . $db_cms . "`.`" . LUCKY_DRAW_PRIZE . "`
+        WHERE status = 'A'
+          AND prize_type = 'voucher'
+          AND voucher_code IS NOT NULL
+          AND TRIM(voucher_code) <> ''");
+    if ($legacyVoucherResult) {
+        $legacyBackfilled = 0;
+        while ($legacyVoucherRow = $legacyVoucherResult->fetch_assoc()) {
+            $legacyPrizeId = (int) $legacyVoucherRow['id'];
+            $legacyCode = trim((string) $legacyVoucherRow['voucher_code']);
+            $poolCountResult = $conn->query("SELECT COUNT(*) AS pool_count
+                FROM `" . $db_cms . "`.`" . LUCKY_DRAW_VOUCHER_CODE . "`
+                WHERE prize_id = " . $legacyPrizeId);
+            $poolCountRow = $poolCountResult ? $poolCountResult->fetch_assoc() : null;
+            if ($poolCountRow && (int) $poolCountRow['pool_count'] > 0) {
+                continue;
+            }
+
+            $safeLegacyCode = $conn->real_escape_string($legacyCode);
+            if ($conn->query("INSERT IGNORE INTO `" . $db_cms . "`.`" . LUCKY_DRAW_VOUCHER_CODE . "`
+                (prize_id, voucher_code, code_state, create_by, create_date, create_time, status)
+                VALUES
+                (" . $legacyPrizeId . ", '" . $safeLegacyCode . "', 'available', 'MIGRATION', CURDATE(), CURTIME(), 'A')")) {
+                $legacyBackfilled += (int) $conn->affected_rows;
+            }
+        }
+        if ($legacyBackfilled > 0) {
+            echo "<p style='color:blue;'>Backfilled " . $legacyBackfilled . " legacy voucher code(s) into the code pool.</p>";
+        }
+    }
+
+    // Keep the denormalised prize stock columns in step with the pool so the admin list,
+    // the import screen and the readiness report all agree on the real stock.
+    if ($conn->query("UPDATE `" . $db_cms . "`.`" . LUCKY_DRAW_PRIZE . "` p
+        SET p.total_stock = (SELECT COUNT(*) FROM `" . $db_cms . "`.`" . LUCKY_DRAW_VOUCHER_CODE . "` c WHERE c.prize_id = p.id AND c.status = 'A'),
+            p.reserved_stock = (SELECT COUNT(*) FROM `" . $db_cms . "`.`" . LUCKY_DRAW_VOUCHER_CODE . "` c WHERE c.prize_id = p.id AND c.status = 'A' AND c.code_state = 'reserved'),
+            p.assigned_stock = (SELECT COUNT(*) FROM `" . $db_cms . "`.`" . LUCKY_DRAW_VOUCHER_CODE . "` c WHERE c.prize_id = p.id AND c.status = 'A' AND c.code_state = 'assigned')
+        WHERE p.status = 'A'
+          AND p.prize_type = 'voucher'")) {
+        echo "<p style='color:green;'>Synced voucher prize stock counters with the code pool.</p>";
+    } else {
+        echo "<p style='color:red;'>Failed syncing voucher prize stock counters: " . $conn->error . "</p>";
+    }
+
     $createLuckyDrawLogSql = "CREATE TABLE IF NOT EXISTS `" . $db_cms . "`.`" . LUCKY_DRAW_DRAW_LOG . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,
         `member_id_hmac` CHAR(64) NOT NULL,

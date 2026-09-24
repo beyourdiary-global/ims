@@ -406,38 +406,40 @@ if (!function_exists('luckyDrawPrizeImageUrl')) {
     }
 }
 
-if (!function_exists('luckyDrawVoucherAvailableCounts')) {
-    function luckyDrawVoucherAvailableCounts($connect)
+if (!function_exists('luckyDrawVoucherCodeTableReady')) {
+    function luckyDrawVoucherCodeTableReady($connect)
     {
-        $counts = array();
+        static $ready = null;
+        if ($ready !== null) {
+            return $ready;
+        }
+
+        $ready = false;
         if (!($connect instanceof mysqli)) {
-            return $counts;
+            return $ready;
         }
 
-        $sql = "SELECT id, total_stock, reserved_stock, assigned_stock
-            FROM `" . LUCKY_DRAW_PRIZE . "`
-            WHERE status = 'A'
-              AND prize_type = 'voucher'";
-        $result = mysqli_query($connect, $sql);
-        if ($result) {
-            while ($row = mysqli_fetch_assoc($result)) {
-                $prizeId = isset($row['id']) ? (int) $row['id'] : 0;
-                $totalStock = isset($row['total_stock']) ? (int) $row['total_stock'] : 0;
-                $reservedStock = isset($row['reserved_stock']) ? (int) $row['reserved_stock'] : 0;
-                $assignedStock = isset($row['assigned_stock']) ? (int) $row['assigned_stock'] : 0;
-                $counts[$prizeId] = max(0, $totalStock - $reservedStock - $assignedStock);
-            }
+        try {
+            $tableName = mysqli_real_escape_string($connect, LUCKY_DRAW_VOUCHER_CODE);
+            $result = mysqli_query($connect, "SHOW TABLES LIKE '" . $tableName . "'");
+            $ready = (bool) ($result && mysqli_num_rows($result) > 0);
+        } catch (Exception $exception) {
+            $ready = false;
         }
 
-        return $counts;
+        return $ready;
     }
 }
 
-if (!function_exists('luckyDrawVoucherStateCounts')) {
-    function luckyDrawVoucherStateCounts($connect, $prizeIds = array(), $lockRows = false)
+if (!function_exists('luckyDrawVoucherPoolCounts')) {
+    /**
+     * The voucher code pool is the single source of truth for voucher stock.
+     * Returns [prizeId => ['available' => n, 'reserved' => n, 'assigned' => n, 'total' => n]].
+     */
+    function luckyDrawVoucherPoolCounts($connect, $prizeIds = array())
     {
         $counts = array();
-        if (!($connect instanceof mysqli)) {
+        if (!($connect instanceof mysqli) || !luckyDrawVoucherCodeTableReady($connect)) {
             return $counts;
         }
 
@@ -450,31 +452,430 @@ if (!function_exists('luckyDrawVoucherStateCounts')) {
         }
         $sanitizedPrizeIds = array_values(array_unique($sanitizedPrizeIds));
 
-        $sql = "SELECT id, total_stock, reserved_stock, assigned_stock
-            FROM `" . LUCKY_DRAW_PRIZE . "`
-            WHERE status = 'A'
-              AND prize_type = 'voucher'";
+        $sql = "SELECT prize_id, code_state, COUNT(*) AS state_count
+            FROM `" . LUCKY_DRAW_VOUCHER_CODE . "`
+            WHERE status = 'A'";
         if (!empty($sanitizedPrizeIds)) {
-            $sql .= " AND id IN (" . implode(',', $sanitizedPrizeIds) . ")";
+            $sql .= " AND prize_id IN (" . implode(',', $sanitizedPrizeIds) . ")";
         }
-        if ($lockRows) {
-            $sql .= " FOR UPDATE";
+        $sql .= " GROUP BY prize_id, code_state";
+
+        try {
+            $result = mysqli_query($connect, $sql);
+        } catch (Exception $exception) {
+            return $counts;
         }
 
-        $result = mysqli_query($connect, $sql);
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $prizeId = isset($row['prize_id']) ? (int) $row['prize_id'] : 0;
+                if ($prizeId <= 0) {
+                    continue;
+                }
+                if (!isset($counts[$prizeId])) {
+                    $counts[$prizeId] = array('available' => 0, 'reserved' => 0, 'assigned' => 0, 'total' => 0);
+                }
+
+                $stateName = strtolower(trim((string) (isset($row['code_state']) ? $row['code_state'] : '')));
+                $stateCount = isset($row['state_count']) ? (int) $row['state_count'] : 0;
+                if ($stateName === 'reserved') {
+                    $counts[$prizeId]['reserved'] += $stateCount;
+                } elseif ($stateName === 'assigned') {
+                    $counts[$prizeId]['assigned'] += $stateCount;
+                } else {
+                    $counts[$prizeId]['available'] += $stateCount;
+                }
+                $counts[$prizeId]['total'] += $stateCount;
+            }
+        }
+
+        return $counts;
+    }
+}
+
+if (!function_exists('luckyDrawVoucherRefreshPrizeStockCounters')) {
+    /**
+     * Keeps the denormalised total/reserved/assigned columns on the prize row in step with
+     * the pool, so the existing admin list and import screens keep showing sane numbers.
+     */
+    function luckyDrawVoucherRefreshPrizeStockCounters($connect, $prizeId)
+    {
+        $prizeId = (int) $prizeId;
+        if (!($connect instanceof mysqli) || $prizeId <= 0 || !luckyDrawVoucherCodeTableReady($connect)) {
+            return false;
+        }
+
+        $poolCounts = luckyDrawVoucherPoolCounts($connect, array($prizeId));
+        $poolCount = isset($poolCounts[$prizeId])
+            ? $poolCounts[$prizeId]
+            : array('available' => 0, 'reserved' => 0, 'assigned' => 0, 'total' => 0);
+
+        $sql = "UPDATE `" . LUCKY_DRAW_PRIZE . "`
+            SET total_stock = " . (int) $poolCount['total'] . ",
+                reserved_stock = " . (int) $poolCount['reserved'] . ",
+                assigned_stock = " . (int) $poolCount['assigned'] . ",
+                update_date = CURDATE(),
+                update_time = CURTIME()
+            WHERE id = " . $prizeId . "
+              AND status = 'A'
+            LIMIT 1";
+
+        return (bool) mysqli_query($connect, $sql);
+    }
+}
+
+if (!function_exists('luckyDrawVoucherReserveCode')) {
+    /**
+     * Locks one unused code from the prize pool for the given draw log.
+     * Returns the reserved code, or '' when the pool has nothing left to give.
+     */
+    function luckyDrawVoucherReserveCode($connect, $prizeId, $drawLogId)
+    {
+        $prizeId = (int) $prizeId;
+        $drawLogId = (int) $drawLogId;
+        if (!($connect instanceof mysqli) || $prizeId <= 0 || $drawLogId <= 0 || !luckyDrawVoucherCodeTableReady($connect)) {
+            return '';
+        }
+
+        $result = mysqli_query($connect, "SELECT id, voucher_code
+            FROM `" . LUCKY_DRAW_VOUCHER_CODE . "`
+            WHERE prize_id = " . $prizeId . "
+              AND code_state = 'available'
+              AND status = 'A'
+            ORDER BY id ASC
+            LIMIT 1
+            FOR UPDATE");
+        if (!$result || !($codeRow = mysqli_fetch_assoc($result))) {
+            return '';
+        }
+
+        $codeId = (int) $codeRow['id'];
+        if (!mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_VOUCHER_CODE . "`
+            SET code_state = 'reserved',
+                draw_log_id = " . $drawLogId . ",
+                reserved_at = NOW(),
+                assigned_at = NULL,
+                update_by = 'PUBLIC',
+                update_date = CURDATE(),
+                update_time = CURTIME()
+            WHERE id = " . $codeId . "
+              AND code_state = 'available'
+              AND status = 'A'
+            LIMIT 1")) {
+            return '';
+        }
+
+        if (mysqli_affected_rows($connect) <= 0) {
+            return '';
+        }
+
+        luckyDrawVoucherRefreshPrizeStockCounters($connect, $prizeId);
+        return trim((string) $codeRow['voucher_code']);
+    }
+}
+
+if (!function_exists('luckyDrawVoucherAssignCode')) {
+    function luckyDrawVoucherAssignCode($connect, $drawLogId)
+    {
+        $drawLogId = (int) $drawLogId;
+        if (!($connect instanceof mysqli) || $drawLogId <= 0 || !luckyDrawVoucherCodeTableReady($connect)) {
+            return '';
+        }
+
+        $result = mysqli_query($connect, "SELECT id, prize_id, voucher_code
+            FROM `" . LUCKY_DRAW_VOUCHER_CODE . "`
+            WHERE draw_log_id = " . $drawLogId . "
+              AND status = 'A'
+            ORDER BY id ASC
+            LIMIT 1
+            FOR UPDATE");
+        if (!$result || !($codeRow = mysqli_fetch_assoc($result))) {
+            return '';
+        }
+
+        mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_VOUCHER_CODE . "`
+            SET code_state = 'assigned',
+                assigned_at = NOW(),
+                update_by = 'PUBLIC',
+                update_date = CURDATE(),
+                update_time = CURTIME()
+            WHERE id = " . (int) $codeRow['id'] . "
+              AND code_state = 'reserved'
+              AND status = 'A'
+            LIMIT 1");
+
+        luckyDrawVoucherRefreshPrizeStockCounters($connect, (int) $codeRow['prize_id']);
+        return trim((string) $codeRow['voucher_code']);
+    }
+}
+
+if (!function_exists('luckyDrawVoucherReleaseCode')) {
+    function luckyDrawVoucherReleaseCode($connect, $drawLogId)
+    {
+        $drawLogId = (int) $drawLogId;
+        if (!($connect instanceof mysqli) || $drawLogId <= 0 || !luckyDrawVoucherCodeTableReady($connect)) {
+            return false;
+        }
+
+        $result = mysqli_query($connect, "SELECT id, prize_id
+            FROM `" . LUCKY_DRAW_VOUCHER_CODE . "`
+            WHERE draw_log_id = " . $drawLogId . "
+              AND code_state = 'reserved'
+              AND status = 'A'
+            ORDER BY id ASC
+            LIMIT 1
+            FOR UPDATE");
+        if (!$result || !($codeRow = mysqli_fetch_assoc($result))) {
+            return false;
+        }
+
+        mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_VOUCHER_CODE . "`
+            SET code_state = 'available',
+                draw_log_id = NULL,
+                reserved_at = NULL,
+                assigned_at = NULL,
+                update_by = 'SYSTEM',
+                update_date = CURDATE(),
+                update_time = CURTIME()
+            WHERE id = " . (int) $codeRow['id'] . "
+              AND code_state = 'reserved'
+              AND status = 'A'
+            LIMIT 1");
+
+        luckyDrawVoucherRefreshPrizeStockCounters($connect, (int) $codeRow['prize_id']);
+        return true;
+    }
+}
+
+if (!function_exists('luckyDrawVoucherCodeByDrawLog')) {
+    function luckyDrawVoucherCodeByDrawLog($connect, $drawLogId)
+    {
+        $drawLogId = (int) $drawLogId;
+        if (!($connect instanceof mysqli) || $drawLogId <= 0 || !luckyDrawVoucherCodeTableReady($connect)) {
+            return '';
+        }
+
+        $result = mysqli_query($connect, "SELECT voucher_code
+            FROM `" . LUCKY_DRAW_VOUCHER_CODE . "`
+            WHERE draw_log_id = " . $drawLogId . "
+              AND status = 'A'
+            ORDER BY id ASC
+            LIMIT 1");
+
+        return ($result && ($row = mysqli_fetch_assoc($result))) ? trim((string) $row['voucher_code']) : '';
+    }
+}
+
+if (!function_exists('luckyDrawVoucherParseCodeList')) {
+    /** Splits a pasted block into a de-duplicated list of codes (one per line). */
+    function luckyDrawVoucherParseCodeList($rawText)
+    {
+        $codes = array();
+        $seen = array();
+        $lines = preg_split('/\r\n|\r|\n/', (string) $rawText);
+        foreach ((array) $lines as $line) {
+            $code = luckyDrawSafePublicText($line, 255);
+            if ($code === '') {
+                continue;
+            }
+            $fingerprint = strtolower($code);
+            if (isset($seen[$fingerprint])) {
+                continue;
+            }
+            $seen[$fingerprint] = true;
+            $codes[] = $code;
+        }
+
+        return $codes;
+    }
+}
+
+if (!function_exists('luckyDrawVoucherAvailableCodeList')) {
+    function luckyDrawVoucherAvailableCodeList($connect, $prizeId)
+    {
+        $codes = array();
+        $prizeId = (int) $prizeId;
+        if (!($connect instanceof mysqli) || $prizeId <= 0 || !luckyDrawVoucherCodeTableReady($connect)) {
+            return $codes;
+        }
+
+        $result = mysqli_query($connect, "SELECT voucher_code
+            FROM `" . LUCKY_DRAW_VOUCHER_CODE . "`
+            WHERE prize_id = " . $prizeId . "
+              AND code_state = 'available'
+              AND status = 'A'
+            ORDER BY id ASC");
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $codes[] = (string) $row['voucher_code'];
+            }
+        }
+
+        return $codes;
+    }
+}
+
+if (!function_exists('luckyDrawVoucherSyncAvailableCodes')) {
+    /**
+     * Reconciles the AVAILABLE part of a prize pool with the given list.
+     * Reserved / assigned codes are never touched, so a live draw can never lose its code
+     * while the operator is editing the pool.
+     * Returns ['added' => n, 'removed' => n, 'available' => n, 'in_use' => n, 'conflicts' => []].
+     */
+    function luckyDrawVoucherSyncAvailableCodes($connect, $prizeId, $codeList, $actorUserId = 'SYSTEM')
+    {
+        $summary = array('added' => 0, 'removed' => 0, 'available' => 0, 'in_use' => 0, 'conflicts' => array());
+        $prizeId = (int) $prizeId;
+        if (!($connect instanceof mysqli) || $prizeId <= 0 || !luckyDrawVoucherCodeTableReady($connect)) {
+            return $summary;
+        }
+
+        $desired = array();
+        foreach ((array) $codeList as $code) {
+            $code = luckyDrawSafePublicText($code, 255);
+            if ($code !== '') {
+                $desired[strtolower($code)] = $code;
+            }
+        }
+
+        $existing = array();
+        $result = mysqli_query($connect, "SELECT id, voucher_code, code_state
+            FROM `" . LUCKY_DRAW_VOUCHER_CODE . "`
+            WHERE prize_id = " . $prizeId . "
+              AND status = 'A'");
+        if ($result) {
+            while ($row = mysqli_fetch_assoc($result)) {
+                $existingCode = trim((string) $row['voucher_code']);
+                $existing[] = array(
+                    'id' => (int) $row['id'],
+                    'fingerprint' => strtolower($existingCode),
+                    'state' => strtolower(trim((string) $row['code_state'])),
+                );
+            }
+        }
+
+        $existingFingerprints = array();
+        foreach ($existing as $existingRow) {
+            $existingFingerprints[$existingRow['fingerprint']] = true;
+            if ($existingRow['state'] !== 'available') {
+                continue;
+            }
+            if (isset($desired[$existingRow['fingerprint']])) {
+                continue;
+            }
+
+            // Only untouched codes can be withdrawn from the pool.
+            if (mysqli_query($connect, "DELETE FROM `" . LUCKY_DRAW_VOUCHER_CODE . "`
+                WHERE id = " . $existingRow['id'] . "
+                  AND code_state = 'available'
+                  AND status = 'A'
+                LIMIT 1")) {
+                $summary['removed'] += (int) mysqli_affected_rows($connect);
+            }
+        }
+
+        $safeActor = mysqli_real_escape_string($connect, luckyDrawSafePublicText($actorUserId, 30));
+        foreach ($desired as $fingerprint => $code) {
+            if (isset($existingFingerprints[$fingerprint])) {
+                continue;
+            }
+
+            // Codes are globally unique. A code already used by another prize is reported
+            // instead of aborting the whole save.
+            $safeCode = mysqli_real_escape_string($connect, $code);
+            $conflictResult = mysqli_query($connect, "SELECT id FROM `" . LUCKY_DRAW_VOUCHER_CODE . "`
+                WHERE voucher_code = '" . $safeCode . "'
+                  AND status = 'A'
+                LIMIT 1");
+            if ($conflictResult && mysqli_num_rows($conflictResult) > 0) {
+                $summary['conflicts'][] = $code;
+                continue;
+            }
+
+            if (mysqli_query($connect, "INSERT INTO `" . LUCKY_DRAW_VOUCHER_CODE . "`
+                (prize_id, voucher_code, code_state, create_by, create_date, create_time, status)
+                VALUES
+                (" . $prizeId . ", '" . $safeCode . "', 'available', '" . $safeActor . "', CURDATE(), CURTIME(), 'A')")) {
+                $summary['added']++;
+            }
+        }
+
+        luckyDrawVoucherRefreshPrizeStockCounters($connect, $prizeId);
+
+        $poolCounts = luckyDrawVoucherPoolCounts($connect, array($prizeId));
+        if (isset($poolCounts[$prizeId])) {
+            $summary['available'] = (int) $poolCounts[$prizeId]['available'];
+            $summary['in_use'] = (int) $poolCounts[$prizeId]['reserved'] + (int) $poolCounts[$prizeId]['assigned'];
+        }
+
+        return $summary;
+    }
+}
+
+if (!function_exists('luckyDrawVoucherAvailableCounts')) {
+    /**
+     * Available voucher stock == unused codes in that prize pool. Every voucher prize gets an
+     * explicit entry (0 when the pool is empty) so a stale mirror column can never resurrect it.
+     */
+    function luckyDrawVoucherAvailableCounts($connect)
+    {
+        $counts = array();
+        if (!($connect instanceof mysqli) || !luckyDrawVoucherCodeTableReady($connect)) {
+            return $counts;
+        }
+
+        $voucherPrizeIds = array();
+        $result = mysqli_query($connect, "SELECT id
+            FROM `" . LUCKY_DRAW_PRIZE . "`
+            WHERE status = 'A'
+              AND prize_type = 'voucher'");
         if ($result) {
             while ($row = mysqli_fetch_assoc($result)) {
                 $prizeId = isset($row['id']) ? (int) $row['id'] : 0;
-                $totalStock = isset($row['total_stock']) ? (int) $row['total_stock'] : 0;
-                $reservedStock = isset($row['reserved_stock']) ? (int) $row['reserved_stock'] : 0;
-                $assignedStock = isset($row['assigned_stock']) ? (int) $row['assigned_stock'] : 0;
-                $counts[$prizeId] = array(
-                    'available' => max(0, $totalStock - $reservedStock - $assignedStock),
-                    'reserved' => max(0, $reservedStock),
-                    'assigned' => max(0, $assignedStock),
-                    'sent' => 0,
-                );
+                if ($prizeId > 0) {
+                    $voucherPrizeIds[] = $prizeId;
+                    $counts[$prizeId] = 0;
+                }
             }
+        }
+
+        $poolCounts = luckyDrawVoucherPoolCounts($connect, $voucherPrizeIds);
+        foreach ($poolCounts as $prizeId => $poolCount) {
+            $counts[(int) $prizeId] = (int) $poolCount['available'];
+        }
+
+        return $counts;
+    }
+}
+
+if (!function_exists('luckyDrawVoucherStateCounts')) {
+    function luckyDrawVoucherStateCounts($connect, $prizeIds = array(), $lockRows = false)
+    {
+        $counts = array();
+        if (!($connect instanceof mysqli) || !luckyDrawVoucherCodeTableReady($connect)) {
+            return $counts;
+        }
+
+        $sanitizedPrizeIds = array();
+        foreach ((array) $prizeIds as $prizeId) {
+            $prizeId = (int) $prizeId;
+            if ($prizeId > 0) {
+                $sanitizedPrizeIds[] = $prizeId;
+            }
+        }
+        $sanitizedPrizeIds = array_values(array_unique($sanitizedPrizeIds));
+
+        // Callers that need a stable snapshot already lock the prize row FOR UPDATE before
+        // reading these counts, and a reservation locks its own code row, so no extra row
+        // lock is needed here -- $lockRows is kept for call-site compatibility.
+        $poolCounts = luckyDrawVoucherPoolCounts($connect, $sanitizedPrizeIds);
+        foreach ($poolCounts as $prizeId => $poolCount) {
+            $counts[(int) $prizeId] = array(
+                'available' => (int) $poolCount['available'],
+                'reserved' => (int) $poolCount['reserved'],
+                'assigned' => (int) $poolCount['assigned'],
+                'sent' => 0,
+            );
         }
 
         return $counts;
@@ -518,11 +919,13 @@ if (!function_exists('luckyDrawPrizeAvailableUnits')) {
                 ? max(0, (int) $voucherAssignedCount)
                 : (isset($prizeRow['assigned_stock']) ? (int) $prizeRow['assigned_stock'] : 0);
 
+            // The pool is authoritative: available voucher stock is exactly the number of
+            // unused codes, so the mirror columns must never clamp it down.
             if ($voucherAvailableCount > 0) {
-                return min(max(0, (int) $voucherAvailableCount), max(0, $totalStock - $reservedStock - $assignedStock));
+                return max(0, (int) $voucherAvailableCount);
             }
 
-            return max(0, $totalStock - $reservedStock - $assignedStock);
+            return 0;
         }
 
         $totalStock = isset($prizeRow['total_stock']) ? (int) $prizeRow['total_stock'] : 0;
@@ -540,14 +943,10 @@ if (!function_exists('luckyDrawValidateVoucherPrizeStockConfig')) {
             return array('success' => true, 'message' => '');
         }
 
-        $totalStock = isset($prizeRow['total_stock']) ? (int) $prizeRow['total_stock'] : 0;
-        if ($totalStock <= 0) {
-            return array(
-                'success' => false,
-                'message' => 'Voucher Total Stock must be greater than 0.',
-            );
-        }
-
+        // Voucher stock now comes from the code pool, so an empty pool simply means the prize
+        // does not exist. Availability is gated separately by luckyDrawPrizeAvailableUnits(),
+        // and the mirrored total_stock column must never turn a sold-out prize into a scary
+        // 'misconfigured' error for the customer.
         return array('success' => true, 'message' => '');
     }
 }
@@ -669,21 +1068,45 @@ if (!function_exists('luckyDrawReadiness')) {
             'detail' => ($siteKeyReady && $secretReady) ? 'Site key and secret key found.' : 'Missing reCAPTCHA env config.',
         );
 
-        $birthdayCount = luckyDrawCustomerBirthdayCount($connect);
-        if ($birthdayCount <= 0) {
-            $hasErrors = true;
-        }
+        // Informational only: a missing birthday source never locks the public page.
+        // Customers without a birthday simply get a clear rejection at draw time.
+        $birthdayColumnsReady = luckyDrawCustomerBirthdayColumnsReady($connect);
+        $birthdayCount = $birthdayColumnsReady ? luckyDrawCustomerBirthdayCount($connect) : 0;
         $items[] = array(
             'key' => 'customer_birthday_source',
             'label' => 'Customer birthday source',
-            'success' => $birthdayCount > 0,
-            'detail' => $birthdayCount > 0 ? ($birthdayCount . ' customer(s) with birthday found.') : 'No customer birthday rows found.',
+            'success' => ($birthdayColumnsReady && $birthdayCount > 0),
+            'detail' => !$birthdayColumnsReady
+                ? ('customer_info is missing the birthday_year / birthday_month / birthday_day columns. Run insert_table.php to migrate.')
+                : ($birthdayCount > 0
+                    ? ($birthdayCount . ' customer(s) with birthday found.')
+                    : 'No customer has a birthday on file yet.'),
+        );
+
+        $voucherPoolReady = luckyDrawVoucherCodeTableReady($connect);
+        $voucherPoolSummary = array('available' => 0, 'reserved' => 0, 'assigned' => 0, 'total' => 0);
+        if ($voucherPoolReady) {
+            foreach (luckyDrawVoucherPoolCounts($connect) as $poolCount) {
+                $voucherPoolSummary['available'] += (int) $poolCount['available'];
+                $voucherPoolSummary['reserved'] += (int) $poolCount['reserved'];
+                $voucherPoolSummary['assigned'] += (int) $poolCount['assigned'];
+                $voucherPoolSummary['total'] += (int) $poolCount['total'];
+            }
+        }
+        $items[] = array(
+            'key' => 'voucher_code_pool',
+            'label' => 'Voucher code pool',
+            'success' => $voucherPoolReady,
+            'detail' => !$voucherPoolReady
+                ? (LUCKY_DRAW_VOUCHER_CODE . ' is missing. Run insert_table.php to migrate, otherwise voucher prizes have no stock.')
+                : ($voucherPoolSummary['total'] . ' code(s): ' . $voucherPoolSummary['available'] . ' available, ' . $voucherPoolSummary['reserved'] . ' reserved, ' . $voucherPoolSummary['assigned'] . ' assigned. Every winner is issued their own code.'),
         );
 
         $prizeRows = luckyDrawFetchPrizeRows($connect, true);
         $voucherCounts = luckyDrawVoucherAvailableCounts($connect);
         $voucherStateCounts = luckyDrawVoucherStateCounts($connect);
         $readyPrizeCount = 0;
+        $skippedPrizeCount = 0;
         foreach ($prizeRows as $prizeRow) {
             $prizeId = isset($prizeRow['id']) ? (int) $prizeRow['id'] : 0;
             $voucherReservedCount = (int) ($voucherStateCounts[$prizeId]['reserved'] ?? 0);
@@ -694,6 +1117,14 @@ if (!function_exists('luckyDrawReadiness')) {
                 $voucherReservedCount,
                 $voucherAssignedCount
             );
+
+            // Zero available stock means the prize does not exist. It is neither usable
+            // nor an error, so it must never block the rest of the draw.
+            if ($availability <= 0) {
+                $skippedPrizeCount++;
+                continue;
+            }
+
             $defaultsCheck = luckyDrawValidatePrizeDefaults($prizeRow);
             $stockCheck = array('success' => true, 'message' => '');
             $voucherConfigCheck = luckyDrawValidateVoucherPrizeStockConfig($prizeRow);
@@ -701,17 +1132,12 @@ if (!function_exists('luckyDrawReadiness')) {
                 $stockCheck = luckyDrawValidatePhysicalPrizeStock($connect, $financeConnect, $prizeRow);
             }
 
-            $prizeReady = !empty($defaultsCheck['success']) && !empty($stockCheck['success']) && !empty($voucherConfigCheck['success']) && $availability > 0;
+            $prizeReady = !empty($defaultsCheck['success']) && !empty($stockCheck['success']) && !empty($voucherConfigCheck['success']);
             if ($prizeReady) {
                 $readyPrizeCount++;
-            } else {
-                $hasErrors = true;
             }
 
             $detailParts = array('Availability: ' . $availability);
-            if (strtolower((string) ($prizeRow['prize_type'] ?? '')) === 'voucher' && $availability <= 0) {
-                $detailParts[] = 'Voucher availability uses the remaining Total Stock configured on the prize row.';
-            }
             if (empty($voucherConfigCheck['success'])) {
                 $detailParts[] = $voucherConfigCheck['message'];
             }
@@ -720,6 +1146,9 @@ if (!function_exists('luckyDrawReadiness')) {
             }
             if (empty($stockCheck['success'])) {
                 $detailParts[] = $stockCheck['message'];
+            }
+            if (!$prizeReady) {
+                $detailParts[] = 'This prize is skipped in the draw until it is fixed.';
             }
 
             $items[] = array(
@@ -730,19 +1159,31 @@ if (!function_exists('luckyDrawReadiness')) {
             );
         }
 
+        if ($skippedPrizeCount > 0) {
+            $items[] = array(
+                'key' => 'excluded_prizes',
+                'label' => 'Prizes excluded (zero stock)',
+                'success' => true,
+                'detail' => $skippedPrizeCount . ' prize(s) have 0 available stock, so they are not part of the draw pool.',
+            );
+        }
+
         $items[] = array(
             'key' => 'active_prizes',
             'label' => 'Active prize pool',
             'success' => $readyPrizeCount > 0,
-            'detail' => $readyPrizeCount > 0 ? ($readyPrizeCount . ' prize(s) ready.') : 'No active ready prize found.',
+            'detail' => $readyPrizeCount > 0
+                ? ($readyPrizeCount . ' prize(s) ready.')
+                : 'No prize with stock is configured. Add stock to at least one prize to open the public draw.',
         );
 
-        if ($readyPrizeCount <= 0) {
-            $hasErrors = true;
-        }
-
+        // Prize availability is a content state, not a system fault: a prize with zero stock
+        // simply does not exist. An empty pool must therefore never lock the public page --
+        // it is surfaced through `draw_available` so the operator still sees it at a glance.
         return array(
             'success' => !$hasErrors,
+            'draw_available' => ($readyPrizeCount > 0),
+            'ready_prize_count' => $readyPrizeCount,
             'items' => $items,
         );
     }
@@ -1056,6 +1497,37 @@ if (!function_exists('luckyDrawResolveCustomerBirthdayParts')) {
     }
 }
 
+if (!function_exists('luckyDrawCustomerBirthdayColumnsReady')) {
+    function luckyDrawCustomerBirthdayColumnsReady($connect)
+    {
+        static $ready = null;
+        if ($ready !== null) {
+            return $ready;
+        }
+
+        $ready = false;
+        if (!($connect instanceof mysqli)) {
+            return $ready;
+        }
+
+        try {
+            $result = mysqli_query($connect, "SHOW COLUMNS FROM `" . CUS_INFO . "` LIKE 'birthday_%'");
+            if ($result) {
+                $found = array();
+                while ($row = mysqli_fetch_assoc($result)) {
+                    $found[strtolower((string) (isset($row['Field']) ? $row['Field'] : ''))] = true;
+                }
+                $ready = isset($found['birthday_year']) && isset($found['birthday_month']) && isset($found['birthday_day']);
+            }
+        } catch (Throwable $e) {
+            // Missing table / missing columns: degrade to "not ready" instead of a fatal.
+            $ready = false;
+        }
+
+        return $ready;
+    }
+}
+
 if (!function_exists('luckyDrawCustomerBirthdayCount')) {
     function luckyDrawCustomerBirthdayCount($connect)
     {
@@ -1063,13 +1535,21 @@ if (!function_exists('luckyDrawCustomerBirthdayCount')) {
             return 0;
         }
 
-        $sql = "SELECT COUNT(*) AS total_count FROM `" . CUS_INFO . "`
-            WHERE status = 'A'
-              AND birthday_year IS NOT NULL AND birthday_year > 0
-              AND birthday_month IS NOT NULL AND birthday_month > 0";
-        $result = mysqli_query($connect, $sql);
-        if ($result && ($row = mysqli_fetch_assoc($result))) {
-            return (int) (isset($row['total_count']) ? $row['total_count'] : 0);
+        if (!luckyDrawCustomerBirthdayColumnsReady($connect)) {
+            return 0;
+        }
+
+        try {
+            $sql = "SELECT COUNT(*) AS total_count FROM `" . CUS_INFO . "`
+                WHERE status = 'A'
+                  AND birthday_year IS NOT NULL AND birthday_year > 0
+                  AND birthday_month IS NOT NULL AND birthday_month > 0";
+            $result = mysqli_query($connect, $sql);
+            if ($result && ($row = mysqli_fetch_assoc($result))) {
+                return (int) (isset($row['total_count']) ? $row['total_count'] : 0);
+            }
+        } catch (Throwable $e) {
+            return 0;
         }
 
         return 0;
@@ -1526,7 +2006,6 @@ if (!function_exists('luckyDrawCreateReservation')) {
             }
 
             $eligiblePrizeRows = array();
-            $hasVoucherConfigError = false;
             foreach ($prizeRows as $prizeRow) {
                 $prizeId = isset($prizeRow['id']) ? (int) $prizeRow['id'] : 0;
                 $voucherReservedCount = (int) ($voucherStateCounts[$prizeId]['reserved'] ?? 0);
@@ -1537,15 +2016,15 @@ if (!function_exists('luckyDrawCreateReservation')) {
                     $voucherReservedCount,
                     $voucherAssignedCount
                 );
-                $voucherConfigCheck = luckyDrawValidateVoucherPrizeStockConfig($prizeRow);
-                if (empty($voucherConfigCheck['success']) && (float) ($prizeRow['weight'] ?? 0) > 0) {
-                    $hasVoucherConfigError = true;
-                }
+
+                // Zero available stock means the prize does not exist, so it is skipped silently
+                // instead of surfacing as a broken configuration to the customer.
                 if ((float) ($prizeRow['weight'] ?? 0) <= 0 || $availableUnits <= 0) {
                     continue;
                 }
 
                 $defaultsCheck = luckyDrawValidatePrizeDefaults($prizeRow);
+                $voucherConfigCheck = luckyDrawValidateVoucherPrizeStockConfig($prizeRow);
                 if (empty($defaultsCheck['success']) || empty($voucherConfigCheck['success'])) {
                     continue;
                 }
@@ -1554,10 +2033,7 @@ if (!function_exists('luckyDrawCreateReservation')) {
             }
 
             if (empty($eligiblePrizeRows)) {
-                if ($hasVoucherConfigError) {
-                    throw new Exception('Lucky Draw voucher stock configuration is incomplete. Please contact support.');
-                }
-                throw new Exception('No prize is available for the birthday draw.');
+                throw new Exception('No prize is available right now. Please try again later.');
             }
 
             $selectedPrize = luckyDrawPickWeightedPrize($eligiblePrizeRows);
@@ -1599,21 +2075,10 @@ if (!function_exists('luckyDrawCreateReservation')) {
             $drawLogId = (int) mysqli_insert_id($connect);
 
             if ($prizeType === 'voucher') {
-                if (!mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_PRIZE . "`
-                    SET reserved_stock = reserved_stock + 1,
-                        update_by = '" . $safeActor . "',
-                        update_date = CURDATE(),
-                        update_time = CURTIME()
-                    WHERE id = " . $prizeId . "
-                      AND status = 'A'
-                      AND is_enabled = 'Y'
-                      AND total_stock > 0
-                      AND reserved_stock + assigned_stock < total_stock
-                    LIMIT 1")) {
-                    throw new Exception('Unable to reserve the voucher prize.');
-                }
-
-                if (mysqli_affected_rows($connect) <= 0) {
+                // One winner, one code: lock a single unused code from the prize pool instead of
+                // handing the same shared voucher code to everybody who wins this prize.
+                $reservedVoucherCode = luckyDrawVoucherReserveCode($connect, $prizeId, $drawLogId);
+                if ($reservedVoucherCode === '') {
                     throw new Exception('The selected voucher prize is no longer available.');
                 }
             } else {
@@ -1784,14 +2249,8 @@ if (!function_exists('luckyDrawSubmitClaim')) {
             $safeEmail = mysqli_real_escape_string($connect, $email);
 
             if ($prizeType === 'voucher') {
-                mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_PRIZE . "`
-                    SET reserved_stock = GREATEST(reserved_stock - 1, 0),
-                        assigned_stock = assigned_stock + 1,
-                        update_by = '" . $safeActor . "',
-                        update_date = CURDATE(),
-                        update_time = CURTIME()
-                    WHERE id = " . (int) $drawRow['prize_id'] . "
-                    LIMIT 1");
+                // The code this winner reserved at draw time is now permanently theirs.
+                luckyDrawVoucherAssignCode($connect, (int) $drawRow['id']);
 
                 mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_DRAW_LOG . "`
                     SET claim_email = '" . $safeEmail . "',
@@ -1888,9 +2347,10 @@ if (!function_exists('luckyDrawQueueEmailSendLock')) {
             $lockToken = bin2hex(random_bytes(16));
             try {
                 $staleBoundary = date('Y-m-d H:i:s', strtotime('-' . max(1, (int) $lockMinutes) . ' minutes'));
-                $sql = "SELECT dl.*, p.prize_name, p.prize_type, p.voucher_code
+                $sql = "SELECT dl.*, p.prize_name, p.prize_type, vc.voucher_code
                     FROM `" . LUCKY_DRAW_DRAW_LOG . "` dl
                     INNER JOIN `" . LUCKY_DRAW_PRIZE . "` p ON p.id = dl.prize_id AND p.status = 'A'
+                    LEFT JOIN `" . LUCKY_DRAW_VOUCHER_CODE . "` vc ON vc.draw_log_id = dl.id AND vc.status = 'A'
                     WHERE dl.status = 'A'
                       AND dl.prize_type_snapshot = 'voucher'
                       AND dl.claim_state = 'claimed'
@@ -2089,7 +2549,7 @@ if (!function_exists('luckyDrawSendClaimEmailNow')) {
             mysqli_commit($connect);
 
             if ($prizeType === 'voucher') {
-                $voucherCode = luckyDrawSafePublicText(isset($drawRow['voucher_code']) ? $drawRow['voucher_code'] : '', 255);
+                $voucherCode = luckyDrawSafePublicText(luckyDrawVoucherCodeByDrawLog($connect, $drawLogId), 255);
                 if ($voucherCode === '') {
                     luckyDrawMarkEmailSendResult($connect, $drawLogId, $lockToken, false, 'Voucher code is missing for this prize.');
                     return array(
@@ -2230,13 +2690,8 @@ if (!function_exists('luckyDrawReleaseExpiredReservations')) {
 
                     $prizeType = strtolower(trim((string) (isset($drawRow['prize_type_snapshot']) ? $drawRow['prize_type_snapshot'] : '')));
                     if ($prizeType === 'voucher') {
-                        mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_PRIZE . "`
-                            SET reserved_stock = CASE WHEN reserved_stock > 0 THEN reserved_stock - 1 ELSE 0 END,
-                                update_by = 'SYSTEM',
-                                update_date = CURDATE(),
-                                update_time = CURTIME()
-                            WHERE id = " . (int) $drawRow['prize_id'] . "
-                            LIMIT 1");
+                        // Put the untouched code back so the next birthday member can win it.
+                        luckyDrawVoucherReleaseCode($connect, (int) $drawRow['id']);
                         $released['voucher']++;
                     } else {
                         mysqli_query($connect, "UPDATE `" . LUCKY_DRAW_PRIZE . "`

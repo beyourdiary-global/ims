@@ -38,13 +38,9 @@ foreach ((array) ($readiness['items'] ?? array()) as $readinessItem) {
     $visibleReadinessItems[] = $readinessItem;
 }
 
-$visibleReadinessSuccess = true;
-foreach ($visibleReadinessItems as $readinessItem) {
-    if (empty($readinessItem['success'])) {
-        $visibleReadinessSuccess = false;
-        break;
-    }
-}
+// The public draw only depends on the overall readiness result. Individual prize
+// warnings (for example a prize with zero stock) are shown below but never lock the page.
+$visibleReadinessSuccess = !empty($readiness['success']);
 
 $stats = array(
     'members' => luckyDrawCustomerBirthdayCount($connect),
@@ -102,7 +98,7 @@ luckyDrawAdminRenderPageStart($pageTitle, 'dashboard');
     <div class="d-flex justify-content-between align-items-center mb-3">
         <div>
             <h4 class="mb-1">Readiness</h4>
-            <p class="text-muted mb-0">Public draw opens automatically when all checks pass.</p>
+            <p class="text-muted mb-0">The public draw opens as soon as at least one prize has stock. Prizes with zero stock are treated as not existing.</p>
         </div>
         <span class="badge bg-<?= !empty($visibleReadinessSuccess) ? 'success' : 'warning' ?>"><?= !empty($visibleReadinessSuccess) ? 'Ready' : 'Needs Attention' ?></span>
     </div>

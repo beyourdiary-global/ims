@@ -87,13 +87,13 @@ if ($checkboxValues !== '') {
     }
 
     $excelData = array();
-    $excelData[] = array('S/N', 'PRIZE NAME', 'PRIZE TYPE', 'VOUCHER CODE', 'WEIGHT', 'DISPLAY ORDER', 'TOTAL STOCK', 'PRICE', 'CREATE BY', 'CREATE DATE', 'CREATE TIME', 'UPDATE BY', 'UPDATE DATE', 'UPDATE TIME');
+    $excelData[] = array('S/N', 'PRIZE NAME', 'PRIZE TYPE', 'CODE POOL SIZE', 'WEIGHT', 'DISPLAY ORDER', 'TOTAL STOCK', 'PRICE', 'CREATE BY', 'CREATE DATE', 'CREATE TIME', 'UPDATE BY', 'UPDATE DATE', 'UPDATE TIME');
     foreach ($selectedPrizeRows as $selectedPrize) {
         $excelData[] = array(
             (string) $selectedPrize['id'],
             (string) $selectedPrize['prize_name'],
             strtoupper((string) $selectedPrize['prize_type']),
-            (string) $selectedPrize['voucher_code'],
+            (string) $selectedPrize['total_stock'],
             (string) $selectedPrize['weight'],
             (string) $selectedPrize['display_order'],
             (string) $selectedPrize['total_stock'],
@@ -237,7 +237,7 @@ include_once '../menuHeader.php';
                                 <th scope="col">Prize Name</th>
                                 <th scope="col">Label Color</th>
                                 <th scope="col">Type</th>
-                                <th scope="col">Voucher Code</th>
+                                <th scope="col">Code Pool</th>
                                 <th scope="col">Weight</th>
                                 <th scope="col">Availability</th>
                                 <th scope="col">Reserved</th>
@@ -260,6 +260,10 @@ include_once '../menuHeader.php';
                                     $assignedCount = (int) ($row['assigned_stock'] ?? 0);
                                 }
                                 $availableCount = luckyDrawPrizeAvailableUnits($row, (int) ($voucherAvailableCounts[$prizeId] ?? 0), $reservedCount, $assignedCount);
+                                // One winner, one code: the pool size is the real voucher stock.
+                                $poolTotalCount = $prizeType === 'voucher'
+                                    ? ($availableCount + $reservedCount + $assignedCount)
+                                    : 0;
                                 $imageUrl = luckyDrawPrizeImageUrl((string) ($row['prize_image'] ?? ''));
                                 ?>
                                 <tr>
@@ -290,8 +294,8 @@ include_once '../menuHeader.php';
                                     <td><?php if (!empty($row['label_color'])) { ?><input type="color" value="<?= htmlspecialchars((string) $row['label_color'], ENT_QUOTES, 'UTF-8') ?>" disabled><?php } ?></td>
                                     <td><?= htmlspecialchars(strtoupper((string) ($row['prize_type'] ?? '')), ENT_QUOTES, 'UTF-8') ?></td>
                                     <td>
-                                        <?php if ($prizeType === 'voucher' && trim((string) ($row['voucher_code'] ?? '')) !== '') { ?>
-                                            <?= htmlspecialchars((string) ($row['voucher_code'] ?? ''), ENT_QUOTES, 'UTF-8') ?>
+                                        <?php if ($prizeType === 'voucher') { ?>
+                                            <?= (int) $poolTotalCount ?> code(s)
                                         <?php } else { ?>
                                             <span class="text-muted">-</span>
                                         <?php } ?>
@@ -319,7 +323,7 @@ include_once '../menuHeader.php';
                                 <th scope="col">Prize Name</th>
                                 <th scope="col">Label Color</th>
                                 <th scope="col">Type</th>
-                                <th scope="col">Voucher Code</th>
+                                <th scope="col">Code Pool</th>
                                 <th scope="col">Weight</th>
                                 <th scope="col">Availability</th>
                                 <th scope="col">Reserved</th>
