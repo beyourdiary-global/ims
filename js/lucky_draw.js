@@ -11,8 +11,6 @@
     const buttonColor = config.buttonColor || '#1b1b1b';
     const drawEndpoint = config.drawEndpoint || '';
     const boardFeedEndpoint = config.boardFeedEndpoint || '';
-    const recaptchaSiteKey = config.recaptchaSiteKey || '';
-    const prefersDarkScheme = window.matchMedia('(prefers-color-scheme: dark)');
     const wheelContainer = document.getElementById('luckyWheel');
     const drawForm = document.getElementById('luckyDrawForm');
     const drawBtn = document.getElementById('drawBtn');
@@ -23,7 +21,6 @@
     const resultName = document.getElementById('resultName');
     const resultMessage = document.getElementById('resultMessage');
     const claimLink = document.getElementById('claimLink');
-    const recaptchaSlot = document.getElementById('recaptchaSlot');
     const heroGrid = document.querySelector('.ld-hero-grid');
     const wheelColumn = document.querySelector('.ld-wheel-column');
     const joinColumn = document.querySelector('.ld-join-column');
@@ -40,8 +37,6 @@
     const winResultCountdown = document.getElementById('winResultCountdown');
     const winResultClaimLink = document.getElementById('winResultClaimLink');
     let luckyWheelInstance = null;
-    let recaptchaWidgetId = null;
-    let recaptchaVerified = false;
     let winRedirectTimeoutId = null;
     let winCountdownIntervalId = null;
 
@@ -73,108 +68,21 @@
         mobileWheelMedia.addListener(syncMobileWheelPosition);
     }
 
-    function currentRecaptchaTheme() {
-        return prefersDarkScheme.matches ? 'dark' : 'light';
-    }
-
     function updateDrawButtonState() {
         if (!drawBtn) {
             return;
         }
 
-        const canUseRecaptcha = Boolean(recaptchaSiteKey);
+        // The button only reflects whether this visitor already used their birthday-month chance.
+        // Bot protection is handled server-side, so nothing in the browser can leave it stuck.
         const isParticipationLocked = Boolean(storedParticipation && storedParticipation.participated);
-        drawBtn.disabled = isParticipationLocked || !canUseRecaptcha || !recaptchaVerified;
-    }
-
-    function resizeLuckyDrawRecaptcha() {
-        if (!recaptchaSlot || !recaptchaSlot.parentElement) {
-            return;
-        }
-
-        const normalRecaptchaWidth = 304;
-        const normalRecaptchaHeight = 78;
-        const wrap = recaptchaSlot.parentElement;
-        const form = wrap.closest('.ld-form');
-        const formWidth = form ? form.clientWidth : normalRecaptchaWidth;
-        const targetWidth = Math.min(normalRecaptchaWidth, formWidth);
-        const scale = Math.min(1, targetWidth / normalRecaptchaWidth);
-        const scaledWidth = Math.ceil(normalRecaptchaWidth * scale);
-        const scaledHeight = Math.ceil(normalRecaptchaHeight * scale);
-
-        wrap.style.width = `${scaledWidth}px`;
-        wrap.style.height = `${scaledHeight}px`;
-
-        recaptchaSlot.style.width = `${normalRecaptchaWidth}px`;
-        recaptchaSlot.style.height = `${normalRecaptchaHeight}px`;
-        recaptchaSlot.style.transform = `scale(${scale})`;
-        recaptchaSlot.style.transformOrigin = 'left top';
-    }
-
-    window.renderLuckyDrawRecaptcha = function(forceRender) {
-        if (!recaptchaSlot || !recaptchaSiteKey || !window.grecaptcha || typeof window.grecaptcha.render !== 'function') {
-            return;
-        }
-
-        if (recaptchaWidgetId !== null && !forceRender) {
-            return;
-        }
-
-        recaptchaSlot.innerHTML = '';
-        recaptchaVerified = false;
-        recaptchaWidgetId = window.grecaptcha.render(recaptchaSlot, {
-            sitekey: recaptchaSiteKey,
-            theme: currentRecaptchaTheme(),
-            callback: () => {
-                recaptchaVerified = true;
-                updateDrawButtonState();
-            },
-            'expired-callback': () => {
-                recaptchaVerified = false;
-                updateDrawButtonState();
-            },
-            'error-callback': () => {
-                recaptchaVerified = false;
-                updateDrawButtonState();
-            }
-        });
-        updateDrawButtonState();
-
-        window.setTimeout(resizeLuckyDrawRecaptcha, 80);
-        window.setTimeout(resizeLuckyDrawRecaptcha, 300);
-        window.setTimeout(resizeLuckyDrawRecaptcha, 800);
-    };
-
-    window.addEventListener('resize', resizeLuckyDrawRecaptcha);
-
-    if (typeof prefersDarkScheme.addEventListener === 'function') {
-        prefersDarkScheme.addEventListener('change', () => {
-            if (recaptchaWidgetId !== null) {
-                recaptchaWidgetId = null;
-                window.renderLuckyDrawRecaptcha(true);
-            }
-        });
-    } else if (typeof prefersDarkScheme.addListener === 'function') {
-        prefersDarkScheme.addListener(() => {
-            if (recaptchaWidgetId !== null) {
-                recaptchaWidgetId = null;
-                window.renderLuckyDrawRecaptcha(true);
-            }
-        });
+        drawBtn.disabled = isParticipationLocked;
     }
 
     function setStatus(message, isError = false) {
         if (!statusNote) return;
         statusNote.textContent = message || '';
         statusNote.style.color = isError ? 'var(--ld-danger)' : 'var(--ld-text-soft)';
-    }
-
-    function resetRecaptcha() {
-        if (window.grecaptcha && typeof window.grecaptcha.reset === 'function' && recaptchaWidgetId !== null) {
-            window.grecaptcha.reset(recaptchaWidgetId);
-        }
-        recaptchaVerified = false;
-        updateDrawButtonState();
     }
 
     function openAllPrizesModal() {
@@ -730,12 +638,6 @@
         drawForm.addEventListener('submit', async (event) => {
             event.preventDefault();
             if (!drawBtn) return;
-            if (!recaptchaVerified) {
-                setStatus('Please complete reCAPTCHA before spinning the wheel.', true);
-                updateDrawButtonState();
-                return;
-            }
-
             drawBtn.disabled = true;
             if (resultCard) {
                 resultCard.classList.remove('show');
@@ -753,7 +655,6 @@
                 const data = await response.json();
 
                 if (!response.ok || !data.success) {
-                    resetRecaptcha();
                     setStatus(data.message || 'Unable to process your draw right now.', true);
                     drawBtn.disabled = false;
                     return;
@@ -763,12 +664,10 @@
                 setStatus('The wheel is spinning... prepare to claim your prize!');
                 window.setTimeout(() => {
                     showResult(data, { openModal: true });
-                    resetRecaptcha();
                     setStatus('Your prize is ready. Complete the claim form now.');
                     drawBtn.disabled = false;
                 }, 6600);
             } catch (error) {
-                resetRecaptcha();
                 setStatus('Unable to reach the Lucky Draw service. Please try again later.', true);
                 drawBtn.disabled = false;
             }
@@ -789,9 +688,5 @@
     }
 
     updateDrawButtonState();
-
-    if (recaptchaSiteKey && window.grecaptcha && typeof window.grecaptcha.render === 'function') {
-        window.renderLuckyDrawRecaptcha(true);
-    }
 
 })();

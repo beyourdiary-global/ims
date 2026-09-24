@@ -219,13 +219,13 @@ $prizeRows = luckyDrawFetchPrizeRows($connect, true);
 $voucherAvailableCounts = luckyDrawVoucherAvailableCounts($connect);
 $voucherStateCounts = luckyDrawVoucherStateCounts($connect);
 $csrfToken = luckyDrawGetCsrfToken();
-$recaptchaSiteKey = luckyDrawGetRecaptchaSiteKey();
+$formToken = luckyDrawIssueFormToken();
 $participationState = luckyDrawGetParticipationSessionState($connect);
 $hasParticipated = !empty($participationState['participated']);
 $wheelNoteText = $hasParticipated ? 'You already participated the lucky draw.' : 'You have 1 verified birthday-month chance';
 
 $heroTitle = 'Lucky Draw';
-$heroSubtitle = 'Spin once during your birthday month to unlock a verified reward. Enter your username with your birth month and year, pass reCAPTCHA, and complete the claim flow if you win.';
+$heroSubtitle = 'Spin once during your birthday month to unlock a verified reward. Enter your username with your birth month and year and complete the claim flow if you win.';
 
 // Only prizes that are enabled, weighted, and actually in stock make it onto the wheel.
 // Zero stock means the prize does not exist, so it is dropped instead of blocking the draw.
@@ -310,7 +310,7 @@ foreach ($wheelPrizes as $row) {
 $howItWorks = array(
     array(
         'title' => 'Enter Your Username',
-        'description' => 'Fill in your Shopee username or your name, pick your birth month and year, then complete reCAPTCHA.',
+        'description' => 'Fill in your Shopee username or your name and pick your birth month and year.',
     ),
     array(
         'title' => 'Spin the Wheel',
@@ -335,16 +335,6 @@ $howItWorks = array(
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <meta name="theme-color" content="<?= htmlspecialchars($themeColor, ENT_QUOTES, 'UTF-8') ?>">
     <link rel="icon" href="<?= htmlspecialchars($faviconUrl, ENT_QUOTES, 'UTF-8') ?>">
-    <?php if ($recaptchaSiteKey !== '') { ?>
-        <script>
-            window.luckyDrawRecaptchaReady = function () {
-                if (typeof window.renderLuckyDrawRecaptcha === 'function') {
-                    window.renderLuckyDrawRecaptcha(true);
-                }
-            };
-        </script>
-        <script src="https://www.google.com/recaptcha/api.js?onload=luckyDrawRecaptchaReady&render=explicit" async defer></script>
-    <?php } ?>
     <script src="<?= htmlspecialchars($SITEURL . '/header/js/spin-wheel-iife.js', ENT_QUOTES, 'UTF-8') ?>"></script>
     <link rel="stylesheet" href="<?= htmlspecialchars($SITEURL . '/css/lucky_draw.css', ENT_QUOTES, 'UTF-8') ?>">
 </head>
@@ -389,9 +379,15 @@ $howItWorks = array(
                             <p>You already participated the lucky draw. If your claim is still pending, continue below to complete it.</p>
                             <div class="ld-empty-state">You already participated the lucky draw.</div>
                         <?php } else { ?>
-                            <p>Fill in your username, pick your birth month and year, then complete the verification to spin the wheel.</p>
+                            <p>Fill in your username and pick your birth month and year, then spin the wheel.</p>
                             <form class="ld-form" id="luckyDrawForm">
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
+                                <input type="hidden" name="ld_form_token" value="<?= htmlspecialchars($formToken, ENT_QUOTES, 'UTF-8') ?>">
+                                <!-- Honeypot: hidden from customers with CSS, so any value in it means a bot filled the form. -->
+                                <div class="ld-honeypot" aria-hidden="true">
+                                    <label for="ld_website">Website</label>
+                                    <input type="text" id="ld_website" name="ld_website" value="" tabindex="-1" autocomplete="off">
+                                </div>
                                 <div>
                                     <label for="customer_username">Username</label>
                                     <input type="text" id="customer_username" name="customer_username" placeholder="Shopee username or your name" autocomplete="username" required>
@@ -417,14 +413,6 @@ $howItWorks = array(
                                         </select>
                                     </div>
                                 </div>
-
-                                <?php if ($recaptchaSiteKey !== '') { ?>
-                                    <div class="ld-recaptcha-wrap">
-                                        <div id="recaptchaSlot"></div>
-                                    </div>
-                                <?php } else { ?>
-                                    <div class="ld-empty-state">Google reCAPTCHA is not configured yet. Public draw will be available after reCAPTCHA setup is completed.</div>
-                                <?php } ?>
 
                                 <button class="ld-draw-btn" type="submit" id="drawBtn" disabled>Spin Now</button>
                                 <div class="ld-form-note">You have 1 chance</div>
@@ -491,7 +479,7 @@ $howItWorks = array(
                 <div class="ld-section-head">
                     <div>
                         <h3>How It Works</h3>
-                        <p>Clear steps from verification to claim completion.</p>
+                        <p>Clear steps from entry to claim completion.</p>
                     </div>
                 </div>
                 <div class="ld-steps-grid">
@@ -626,8 +614,7 @@ $howItWorks = array(
             themeColor: <?= json_encode($themeColor, JSON_UNESCAPED_SLASHES) ?>,
             buttonColor: <?= json_encode($buttonColor, JSON_UNESCAPED_SLASHES) ?>,
             drawEndpoint: <?= json_encode(siteUrlPath(ROUTE_LUCKY_DRAW_DRAW_SUBMIT), JSON_UNESCAPED_SLASHES) ?>,
-            boardFeedEndpoint: <?= json_encode(siteUrlPath(ROUTE_LUCKY_DRAW_BOARD_FEED), JSON_UNESCAPED_SLASHES) ?>,
-            recaptchaSiteKey: <?= json_encode($recaptchaSiteKey, JSON_UNESCAPED_SLASHES) ?>
+            boardFeedEndpoint: <?= json_encode(siteUrlPath(ROUTE_LUCKY_DRAW_BOARD_FEED), JSON_UNESCAPED_SLASHES) ?>
         };
     </script>
     <script src="<?= htmlspecialchars($SITEURL . '/js/lucky_draw.js', ENT_QUOTES, 'UTF-8') ?>"></script>

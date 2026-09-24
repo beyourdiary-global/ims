@@ -19,7 +19,7 @@ $hiddenReadinessKeys = array(
     'table_' . LUCKY_DRAW_REQUEST_LOG,
     'facebook_order_request_engine',
     'identity_hashing',
-    'recaptcha_keys',
+    'bot_protection',
 );
 
 $visibleReadinessItems = array();

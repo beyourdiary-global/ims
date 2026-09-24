@@ -628,35 +628,15 @@ img {
     gap: 14px;
 }
 
-.ld-recaptcha-wrap {
-    width: 304px;
-    height: 78px;
-    max-width: 100%;
-    display: block;
+/* Honeypot field: off-screen rather than display:none, because some bots check for that.
+   Customers never see or tab into it, so a filled value means the form was submitted by a script. */
+.ld-honeypot {
+    position: absolute;
+    left: -9999px;
+    top: auto;
+    width: 1px;
+    height: 1px;
     overflow: hidden;
-    border-radius: 4px;
-    margin: 2px auto 4px;
-    background: transparent;
-    line-height: 0;
-}
-
-#recaptchaSlot {
-    width: 304px;
-    height: 78px;
-    display: block;
-    transform-origin: left top;
-}
-
-#recaptchaSlot > div,
-#recaptchaSlot iframe {
-    display: block;
-}
-
-@media (max-width: 1240px) {
-    .ld-recaptcha-wrap {
-        width: 304px;
-        max-width: 100%;
-    }
 }
 
 .ld-draw-btn {
@@ -1370,11 +1350,6 @@ body.ld-modal-open {
     .ld-birthday-grid {
         grid-template-columns: 1fr;
     }
-
-    .ld-recaptcha-wrap {
-        margin-left: 0;
-        margin-right: 0;
-    }            
 
     .ld-win-modal {
         padding: 14px;

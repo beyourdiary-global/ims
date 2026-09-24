@@ -16,6 +16,20 @@ if (!defined('LUCKY_DRAW_RATE_LIMIT_MAX_PER_MEMBER')) {
     define('LUCKY_DRAW_RATE_LIMIT_MAX_PER_MEMBER', 5);
 }
 
+// Bot protection is built in, so the public draw never depends on a third-party service that can
+// fail, rate-limit us, or be misconfigured for a single domain.
+if (!defined('LUCKY_DRAW_FORM_TOKEN_MAX_AGE_SEC')) {
+    define('LUCKY_DRAW_FORM_TOKEN_MAX_AGE_SEC', 1800);
+}
+
+if (!defined('LUCKY_DRAW_FORM_MIN_FILL_SEC')) {
+    define('LUCKY_DRAW_FORM_MIN_FILL_SEC', 2);
+}
+
+if (!defined('LUCKY_DRAW_FORM_NONCE_KEEP')) {
+    define('LUCKY_DRAW_FORM_NONCE_KEEP', 8);
+}
+
 if (!defined('LUCKY_DRAW_CLAIM_EXPIRY_HOURS')) {
     define('LUCKY_DRAW_CLAIM_EXPIRY_HOURS', 24);
 }
@@ -66,23 +80,108 @@ if (!function_exists('luckyDrawResolveConfigValue')) {
     }
 }
 
-if (!function_exists('luckyDrawGetRecaptchaSiteKey')) {
-    function luckyDrawGetRecaptchaSiteKey()
+if (!function_exists('luckyDrawIssueFormToken')) {
+    /**
+     * Mints a single-use nonce for the draw form and records when it was handed out.
+     *
+     * The nonce proves the submitter actually loaded the form, and the recorded issue time lets
+     * the server reject submissions that arrive faster than a human could possibly fill the form.
+     * A small ring of nonces is kept so opening a second tab does not invalidate the first one.
+     */
+    function luckyDrawIssueFormToken()
     {
-        return luckyDrawResolveConfigValue(
-            defined('LUCKY_DRAW_RECAPTCHA_SITE_KEY_ENV') ? LUCKY_DRAW_RECAPTCHA_SITE_KEY_ENV : '',
-            'LUCKY_DRAW_RECAPTCHA_SITE_KEY'
-        );
+        $now = time();
+        $maxAge = max(60, (int) LUCKY_DRAW_FORM_TOKEN_MAX_AGE_SEC);
+        $keep = max(1, (int) LUCKY_DRAW_FORM_NONCE_KEEP);
+
+        $ring = (isset($_SESSION['lucky_draw_form_nonces']) && is_array($_SESSION['lucky_draw_form_nonces']))
+            ? $_SESSION['lucky_draw_form_nonces']
+            : array();
+
+        foreach ($ring as $storedNonce => $issuedAt) {
+            if (($now - (int) $issuedAt) > $maxAge) {
+                unset($ring[$storedNonce]);
+            }
+        }
+
+        $nonce = bin2hex(random_bytes(16));
+        $ring[$nonce] = $now;
+
+        while (count($ring) > $keep) {
+            array_shift($ring);
+        }
+
+        $_SESSION['lucky_draw_form_nonces'] = $ring;
+
+        return $nonce;
     }
 }
 
-if (!function_exists('luckyDrawGetRecaptchaSecretKey')) {
-    function luckyDrawGetRecaptchaSecretKey()
+if (!function_exists('luckyDrawConsumeFormToken')) {
+    /**
+     * Validates a form nonce. The nonce is burned only when the submission is accepted, so a
+     * customer who trips the timing check can simply submit again without reloading the page.
+     */
+    function luckyDrawConsumeFormToken($token)
     {
-        return luckyDrawResolveConfigValue(
-            defined('LUCKY_DRAW_RECAPTCHA_SECRET_KEY_ENV') ? LUCKY_DRAW_RECAPTCHA_SECRET_KEY_ENV : '',
-            'LUCKY_DRAW_RECAPTCHA_SECRET_KEY'
-        );
+        $token = trim((string) $token);
+        if ($token === '' || !preg_match('/^[a-f0-9]{32}$/', $token)) {
+            return array('success' => false, 'message' => 'Please refresh the page and try again.');
+        }
+
+        $ring = (isset($_SESSION['lucky_draw_form_nonces']) && is_array($_SESSION['lucky_draw_form_nonces']))
+            ? $_SESSION['lucky_draw_form_nonces']
+            : array();
+
+        if (!array_key_exists($token, $ring)) {
+            return array('success' => false, 'message' => 'Your form has expired. Please refresh the page and try again.');
+        }
+
+        $elapsed = time() - (int) $ring[$token];
+        $maxAge = max(60, (int) LUCKY_DRAW_FORM_TOKEN_MAX_AGE_SEC);
+        $minFill = max(0, (int) LUCKY_DRAW_FORM_MIN_FILL_SEC);
+
+        if ($elapsed > $maxAge) {
+            unset($ring[$token]);
+            $_SESSION['lucky_draw_form_nonces'] = $ring;
+            return array('success' => false, 'message' => 'Your form has expired. Please refresh the page and try again.');
+        }
+
+        // A script posts the form the moment it loads it. A real customer needs a couple of
+        // seconds to type a username and pick a month and a year.
+        if ($elapsed < $minFill) {
+            return array('success' => false, 'message' => 'That was a little too quick. Please try again.');
+        }
+
+        unset($ring[$token]);
+        $_SESSION['lucky_draw_form_nonces'] = $ring;
+
+        return array('success' => true, 'message' => '');
+    }
+}
+
+if (!function_exists('luckyDrawValidateBotGuard')) {
+    /**
+     * Cheap bot checks that run before anything touches the database.
+     *
+     * 1. Honeypot: a field hidden with CSS. Customers never see it, so anything in it is a bot.
+     * 2. Single-use form nonce: proves the form was loaded and that time passed since it was.
+     *
+     * The rejection message never says which check failed, so a scripted attacker gets no signal
+     * to tune against. This replaces the Google reCAPTCHA dependency: no third-party call, no
+     * per-domain key to register, and nothing that can black out the campaign when Google is
+     * unreachable or the domain allow-list is wrong.
+     */
+    function luckyDrawValidateBotGuard($post = null)
+    {
+        $post = is_array($post) ? $post : $_POST;
+
+        $honeypot = isset($post['ld_website']) ? trim((string) $post['ld_website']) : '';
+        if ($honeypot !== '') {
+            return array('success' => false, 'message' => 'Your submission could not be verified. Please refresh the page and try again.');
+        }
+
+        return luckyDrawConsumeFormToken(isset($post['ld_form_token']) ? $post['ld_form_token'] : '');
     }
 }
 
@@ -1057,23 +1156,19 @@ if (!function_exists('luckyDrawReadiness')) {
                 : ('Current engine: ' . ($fbEngine !== '' ? $fbEngine : 'missing') . '. Physical prize claims need this table; the public draw is unaffected.'),
         );
 
-        $siteKeyReady = luckyDrawGetRecaptchaSiteKey() !== '';
-        $secretReady = luckyDrawGetRecaptchaSecretKey() !== '';
-        if (!$siteKeyReady || !$secretReady) {
-            $hasErrors = true;
-        }
-
+        // Bot protection is built in (honeypot + single-use form token + rate limits), so there
+        // is no third-party key to configure and nothing here can lock the public page.
+        $items[] = array(
+            'key' => 'bot_protection',
+            'label' => 'Built-in bot protection',
+            'success' => true,
+            'detail' => 'Honeypot field, single-use form token, and per-IP / per-member rate limits are active.',
+        );
         $items[] = array(
             'key' => 'identity_hashing',
             'label' => 'SHA-256 identity hashing',
             'success' => true,
             'detail' => 'Lucky Draw now hashes member identity and IP with SHA-256.',
-        );
-        $items[] = array(
-            'key' => 'recaptcha_keys',
-            'label' => 'reCAPTCHA keys configured',
-            'success' => ($siteKeyReady && $secretReady),
-            'detail' => ($siteKeyReady && $secretReady) ? 'Site key and secret key found.' : 'Missing reCAPTCHA env config.',
         );
 
         // Informational only: a missing birthday source never locks the public page.
@@ -1194,55 +1289,6 @@ if (!function_exists('luckyDrawReadiness')) {
             'ready_prize_count' => $readyPrizeCount,
             'items' => $items,
         );
-    }
-}
-
-if (!function_exists('luckyDrawValidateRecaptchaToken')) {
-    function luckyDrawValidateRecaptchaToken($token, $remoteIp = '')
-    {
-        $secretKey = luckyDrawGetRecaptchaSecretKey();
-        $token = trim((string) $token);
-        if ($secretKey === '' || $token === '') {
-            return array('success' => false, 'message' => 'Human verification is not available right now.');
-        }
-
-        $postFields = http_build_query(array(
-            'secret' => $secretKey,
-            'response' => $token,
-            'remoteip' => trim((string) $remoteIp),
-        ));
-
-        $responseBody = '';
-        if (function_exists('curl_init')) {
-            $ch = curl_init('https://www.google.com/recaptcha/api/siteverify');
-            curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
-            curl_setopt($ch, CURLOPT_POST, true);
-            curl_setopt($ch, CURLOPT_POSTFIELDS, $postFields);
-            curl_setopt($ch, CURLOPT_TIMEOUT, 12);
-            $responseBody = (string) curl_exec($ch);
-            curl_close($ch);
-        } else {
-            $context = stream_context_create(array(
-                'http' => array(
-                    'method' => 'POST',
-                    'header' => "Content-type: application/x-www-form-urlencoded\r\n",
-                    'content' => $postFields,
-                    'timeout' => 12,
-                ),
-            ));
-            $responseBody = (string) @file_get_contents('https://www.google.com/recaptcha/api/siteverify', false, $context);
-        }
-
-        if ($responseBody === '') {
-            return array('success' => false, 'message' => 'Human verification failed. Please try again.');
-        }
-
-        $decoded = json_decode($responseBody, true);
-        if (!is_array($decoded) || empty($decoded['success'])) {
-            return array('success' => false, 'message' => 'Human verification failed. Please refresh and try again.');
-        }
-
-        return array('success' => true, 'message' => '');
     }
 }
 

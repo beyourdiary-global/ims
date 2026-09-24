@@ -49,13 +49,13 @@ if (empty($rateLimit['success'])) {
     ), 429);
 }
 
-$recaptchaToken = trim((string) post('g-recaptcha-response'));
-$recaptchaResult = luckyDrawValidateRecaptchaToken($recaptchaToken, $remoteIp);
-if (empty($recaptchaResult['success'])) {
-    luckyDrawRecordRequestLog($connect, 'draw_attempt', $requestMemberHmac, $ipHmac, 'recaptcha_failed');
+// Built-in bot protection: honeypot field + single-use form token minted when the page rendered.
+$botGuard = luckyDrawValidateBotGuard($_POST);
+if (empty($botGuard['success'])) {
+    luckyDrawRecordRequestLog($connect, 'draw_attempt', $requestMemberHmac, $ipHmac, 'bot_guard_failed');
     luckyDrawJsonResponse(array(
         'success' => false,
-        'message' => isset($recaptchaResult['message']) ? (string) $recaptchaResult['message'] : 'Human verification failed.',
+        'message' => isset($botGuard['message']) ? (string) $botGuard['message'] : 'Your submission could not be verified.',
     ), 422);
 }
 
