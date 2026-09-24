@@ -206,6 +206,15 @@ $faviconUrl = !empty($projectRow['meta_logo']) ? ($logoBaseUrl . rawurlencode((s
 $pageTitle = $websiteName . ' Lucky Draw';
 
 $readiness = luckyDrawReadiness($connect, $finance_connect);
+
+// TEMP DIAGNOSTIC -- remove once the lock cause is confirmed. Reachable only with the
+// private token below, so no customer ever sees it. Dumps the readiness report as JSON.
+if (isset($_GET['ld_diag']) && (string) $_GET['ld_diag'] === 'ld-20260924-7f3a9c') {
+    @header('Content-Type: application/json; charset=UTF-8');
+    echo json_encode($readiness, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+    exit;
+}
+
 $prizeRows = luckyDrawFetchPrizeRows($connect, true);
 $voucherAvailableCounts = luckyDrawVoucherAvailableCounts($connect);
 $voucherStateCounts = luckyDrawVoucherStateCounts($connect);
