@@ -335,8 +335,8 @@ $howItWorks = array(
     <title><?= htmlspecialchars($pageTitle, ENT_QUOTES, 'UTF-8') ?></title>
     <meta name="theme-color" content="<?= htmlspecialchars($themeColor, ENT_QUOTES, 'UTF-8') ?>">
     <link rel="icon" href="<?= htmlspecialchars($faviconUrl, ENT_QUOTES, 'UTF-8') ?>">
-    <script src="<?= htmlspecialchars($SITEURL . '/header/js/spin-wheel-iife.js', ENT_QUOTES, 'UTF-8') ?>"></script>
-    <link rel="stylesheet" href="<?= htmlspecialchars($SITEURL . '/css/lucky_draw.css', ENT_QUOTES, 'UTF-8') ?>">
+    <script src="<?= htmlspecialchars($SITEURL . '/header/js/spin-wheel-iife.js?v=' . (int) @filemtime(ROOT . '/header/js/spin-wheel-iife.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
+    <link rel="stylesheet" href="<?= htmlspecialchars($SITEURL . '/css/lucky_draw.css?v=' . (int) @filemtime(ROOT . '/css/lucky_draw.css'), ENT_QUOTES, 'UTF-8') ?>">
 </head>
 <body style="--ld-theme: <?= htmlspecialchars($themeColor, ENT_QUOTES, 'UTF-8') ?>; --ld-theme-rgb: <?= (int) $themeRgb[0] ?>, <?= (int) $themeRgb[1] ?>, <?= (int) $themeRgb[2] ?>; --ld-button: <?= htmlspecialchars($buttonColor, ENT_QUOTES, 'UTF-8') ?>; --ld-button-rgb: <?= (int) $buttonRgb[0] ?>, <?= (int) $buttonRgb[1] ?>, <?= (int) $buttonRgb[2] ?>; --ld-wheel-gradient: <?= htmlspecialchars($wheelGradient, ENT_QUOTES, 'UTF-8') ?>;">
     <div class="ld-shell">
@@ -384,7 +384,7 @@ $howItWorks = array(
                                 <input type="hidden" name="csrf_token" value="<?= htmlspecialchars($csrfToken, ENT_QUOTES, 'UTF-8') ?>">
                                 <input type="hidden" name="ld_form_token" value="<?= htmlspecialchars($formToken, ENT_QUOTES, 'UTF-8') ?>">
                                 <!-- Honeypot: hidden from customers with CSS, so any value in it means a bot filled the form. -->
-                                <div class="ld-honeypot" aria-hidden="true">
+                                <div class="ld-honeypot" aria-hidden="true" style="position:absolute; left:-9999px; top:auto; width:1px; height:1px; overflow:hidden;">
                                     <label for="ld_website">Website</label>
                                     <input type="text" id="ld_website" name="ld_website" value="" tabindex="-1" autocomplete="off">
                                 </div>
@@ -617,6 +617,6 @@ $howItWorks = array(
             boardFeedEndpoint: <?= json_encode(siteUrlPath(ROUTE_LUCKY_DRAW_BOARD_FEED), JSON_UNESCAPED_SLASHES) ?>
         };
     </script>
-    <script src="<?= htmlspecialchars($SITEURL . '/js/lucky_draw.js', ENT_QUOTES, 'UTF-8') ?>"></script>
+    <script src="<?= htmlspecialchars($SITEURL . '/js/lucky_draw.js?v=' . (int) @filemtime(ROOT . '/js/lucky_draw.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
 </body>
 </html>
