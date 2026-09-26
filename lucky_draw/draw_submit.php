@@ -11,9 +11,14 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
 
 $readiness = luckyDrawReadiness($connect, $finance_connect);
 if (empty($readiness['success'])) {
+    // Distinguish an on-purpose operator pause from a genuinely unfinished campaign,
+    // so a direct POST does not read like something is broken.
+    $luckyDrawPaused = (defined('LUCKY_DRAW_PAUSED') && LUCKY_DRAW_PAUSED);
     luckyDrawJsonResponse(array(
         'success' => false,
-        'message' => 'Lucky Draw is being prepared. Please try again later.',
+        'message' => $luckyDrawPaused
+            ? 'Lucky Draw is temporarily unavailable. Please try again later.'
+            : 'Lucky Draw is being prepared. Please try again later.',
     ), 503);
 }
 

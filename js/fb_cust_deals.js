@@ -1,5 +1,18 @@
 //autocomplete
+// This file is served as a real static .js, so PHP short tags written inside it would reach the
+// browser as dead text and every autocomplete here would silently do nothing. The page passes
+// the values in through window.fbCustDealsConfig instead (see customer/fb_cust_deals.php).
+var fbCustDealsConfig = window.fbCustDealsConfig || {};
+var fbCustDealsSiteUrl = fbCustDealsConfig.siteUrl || '';
+var fbCustDealsTables = fbCustDealsConfig.tables || {};
+
 $(document).ready(function() {
+
+    if (fbCustDealsSiteUrl === '') {
+        // Fail loudly instead of silently: a missing config is exactly how this page broke before.
+        console.warn('fb_cust_deals.js: window.fbCustDealsConfig.siteUrl is missing, autocomplete disabled.');
+        return;
+    }
 
     if (!($("#fcb_pic").attr('disabled'))) {
         $("#fcb_pic").keyup(function() {
@@ -8,9 +21,9 @@ $(document).ready(function() {
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
                 hiddenElementID: $(this).attr('id') + '_hidden', // hidden input fcb storing the value
-                dbTable: '<?= USR_USER ?>', // json filename (generated when login)
+                dbTable: fbCustDealsTables.pic, // json filename (generated when login)
             }
-            searchInput(param, '<?= $SITEURL ?>');
+            searchInput(param, fbCustDealsSiteUrl);
         });
 
     }
@@ -22,9 +35,9 @@ $(document).ready(function() {
                 searchType: 'nicename', // column of the table
                 elementID: $(this).attr('id'), // id of the input
                 hiddenElementID: $(this).attr('id') + '_hidden', // hidden input fcb storing the value
-                dbTable: '<?= COUNTRIES ?>', // json filename (generated when login)
+                dbTable: fbCustDealsTables.country, // json filename (generated when login)
             }
-            searchInput(param, '<?= $SITEURL ?>');
+            searchInput(param, fbCustDealsSiteUrl);
         });
 
     }
@@ -36,9 +49,9 @@ $(document).ready(function() {
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
                 hiddenElementID: $(this).attr('id') + '_hidden', // hidden input fcb storing the value
-                dbTable: '<?= BRAND ?>', // json filename (generated when login)
+                dbTable: fbCustDealsTables.brand, // json filename (generated when login)
             }
-            searchInput(param, '<?= $SITEURL ?>');
+            searchInput(param, fbCustDealsSiteUrl);
         });
 
     }
@@ -50,9 +63,9 @@ $(document).ready(function() {
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
                 hiddenElementID: $(this).attr('id') + '_hidden', // hidden input fcb storing the value
-                dbTable: '<?= BRD_SERIES ?>', // json filename (generated when login)
+                dbTable: fbCustDealsTables.series, // json filename (generated when login)
             }
-            searchInput(param, '<?= $SITEURL ?>');
+            searchInput(param, fbCustDealsSiteUrl);
         });
 
     }
@@ -64,9 +77,9 @@ $(document).ready(function() {
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
                 hiddenElementID: $(this).attr('id') + '_hidden', // hidden input fcb storing the value
-                dbTable: '<?= FB_PAGE_ACC ?>', // json filename (generated when login)
+                dbTable: fbCustDealsTables.fbpage, // json filename (generated when login)
             }
-            searchInput(param, '<?= $SITEURL ?>');
+            searchInput(param, fbCustDealsSiteUrl);
         });
 
     }
@@ -78,9 +91,9 @@ $(document).ready(function() {
                 searchType: 'name', // column of the table
                 elementID: $(this).attr('id'), // id of the input
                 hiddenElementID: $(this).attr('id') + '_hidden', // hidden input fcb storing the value
-                dbTable: '<?= CHANEL_SC_MD ?>', // json filename (generated when login)
+                dbTable: fbCustDealsTables.channel, // json filename (generated when login)
             }
-            searchInput(param, '<?= $SITEURL ?>');
+            searchInput(param, fbCustDealsSiteUrl);
         });
     }
 })

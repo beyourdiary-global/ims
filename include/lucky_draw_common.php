@@ -1155,6 +1155,19 @@ if (!function_exists('luckyDrawReadiness')) {
         $items = array();
         $hasErrors = false;
 
+        // Operator pause switch (init.php). Deliberately a hard error: while it is on the public
+        // page must stop accepting draws even though nothing is actually broken.
+        $paused = (defined('LUCKY_DRAW_PAUSED') && LUCKY_DRAW_PAUSED);
+        if ($paused) {
+            $hasErrors = true;
+            $items[] = array(
+                'key' => 'operator_pause',
+                'label' => 'Operator pause',
+                'success' => false,
+                'detail' => 'The public draw is paused on purpose. Set LUCKY_DRAW_PAUSED to false in init.php to resume.',
+            );
+        }
+
         foreach (luckyDrawRequiredTableList() as $tableName) {
             $engine = luckyDrawTableEngine($connect, dbname, $tableName);
             // A missing table genuinely breaks the draw, so it stays a hard error. A table that
@@ -1318,7 +1331,7 @@ if (!function_exists('luckyDrawReadiness')) {
         // it is surfaced through `draw_available` so the operator still sees it at a glance.
         return array(
             'success' => !$hasErrors,
-            'draw_available' => ($readyPrizeCount > 0),
+            'draw_available' => (!$paused && $readyPrizeCount > 0),
             'ready_prize_count' => $readyPrizeCount,
             'items' => $items,
         );

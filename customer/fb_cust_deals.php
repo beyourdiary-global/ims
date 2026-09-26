@@ -1051,7 +1051,23 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         preloader(300, action);
 
     </script>
-    <script src="<?= $SITEURL ?>/js/fb_cust_deals.js"></script>
+    <script>
+        // js/fb_cust_deals.js is a real static file, so PHP short tags written inside it would be
+        // shipped to the browser as dead text and every autocomplete would silently do nothing.
+        // Hand everything it needs over through this config object instead.
+        window.fbCustDealsConfig = {
+            siteUrl: <?= json_encode(rtrim((string) $SITEURL, '/'), JSON_UNESCAPED_SLASHES) ?>,
+            tables: {
+                pic: <?= json_encode(USR_USER) ?>,
+                country: <?= json_encode(COUNTRIES) ?>,
+                brand: <?= json_encode(BRAND) ?>,
+                series: <?= json_encode(BRD_SERIES) ?>,
+                fbpage: <?= json_encode(FB_PAGE_ACC) ?>,
+                channel: <?= json_encode(CHANEL_SC_MD) ?>
+            }
+        };
+    </script>
+    <script src="<?= htmlspecialchars($SITEURL . '/js/fb_cust_deals.js?v=' . (int) @filemtime(ROOT . '/js/fb_cust_deals.js'), ENT_QUOTES, 'UTF-8') ?>"></script>
 
 </body>
 

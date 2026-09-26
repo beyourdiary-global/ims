@@ -89,6 +89,13 @@ define('email_cc', 'report@beyourdiary.com');
 // nothing that can black out the campaign when Google is unreachable or the domain list is wrong.
 // The admin pages keep their own reCAPTCHA via js/common.fun.js and are not affected.
 
+// Operator pause switch for the public Lucky Draw. When true the public page shows
+// "Lucky Draw is temporarily unavailable" and draw_submit.php answers 503, while every
+// prize, log and customer record stays exactly as it is. Flip it back to false to resume.
+if (!defined('LUCKY_DRAW_PAUSED')) {
+    define('LUCKY_DRAW_PAUSED', true);
+}
+
 // shared external URLs / CDN paths
 define('TELEGRAM_API', 'https://api.telegram.org/bot');
 define('QR_CODE_API_URL', 'https://api.qrserver.com/v1/create-qr-code/');
