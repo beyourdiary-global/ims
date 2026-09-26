@@ -206,6 +206,9 @@ $faviconUrl = !empty($projectRow['meta_logo']) ? ($logoBaseUrl . rawurlencode((s
 $pageTitle = $websiteName . ' Lucky Draw';
 
 $readiness = luckyDrawReadiness($connect, $finance_connect);
+// Operator pause switch (init.php). Used only for copy: the hard error itself is added
+// inside luckyDrawReadiness(), so the form and draw_submit.php both stay shut.
+$luckyDrawPaused = (defined('LUCKY_DRAW_PAUSED') && LUCKY_DRAW_PAUSED);
 
 // TEMP DIAGNOSTIC -- remove once the lock cause is confirmed. Reachable only with the
 // private token below, so no customer ever sees it. Dumps the readiness report as JSON.
@@ -222,7 +225,9 @@ $csrfToken = luckyDrawGetCsrfToken();
 $formToken = luckyDrawIssueFormToken();
 $participationState = luckyDrawGetParticipationSessionState($connect);
 $hasParticipated = !empty($participationState['participated']);
-$wheelNoteText = $hasParticipated ? 'You already participated the lucky draw.' : 'You have 1 verified birthday-month chance';
+$wheelNoteText = $luckyDrawPaused
+    ? 'The draw is paused for now.'
+    : ($hasParticipated ? 'You already participated the lucky draw.' : 'You have 1 verified birthday-month chance');
 
 $heroTitle = 'Lucky Draw';
 $heroSubtitle = 'Spin once during your birthday month to unlock a verified reward. Enter your username with your birth month and year and complete the claim flow if you win.';
@@ -373,7 +378,9 @@ $howItWorks = array(
                     <div class="ld-join-card">
                         <h2>Join the Lucky Draw</h2>
                         <?php if (empty($readiness['success'])) { ?>
-                            <p>The birthday-month draw is still being prepared. Please come back after the Lucky Draw setup passes all readiness checks.</p>
+                            <p><?= $luckyDrawPaused
+                                ? 'The Lucky Draw is paused for now. Please check back later.'
+                                : 'The birthday-month draw is still being prepared. Please come back after the Lucky Draw setup passes all readiness checks.' ?></p>
                             <div class="ld-empty-state">Lucky Draw is temporarily unavailable.</div>
                         <?php } else if ($hasParticipated) { ?>
                             <p>You already participated the lucky draw. If your claim is still pending, continue below to complete it.</p>
