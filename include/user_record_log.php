@@ -1370,6 +1370,13 @@ if (!function_exists('urlGetLatestUserRecordLogSummary')) {
             return '';
         }
 
+        // 任务5：tag 类变更（log_type='tag'）不是真正的客户备注，Summary 框只取真正的
+        // 客户备注行，避免 tag 行（即便带了 summary）干扰「最新 summary」判定。
+        $logTypeColResult3 = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName) . "` LIKE 'log_type'");
+        if ($logTypeColResult3 && $logTypeColResult3->num_rows > 0) {
+            $where[] = "(log_type IS NULL OR log_type <> 'tag')";
+        }
+
         $sql = "SELECT `summary`
                 FROM `" . preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName) . "`
                 WHERE " . implode(' AND ', $where) . "
@@ -1507,6 +1514,12 @@ if (!function_exists('urlBuildListHtml')) {
             );
         }
         $where[] = "(IFNULL(content,'') <> '' OR IFNULL(attachment,'') <> '')";
+
+        // 任务5：tag 类变更（log_type='tag'）只保留在 DB、不在客户页列表显示。
+        $logTypeColResult2 = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName) . "` LIKE 'log_type'");
+        if ($logTypeColResult2 && $logTypeColResult2->num_rows > 0) {
+            $where[] = "(log_type IS NULL OR log_type <> 'tag')";
+        }
 
         if ($keyword !== '') {
             $where[] = "content LIKE '%" . urlEsc($dbConnect, $keyword) . "%'";

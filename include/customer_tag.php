@@ -624,23 +624,34 @@ if (!function_exists('customerTagWriteUserRecordLog')) {
 
         $userId = defined('USER_ID') ? (string) USER_ID : '';
 
-        $sql = "INSERT INTO `" . $safeTable . "` (
-                `" . $customerColumn . "`,
-                `content`,
-                `created_by`,
-                `created_at`,
-                `updated_by`,
-                `updated_at`,
-                `status`
-            ) VALUES (
-                '" . $customerId . "',
-                '" . mysqli_real_escape_string($connect, $content) . "',
-                '" . mysqli_real_escape_string($connect, $userId) . "',
-                NOW(),
-                '" . mysqli_real_escape_string($connect, $userId) . "',
-                NOW(),
-                'A'
-            )";
+        // 任务5：tag 变更写 log_type='tag'，列表显示侧与 Summary 框过滤掉（数据保留）。
+        // 就地 SHOW COLUMNS 查 log_type 列，避免依赖 user_record_log.php 的 include 顺序。
+        $tagLogColumns = array(
+            "`" . $customerColumn . "`",
+            "`content`",
+            "`created_by`",
+            "`created_at`",
+            "`updated_by`",
+            "`updated_at`",
+            "`status`",
+        );
+        $tagLogValues = array(
+            "'" . $customerId . "'",
+            "'" . mysqli_real_escape_string($connect, $content) . "'",
+            "'" . mysqli_real_escape_string($connect, $userId) . "'",
+            "NOW()",
+            "'" . mysqli_real_escape_string($connect, $userId) . "'",
+            "NOW()",
+            "'A'",
+        );
+
+        $logTypeColResult = mysqli_query($connect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE 'log_type'");
+        if ($logTypeColResult && $logTypeColResult->num_rows > 0) {
+            $tagLogColumns[] = "`log_type`";
+            $tagLogValues[] = "'tag'";
+        }
+
+        $sql = "INSERT INTO `" . $safeTable . "` (" . implode(', ', $tagLogColumns) . ") VALUES (" . implode(', ', $tagLogValues) . ")";
 
         return (bool) mysqli_query($connect, $sql);
     }
