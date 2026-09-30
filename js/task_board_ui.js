@@ -4749,14 +4749,18 @@ function openStatusModal(config) {
   statusModalState.columnId = Number(opts.columnId || 0);
   statusModalState.initialName = String(opts.currentName || "").trim();
 
+  var $onEnter = $("#taskStatusOnEnterAssignee");
   if (statusModalState.mode === "rename") {
     elems.$title.text("Rename status");
     elems.$submit.text("Save");
     elems.$input.val(statusModalState.initialName);
+    var renameMeta = getBoardStatusColumnMeta(statusModalState.columnId);
+    $onEnter.val(renameMeta && renameMeta.on_enter_assignee_mode ? renameMeta.on_enter_assignee_mode : "keep");
   } else {
     elems.$title.text("Add status");
     elems.$submit.text("Add");
     elems.$input.val("");
+    $onEnter.val("keep");
   }
 
   elems.$submit.prop(
@@ -4791,6 +4795,7 @@ function createStatus(columnName) {
     {
       task_action: "create_status",
       column_name: statusName,
+      on_enter_assignee_mode: $("#taskStatusOnEnterAssignee").val() || "keep",
     },
     function (res) {
       var column = res.column || {};
@@ -4804,6 +4809,7 @@ function createStatus(columnName) {
       showTaskSuccess("Status created successfully.");
 
       $("#taskStatusNameMobile").val("");
+      $("#taskStatusOnEnterAssignee").val("keep");
       resetCreateStatusInline();
     },
   );
@@ -4821,6 +4827,7 @@ function renameStatus(columnId, newName, $column) {
       task_action: "rename_status",
       column_id: id,
       column_name: nextName,
+      on_enter_assignee_mode: $("#taskStatusOnEnterAssignee").val() || "keep",
     },
     function (res) {
       var resolvedName = String(
@@ -4925,6 +4932,7 @@ $("#taskCreateStatusMobileModal").on("hidden.bs.modal", function () {
   elems.$submit.text("Add");
   elems.$submit.prop("disabled", !canAdd);
   elems.$input.val("");
+  $("#taskStatusOnEnterAssignee").val("keep");
 });
 
 $app.on("click", ".task-column-collapse-btn", function () {

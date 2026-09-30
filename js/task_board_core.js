@@ -2885,6 +2885,7 @@ function getBoardStatusColumnMeta(columnId) {
         id: Number(col.id || 0),
         name: String(col.name || "").trim(),
         color: normalizeHexColorValue(col.color || "", "#DFE1E6"),
+        on_enter_assignee_mode: String(col.on_enter_assignee_mode || "keep").trim(),
       };
     }
   }

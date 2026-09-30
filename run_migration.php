@@ -10,7 +10,8 @@
  *
  * 涵盖：
  *   1) 生日三列（customer_info） + 抽奖相关列（lucky_draw_*）  —— 让 Lucky Draw 能开跑
- *   2) task_column.on_enter_assignee_mode  —— 任务1：move 到该 column 时改 assignee 的模式
+ *   2) task_board_status.on_enter_assignee_mode  —— 任务1：move 到该 column 时改 assignee 的模式
+ *      （注意：TASK_COLUMN 常量 = task_board_status，不是 task_column）
  *   3) user_record_log.log_type            —— 任务5：标记 tag 类变更，列表过滤掉
  */
 
@@ -101,7 +102,7 @@ echo migAddColumn($connect, $dbName, 'lucky_draw_virtual_winner', 'is_enabled', 
 echo migAddIndex($connect, $dbName, 'lucky_draw_virtual_winner', 'idx_lucky_draw_virtual_board', "(`is_enabled`, `status`)");
 
 // ---- 2) 任务1：move 到该 column 时改 assignee 的模式 ----
-echo migAddColumn($connect, $dbName, 'task_column', 'on_enter_assignee_mode', "VARCHAR(16) NOT NULL DEFAULT 'keep' COMMENT 'keep|reporter|clear'");
+echo migAddColumn($connect, $dbName, TASK_COLUMN, 'on_enter_assignee_mode', "VARCHAR(16) NOT NULL DEFAULT 'keep' COMMENT 'keep|reporter|clear'");
 
 // ---- 3) 任务5：标记 tag 类变更，列表过滤掉 ----
 echo migAddColumn($connect, $dbName, 'user_record_log', 'log_type', "VARCHAR(32) DEFAULT NULL COMMENT 'tag=标签变更，列表过滤掉'");

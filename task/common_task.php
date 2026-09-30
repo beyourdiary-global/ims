@@ -8764,7 +8764,7 @@ if (!function_exists('taskGetColumns')) {
     {
         $rows = array();
         $projectId = (int) $projectId;
-        $sql = "SELECT id,name,color,sort_order FROM " . TASK_COLUMN . " WHERE status='A'";
+        $sql = "SELECT id,name,color,sort_order,on_enter_assignee_mode FROM " . TASK_COLUMN . " WHERE status='A'";
         if ($projectId > 0) {
             $sql .= " AND project_id='" . $projectId . "'";
         }
@@ -8778,6 +8778,7 @@ if (!function_exists('taskGetColumns')) {
                     'name' => (string) $row['name'],
                     'color' => taskNormalizeHexColor(isset($row['color']) ? $row['color'] : '', '#dfe1e6'),
                     'sort_order' => (int) $row['sort_order'],
+                    'on_enter_assignee_mode' => isset($row['on_enter_assignee_mode']) ? strtolower((string)$row['on_enter_assignee_mode']) : 'keep',
                 );
             }
         }
@@ -9421,8 +9422,26 @@ if (!function_exists('taskRenderBoardColumn')) {
     }
 }
 
+if (!function_exists('taskColumnSupportsOnEnterMode')) {
+    function taskColumnSupportsOnEnterMode($connect)
+    {
+        // 守卫：on_enter_assignee_mode 列可能尚未由迁移脚本建立；未建立时降级跳过该字段
+        if (isset($GLOBALS['__taskHasOnEnterMode'])) {
+            return (bool) $GLOBALS['__taskHasOnEnterMode'];
+        }
+        $has = false;
+        $res = mysqli_query($connect, "SELECT COUNT(*) AS c FROM information_schema.COLUMNS WHERE TABLE_NAME='" . TASK_COLUMN . "' AND COLUMN_NAME='on_enter_assignee_mode' LIMIT 1");
+        if ($res) {
+            $row = mysqli_fetch_assoc($res);
+            $has = !empty($row['c']);
+        }
+        $GLOBALS['__taskHasOnEnterMode'] = $has;
+        return $has;
+    }
+}
+
 if (!function_exists('taskCreateColumn')) {
-    function taskCreateColumn($connect, $projectId, $columnName, $currentUserId, $cdate, $ctime)
+    function taskCreateColumn($connect, $projectId, $columnName, $currentUserId, $cdate, $ctime, $onEnterMode = 'keep')
     {
         $projectId = (int) $projectId;
         $columnName = trim((string) $columnName);
@@ -9431,6 +9450,11 @@ if (!function_exists('taskCreateColumn')) {
         }
 
         $safeName = taskEsc($connect, substr($columnName, 0, 150));
+
+        $onEnterMode = strtolower(trim((string) $onEnterMode));
+        if (!in_array($onEnterMode, array('keep', 'reporter', 'clear'), true)) {
+            $onEnterMode = 'keep';
+        }
 
         $duplicateSql = "SELECT id FROM " . TASK_COLUMN . " WHERE status='A' AND project_id='" . $projectId . "' AND LOWER(name)=LOWER('" . $safeName . "') LIMIT 1";
         $duplicateRst = mysqli_query($connect, $duplicateSql);
@@ -9449,8 +9473,14 @@ if (!function_exists('taskCreateColumn')) {
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
 
-        $insertSql = "INSERT INTO " . TASK_COLUMN . " (project_id,name,color,sort_order,create_by,create_date,create_time,status)
-                      VALUES ('" . $projectId . "','" . $safeName . "','#DFE1E6','" . $sortOrder . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')";
+        $hasOnEnter = taskColumnSupportsOnEnterMode($connect);
+        if ($hasOnEnter) {
+            $insertSql = "INSERT INTO " . TASK_COLUMN . " (project_id,name,color,sort_order,on_enter_assignee_mode,create_by,create_date,create_time,status)
+                          VALUES ('" . $projectId . "','" . $safeName . "','#DFE1E6','" . $sortOrder . "','" . $onEnterMode . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')";
+        } else {
+            $insertSql = "INSERT INTO " . TASK_COLUMN . " (project_id,name,color,sort_order,create_by,create_date,create_time,status)
+                          VALUES ('" . $projectId . "','" . $safeName . "','#DFE1E6','" . $sortOrder . "','" . $safeUser . "','" . $safeDate . "','" . $safeTime . "','A')";
+        }
 
         if (!mysqli_query($connect, $insertSql)) {
             return array('ok' => 0, 'message' => 'Failed to create status.');
@@ -9467,17 +9497,23 @@ if (!function_exists('taskCreateColumn')) {
                 'name' => $columnName,
                 'color' => '#DFE1E6',
                 'sort_order' => $sortOrder,
+                'on_enter_assignee_mode' => $onEnterMode,
             ),
         );
     }
 }
 
 if (!function_exists('taskRenameColumn')) {
-    function taskRenameColumn($connect, $projectId, $columnId, $columnName, $currentUserId, $cdate, $ctime)
+    function taskRenameColumn($connect, $projectId, $columnId, $columnName, $currentUserId, $cdate, $ctime, $onEnterMode = 'keep')
     {
         $projectId = (int) $projectId;
         $columnId = (int) $columnId;
         $columnName = trim((string) $columnName);
+
+        $onEnterMode = strtolower(trim((string) $onEnterMode));
+        if (!in_array($onEnterMode, array('keep', 'reporter', 'clear'), true)) {
+            $onEnterMode = 'keep';
+        }
 
         if ($columnId <= 0 || $columnName === '') {
             return array('ok' => 0, 'message' => 'Invalid status rename request.');
@@ -9501,12 +9537,23 @@ if (!function_exists('taskRenameColumn')) {
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
 
-        $updateSql = "UPDATE " . TASK_COLUMN . " SET
-                        name='" . $safeName . "',
-                        update_by='" . $safeUser . "',
-                        update_date='" . $safeDate . "',
-                        update_time='" . $safeTime . "'
-                      WHERE id='" . $columnId . "' AND project_id='" . $projectId . "' AND status='A'";
+        $hasOnEnter = taskColumnSupportsOnEnterMode($connect);
+        if ($hasOnEnter) {
+            $updateSql = "UPDATE " . TASK_COLUMN . " SET
+                            name='" . $safeName . "',
+                            on_enter_assignee_mode='" . $onEnterMode . "',
+                            update_by='" . $safeUser . "',
+                            update_date='" . $safeDate . "',
+                            update_time='" . $safeTime . "'
+                          WHERE id='" . $columnId . "' AND project_id='" . $projectId . "' AND status='A'";
+        } else {
+            $updateSql = "UPDATE " . TASK_COLUMN . " SET
+                            name='" . $safeName . "',
+                            update_by='" . $safeUser . "',
+                            update_date='" . $safeDate . "',
+                            update_time='" . $safeTime . "'
+                          WHERE id='" . $columnId . "' AND project_id='" . $projectId . "' AND status='A'";
+        }
 
         if (!mysqli_query($connect, $updateSql)) {
             return array('ok' => 0, 'message' => 'Failed to rename status.');
@@ -9958,6 +10005,33 @@ if (!function_exists('taskMoveItem')) {
     }
 }
 
+if (!function_exists('taskComputeOnEnterAssigneeSql')) {
+    function taskComputeOnEnterAssigneeSql($connect, $itemId, $targetColumnId)
+    {
+        // 任务1：item 进入某 column 时，按该 column 的 on_enter_assignee_mode 改写 assignee
+        // 列不存在（迁移未跑）时 mysqli_query 返回 false，安全降级为 keep
+        $modeRst = mysqli_query($connect, "SELECT on_enter_assignee_mode FROM " . TASK_COLUMN . " WHERE id='" . (int)$targetColumnId . "' AND status='A' LIMIT 1");
+        if (!$modeRst || $modeRst->num_rows === 0) {
+            return '';
+        }
+        $modeRow = $modeRst->fetch_assoc();
+        $mode = isset($modeRow['on_enter_assignee_mode']) ? strtolower((string)$modeRow['on_enter_assignee_mode']) : 'keep';
+        if ($mode === 'reporter') {
+            $itemRst = mysqli_query($connect, "SELECT reporter_user_id FROM " . TASK_ITEM . " WHERE id='" . (int)$itemId . "' AND status='A' LIMIT 1");
+            $reporter = 0;
+            if ($itemRst && $itemRst->num_rows > 0) {
+                $r = $itemRst->fetch_assoc();
+                $reporter = isset($r['reporter_user_id']) ? (int)$r['reporter_user_id'] : 0;
+            }
+            return ", assignee_user_id='" . $reporter . "'";
+        }
+        if ($mode === 'clear') {
+            return ", assignee_user_id=NULL";
+        }
+        return '';
+    }
+}
+
 if (!function_exists('taskChangeItemStatus')) {
     function taskChangeItemStatus($connect, $itemId, $targetColumnId, $currentUserId, $cdate, $ctime)
     {
@@ -10009,6 +10083,14 @@ if (!function_exists('taskChangeItemStatus')) {
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
 
+        $prevAssigneeRst = mysqli_query($connect, "SELECT assignee_user_id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND status='A' LIMIT 1");
+        $prevAssignee = 0;
+        if ($prevAssigneeRst && $prevAssigneeRst->num_rows > 0) {
+            $pa = $prevAssigneeRst->fetch_assoc();
+            $prevAssignee = isset($pa['assignee_user_id']) ? (int)$pa['assignee_user_id'] : 0;
+        }
+        $onEnterAssigneeSql = taskComputeOnEnterAssigneeSql($connect, $itemId, $targetColumnId);
+
         mysqli_begin_transaction($connect);
         $okUpdate = mysqli_query(
             $connect,
@@ -10017,7 +10099,7 @@ if (!function_exists('taskChangeItemStatus')) {
                 sort_order='" . $targetSort . "',
                 update_by='" . $safeUser . "',
                 update_date='" . $safeDate . "',
-                update_time='" . $safeTime . "'
+                update_time='" . $safeTime . "'" . $onEnterAssigneeSql . "
              WHERE id='" . $itemId . "' AND status='A'"
         );
 
@@ -10029,6 +10111,30 @@ if (!function_exists('taskChangeItemStatus')) {
         taskResequenceItemsInColumn($connect, $currentColumnId);
         taskResequenceItemsInColumn($connect, $targetColumnId);
         mysqli_commit($connect);
+
+        if ($onEnterAssigneeSql !== '') {
+            $newAssigneeRst = mysqli_query($connect, "SELECT assignee_user_id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' LIMIT 1");
+            $newAssignee = 0;
+            if ($newAssigneeRst && $newAssigneeRst->num_rows > 0) {
+                $na = $newAssigneeRst->fetch_assoc();
+                $newAssignee = isset($na['assignee_user_id']) ? (int)$na['assignee_user_id'] : 0;
+            }
+            if ($prevAssignee !== $newAssignee) {
+                taskLogItemHistory(
+                    $connect,
+                    $itemId,
+                    'update_field',
+                    'Assignee',
+                    taskFormatHistoryUserValue($connect, $prevAssignee),
+                    taskFormatHistoryUserValue($connect, $newAssignee),
+                    'changed Assignee',
+                    $currentUserId,
+                    $cdate,
+                    $ctime
+                );
+                taskSendAssigneeReassignmentAlert($connect, $itemId, $prevAssignee, $newAssignee, $currentUserId, $cdate, $ctime);
+            }
+        }
 
         taskLogItemHistory(
             $connect,
@@ -10128,6 +10234,14 @@ if (!function_exists('taskMoveItemByDrop')) {
         $safeDate = taskEsc($connect, $cdate);
         $safeTime = taskEsc($connect, $ctime);
 
+        $prevAssigneeRst = mysqli_query($connect, "SELECT assignee_user_id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' AND status='A' LIMIT 1");
+        $prevAssignee = 0;
+        if ($prevAssigneeRst && $prevAssigneeRst->num_rows > 0) {
+            $pa = $prevAssigneeRst->fetch_assoc();
+            $prevAssignee = isset($pa['assignee_user_id']) ? (int)$pa['assignee_user_id'] : 0;
+        }
+        $onEnterAssigneeSql = ($sourceColumnId !== $targetColumnId) ? taskComputeOnEnterAssigneeSql($connect, $itemId, $targetColumnId) : '';
+
         mysqli_begin_transaction($connect);
 
         $okItem = mysqli_query(
@@ -10136,7 +10250,7 @@ if (!function_exists('taskMoveItemByDrop')) {
                 column_id='" . $targetColumnId . "',
                 update_by='" . $safeUser . "',
                 update_date='" . $safeDate . "',
-                update_time='" . $safeTime . "'
+                update_time='" . $safeTime . "'" . $onEnterAssigneeSql . "
              WHERE id='" . $itemId . "' AND status='A'"
         );
 
@@ -10164,6 +10278,30 @@ if (!function_exists('taskMoveItemByDrop')) {
         }
 
         mysqli_commit($connect);
+
+        if ($onEnterAssigneeSql !== '') {
+            $newAssigneeRst = mysqli_query($connect, "SELECT assignee_user_id FROM " . TASK_ITEM . " WHERE id='" . $itemId . "' LIMIT 1");
+            $newAssignee = 0;
+            if ($newAssigneeRst && $newAssigneeRst->num_rows > 0) {
+                $na = $newAssigneeRst->fetch_assoc();
+                $newAssignee = isset($na['assignee_user_id']) ? (int)$na['assignee_user_id'] : 0;
+            }
+            if ($prevAssignee !== $newAssignee) {
+                taskLogItemHistory(
+                    $connect,
+                    $itemId,
+                    'update_field',
+                    'Assignee',
+                    taskFormatHistoryUserValue($connect, $prevAssignee),
+                    taskFormatHistoryUserValue($connect, $newAssignee),
+                    'changed Assignee',
+                    $currentUserId,
+                    $cdate,
+                    $ctime
+                );
+                taskSendAssigneeReassignmentAlert($connect, $itemId, $prevAssignee, $newAssignee, $currentUserId, $cdate, $ctime);
+            }
+        }
 
         if ($sourceColumnId !== $targetColumnId) {
             taskLogItemHistory(

@@ -336,7 +336,7 @@ if (
             taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to create statuses.'));
         }
 
-        $result = taskCreateColumn($connect, $currentProjectId, post('column_name'), $currentUserId, $cdate, $ctime);
+        $result = taskCreateColumn($connect, $currentProjectId, post('column_name'), $currentUserId, $cdate, $ctime, post('on_enter_assignee_mode'));
         if (!empty($result['ok'])) {
             $statusName = isset($result['column']['name']) ? htmlspecialchars((string) $result['column']['name'], ENT_QUOTES, 'UTF-8') : '';
             $viewActMsg = $safeUserName . " added new status <b>" . $statusName . "</b> on <b>" . $safePageTitle . "</b>.";
@@ -355,6 +355,7 @@ if (
             $currentProjectId,
             (int) post('column_id'),
             post('column_name'),
+            post('on_enter_assignee_mode'),
             $currentUserId,
             $cdate,
             $ctime
@@ -1696,6 +1697,15 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
             <div class="modal-body">
                 <label class="form-label" for="taskStatusNameMobile">Status name</label>
                 <input id="taskStatusNameMobile" class="form-control" type="text" maxlength="150" placeholder="Status name" <?= $canAdd ? '' : 'disabled' ?>>
+                <div class="mb-3 mt-3">
+                    <label class="form-label" for="taskStatusOnEnterAssignee">On enter &mdash; assignee</label>
+                    <select id="taskStatusOnEnterAssignee" class="form-select">
+                        <option value="keep">Keep current assignee</option>
+                        <option value="reporter">Change to reporter</option>
+                        <option value="clear">Clear assignee</option>
+                    </select>
+                    <small class="text-muted">When a task is moved into this status, auto-adjust its assignee.</small>
+                </div>
             </div>
             <div class="modal-footer">
                 <button type="button" class="btn btn-light" data-bs-dismiss="modal">Cancel</button>
