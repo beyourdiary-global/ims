@@ -1377,6 +1377,12 @@ if (!function_exists('urlGetLatestUserRecordLogSummary')) {
             $where[] = "(log_type IS NULL OR log_type <> 'tag')";
         }
 
+        // 任务3 补全修复：display 与 carry-forward 取「最新一条非空 summary」而非「最新一条」。
+        // 否则 fix 前 follow-up 自动写入的空系统行会一直是 updated_at 最大那条，把框顶空；
+        // 原 4c06f87 只防「新增不再丢」，修不了已存在的空行。跳过空 summary 即可显示最近
+        // 一条真正有内容的 summary（不依赖 is_system_record 列，该列生产库尚未建）。
+        $where[] = "(summary IS NOT NULL AND summary <> '')";
+
         $sql = "SELECT `summary`
                 FROM `" . preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName) . "`
                 WHERE " . implode(' AND ', $where) . "
