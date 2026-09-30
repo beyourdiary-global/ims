@@ -127,12 +127,14 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
                 'title' => 'Shopee Waiting To Pack',
                 'path' => ROUTE_FINANCE_WAITING_TO_PACK,
                 'action_label' => 'View Orders',
+                'owner_user_ids' => array(),
             ),
             'shopee_arrival_management' => array(
                 'pin_group_id' => 147,
                 'title' => 'Shopee Arrival Management',
                 'path' => ROUTE_FINANCE_ARRIVAL_MANAGEMENT,
                 'action_label' => 'Open Page',
+                'owner_user_ids' => array(),
             ),
             'daily_flow_report' => array(
                 'pin_group_id' => 148,
@@ -163,6 +165,7 @@ if (!function_exists('systemAlertGetModuleConfigs')) {
                 'title' => 'Waiting Admin Final Check',
                 'path' => ROUTE_SHOPEE_VERIFY,
                 'action_label' => 'Open Page',
+                'owner_user_ids' => array(),
             ),
             'order_delete_approval' => array(
                 'pin_group_id' => 0,
@@ -1146,6 +1149,24 @@ if (!function_exists('systemAlertGenerateDailyFlowSupervisorAlerts')) {
     }
 }
 
+if (!function_exists('systemAlertGetModuleOwnerUserIds')) {
+    function systemAlertGetModuleOwnerUserIds($connect, $moduleKey)
+    {
+        // 任务2：模块级告警只发给配置的负责人（owner），不再按权限广播给所有人
+        $configs = systemAlertGetModuleConfigs();
+        $config = isset($configs[$moduleKey]) ? $configs[$moduleKey] : array();
+        $ids = isset($config['owner_user_ids']) && is_array($config['owner_user_ids']) ? $config['owner_user_ids'] : array();
+        $out = array();
+        foreach ($ids as $id) {
+            $id = (int) $id;
+            if ($id > 0) {
+                $out[] = $id;
+            }
+        }
+        return $out;
+    }
+}
+
 if (!function_exists('systemAlertGenerateForUser')) {
     function systemAlertGenerateForUser($connect, $financeConnect, $userId)
     {
@@ -1163,21 +1184,21 @@ if (!function_exists('systemAlertGenerateForUser')) {
 
         $createdCount = 0;
 
-        if (systemAlertUserHasAccessToModule($connect, $userId, 'shopee_waiting_to_pack')) {
+        if (in_array($userId, systemAlertGetModuleOwnerUserIds($connect, 'shopee_waiting_to_pack'), true)) {
             $waitingToPackCount = systemAlertCountWaitingToPack($connect, $financeConnect);
             if ($waitingToPackCount > 0 && systemAlertGenerateModuleAlert($connect, $userId, 'shopee_waiting_to_pack', 'Shopee Waiting To Pack', 'There are ' . $waitingToPackCount . ' order(s) waiting to be packed.') > 0) {
                 $createdCount++;
             }
         }
 
-        if (systemAlertUserHasAccessToModule($connect, $userId, 'shopee_arrival_management')) {
+        if (in_array($userId, systemAlertGetModuleOwnerUserIds($connect, 'shopee_arrival_management'), true)) {
             $arrivalCount = systemAlertCountArrivalManagementOrders($connect, $financeConnect);
             if ($arrivalCount > 0 && systemAlertGenerateModuleAlert($connect, $userId, 'shopee_arrival_management', 'Shopee Arrival Management', 'There are ' . $arrivalCount . ' order(s) waiting for arrival update.') > 0) {
                 $createdCount++;
             }
         }
 
-        if (systemAlertUserHasAccessToModule($connect, $userId, 'waiting_admin_final_check')) {
+        if (in_array($userId, systemAlertGetModuleOwnerUserIds($connect, 'waiting_admin_final_check'), true)) {
             $finalCheckCount = systemAlertCountWaitingAdminFinalCheckOrders($connect, $financeConnect);
             if ($finalCheckCount > 0 && systemAlertGenerateModuleAlert($connect, $userId, 'waiting_admin_final_check', 'Waiting Admin Final Check', 'There are ' . $finalCheckCount . ' order(s) waiting for final check.') > 0) {
                 $createdCount++;
