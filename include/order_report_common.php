@@ -2641,6 +2641,7 @@ if (!function_exists('orderReportRenderPage')) {
                 echo '                          <th>Charges & Fees</th>';
                 echo '                          <th>Final Commission Fees</th>';
                 if ($profitVisible) {
+                    echo '                          <th>Package Cost</th>';
                     echo '                          <th>Profit</th>';
                 }
             }
@@ -2685,6 +2686,8 @@ if (!function_exists('orderReportRenderPage')) {
                     echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['charges_and_fees']) ? $metrics['charges_and_fees'] : 0)) . '</td>';
                     echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['final_commission_fees']) ? $metrics['final_commission_fees'] : 0)) . '</td>';
                     if ($profitVisible) {
+                        $packageCostCell = isset($row['package_total_breakdown_metrics']['totals']['total_cost']) ? (float) $row['package_total_breakdown_metrics']['totals']['total_cost'] : 0.0;
+                        echo '                      <td>' . orderReportEscape(orderReportFormatAmount($packageCostCell)) . '</td>';
                         echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['profit']) ? $metrics['profit'] : 0)) . '</td>';
                     }
                 }
