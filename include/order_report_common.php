@@ -2651,16 +2651,16 @@ if (!function_exists('orderReportRenderPage')) {
                 echo '                          <th>Customer Repeat</th>';
                 echo '                          <th>Order Status</th>';
                 echo '                          <th>Final Amount</th>';
+                if ($profitVisible) {
+                    echo '                          <th>Package Cost</th>';
+                    echo '                          <th>Profit</th>';
+                }
                 echo '                          <th>Voucher</th>';
                 echo '                          <th>Service Fee</th>';
                 echo '                          <th>Transaction Fee</th>';
                 echo '                          <th>AWS Commission Fee</th>';
                 echo '                          <th>Charges & Fees</th>';
                 echo '                          <th>Final Commission Fees</th>';
-                if ($profitVisible) {
-                    echo '                          <th>Package Cost</th>';
-                    echo '                          <th>Profit</th>';
-                }
             }
             echo '                      </tr>';
             echo '                  </thead>';
@@ -2696,17 +2696,17 @@ if (!function_exists('orderReportRenderPage')) {
                     echo '                      <td>' . orderReportRenderCustomerTypeLabelCell($row, 'repeat', 'repeat_name') . '</td>';
                     echo '                      <td>' . orderReportEscape(isset($row['status_label']) && $row['status_label'] !== '' ? $row['status_label'] : '-') . '</td>';
                     echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['final_amount']) ? $metrics['final_amount'] : 0)) . '</td>';
+                    if ($profitVisible) {
+                        $packageCostCell = isset($row['package_total_breakdown_metrics']['totals']['total_cost']) ? (float) $row['package_total_breakdown_metrics']['totals']['total_cost'] : 0.0;
+                        echo '                      <td>' . orderReportEscape(orderReportFormatAmount($packageCostCell)) . '</td>';
+                        echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['profit']) ? $metrics['profit'] : 0)) . '</td>';
+                    }
                     echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['voucher']) ? $metrics['voucher'] : 0)) . '</td>';
                     echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['service_fee']) ? $metrics['service_fee'] : 0)) . '</td>';
                     echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['transaction_fee']) ? $metrics['transaction_fee'] : 0)) . '</td>';
                     echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['aws_commission_fee']) ? $metrics['aws_commission_fee'] : 0)) . '</td>';
                     echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['charges_and_fees']) ? $metrics['charges_and_fees'] : 0)) . '</td>';
                     echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['final_commission_fees']) ? $metrics['final_commission_fees'] : 0)) . '</td>';
-                    if ($profitVisible) {
-                        $packageCostCell = isset($row['package_total_breakdown_metrics']['totals']['total_cost']) ? (float) $row['package_total_breakdown_metrics']['totals']['total_cost'] : 0.0;
-                        echo '                      <td>' . orderReportEscape(orderReportFormatAmount($packageCostCell)) . '</td>';
-                        echo '                      <td>' . orderReportEscape(orderReportFormatAmount(isset($metrics['profit']) ? $metrics['profit'] : 0)) . '</td>';
-                    }
                 }
                 echo '                  </tr>';
             }
