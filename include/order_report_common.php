@@ -1384,7 +1384,11 @@ if (!function_exists('orderReportBuildRowMeta')) {
                 $packageProfitTotals = isset($packageDimensionMetrics['totals']['totals']) && is_array($packageDimensionMetrics['totals']['totals']) ? $packageDimensionMetrics['totals']['totals'] : array();
                 $packageCostTotal = isset($packageProfitTotals['total_cost']) ? (float) $packageProfitTotals['total_cost'] : 0.0;
                 $profitStatusCode = isset($row[$statusField]) ? $row[$statusField] : '';
-                $metrics['profit'] = (function_exists('shopeeOmsIsReturnedStatus') && shopeeOmsIsReturnedStatus($profitStatusCode))
+                $profitIsReturned = function_exists('shopeeOmsIsReturnedStatus') && shopeeOmsIsReturnedStatus($profitStatusCode);
+                // package_cost follows the same rule as profit: returned orders (R/CR) count 0,
+                // so that Total Sales - Total Package Cost = Total Profit holds exactly.
+                $metrics['package_cost'] = $profitIsReturned ? 0.0 : $packageCostTotal;
+                $metrics['profit'] = $profitIsReturned
                     ? 0.0
                     : ((float) $metrics['final_amount'] - $packageCostTotal);
             }
@@ -1666,6 +1670,7 @@ if (!function_exists('orderReportSumMetrics')) {
             'charges_and_fees' => 0.0,
             'final_commission_fees' => 0.0,
             'profit' => 0.0,
+            'package_cost' => 0.0,
             'total_price' => 0.0,
             'total_cost' => 0.0,
             'total_agent_cost' => 0.0,
@@ -1677,6 +1682,10 @@ if (!function_exists('orderReportSumMetrics')) {
             $metrics = isset($row['metrics']) ? (array) $row['metrics'] : array();
             foreach (array('order_count', 'final_amount', 'voucher', 'service_fee', 'transaction_fee', 'aws_commission_fee', 'charges_and_fees', 'final_commission_fees', 'profit') as $key) {
                 $totals[$key] += isset($metrics[$key]) ? (float) $metrics[$key] : 0.0;
+            }
+
+            if (!empty($platformConfig['profit_enabled'])) {
+                $totals['package_cost'] += isset($metrics['package_cost']) ? (float) $metrics['package_cost'] : 0.0;
             }
 
             if (orderReportGetVariant($platformConfig) === 'stock') {
@@ -2522,6 +2531,7 @@ if (!function_exists('orderReportRenderPage')) {
             orderReportRenderSummaryCard('Total Charges & Fees', orderReportFormatAmount($totals['charges_and_fees'] ?? 0));
             orderReportRenderSummaryCard('Total Final Commission Fees', orderReportFormatAmount($totals['final_commission_fees'] ?? 0));
             if ($profitVisible) {
+                orderReportRenderSummaryCard('Total Package Cost', orderReportFormatAmount($totals['package_cost'] ?? 0));
                 orderReportRenderSummaryCard('Total Profit', orderReportFormatAmount($totals['profit'] ?? 0));
             }
         }
