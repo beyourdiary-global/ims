@@ -207,7 +207,14 @@ if (!function_exists('orderReportGetMultiSelectFilters')) {
             );
         }
 
-        return array(
+        $filters = array();
+        $platform = is_array($platformConfig) ? strtolower(trim((string) ($platformConfig['platform'] ?? ''))) : '';
+        if ($platform === 'shopee') {
+            $filters['order_status'] = array('label' => 'Order Status', 'placeholder' => 'All Order Statuses');
+            $filters['shopee_acc'] = array('label' => 'Shopee Account', 'placeholder' => 'All Shopee Accounts');
+        }
+
+        return array_merge($filters, array(
             'package' => array('label' => 'Package', 'placeholder' => 'All Packages'),
             'brand' => array('label' => 'Brand', 'placeholder' => 'All Brands'),
             'warehouse' => array('label' => 'Warehouse', 'placeholder' => 'All Warehouses'),
@@ -216,7 +223,7 @@ if (!function_exists('orderReportGetMultiSelectFilters')) {
             'segmentation' => array('label' => 'Customer Segmentation', 'placeholder' => 'All Segmentations'),
             'level' => array('label' => 'Customer Level', 'placeholder' => 'All Levels'),
             'repeat' => array('label' => 'Customer Repeat', 'placeholder' => 'All Repeat Labels'),
-        );
+        ));
     }
 }
 
@@ -988,6 +995,29 @@ if (!function_exists('orderReportBuildFieldFilterSql')) {
     }
 }
 
+if (!function_exists('orderReportBuildFieldFilterSqlIncludingEmpty')) {
+    function orderReportBuildFieldFilterSqlIncludingEmpty($conn, $fieldName, $values, $emptyToken = '__EMPTY__')
+    {
+        $values = array_values(array_map('strval', (array) $values));
+        $includeEmpty = in_array((string) $emptyToken, $values, true);
+        $nonEmptyValues = array_values(array_filter($values, function ($value) use ($emptyToken) {
+            return (string) $value !== (string) $emptyToken;
+        }));
+        $filterSql = orderReportBuildFieldFilterSql($conn, $fieldName, $nonEmptyValues);
+        if (!$includeEmpty) {
+            return $filterSql;
+        }
+
+        $fieldName = trim((string) $fieldName);
+        if ($fieldName === '') {
+            return '';
+        }
+        $qualifiedField = '`' . str_replace('`', '``', $fieldName) . '`';
+        $emptySql = '(' . $qualifiedField . " = '' OR " . $qualifiedField . ' IS NULL)';
+        return $filterSql !== '' ? '(' . $filterSql . ' OR ' . $emptySql . ')' : $emptySql;
+    }
+}
+
 if (!function_exists('orderReportBuildBaseQuery')) {
     function orderReportBuildBaseQuery($conn, $tblName, $dateWhereSql, $extraConditions = array())
     {
@@ -1099,6 +1129,21 @@ if (!function_exists('orderReportBuildOptionSets')) {
         $paymentMap = orderReportGetPaymentLookupMap($platformConfig, $referenceMaps);
         $warehouseMap = isset($referenceMaps['warehouse_map']) ? $referenceMaps['warehouse_map'] : array();
         $defaultWarehouseId = isset($referenceMaps['default_warehouse_id']) ? (int) $referenceMaps['default_warehouse_id'] : 0;
+        $isShopee = strtolower(trim((string) ($platformConfig['platform'] ?? ''))) === 'shopee';
+        $shopeeAccountMap = array();
+        if ($isShopee && defined('SHOPEE_ACC')) {
+            $accountTableName = (string) SHOPEE_ACC;
+            if ($accountTableName !== '' && tableExists($accountTableName, $connectForOrders)) {
+                $accountRows = orderReportFetchRows($connectForOrders, "SELECT `id`, `name` FROM `" . str_replace('`', '``', $accountTableName) . "` ORDER BY `name` ASC");
+                foreach ($accountRows as $accountRow) {
+                    $accountId = isset($accountRow['id']) ? trim((string) $accountRow['id']) : '';
+                    $accountName = isset($accountRow['name']) ? trim((string) $accountRow['name']) : '';
+                    if ($accountId !== '' && $accountName !== '') {
+                        $shopeeAccountMap[$accountId] = $accountName;
+                    }
+                }
+            }
+        }
 
         foreach ((array) $rows as $row) {
             foreach (orderReportResolvePackageOptionsFromRow($connect, $platformConfig['platform'], $row, isset($referenceMaps['package_map']) ? $referenceMaps['package_map'] : array(), $referenceMaps) as $rawValue => $label) {
@@ -1122,6 +1167,21 @@ if (!function_exists('orderReportBuildOptionSets')) {
             $paymentRaw = $paymentField !== '' && isset($row[$paymentField]) ? trim((string) $row[$paymentField]) : '';
             if ($paymentRaw !== '') {
                 $optionSets['payment'][$paymentRaw] = orderReportResolveOptionLabel($paymentRaw, $paymentMap);
+            }
+
+            if ($isShopee) {
+                $statusRaw = trim((string) ($row['order_status'] ?? ''));
+                $statusKey = $statusRaw !== '' ? $statusRaw : '__EMPTY__';
+                $statusLabel = $statusRaw !== ''
+                    ? (function_exists('shopeeOmsGetStatusLabel') ? shopeeOmsGetStatusLabel($statusRaw) : $statusRaw)
+                    : (function_exists('shopeeOmsGetTransitionStatusLabel') ? shopeeOmsGetTransitionStatusLabel('', 'from') : 'New Order (blank status)');
+                $optionSets['order_status'][$statusKey] = $statusLabel;
+
+                $accountRaw = trim((string) ($row['shopee_acc'] ?? ''));
+                $accountKey = $accountRaw !== '' ? $accountRaw : '__EMPTY__';
+                $optionSets['shopee_acc'][$accountKey] = $accountRaw !== ''
+                    ? orderReportResolveOptionLabel($accountRaw, $shopeeAccountMap)
+                    : 'Unknown / blank account';
             }
         }
 
@@ -2210,6 +2270,12 @@ if (!function_exists('orderReportBuildView')) {
         }
         if (orderReportGetVariant($platformConfig) !== 'stock' && !empty($state['filters']['payment'])) {
             $extraConditions[] = orderReportBuildFieldFilterSql($orderConn, $platformConfig['payment_field'], $state['filters']['payment']);
+        }
+        if (strtolower(trim((string) ($platformConfig['platform'] ?? ''))) === 'shopee' && !empty($state['filters']['order_status'])) {
+            $extraConditions[] = orderReportBuildFieldFilterSqlIncludingEmpty($orderConn, 'order_status', $state['filters']['order_status']);
+        }
+        if (strtolower(trim((string) ($platformConfig['platform'] ?? ''))) === 'shopee' && !empty($state['filters']['shopee_acc'])) {
+            $extraConditions[] = orderReportBuildFieldFilterSqlIncludingEmpty($orderConn, 'shopee_acc', $state['filters']['shopee_acc']);
         }
 
         $filteredRows = orderReportFetchRows($orderConn, orderReportBuildSourceQuery($orderConn, $platformConfig, $dateWhereSql, $extraConditions));
