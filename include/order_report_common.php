@@ -2368,10 +2368,16 @@ if (!function_exists('orderReportRenderPage')) {
         $breakdownDimensions = orderReportGetBreakdownDimensions($platformConfig);
         $multiSelectFilters = orderReportGetMultiSelectFilters($platformConfig);
         $rangeFilters = orderReportGetRangeFilters($platformConfig);
-        $profitPinId = isset($GLOBALS['currentPagePin']) ? (int) $GLOBALS['currentPagePin'] : 0;
-        $profitAccessKeys = isset($_SESSION['usr_pin_access'][$profitPinId]) && is_array($_SESSION['usr_pin_access'][$profitPinId]) ? $_SESSION['usr_pin_access'][$profitPinId] : array();
+        $profitPinGroups = array(128, 129, 130);
+        $profitAccessKeys = array();
+        foreach ($profitPinGroups as $profitPinGroupId) {
+            if (isset($_SESSION['usr_pin_access'][$profitPinGroupId]) && is_array($_SESSION['usr_pin_access'][$profitPinGroupId])) {
+                $profitAccessKeys = array_merge($profitAccessKeys, $_SESSION['usr_pin_access'][$profitPinGroupId]);
+            }
+        }
+        $profitAccessKeys = array_values(array_unique(array_map('intval', $profitAccessKeys)));
         $profitVisible = !empty($platformConfig['profit_enabled'])
-            && (in_array(15, $profitAccessKeys, true) || in_array('15', $profitAccessKeys, true));
+            && in_array(15, $profitAccessKeys, true);
         $salesLabel = trim((string) ($platformConfig['sales_label'] ?? 'Final Amount'));
         if ($salesLabel === '') {
             $salesLabel = 'Final Amount';
@@ -2397,6 +2403,7 @@ if (!function_exists('orderReportRenderPage')) {
         $reportScriptVersion = @filemtime(ROOT . '/js/order_report.js');
         $reportScriptUrl = $reportScriptPath . ($reportScriptVersion ? ('?v=' . $reportScriptVersion) : '');
 
+        echo '<!-- order_report_common build 2026-10-03a -->';
         echo '<div class="container-fluid d-flex justify-content-center mt-3">';
         echo '  <div class="col-12 col-md-11">';
         echo '      <div class="d-flex flex-column mb-3">';
