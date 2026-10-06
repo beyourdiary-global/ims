@@ -93,7 +93,7 @@ define('email_cc', 'report@beyourdiary.com');
 // "Lucky Draw is temporarily unavailable" and draw_submit.php answers 503, while every
 // prize, log and customer record stays exactly as it is. Flip it back to false to resume.
 if (!defined('LUCKY_DRAW_PAUSED')) {
-    define('LUCKY_DRAW_PAUSED', true);
+    define('LUCKY_DRAW_PAUSED', false);
 }
 
 // shared external URLs / CDN paths
