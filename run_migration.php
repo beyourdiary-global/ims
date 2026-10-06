@@ -110,5 +110,13 @@ echo migAddColumn($connect, $dbName, 'user_record_log', 'log_type', "VARCHAR(32)
 // ---- 4) Facebook customer record birthday ----
 echo migAddColumn($connect, $dbName, 'customer_facebook_deals_transaction', 'birthday', "DATE DEFAULT NULL COMMENT 'Customer birthday (YYYY-MM-DD)'");
 
+// ---- 5) Lazada / Shopee customer birthday ----
+echo migAddColumn($connect, $dbName, 'customer_lazada_deals_transaction', 'birthday', "DATE DEFAULT NULL COMMENT 'Customer birthday (YYYY-MM-DD)'");
+if (isset($finance_connect) && ($finance_connect instanceof mysqli)) {
+    echo migAddColumn($finance_connect, dbFinance, 'shopee_customer_info', 'birthday', "DATE DEFAULT NULL COMMENT 'Customer birthday (YYYY-MM-DD)'");
+} else {
+    echo "SKIP  shopee_customer_info.birthday (finance connection unavailable)\n";
+}
+
 echo "====================\n";
 echo "Done. 建议执行完从服务器删除本文件。\n";

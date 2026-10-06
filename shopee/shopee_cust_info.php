@@ -207,6 +207,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $scr_country_text = postSpaceFilter("scr_country");
             $scr_brand_text = postSpaceFilter("scr_brand");
             $scr_series_text = postSpaceFilter("scr_series");
+            $scr_birthday = postSpaceFilter("scr_birthday");
 
             // Normalize hidden lookup IDs. If hidden value is empty/0, resolve by typed text.
             if ($scr_pic === '' || $scr_pic === '0') {
@@ -226,6 +227,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $scr_series = (string) $resolvedSeries['id'];
             }
 
+            $scrBirthday = trim((string) $scr_birthday);
+            $scrBirthdayParts = $scrBirthday !== '' ? explode('-', $scrBirthday) : array();
+            $scrBirthdayValid = ($scrBirthday === '' || (count($scrBirthdayParts) === 3 && checkdate((int) $scrBirthdayParts[1], (int) $scrBirthdayParts[2], (int) $scrBirthdayParts[0])));
+            $sqlScrBirthday = $scrBirthday !== '' ? scrEsc($finance_connect, $scrBirthday) : '';
+            // The birthday column may not exist yet (migration pending). Detect it so a
+            // deploy without the DB migration never breaks adding/editing Shopee customers.
+            $scrBirthdayColumnReady = false;
+            $scrBirthdayColRst = mysqli_query($finance_connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'birthday'");
+            if ($scrBirthdayColRst && $scrBirthdayColRst->num_rows > 0) {
+                $scrBirthdayColumnReady = true;
+            }
+            $scrBirthdayInsertCol = $scrBirthdayColumnReady ? ", birthday" : '';
+            $scrBirthdayInsertVal = $scrBirthdayColumnReady ? ($sqlScrBirthday !== '' ? ", '" . $sqlScrBirthday . "'" : ", NULL") : '';
+            $scrBirthdaySet = $scrBirthdayColumnReady ? ", birthday = " . ($sqlScrBirthday !== '' ? "'" . $sqlScrBirthday . "'" : "NULL") : '';
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
             if (!$scr_username) {
@@ -245,6 +260,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             } else if (!$scr_contact) {
                 $contact_err = "Whatsapp / Contact Number cannot be empty";
+                break;
+            } else if (!$scrBirthdayValid) {
+                $birthday_err = "Birthday must be a valid date (YYYY-MM-DD).";
                 break;
             } else if ($action == 'addRecord') {
                 try {
@@ -286,8 +304,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         array_push($datafield, 'remark');
                     }
 
+                    if ($scrBirthday !== '') {
+                        array_push($newvalarr, $scrBirthday);
+                        array_push($datafield, 'birthday');
+                    }
 
-                    $query = "INSERT INTO " . $tblName . "(buyer_username,pic,country,brand,series,contact_no,remark,create_by,create_date,create_time) VALUES ('" . scrEsc($finance_connect, $scr_username) . "','" . scrEsc($finance_connect, $scr_pic) . "','" . scrEsc($finance_connect, $scr_country) . "','" . scrEsc($finance_connect, $scr_brand) . "','" . scrEsc($finance_connect, $scr_series) . "','" . scrEsc($finance_connect, $scr_contact) . "','" . scrEsc($finance_connect, $scr_remark) . "','" . USER_ID . "',curdate(),curtime())";
+
+                    $query = "INSERT INTO " . $tblName . "(buyer_username,pic,country,brand,series,contact_no,remark" . $scrBirthdayInsertCol . ",create_by,create_date,create_time) VALUES ('" . scrEsc($finance_connect, $scr_username) . "','" . scrEsc($finance_connect, $scr_pic) . "','" . scrEsc($finance_connect, $scr_country) . "','" . scrEsc($finance_connect, $scr_brand) . "','" . scrEsc($finance_connect, $scr_series) . "','" . scrEsc($finance_connect, $scr_contact) . "','" . scrEsc($finance_connect, $scr_remark) . "'" . $scrBirthdayInsertVal . ",'" . USER_ID . "',curdate(),curtime())";
 
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
@@ -356,12 +379,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         array_push($datafield, 'remark');
                     }
 
+                    // Treat NULL and '' as the same empty value, otherwise a DATE
+                    // column would receive '' and the UPDATE would fail on strict mode.
+                    $scrBirthdayOld = isset($row['birthday']) ? trim((string) $row['birthday']) : '';
+                    if ($scrBirthdayColumnReady && $scrBirthdayOld != $scrBirthday) {
+                        array_push($oldvalarr, $scrBirthdayOld == '' ? 'Empty Value' : $scrBirthdayOld);
+                        array_push($chgvalarr, $scrBirthday == '' ? 'Empty Value' : $scrBirthday);
+                        array_push($datafield, 'birthday');
+                    }
+
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
                     $chgval = implode(",", $chgvalarr);
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET buyer_username = '" . scrEsc($finance_connect, $scr_username) . "', pic = '" . scrEsc($finance_connect, $scr_pic) . "', country = '" . scrEsc($finance_connect, $scr_country) . "', brand = '" . scrEsc($finance_connect, $scr_brand) . "', series = '" . scrEsc($finance_connect, $scr_series) . "', contact_no = '" . scrEsc($finance_connect, $scr_contact) . "', remark = '" . scrEsc($finance_connect, $scr_remark) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '" . (int) $dataId . "'";
+                        $query = "UPDATE " . $tblName . " SET buyer_username = '" . scrEsc($finance_connect, $scr_username) . "', pic = '" . scrEsc($finance_connect, $scr_pic) . "', country = '" . scrEsc($finance_connect, $scr_country) . "', brand = '" . scrEsc($finance_connect, $scr_brand) . "', series = '" . scrEsc($finance_connect, $scr_series) . "', contact_no = '" . scrEsc($finance_connect, $scr_contact) . "', remark = '" . scrEsc($finance_connect, $scr_remark) . "'" . $scrBirthdaySet . ", update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '" . (int) $dataId . "'";
                         $returnData = mysqli_query($finance_connect, $query);
                         if (!$returnData) {
                             $errorMsg = mysqli_error($finance_connect);
@@ -664,6 +696,21 @@ if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && em
                                 <?php if (isset($contact_err)) { ?>
                                     <div id="err_msg">
                                         <span class="mt-n1"><?php echo $contact_err; ?></span>
+                                    </div>
+                                <?php } ?>
+                            </div>
+                            <div class="form-group col-md-4 mb-3">
+                                <label class="form-label form_lbl" id="scr_birthday_lbl" for="scr_birthday">Birthday</label>
+                                <input class="form-control" type="date" name="scr_birthday" id="scr_birthday" value="<?php
+                                if (isset($dataExisted) && isset($row['birthday']) && !isset($scr_birthday)) {
+                                    echo htmlspecialchars((string) $row['birthday'], ENT_QUOTES, 'UTF-8');
+                                } else if (isset($scr_birthday)) {
+                                    echo htmlspecialchars((string) $scr_birthday, ENT_QUOTES, 'UTF-8');
+                                } ?>" placeholder="YYYY-MM-DD" <?php if ($act == '')
+                                     echo 'disabled' ?>>
+                                <?php if (isset($birthday_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1"><?php echo $birthday_err; ?></span>
                                     </div>
                                 <?php } ?>
                             </div>

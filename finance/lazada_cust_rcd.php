@@ -181,6 +181,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $lcr_rec_ctc = postSpaceFilter('lcr_rec_ctc');
     $lcr_rec_add = postSpaceFilter('lcr_rec_add');
     $lcr_remark = postSpaceFilter('lcr_remark');
+    $lcr_birthday = postSpaceFilter('lcr_birthday');
 
     if ($lcr_pic === '' || $lcr_pic === '0') {
         $resolvedPic = resolveLookupValue(USR_USER, $lcr_pic_text, 'name', $connect);
@@ -199,6 +200,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lcr_series = (string) $resolvedSeries['id'];
     }
 
+    $lcrBirthday = trim((string) $lcr_birthday);
+    $lcrBirthdayParts = $lcrBirthday !== '' ? explode('-', $lcrBirthday) : array();
+    $lcrBirthdayValid = ($lcrBirthday === '' || (count($lcrBirthdayParts) === 3 && checkdate((int) $lcrBirthdayParts[1], (int) $lcrBirthdayParts[2], (int) $lcrBirthdayParts[0])));
+    $sqlLcrBirthday = $lcrBirthday !== '' ? mysqli_real_escape_string($connect, $lcrBirthday) : '';
+    // The birthday column may not exist yet (migration pending). Detect it so a
+    // deploy without the DB migration never breaks adding/editing Lazada customers.
+    $lcrBirthdayColumnReady = false;
+    $lcrBirthdayColRst = mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'birthday'");
+    if ($lcrBirthdayColRst && $lcrBirthdayColRst->num_rows > 0) {
+        $lcrBirthdayColumnReady = true;
+    }
+    $lcrBirthdayInsertCol = $lcrBirthdayColumnReady ? ", birthday" : '';
+    $lcrBirthdayInsertVal = $lcrBirthdayColumnReady ? ($sqlLcrBirthday !== '' ? ", '" . $sqlLcrBirthday . "'" : ", NULL") : '';
+    $lcrBirthdaySet = $lcrBirthdayColumnReady ? ", birthday = " . ($sqlLcrBirthday !== '' ? "'" . $sqlLcrBirthday . "'" : "NULL") : '';
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
     switch ($action) {
@@ -239,6 +254,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 break;
             } else if (!$lcr_rec_add) {
                 $rec_add_err = "Receiver Address cannot be empty.";
+                break;
+            } else if (!$lcrBirthdayValid) {
+                $birthday_err = "Birthday must be a valid date (YYYY-MM-DD).";
                 break;
             } else if ($action == 'addRecord') {
                 try {
@@ -303,7 +321,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(lcr_id,name,email,phone,sales_pic,country,brand,series,ship_rec_name,ship_rec_add,ship_rec_contact,remark,create_by,create_date,create_time) VALUES ('$lcr_id','$lcr_name','$lcr_email','$lcr_phone','$lcr_pic','$lcr_country','$lcr_brand','$lcr_series','$lcr_rec_name','$lcr_rec_add','$lcr_rec_ctc','$lcr_remark','" . USER_ID . "',curdate(),curtime())";
+                    if ($lcrBirthday !== '') {
+                        array_push($newvalarr, $lcrBirthday);
+                        array_push($datafield, 'birthday');
+                    }
+
+                    $query = "INSERT INTO " . $tblName . "(lcr_id,name,email,phone,sales_pic,country,brand,series,ship_rec_name,ship_rec_add,ship_rec_contact,remark" . $lcrBirthdayInsertCol . ",create_by,create_date,create_time) VALUES ('$lcr_id','$lcr_name','$lcr_email','$lcr_phone','$lcr_pic','$lcr_country','$lcr_brand','$lcr_series','$lcr_rec_name','$lcr_rec_add','$lcr_rec_ctc','$lcr_remark'" . $lcrBirthdayInsertVal . ",'" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
@@ -398,13 +421,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         array_push($datafield, 'remark');
                     }
 
+                    // Treat NULL and '' as the same empty value, otherwise a DATE
+                    // column would receive '' and the UPDATE would fail on strict mode.
+                    $lcrBirthdayOld = isset($row['birthday']) ? trim((string) $row['birthday']) : '';
+                    if ($lcrBirthdayColumnReady && $lcrBirthdayOld != $lcrBirthday) {
+                        array_push($oldvalarr, $lcrBirthdayOld == '' ? 'Empty Value' : $lcrBirthdayOld);
+                        array_push($chgvalarr, $lcrBirthday == '' ? 'Empty Value' : $lcrBirthday);
+                        array_push($datafield, 'birthday');
+                    }
+
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
                     $chgval = implode(",", $chgvalarr);
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET lcr_id = '$lcr_id', name = '$lcr_name', email = '$lcr_email', phone = '$lcr_phone', sales_pic = '$lcr_pic', country = '$lcr_country', brand = '$lcr_brand', series = '$lcr_series', ship_rec_name = '$lcr_rec_name', ship_rec_add = '$lcr_rec_add', ship_rec_contact = '$lcr_rec_ctc', remark ='$lcr_remark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName . " SET lcr_id = '$lcr_id', name = '$lcr_name', email = '$lcr_email', phone = '$lcr_phone', sales_pic = '$lcr_pic', country = '$lcr_country', brand = '$lcr_brand', series = '$lcr_series', ship_rec_name = '$lcr_rec_name', ship_rec_add = '$lcr_rec_add', ship_rec_contact = '$lcr_rec_ctc', remark ='$lcr_remark'" . $lcrBirthdaySet . ", update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
 
                     } else {
@@ -612,6 +644,22 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             <?php if (isset($phone_err)) { ?>
                 <div id="err_msg">
                     <span class="mt-n1"><?php echo $phone_err; ?></span>
+                </div>
+            <?php } ?>
+        </div>
+
+        <div class="col-md-6 mb-3">
+            <label class="form-label form_lbl" id="lcr_birthday_lbl" for="lcr_birthday">Customer Birthday</label>
+            <input class="form-control" type="date" name="lcr_birthday" id="lcr_birthday" value="<?php
+                if (isset($dataExisted) && isset($row['birthday']) && !isset($lcr_birthday)) {
+                    echo $row['birthday'];
+                } else if (isset($lcr_birthday)) {
+                    echo $lcr_birthday;
+                }
+                ?>" placeholder="YYYY-MM-DD" <?php if ($act == '') echo 'disabled' ?>>
+            <?php if (isset($birthday_err)) { ?>
+                <div id="err_msg">
+                    <span class="mt-n1"><?php echo $birthday_err; ?></span>
                 </div>
             <?php } ?>
         </div>
