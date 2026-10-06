@@ -140,7 +140,9 @@ if (post('actionBtn')) {
     $fcb_rec_ctc = postSpaceFilter('fcb_rec_ctc');
     $fcb_rec_add = postSpaceFilter('fcb_rec_add');
     $fcb_remark = postSpaceFilter('fcb_remark');
-    $fcb_birthday = postSpaceFilter('fcb_birthday');
+    $fcb_birthday_day = postSpaceFilter('fcb_birthday_day');
+    $fcb_birthday_month = postSpaceFilter('fcb_birthday_month');
+    $fcb_birthday_year = postSpaceFilter('fcb_birthday_year');
     $sqlFcbName = mysqli_real_escape_string($connect, trim((string) $fcb_name));
     $sqlFcbLink = mysqli_real_escape_string($connect, trim((string) $fcb_link));
     $sqlFcbCtc = mysqli_real_escape_string($connect, trim((string) $fcb_ctc));
@@ -148,20 +150,35 @@ if (post('actionBtn')) {
     $sqlFcbRecCtc = mysqli_real_escape_string($connect, trim((string) $fcb_rec_ctc));
     $sqlFcbRecAdd = mysqli_real_escape_string($connect, trim((string) $fcb_rec_add));
     $sqlFcbRemark = mysqli_real_escape_string($connect, trim((string) $fcb_remark));
-    $fbBirthday = trim((string) $fcb_birthday);
-    $fbBirthdayParts = $fbBirthday !== '' ? explode('-', $fbBirthday) : array();
-    $fbBirthdayValid = ($fbBirthday === '' || (count($fbBirthdayParts) === 3 && checkdate((int) $fbBirthdayParts[1], (int) $fbBirthdayParts[2], (int) $fbBirthdayParts[0])));
-    $sqlFcbBirthday = $fbBirthday !== '' ? mysqli_real_escape_string($connect, $fbBirthday) : '';
-    // The birthday column may not exist yet (migration pending). Detect it so a
+    $fbBirthdayYear = trim((string) $fcb_birthday_year);
+    $fbBirthdayMonth = trim((string) $fcb_birthday_month);
+    $fbBirthdayDay = trim((string) $fcb_birthday_day);
+    // Partial entries (e.g. only the month) are allowed on purpose; a fully
+    // entered date must still be a real calendar date.
+    $fbBirthdayValid = true;
+    if ($fbBirthdayYear !== '' && ((int) $fbBirthdayYear < 1900 || (int) $fbBirthdayYear > (int) date('Y'))) {
+        $fbBirthdayValid = false;
+    }
+    if ($fbBirthdayMonth !== '' && ((int) $fbBirthdayMonth < 1 || (int) $fbBirthdayMonth > 12)) {
+        $fbBirthdayValid = false;
+    }
+    if ($fbBirthdayDay !== '' && ((int) $fbBirthdayDay < 1 || (int) $fbBirthdayDay > 31)) {
+        $fbBirthdayValid = false;
+    }
+    if ($fbBirthdayValid && $fbBirthdayYear !== '' && $fbBirthdayMonth !== '' && $fbBirthdayDay !== ''
+        && !checkdate((int) $fbBirthdayMonth, (int) $fbBirthdayDay, (int) $fbBirthdayYear)) {
+        $fbBirthdayValid = false;
+    }
+    // The birthday columns may not exist yet (migration pending). Detect them so a
     // deploy without the DB migration never breaks adding/editing FB customers.
     $fbBirthdayColumnReady = false;
-    $fbBirthdayColRst = mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'birthday'");
+    $fbBirthdayColRst = mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'birthday_year'");
     if ($fbBirthdayColRst && $fbBirthdayColRst->num_rows > 0) {
         $fbBirthdayColumnReady = true;
     }
-    $fbBirthdayInsertCol = $fbBirthdayColumnReady ? ", birthday" : '';
-    $fbBirthdayInsertVal = $fbBirthdayColumnReady ? ($sqlFcbBirthday !== '' ? ", '" . $sqlFcbBirthday . "'" : ", NULL") : '';
-    $fbBirthdaySet = $fbBirthdayColumnReady ? ", birthday = " . ($sqlFcbBirthday !== '' ? "'" . $sqlFcbBirthday . "'" : "NULL") : '';
+    $fbBirthdayInsertCols = $fbBirthdayColumnReady ? ", birthday_year, birthday_month, birthday_day" : '';
+    $fbBirthdayInsertVals = $fbBirthdayColumnReady ? (", " . ($fbBirthdayYear !== '' ? (int) $fbBirthdayYear : 'NULL') . ", " . ($fbBirthdayMonth !== '' ? (int) $fbBirthdayMonth : 'NULL') . ", " . ($fbBirthdayDay !== '' ? (int) $fbBirthdayDay : 'NULL')) : '';
+    $fbBirthdaySet = $fbBirthdayColumnReady ? (", birthday_year = " . ($fbBirthdayYear !== '' ? (int) $fbBirthdayYear : 'NULL') . ", birthday_month = " . ($fbBirthdayMonth !== '' ? (int) $fbBirthdayMonth : 'NULL') . ", birthday_day = " . ($fbBirthdayDay !== '' ? (int) $fbBirthdayDay : 'NULL')) : '';
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -206,7 +223,7 @@ if (post('actionBtn')) {
                 $rec_add_err = "Receiver Address cannot be empty.";
                 break;
             } else if (!$fbBirthdayValid) {
-                $birthday_err = "Birthday must be a valid date (YYYY-MM-DD).";
+                $birthday_err = "Birthday selection is invalid.";
                 break;
             } else if ($action == 'addRecord') {
                 try {
@@ -275,12 +292,12 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    if ($fbBirthday !== '') {
-                        array_push($newvalarr, $fbBirthday);
+                    if ($fbBirthdayYear !== '' || $fbBirthdayMonth !== '' || $fbBirthdayDay !== '') {
+                        array_push($newvalarr, trim($fbBirthdayYear . '-' . $fbBirthdayMonth . '-' . $fbBirthdayDay, '-'));
                         array_push($datafield, 'birthday');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,fb_link,contact,sales_pic,country,brand,series,fb_page,channel,ship_rec_name,ship_rec_add,ship_rec_contact,remark" . $fbBirthdayInsertCol . ",create_by,create_date,create_time) VALUES ('$sqlFcbName','$sqlFcbLink','$sqlFcbCtc','$fcb_pic','$fcb_country','$fcb_brand','$fcb_series','$fcb_fbpage','$fcb_channel','$sqlFcbRecName','$sqlFcbRecAdd','$sqlFcbRecCtc','$sqlFcbRemark'" . $fbBirthdayInsertVal . ",'" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(name,fb_link,contact,sales_pic,country,brand,series,fb_page,channel,ship_rec_name,ship_rec_add,ship_rec_contact,remark" . $fbBirthdayInsertCols . ",create_by,create_date,create_time) VALUES ('$sqlFcbName','$sqlFcbLink','$sqlFcbCtc','$fcb_pic','$fcb_country','$fcb_brand','$fcb_series','$fcb_fbpage','$fcb_channel','$sqlFcbRecName','$sqlFcbRecAdd','$sqlFcbRecCtc','$sqlFcbRemark'" . $fbBirthdayInsertVals . ",'" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
@@ -381,12 +398,20 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    // Treat NULL and '' as the same empty value, otherwise a DATE
-                    // column would receive '' and the UPDATE would fail on strict mode.
-                    $fbBirthdayOld = isset($row['birthday']) ? trim((string) $row['birthday']) : '';
-                    if ($fbBirthdayColumnReady && $fbBirthdayOld != $fbBirthday) {
-                        array_push($oldvalarr, $fbBirthdayOld == '' ? 'Empty Value' : $fbBirthdayOld);
-                        array_push($chgvalarr, $fbBirthday == '' ? 'Empty Value' : $fbBirthday);
+                    // Compare a compact y-m-d summary; missing segments read as ''
+                    // so adding/clearing one segment diffs correctly.
+                    $fbBirthdayOldSummary = trim(
+                        (isset($row['birthday_year']) && $row['birthday_year'] !== null && (string) $row['birthday_year'] !== '' ? (string) (int) $row['birthday_year'] : '')
+                        . '-' .
+                        (isset($row['birthday_month']) && $row['birthday_month'] !== null && (string) $row['birthday_month'] !== '' ? (string) (int) $row['birthday_month'] : '')
+                        . '-' .
+                        (isset($row['birthday_day']) && $row['birthday_day'] !== null && (string) $row['birthday_day'] !== '' ? (string) (int) $row['birthday_day'] : ''),
+                        '-'
+                    );
+                    $fbBirthdayNewSummary = trim($fbBirthdayYear . '-' . $fbBirthdayMonth . '-' . $fbBirthdayDay, '-');
+                    if ($fbBirthdayColumnReady && $fbBirthdayOldSummary != $fbBirthdayNewSummary) {
+                        array_push($oldvalarr, $fbBirthdayOldSummary == '' ? 'Empty Value' : $fbBirthdayOldSummary);
+                        array_push($chgvalarr, $fbBirthdayNewSummary == '' ? 'Empty Value' : $fbBirthdayNewSummary);
                         array_push($datafield, 'birthday');
                     }
 
@@ -595,15 +620,46 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                 <?php } ?>
                             </div>
                             <div class="col-md-4 mb-3">
-                                <label class="form-label form_lbl" id="fcb_birthday_lbl" for="fcb_birthday">Birthday</label>
-                                <input class="form-control" type="date" name="fcb_birthday" id="fcb_birthday" value="<?php
-                                if (isset($dataExisted) && isset($row['birthday']) && !isset($fcb_birthday)) {
-                                    echo $row['birthday'];
-                                } else if (isset($fcb_birthday)) {
-                                    echo $fcb_birthday;
+                                <label class="form-label form_lbl" id="fcb_birthday_lbl" for="fcb_birthday_day">Birthday</label>
+                                <?php
+                                $fbBdYearValue = isset($row['birthday_year']) && $row['birthday_year'] !== null ? trim((string) $row['birthday_year']) : '';
+                                $fbBdMonthValue = isset($row['birthday_month']) && $row['birthday_month'] !== null ? trim((string) $row['birthday_month']) : '';
+                                $fbBdDayValue = isset($row['birthday_day']) && $row['birthday_day'] !== null ? trim((string) $row['birthday_day']) : '';
+                                if (isset($fcb_birthday_year)) { $fbBdYearValue = $fcb_birthday_year; }
+                                if (isset($fcb_birthday_month)) { $fbBdMonthValue = $fcb_birthday_month; }
+                                if (isset($fcb_birthday_day)) { $fbBdDayValue = $fcb_birthday_day; }
+                                if ($fbBdYearValue === '' && $fbBdMonthValue === '' && $fbBdDayValue === '' && isset($row['birthday']) && !empty($row['birthday']) && substr((string) $row['birthday'], 0, 4) !== '0000') {
+                                    $bdParts = explode('-', (string) $row['birthday']);
+                                    if (count($bdParts) === 3) {
+                                        $fbBdYearValue = (string) (int) $bdParts[0];
+                                        $fbBdMonthValue = (string) (int) $bdParts[1];
+                                        $fbBdDayValue = (string) (int) $bdParts[2];
+                                    }
                                 }
-                                ?>" placeholder="YYYY-MM-DD" <?php if ($act == '')
-                                    echo 'disabled' ?>>
+                                ?>
+                                <div class="d-flex gap-2">
+                                    <select class="form-select" name="fcb_birthday_day" id="fcb_birthday_day" <?php if ($act == '')
+                                        echo 'disabled' ?>>
+                                        <option value="">Day</option>
+                                        <?php for ($bdI = 1; $bdI <= 31; $bdI++) { ?>
+                                            <option value="<?= $bdI ?>" <?= ((string) $bdI === $fbBdDayValue) ? 'selected' : '' ?>><?= $bdI ?></option>
+                                        <?php } ?>
+                                    </select>
+                                    <select class="form-select" name="fcb_birthday_month" id="fcb_birthday_month" <?php if ($act == '')
+                                        echo 'disabled' ?>>
+                                        <option value="">Month</option>
+                                        <?php for ($bdI = 1; $bdI <= 12; $bdI++) { ?>
+                                            <option value="<?= $bdI ?>" <?= ((string) $bdI === $fbBdMonthValue) ? 'selected' : '' ?>><?= $bdI ?></option>
+                                        <?php } ?>
+                                    </select>
+                                    <select class="form-select" name="fcb_birthday_year" id="fcb_birthday_year" <?php if ($act == '')
+                                        echo 'disabled' ?>>
+                                        <option value="">Year</option>
+                                        <?php for ($bdI = (int) date('Y'); $bdI >= 1900; $bdI--) { ?>
+                                            <option value="<?= $bdI ?>" <?= ((string) $bdI === $fbBdYearValue) ? 'selected' : '' ?>><?= $bdI ?></option>
+                                        <?php } ?>
+                                    </select>
+                                </div>
                                 <?php if (isset($birthday_err)) { ?>
                                     <div id="err_msg">
                                         <span class="mt-n1">

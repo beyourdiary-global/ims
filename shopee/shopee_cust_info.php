@@ -207,7 +207,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $scr_country_text = postSpaceFilter("scr_country");
             $scr_brand_text = postSpaceFilter("scr_brand");
             $scr_series_text = postSpaceFilter("scr_series");
-            $scr_birthday = postSpaceFilter("scr_birthday");
+            $scr_birthday_day = postSpaceFilter("scr_birthday_day");
+            $scr_birthday_month = postSpaceFilter("scr_birthday_month");
+            $scr_birthday_year = postSpaceFilter("scr_birthday_year");
 
             // Normalize hidden lookup IDs. If hidden value is empty/0, resolve by typed text.
             if ($scr_pic === '' || $scr_pic === '0') {
@@ -227,20 +229,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $scr_series = (string) $resolvedSeries['id'];
             }
 
-            $scrBirthday = trim((string) $scr_birthday);
-            $scrBirthdayParts = $scrBirthday !== '' ? explode('-', $scrBirthday) : array();
-            $scrBirthdayValid = ($scrBirthday === '' || (count($scrBirthdayParts) === 3 && checkdate((int) $scrBirthdayParts[1], (int) $scrBirthdayParts[2], (int) $scrBirthdayParts[0])));
-            $sqlScrBirthday = $scrBirthday !== '' ? scrEsc($finance_connect, $scrBirthday) : '';
-            // The birthday column may not exist yet (migration pending). Detect it so a
+            $scrBirthdayYear = trim((string) $scr_birthday_year);
+            $scrBirthdayMonth = trim((string) $scr_birthday_month);
+            $scrBirthdayDay = trim((string) $scr_birthday_day);
+            // Partial entries (e.g. only the month) are allowed on purpose; a fully
+            // entered date must still be a real calendar date.
+            $scrBirthdayValid = true;
+            if ($scrBirthdayYear !== '' && ((int) $scrBirthdayYear < 1900 || (int) $scrBirthdayYear > (int) date('Y'))) {
+                $scrBirthdayValid = false;
+            }
+            if ($scrBirthdayMonth !== '' && ((int) $scrBirthdayMonth < 1 || (int) $scrBirthdayMonth > 12)) {
+                $scrBirthdayValid = false;
+            }
+            if ($scrBirthdayDay !== '' && ((int) $scrBirthdayDay < 1 || (int) $scrBirthdayDay > 31)) {
+                $scrBirthdayValid = false;
+            }
+            if ($scrBirthdayValid && $scrBirthdayYear !== '' && $scrBirthdayMonth !== '' && $scrBirthdayDay !== ''
+                && !checkdate((int) $scrBirthdayMonth, (int) $scrBirthdayDay, (int) $scrBirthdayYear)) {
+                $scrBirthdayValid = false;
+            }
+            // The birthday columns may not exist yet (migration pending). Detect them so a
             // deploy without the DB migration never breaks adding/editing Shopee customers.
             $scrBirthdayColumnReady = false;
-            $scrBirthdayColRst = mysqli_query($finance_connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'birthday'");
+            $scrBirthdayColRst = mysqli_query($finance_connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'birthday_year'");
             if ($scrBirthdayColRst && $scrBirthdayColRst->num_rows > 0) {
                 $scrBirthdayColumnReady = true;
             }
-            $scrBirthdayInsertCol = $scrBirthdayColumnReady ? ", birthday" : '';
-            $scrBirthdayInsertVal = $scrBirthdayColumnReady ? ($sqlScrBirthday !== '' ? ", '" . $sqlScrBirthday . "'" : ", NULL") : '';
-            $scrBirthdaySet = $scrBirthdayColumnReady ? ", birthday = " . ($sqlScrBirthday !== '' ? "'" . $sqlScrBirthday . "'" : "NULL") : '';
+            $scrBirthdayInsertCols = $scrBirthdayColumnReady ? ", birthday_year, birthday_month, birthday_day" : '';
+            $scrBirthdayInsertVals = $scrBirthdayColumnReady ? (", " . ($scrBirthdayYear !== '' ? (int) $scrBirthdayYear : 'NULL') . ", " . ($scrBirthdayMonth !== '' ? (int) $scrBirthdayMonth : 'NULL') . ", " . ($scrBirthdayDay !== '' ? (int) $scrBirthdayDay : 'NULL')) : '';
+            $scrBirthdaySet = $scrBirthdayColumnReady ? (", birthday_year = " . ($scrBirthdayYear !== '' ? (int) $scrBirthdayYear : 'NULL') . ", birthday_month = " . ($scrBirthdayMonth !== '' ? (int) $scrBirthdayMonth : 'NULL') . ", birthday_day = " . ($scrBirthdayDay !== '' ? (int) $scrBirthdayDay : 'NULL')) : '';
             $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
             if (!$scr_username) {
@@ -262,7 +279,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $contact_err = "Whatsapp / Contact Number cannot be empty";
                 break;
             } else if (!$scrBirthdayValid) {
-                $birthday_err = "Birthday must be a valid date (YYYY-MM-DD).";
+                $birthday_err = "Birthday selection is invalid.";
                 break;
             } else if ($action == 'addRecord') {
                 try {
@@ -304,13 +321,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         array_push($datafield, 'remark');
                     }
 
-                    if ($scrBirthday !== '') {
-                        array_push($newvalarr, $scrBirthday);
+                    if ($scrBirthdayYear !== '' || $scrBirthdayMonth !== '' || $scrBirthdayDay !== '') {
+                        array_push($newvalarr, trim($scrBirthdayYear . '-' . $scrBirthdayMonth . '-' . $scrBirthdayDay, '-'));
                         array_push($datafield, 'birthday');
                     }
 
 
-                    $query = "INSERT INTO " . $tblName . "(buyer_username,pic,country,brand,series,contact_no,remark" . $scrBirthdayInsertCol . ",create_by,create_date,create_time) VALUES ('" . scrEsc($finance_connect, $scr_username) . "','" . scrEsc($finance_connect, $scr_pic) . "','" . scrEsc($finance_connect, $scr_country) . "','" . scrEsc($finance_connect, $scr_brand) . "','" . scrEsc($finance_connect, $scr_series) . "','" . scrEsc($finance_connect, $scr_contact) . "','" . scrEsc($finance_connect, $scr_remark) . "'" . $scrBirthdayInsertVal . ",'" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(buyer_username,pic,country,brand,series,contact_no,remark" . $scrBirthdayInsertCols . ",create_by,create_date,create_time) VALUES ('" . scrEsc($finance_connect, $scr_username) . "','" . scrEsc($finance_connect, $scr_pic) . "','" . scrEsc($finance_connect, $scr_country) . "','" . scrEsc($finance_connect, $scr_brand) . "','" . scrEsc($finance_connect, $scr_series) . "','" . scrEsc($finance_connect, $scr_contact) . "','" . scrEsc($finance_connect, $scr_remark) . "'" . $scrBirthdayInsertVals . ",'" . USER_ID . "',curdate(),curtime())";
 
                     // Execute the query
                     $returnData = mysqli_query($finance_connect, $query);
@@ -379,12 +396,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         array_push($datafield, 'remark');
                     }
 
-                    // Treat NULL and '' as the same empty value, otherwise a DATE
-                    // column would receive '' and the UPDATE would fail on strict mode.
-                    $scrBirthdayOld = isset($row['birthday']) ? trim((string) $row['birthday']) : '';
-                    if ($scrBirthdayColumnReady && $scrBirthdayOld != $scrBirthday) {
-                        array_push($oldvalarr, $scrBirthdayOld == '' ? 'Empty Value' : $scrBirthdayOld);
-                        array_push($chgvalarr, $scrBirthday == '' ? 'Empty Value' : $scrBirthday);
+                    // Compare a compact y-m-d summary; missing segments read as ''
+                    // so adding/clearing one segment diffs correctly.
+                    $scrBirthdayOldSummary = trim(
+                        (isset($row['birthday_year']) && $row['birthday_year'] !== null && (string) $row['birthday_year'] !== '' ? (string) (int) $row['birthday_year'] : '')
+                        . '-' .
+                        (isset($row['birthday_month']) && $row['birthday_month'] !== null && (string) $row['birthday_month'] !== '' ? (string) (int) $row['birthday_month'] : '')
+                        . '-' .
+                        (isset($row['birthday_day']) && $row['birthday_day'] !== null && (string) $row['birthday_day'] !== '' ? (string) (int) $row['birthday_day'] : ''),
+                        '-'
+                    );
+                    $scrBirthdayNewSummary = trim($scrBirthdayYear . '-' . $scrBirthdayMonth . '-' . $scrBirthdayDay, '-');
+                    if ($scrBirthdayColumnReady && $scrBirthdayOldSummary != $scrBirthdayNewSummary) {
+                        array_push($oldvalarr, $scrBirthdayOldSummary == '' ? 'Empty Value' : $scrBirthdayOldSummary);
+                        array_push($chgvalarr, $scrBirthdayNewSummary == '' ? 'Empty Value' : $scrBirthdayNewSummary);
                         array_push($datafield, 'birthday');
                     }
 
@@ -700,14 +725,46 @@ if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && em
                                 <?php } ?>
                             </div>
                             <div class="form-group col-md-4 mb-3">
-                                <label class="form-label form_lbl" id="scr_birthday_lbl" for="scr_birthday">Birthday</label>
-                                <input class="form-control" type="date" name="scr_birthday" id="scr_birthday" value="<?php
-                                if (isset($dataExisted) && isset($row['birthday']) && !isset($scr_birthday)) {
-                                    echo htmlspecialchars((string) $row['birthday'], ENT_QUOTES, 'UTF-8');
-                                } else if (isset($scr_birthday)) {
-                                    echo htmlspecialchars((string) $scr_birthday, ENT_QUOTES, 'UTF-8');
-                                } ?>" placeholder="YYYY-MM-DD" <?php if ($act == '')
-                                     echo 'disabled' ?>>
+                                <label class="form-label form_lbl" id="scr_birthday_lbl" for="scr_birthday_day">Birthday</label>
+                                <?php
+                                $scrBdYearValue = isset($row['birthday_year']) && $row['birthday_year'] !== null ? trim((string) $row['birthday_year']) : '';
+                                $scrBdMonthValue = isset($row['birthday_month']) && $row['birthday_month'] !== null ? trim((string) $row['birthday_month']) : '';
+                                $scrBdDayValue = isset($row['birthday_day']) && $row['birthday_day'] !== null ? trim((string) $row['birthday_day']) : '';
+                                if (isset($scr_birthday_year)) { $scrBdYearValue = $scr_birthday_year; }
+                                if (isset($scr_birthday_month)) { $scrBdMonthValue = $scr_birthday_month; }
+                                if (isset($scr_birthday_day)) { $scrBdDayValue = $scr_birthday_day; }
+                                if ($scrBdYearValue === '' && $scrBdMonthValue === '' && $scrBdDayValue === '' && isset($row['birthday']) && !empty($row['birthday']) && substr((string) $row['birthday'], 0, 4) !== '0000') {
+                                    $bdParts = explode('-', (string) $row['birthday']);
+                                    if (count($bdParts) === 3) {
+                                        $scrBdYearValue = (string) (int) $bdParts[0];
+                                        $scrBdMonthValue = (string) (int) $bdParts[1];
+                                        $scrBdDayValue = (string) (int) $bdParts[2];
+                                    }
+                                }
+                                ?>
+                                <div class="d-flex gap-2">
+                                    <select class="form-select" name="scr_birthday_day" id="scr_birthday_day" <?php if ($act == '')
+                                        echo 'disabled' ?>>
+                                        <option value="">Day</option>
+                                        <?php for ($bdI = 1; $bdI <= 31; $bdI++) { ?>
+                                            <option value="<?= $bdI ?>" <?= ((string) $bdI === $scrBdDayValue) ? 'selected' : '' ?>><?= $bdI ?></option>
+                                        <?php } ?>
+                                    </select>
+                                    <select class="form-select" name="scr_birthday_month" id="scr_birthday_month" <?php if ($act == '')
+                                        echo 'disabled' ?>>
+                                        <option value="">Month</option>
+                                        <?php for ($bdI = 1; $bdI <= 12; $bdI++) { ?>
+                                            <option value="<?= $bdI ?>" <?= ((string) $bdI === $scrBdMonthValue) ? 'selected' : '' ?>><?= $bdI ?></option>
+                                        <?php } ?>
+                                    </select>
+                                    <select class="form-select" name="scr_birthday_year" id="scr_birthday_year" <?php if ($act == '')
+                                        echo 'disabled' ?>>
+                                        <option value="">Year</option>
+                                        <?php for ($bdI = (int) date('Y'); $bdI >= 1900; $bdI--) { ?>
+                                            <option value="<?= $bdI ?>" <?= ((string) $bdI === $scrBdYearValue) ? 'selected' : '' ?>><?= $bdI ?></option>
+                                        <?php } ?>
+                                    </select>
+                                </div>
                                 <?php if (isset($birthday_err)) { ?>
                                     <div id="err_msg">
                                         <span class="mt-n1"><?php echo $birthday_err; ?></span>

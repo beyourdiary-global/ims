@@ -181,7 +181,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $lcr_rec_ctc = postSpaceFilter('lcr_rec_ctc');
     $lcr_rec_add = postSpaceFilter('lcr_rec_add');
     $lcr_remark = postSpaceFilter('lcr_remark');
-    $lcr_birthday = postSpaceFilter('lcr_birthday');
+    $lcr_birthday_day = postSpaceFilter('lcr_birthday_day');
+    $lcr_birthday_month = postSpaceFilter('lcr_birthday_month');
+    $lcr_birthday_year = postSpaceFilter('lcr_birthday_year');
 
     if ($lcr_pic === '' || $lcr_pic === '0') {
         $resolvedPic = resolveLookupValue(USR_USER, $lcr_pic_text, 'name', $connect);
@@ -200,20 +202,35 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $lcr_series = (string) $resolvedSeries['id'];
     }
 
-    $lcrBirthday = trim((string) $lcr_birthday);
-    $lcrBirthdayParts = $lcrBirthday !== '' ? explode('-', $lcrBirthday) : array();
-    $lcrBirthdayValid = ($lcrBirthday === '' || (count($lcrBirthdayParts) === 3 && checkdate((int) $lcrBirthdayParts[1], (int) $lcrBirthdayParts[2], (int) $lcrBirthdayParts[0])));
-    $sqlLcrBirthday = $lcrBirthday !== '' ? mysqli_real_escape_string($connect, $lcrBirthday) : '';
-    // The birthday column may not exist yet (migration pending). Detect it so a
+    $lcrBirthdayYear = trim((string) $lcr_birthday_year);
+    $lcrBirthdayMonth = trim((string) $lcr_birthday_month);
+    $lcrBirthdayDay = trim((string) $lcr_birthday_day);
+    // Partial entries (e.g. only the month) are allowed on purpose; a fully
+    // entered date must still be a real calendar date.
+    $lcrBirthdayValid = true;
+    if ($lcrBirthdayYear !== '' && ((int) $lcrBirthdayYear < 1900 || (int) $lcrBirthdayYear > (int) date('Y'))) {
+        $lcrBirthdayValid = false;
+    }
+    if ($lcrBirthdayMonth !== '' && ((int) $lcrBirthdayMonth < 1 || (int) $lcrBirthdayMonth > 12)) {
+        $lcrBirthdayValid = false;
+    }
+    if ($lcrBirthdayDay !== '' && ((int) $lcrBirthdayDay < 1 || (int) $lcrBirthdayDay > 31)) {
+        $lcrBirthdayValid = false;
+    }
+    if ($lcrBirthdayValid && $lcrBirthdayYear !== '' && $lcrBirthdayMonth !== '' && $lcrBirthdayDay !== ''
+        && !checkdate((int) $lcrBirthdayMonth, (int) $lcrBirthdayDay, (int) $lcrBirthdayYear)) {
+        $lcrBirthdayValid = false;
+    }
+    // The birthday columns may not exist yet (migration pending). Detect them so a
     // deploy without the DB migration never breaks adding/editing Lazada customers.
     $lcrBirthdayColumnReady = false;
-    $lcrBirthdayColRst = mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'birthday'");
+    $lcrBirthdayColRst = mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'birthday_year'");
     if ($lcrBirthdayColRst && $lcrBirthdayColRst->num_rows > 0) {
         $lcrBirthdayColumnReady = true;
     }
-    $lcrBirthdayInsertCol = $lcrBirthdayColumnReady ? ", birthday" : '';
-    $lcrBirthdayInsertVal = $lcrBirthdayColumnReady ? ($sqlLcrBirthday !== '' ? ", '" . $sqlLcrBirthday . "'" : ", NULL") : '';
-    $lcrBirthdaySet = $lcrBirthdayColumnReady ? ", birthday = " . ($sqlLcrBirthday !== '' ? "'" . $sqlLcrBirthday . "'" : "NULL") : '';
+    $lcrBirthdayInsertCols = $lcrBirthdayColumnReady ? ", birthday_year, birthday_month, birthday_day" : '';
+    $lcrBirthdayInsertVals = $lcrBirthdayColumnReady ? (", " . ($lcrBirthdayYear !== '' ? (int) $lcrBirthdayYear : 'NULL') . ", " . ($lcrBirthdayMonth !== '' ? (int) $lcrBirthdayMonth : 'NULL') . ", " . ($lcrBirthdayDay !== '' ? (int) $lcrBirthdayDay : 'NULL')) : '';
+    $lcrBirthdaySet = $lcrBirthdayColumnReady ? (", birthday_year = " . ($lcrBirthdayYear !== '' ? (int) $lcrBirthdayYear : 'NULL') . ", birthday_month = " . ($lcrBirthdayMonth !== '' ? (int) $lcrBirthdayMonth : 'NULL') . ", birthday_day = " . ($lcrBirthdayDay !== '' ? (int) $lcrBirthdayDay : 'NULL')) : '';
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
     switch ($action) {
@@ -256,7 +273,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $rec_add_err = "Receiver Address cannot be empty.";
                 break;
             } else if (!$lcrBirthdayValid) {
-                $birthday_err = "Birthday must be a valid date (YYYY-MM-DD).";
+                $birthday_err = "Birthday selection is invalid.";
                 break;
             } else if ($action == 'addRecord') {
                 try {
@@ -321,12 +338,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         array_push($datafield, 'remark');
                     }
 
-                    if ($lcrBirthday !== '') {
-                        array_push($newvalarr, $lcrBirthday);
+                    if ($lcrBirthdayYear !== '' || $lcrBirthdayMonth !== '' || $lcrBirthdayDay !== '') {
+                        array_push($newvalarr, trim($lcrBirthdayYear . '-' . $lcrBirthdayMonth . '-' . $lcrBirthdayDay, '-'));
                         array_push($datafield, 'birthday');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(lcr_id,name,email,phone,sales_pic,country,brand,series,ship_rec_name,ship_rec_add,ship_rec_contact,remark" . $lcrBirthdayInsertCol . ",create_by,create_date,create_time) VALUES ('$lcr_id','$lcr_name','$lcr_email','$lcr_phone','$lcr_pic','$lcr_country','$lcr_brand','$lcr_series','$lcr_rec_name','$lcr_rec_add','$lcr_rec_ctc','$lcr_remark'" . $lcrBirthdayInsertVal . ",'" . USER_ID . "',curdate(),curtime())";
+                    $query = "INSERT INTO " . $tblName . "(lcr_id,name,email,phone,sales_pic,country,brand,series,ship_rec_name,ship_rec_add,ship_rec_contact,remark" . $lcrBirthdayInsertCols . ",create_by,create_date,create_time) VALUES ('$lcr_id','$lcr_name','$lcr_email','$lcr_phone','$lcr_pic','$lcr_country','$lcr_brand','$lcr_series','$lcr_rec_name','$lcr_rec_add','$lcr_rec_ctc','$lcr_remark'" . $lcrBirthdayInsertVals . ",'" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
@@ -421,12 +438,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                         array_push($datafield, 'remark');
                     }
 
-                    // Treat NULL and '' as the same empty value, otherwise a DATE
-                    // column would receive '' and the UPDATE would fail on strict mode.
-                    $lcrBirthdayOld = isset($row['birthday']) ? trim((string) $row['birthday']) : '';
-                    if ($lcrBirthdayColumnReady && $lcrBirthdayOld != $lcrBirthday) {
-                        array_push($oldvalarr, $lcrBirthdayOld == '' ? 'Empty Value' : $lcrBirthdayOld);
-                        array_push($chgvalarr, $lcrBirthday == '' ? 'Empty Value' : $lcrBirthday);
+                    // Compare a compact y-m-d summary; missing segments read as ''
+                    // so adding/clearing one segment diffs correctly.
+                    $lcrBirthdayOldSummary = trim(
+                        (isset($row['birthday_year']) && $row['birthday_year'] !== null && (string) $row['birthday_year'] !== '' ? (string) (int) $row['birthday_year'] : '')
+                        . '-' .
+                        (isset($row['birthday_month']) && $row['birthday_month'] !== null && (string) $row['birthday_month'] !== '' ? (string) (int) $row['birthday_month'] : '')
+                        . '-' .
+                        (isset($row['birthday_day']) && $row['birthday_day'] !== null && (string) $row['birthday_day'] !== '' ? (string) (int) $row['birthday_day'] : ''),
+                        '-'
+                    );
+                    $lcrBirthdayNewSummary = trim($lcrBirthdayYear . '-' . $lcrBirthdayMonth . '-' . $lcrBirthdayDay, '-');
+                    if ($lcrBirthdayColumnReady && $lcrBirthdayOldSummary != $lcrBirthdayNewSummary) {
+                        array_push($oldvalarr, $lcrBirthdayOldSummary == '' ? 'Empty Value' : $lcrBirthdayOldSummary);
+                        array_push($chgvalarr, $lcrBirthdayNewSummary == '' ? 'Empty Value' : $lcrBirthdayNewSummary);
                         array_push($datafield, 'birthday');
                     }
 
@@ -649,14 +674,46 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
         </div>
 
         <div class="col-md-6 mb-3">
-            <label class="form-label form_lbl" id="lcr_birthday_lbl" for="lcr_birthday">Customer Birthday</label>
-            <input class="form-control" type="date" name="lcr_birthday" id="lcr_birthday" value="<?php
-                if (isset($dataExisted) && isset($row['birthday']) && !isset($lcr_birthday)) {
-                    echo $row['birthday'];
-                } else if (isset($lcr_birthday)) {
-                    echo $lcr_birthday;
+            <label class="form-label form_lbl" id="lcr_birthday_lbl" for="lcr_birthday_day">Customer Birthday</label>
+            <?php
+            $lcrBdYearValue = isset($row['birthday_year']) && $row['birthday_year'] !== null ? trim((string) $row['birthday_year']) : '';
+            $lcrBdMonthValue = isset($row['birthday_month']) && $row['birthday_month'] !== null ? trim((string) $row['birthday_month']) : '';
+            $lcrBdDayValue = isset($row['birthday_day']) && $row['birthday_day'] !== null ? trim((string) $row['birthday_day']) : '';
+            if (isset($lcr_birthday_year)) { $lcrBdYearValue = $lcr_birthday_year; }
+            if (isset($lcr_birthday_month)) { $lcrBdMonthValue = $lcr_birthday_month; }
+            if (isset($lcr_birthday_day)) { $lcrBdDayValue = $lcr_birthday_day; }
+            if ($lcrBdYearValue === '' && $lcrBdMonthValue === '' && $lcrBdDayValue === '' && isset($row['birthday']) && !empty($row['birthday']) && substr((string) $row['birthday'], 0, 4) !== '0000') {
+                $bdParts = explode('-', (string) $row['birthday']);
+                if (count($bdParts) === 3) {
+                    $lcrBdYearValue = (string) (int) $bdParts[0];
+                    $lcrBdMonthValue = (string) (int) $bdParts[1];
+                    $lcrBdDayValue = (string) (int) $bdParts[2];
                 }
-                ?>" placeholder="YYYY-MM-DD" <?php if ($act == '') echo 'disabled' ?>>
+            }
+            ?>
+            <div class="d-flex gap-2">
+                <select class="form-select" name="lcr_birthday_day" id="lcr_birthday_day" <?php if ($act == '')
+                    echo 'disabled' ?>>
+                    <option value="">Day</option>
+                    <?php for ($bdI = 1; $bdI <= 31; $bdI++) { ?>
+                        <option value="<?= $bdI ?>" <?= ((string) $bdI === $lcrBdDayValue) ? 'selected' : '' ?>><?= $bdI ?></option>
+                    <?php } ?>
+                </select>
+                <select class="form-select" name="lcr_birthday_month" id="lcr_birthday_month" <?php if ($act == '')
+                    echo 'disabled' ?>>
+                    <option value="">Month</option>
+                    <?php for ($bdI = 1; $bdI <= 12; $bdI++) { ?>
+                        <option value="<?= $bdI ?>" <?= ((string) $bdI === $lcrBdMonthValue) ? 'selected' : '' ?>><?= $bdI ?></option>
+                    <?php } ?>
+                </select>
+                <select class="form-select" name="lcr_birthday_year" id="lcr_birthday_year" <?php if ($act == '')
+                    echo 'disabled' ?>>
+                    <option value="">Year</option>
+                    <?php for ($bdI = (int) date('Y'); $bdI >= 1900; $bdI--) { ?>
+                        <option value="<?= $bdI ?>" <?= ((string) $bdI === $lcrBdYearValue) ? 'selected' : '' ?>><?= $bdI ?></option>
+                    <?php } ?>
+                </select>
+            </div>
             <?php if (isset($birthday_err)) { ?>
                 <div id="err_msg">
                     <span class="mt-n1"><?php echo $birthday_err; ?></span>

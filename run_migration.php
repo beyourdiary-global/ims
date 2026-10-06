@@ -108,12 +108,18 @@ echo migAddColumn($connect, $dbName, TASK_COLUMN, 'on_enter_assignee_mode', "VAR
 echo migAddColumn($connect, $dbName, 'user_record_log', 'log_type', "VARCHAR(32) DEFAULT NULL COMMENT 'tag=标签变更，列表过滤掉'");
 
 // ---- 4) Facebook customer record birthday ----
-echo migAddColumn($connect, $dbName, 'customer_facebook_deals_transaction', 'birthday', "DATE DEFAULT NULL COMMENT 'Customer birthday (YYYY-MM-DD)'");
+echo migAddColumn($connect, $dbName, 'customer_facebook_deals_transaction', 'birthday_year', "SMALLINT DEFAULT NULL COMMENT 'Customer birthday year'");
+echo migAddColumn($connect, $dbName, 'customer_facebook_deals_transaction', 'birthday_month', "TINYINT DEFAULT NULL COMMENT 'Customer birthday month 1-12'");
+echo migAddColumn($connect, $dbName, 'customer_facebook_deals_transaction', 'birthday_day', "TINYINT DEFAULT NULL COMMENT 'Customer birthday day 1-31'");
 
 // ---- 5) Lazada / Shopee customer birthday ----
-echo migAddColumn($connect, $dbName, 'customer_lazada_deals_transaction', 'birthday', "DATE DEFAULT NULL COMMENT 'Customer birthday (YYYY-MM-DD)'");
+echo migAddColumn($connect, $dbName, 'customer_lazada_deals_transaction', 'birthday_year', "SMALLINT DEFAULT NULL COMMENT 'Customer birthday year'");
+echo migAddColumn($connect, $dbName, 'customer_lazada_deals_transaction', 'birthday_month', "TINYINT DEFAULT NULL COMMENT 'Customer birthday month 1-12'");
+echo migAddColumn($connect, $dbName, 'customer_lazada_deals_transaction', 'birthday_day', "TINYINT DEFAULT NULL COMMENT 'Customer birthday day 1-31'");
 if (isset($finance_connect) && ($finance_connect instanceof mysqli)) {
-    echo migAddColumn($finance_connect, dbFinance, 'shopee_customer_info', 'birthday', "DATE DEFAULT NULL COMMENT 'Customer birthday (YYYY-MM-DD)'");
+    echo migAddColumn($finance_connect, dbFinance, 'shopee_customer_info', 'birthday_year', "SMALLINT DEFAULT NULL COMMENT 'Customer birthday year'");
+    echo migAddColumn($finance_connect, dbFinance, 'shopee_customer_info', 'birthday_month', "TINYINT DEFAULT NULL COMMENT 'Customer birthday month 1-12'");
+    echo migAddColumn($finance_connect, dbFinance, 'shopee_customer_info', 'birthday_day', "TINYINT DEFAULT NULL COMMENT 'Customer birthday day 1-31'");
 } else {
     echo "SKIP  shopee_customer_info.birthday (finance connection unavailable)\n";
 }
