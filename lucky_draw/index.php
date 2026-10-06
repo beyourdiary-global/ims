@@ -307,7 +307,7 @@ foreach ($wheelPrizes as $row) {
 $howItWorks = array(
     array(
         'title' => 'Enter Your Username',
-        'description' => 'Fill in your Shopee username or your name and pick your birth month and year.',
+        'description' => 'Enter the username we have on file for you (Customer Info, Shopee, Lazada or Facebook) and pick your birth month and year.',
     ),
     array(
         'title' => 'Spin the Wheel',
@@ -384,7 +384,7 @@ $howItWorks = array(
                                 <input type="hidden" name="ld_form_token" value="<?= htmlspecialchars($formToken, ENT_QUOTES, 'UTF-8') ?>">
                                 <div>
                                     <label for="customer_username">Username</label>
-                                    <input type="text" id="customer_username" name="customer_username" placeholder="Shopee username or your name" autocomplete="username" required>
+                                    <input type="text" id="customer_username" name="customer_username" placeholder="Your name or username (Customer Info / Shopee / Lazada / Facebook)" autocomplete="username" required>
                                 </div>
 
                                 <div class="ld-birthday-grid">

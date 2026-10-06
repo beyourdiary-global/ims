@@ -1679,6 +1679,75 @@ if (!function_exists('luckyDrawFindCustomerInfoByName')) {
     }
 }
 
+if (!function_exists('luckyDrawFindCustomerByPlatformUsername')) {
+    // Look the typed username up in one of the platform customer tables
+    // (Facebook / Lazada / Shopee). Each platform exposes a different identity
+    // column, so the caller passes the candidate columns in priority order.
+    // Returns the row array, or null when nothing matches.
+    function luckyDrawFindCustomerByPlatformUsername($connect, $table, $username, $columns)
+    {
+        $username = trim((string) $username);
+        if (!($connect instanceof mysqli) || $username === '' || $table === '') {
+            return null;
+        }
+
+        $columnList = is_array($columns) ? $columns : array($columns);
+        if (empty($columnList)) {
+            return null;
+        }
+
+        // Only compare against columns that actually exist in the table. A platform
+        // table may not carry every candidate column (e.g. shopee_customer_info has
+        // buyer_username but no name), and referencing a missing column would make the
+        // whole lookup throw instead of simply skipping that candidate.
+        $existingColumns = array();
+        $columnResult = mysqli_query($connect, "SHOW COLUMNS FROM `" . $table . "`");
+        if ($columnResult) {
+            while ($columnRow = mysqli_fetch_assoc($columnResult)) {
+                $fieldName = strtolower(trim((string) (isset($columnRow['Field']) ? $columnRow['Field'] : '')));
+                if ($fieldName !== '') {
+                    $existingColumns[$fieldName] = true;
+                }
+            }
+        }
+        if (empty($existingColumns)) {
+            return null;
+        }
+
+        $safeUsername = mysqli_real_escape_string($connect, $username);
+        $conditions = array();
+        foreach ($columnList as $columnName) {
+            $columnName = trim((string) $columnName);
+            if ($columnName === '') {
+                continue;
+            }
+            // Column names are fixed literals from our own call list, never user input,
+            // but keep them bare and identifier-safe anyway.
+            $columnName = preg_replace('/[^A-Za-z0-9_]/', '', $columnName);
+            if ($columnName === '' || !isset($existingColumns[strtolower($columnName)])) {
+                continue;
+            }
+            $conditions[] = "LOWER(TRIM(`" . $columnName . "`)) = LOWER('" . $safeUsername . "')";
+        }
+
+        if (empty($conditions)) {
+            return null;
+        }
+
+        $sql = "SELECT * FROM `" . $table . "`
+            WHERE `status` = 'A'
+              AND (" . implode(' OR ', $conditions) . ")
+            ORDER BY `id` DESC
+            LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if ($result && ($row = mysqli_fetch_assoc($result))) {
+            return (array) $row;
+        }
+
+        return null;
+    }
+}
+
 if (!function_exists('luckyDrawLookupCustomerByUsername')) {
     function luckyDrawLookupCustomerByUsername($connect, $financeConnect, $username)
     {
@@ -1696,34 +1765,32 @@ if (!function_exists('luckyDrawLookupCustomerByUsername')) {
             $source = 'customer_info';
         }
 
-        // 2) The username typed is a Shopee buyer username. Resolve it to the Shopee
-        //    customer's display name first, then match Customer Info on that name.
+        // 2) The username typed is a Shopee buyer username. The Shopee customer table
+        //    lives in the finance database and now carries birthday_year/month/day.
         if ($row === null && ($financeConnect instanceof mysqli)) {
-            $safeUsernameFinance = mysqli_real_escape_string($financeConnect, $username);
-            $shopeeSql = "SELECT * FROM `" . SHOPEE_CUST_INFO . "`
-                WHERE LOWER(TRIM(`buyer_username`)) = LOWER('" . $safeUsernameFinance . "')
-                  AND `status` = 'A'
-                LIMIT 1";
-            $shopeeResult = mysqli_query($financeConnect, $shopeeSql);
-            if ($shopeeResult && ($shopeeRow = mysqli_fetch_assoc($shopeeResult))) {
-                $nameCandidates = array();
-                foreach (array('customer_name', 'name', 'buyer_username') as $nameColumn) {
-                    if (isset($shopeeRow[$nameColumn])) {
-                        $nameCandidates[] = trim((string) $shopeeRow[$nameColumn]);
-                    }
-                }
+            $shopeeRow = luckyDrawFindCustomerByPlatformUsername($financeConnect, SHOPEE_CUST_INFO, $username, array('buyer_username'));
+            if ($shopeeRow !== null) {
+                $row = $shopeeRow;
+                $source = 'shopee';
+            }
+        }
 
-                foreach ($nameCandidates as $candidateName) {
-                    if ($candidateName === '') {
-                        continue;
-                    }
-                    $matchedRow = luckyDrawFindCustomerInfoByName($connect, $candidateName);
-                    if ($matchedRow !== null) {
-                        $row = $matchedRow;
-                        $source = 'shopee';
-                        break;
-                    }
-                }
+        // 3) The username typed is a Facebook customer name / link. Facebook rows live in
+        //    the CMS database and now carry the same birthday_year/month/day columns.
+        if ($row === null) {
+            $facebookRow = luckyDrawFindCustomerByPlatformUsername($connect, FB_CUST_DEALS, $username, array('name', 'fb_link'));
+            if ($facebookRow !== null) {
+                $row = $facebookRow;
+                $source = 'facebook';
+            }
+        }
+
+        // 4) The username typed is a Lazada customer name / email / phone / record id.
+        if ($row === null) {
+            $lazadaRow = luckyDrawFindCustomerByPlatformUsername($connect, LAZADA_CUST_RCD, $username, array('name', 'email', 'phone', 'lcr_id'));
+            if ($lazadaRow !== null) {
+                $row = $lazadaRow;
+                $source = 'lazada';
             }
         }
 
@@ -1736,13 +1803,23 @@ if (!function_exists('luckyDrawLookupCustomerByUsername')) {
             return array('success' => false, 'message' => 'This customer does not have a birthday record yet.', 'member' => array());
         }
 
-        $displayName = trim((string) (isset($row['name']) ? $row['name'] : ''));
+        // Resolve a stable display name per source so the draw key stays canonical:
+        // - customer_info / facebook / lazada expose `name`
+        // - shopee exposes `buyer_username`
+        $displayName = '';
+        foreach (array('name', 'buyer_username') as $nameColumn) {
+            if (isset($row[$nameColumn]) && trim((string) $row[$nameColumn]) !== '') {
+                $displayName = trim((string) $row[$nameColumn]);
+                break;
+            }
+        }
         if ($displayName === '') {
             $displayName = $username;
         }
 
-        // The draw key is the canonical Customer Info name, so a member who types their
-        // Shopee username one day and their name the next still only gets one draw.
+        // The draw key is the canonical customer name, so a member who types their Shopee
+        // username one day and their Facebook name the next still only gets one draw per
+        // distinct name (see the note in the handover about multi-source participation).
         return array(
             'success' => true,
             'message' => '',
