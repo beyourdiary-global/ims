@@ -107,5 +107,8 @@ echo migAddColumn($connect, $dbName, TASK_COLUMN, 'on_enter_assignee_mode', "VAR
 // ---- 3) 任务5：标记 tag 类变更，列表过滤掉 ----
 echo migAddColumn($connect, $dbName, 'user_record_log', 'log_type', "VARCHAR(32) DEFAULT NULL COMMENT 'tag=标签变更，列表过滤掉'");
 
+// ---- 4) Facebook customer record birthday ----
+echo migAddColumn($connect, $dbName, 'customer_facebook_deals_transaction', 'birthday', "DATE DEFAULT NULL COMMENT 'Customer birthday (YYYY-MM-DD)'");
+
 echo "====================\n";
 echo "Done. 建议执行完从服务器删除本文件。\n";

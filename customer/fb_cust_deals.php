@@ -140,6 +140,7 @@ if (post('actionBtn')) {
     $fcb_rec_ctc = postSpaceFilter('fcb_rec_ctc');
     $fcb_rec_add = postSpaceFilter('fcb_rec_add');
     $fcb_remark = postSpaceFilter('fcb_remark');
+    $fcb_birthday = postSpaceFilter('fcb_birthday');
     $sqlFcbName = mysqli_real_escape_string($connect, trim((string) $fcb_name));
     $sqlFcbLink = mysqli_real_escape_string($connect, trim((string) $fcb_link));
     $sqlFcbCtc = mysqli_real_escape_string($connect, trim((string) $fcb_ctc));
@@ -147,6 +148,20 @@ if (post('actionBtn')) {
     $sqlFcbRecCtc = mysqli_real_escape_string($connect, trim((string) $fcb_rec_ctc));
     $sqlFcbRecAdd = mysqli_real_escape_string($connect, trim((string) $fcb_rec_add));
     $sqlFcbRemark = mysqli_real_escape_string($connect, trim((string) $fcb_remark));
+    $fbBirthday = trim((string) $fcb_birthday);
+    $fbBirthdayParts = $fbBirthday !== '' ? explode('-', $fbBirthday) : array();
+    $fbBirthdayValid = ($fbBirthday === '' || (count($fbBirthdayParts) === 3 && checkdate((int) $fbBirthdayParts[1], (int) $fbBirthdayParts[2], (int) $fbBirthdayParts[0])));
+    $sqlFcbBirthday = $fbBirthday !== '' ? mysqli_real_escape_string($connect, $fbBirthday) : '';
+    // The birthday column may not exist yet (migration pending). Detect it so a
+    // deploy without the DB migration never breaks adding/editing FB customers.
+    $fbBirthdayColumnReady = false;
+    $fbBirthdayColRst = mysqli_query($connect, "SHOW COLUMNS FROM `" . $tblName . "` LIKE 'birthday'");
+    if ($fbBirthdayColRst && $fbBirthdayColRst->num_rows > 0) {
+        $fbBirthdayColumnReady = true;
+    }
+    $fbBirthdayInsertCol = $fbBirthdayColumnReady ? ", birthday" : '';
+    $fbBirthdayInsertVal = $fbBirthdayColumnReady ? ($sqlFcbBirthday !== '' ? ", '" . $sqlFcbBirthday . "'" : ", NULL") : '';
+    $fbBirthdaySet = $fbBirthdayColumnReady ? ", birthday = " . ($sqlFcbBirthday !== '' ? "'" . $sqlFcbBirthday . "'" : "NULL") : '';
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
 
@@ -189,6 +204,9 @@ if (post('actionBtn')) {
                 break;
             } else if (!$fcb_rec_add) {
                 $rec_add_err = "Receiver Address cannot be empty.";
+                break;
+            } else if (!$fbBirthdayValid) {
+                $birthday_err = "Birthday must be a valid date (YYYY-MM-DD).";
                 break;
             } else if ($action == 'addRecord') {
                 try {
@@ -257,7 +275,12 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
-                    $query = "INSERT INTO " . $tblName . "(name,fb_link,contact,sales_pic,country,brand,series,fb_page,channel,ship_rec_name,ship_rec_add,ship_rec_contact,remark,create_by,create_date,create_time) VALUES ('$sqlFcbName','$sqlFcbLink','$sqlFcbCtc','$fcb_pic','$fcb_country','$fcb_brand','$fcb_series','$fcb_fbpage','$fcb_channel','$sqlFcbRecName','$sqlFcbRecAdd','$sqlFcbRecCtc','$sqlFcbRemark','" . USER_ID . "',curdate(),curtime())";
+                    if ($fbBirthday !== '') {
+                        array_push($newvalarr, $fbBirthday);
+                        array_push($datafield, 'birthday');
+                    }
+
+                    $query = "INSERT INTO " . $tblName . "(name,fb_link,contact,sales_pic,country,brand,series,fb_page,channel,ship_rec_name,ship_rec_add,ship_rec_contact,remark" . $fbBirthdayInsertCol . ",create_by,create_date,create_time) VALUES ('$sqlFcbName','$sqlFcbLink','$sqlFcbCtc','$fcb_pic','$fcb_country','$fcb_brand','$fcb_series','$fcb_fbpage','$fcb_channel','$sqlFcbRecName','$sqlFcbRecAdd','$sqlFcbRecCtc','$sqlFcbRemark'" . $fbBirthdayInsertVal . ",'" . USER_ID . "',curdate(),curtime())";
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
                     if ($returnData) {
@@ -358,13 +381,22 @@ if (post('actionBtn')) {
                         array_push($datafield, 'remark');
                     }
 
+                    // Treat NULL and '' as the same empty value, otherwise a DATE
+                    // column would receive '' and the UPDATE would fail on strict mode.
+                    $fbBirthdayOld = isset($row['birthday']) ? trim((string) $row['birthday']) : '';
+                    if ($fbBirthdayColumnReady && $fbBirthdayOld != $fbBirthday) {
+                        array_push($oldvalarr, $fbBirthdayOld == '' ? 'Empty Value' : $fbBirthdayOld);
+                        array_push($chgvalarr, $fbBirthday == '' ? 'Empty Value' : $fbBirthday);
+                        array_push($datafield, 'birthday');
+                    }
+
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
                     $chgval = implode(",", $chgvalarr);
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET name = '$sqlFcbName', fb_link = '$sqlFcbLink', contact = '$sqlFcbCtc', sales_pic = '$fcb_pic', country = '$fcb_country', brand = '$fcb_brand', series = '$fcb_series', fb_page = '$fcb_fbpage', channel = '$fcb_channel', ship_rec_name = '$sqlFcbRecName', ship_rec_add = '$sqlFcbRecAdd', ship_rec_contact = '$sqlFcbRecCtc', remark ='$sqlFcbRemark', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName . " SET name = '$sqlFcbName', fb_link = '$sqlFcbLink', contact = '$sqlFcbCtc', sales_pic = '$fcb_pic', country = '$fcb_country', brand = '$fcb_brand', series = '$fcb_series', fb_page = '$fcb_fbpage', channel = '$fcb_channel', ship_rec_name = '$sqlFcbRecName', ship_rec_add = '$sqlFcbRecAdd', ship_rec_contact = '$sqlFcbRecCtc', remark ='$sqlFcbRemark'" . $fbBirthdaySet . ", update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
 
                     } else {
@@ -558,6 +590,24 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                                     <div id="err_msg">
                                         <span class="mt-n1">
                                             <?php echo $contact_err; ?>
+                                        </span>
+                                    </div>
+                                <?php } ?>
+                            </div>
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" id="fcb_birthday_lbl" for="fcb_birthday">Birthday</label>
+                                <input class="form-control" type="date" name="fcb_birthday" id="fcb_birthday" value="<?php
+                                if (isset($dataExisted) && isset($row['birthday']) && !isset($fcb_birthday)) {
+                                    echo $row['birthday'];
+                                } else if (isset($fcb_birthday)) {
+                                    echo $fcb_birthday;
+                                }
+                                ?>" placeholder="YYYY-MM-DD" <?php if ($act == '')
+                                    echo 'disabled' ?>>
+                                <?php if (isset($birthday_err)) { ?>
+                                    <div id="err_msg">
+                                        <span class="mt-n1">
+                                            <?php echo $birthday_err; ?>
                                         </span>
                                     </div>
                                 <?php } ?>
