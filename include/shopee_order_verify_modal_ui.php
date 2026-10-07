@@ -199,7 +199,7 @@ if (!function_exists('shopeeOrderDetailPdfRenderVerifyModalScript')) {
         ?>
         <script src="../finance/header/js/pdf.min.js"></script>
         <script src="../finance/header/js/tesseract.min.js"></script>
-        <script src="../js/pdf_airbill_parser.js"></script>
+        <script src="../js/pdf_airbill_parser.js<?= function_exists('commonAssetVersion') ? '?v=' . commonAssetVersion('/js/pdf_airbill_parser.js') : '' ?>"></script>
         <script>
             (function () {
                 var config = {

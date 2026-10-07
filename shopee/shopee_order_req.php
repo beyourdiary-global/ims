@@ -942,7 +942,7 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
         $sor_update_airbill = 'yes';
     }
     $sor_airbill = postSpaceFilter('sor_airbill');
-    $sor_customer_name = postSpaceFilter('sor_customer_name');
+    $sor_customer_name = shopeeOmsSanitizeDeliveryCustomerName(postSpaceFilter('sor_customer_name'));
     $sor_customer_address = postSpaceFilter('sor_customer_address');
     $sor_bot_msg_template_id = (int) postSpaceFilter('sor_bot_msg_template_id');
     if ($sor_bot_msg_template_id <= 0 || !isset($sorBotMsgTemplateNameMap[$sor_bot_msg_template_id])) {
@@ -1914,7 +1914,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
     <link rel="stylesheet" href="../css/main.css">
     <script src="../finance/header/js/pdf.min.js"></script>
     <script src="../finance/header/js/tesseract.min.js"></script>
-    <script src="../js/pdf_airbill_parser.js"></script>
+    <script src="../js/pdf_airbill_parser.js<?= function_exists('commonAssetVersion') ? '?v=' . commonAssetVersion('/js/pdf_airbill_parser.js') : '' ?>"></script>
     <style>
         .shopee-airbill-row {
             align-items: flex-start;

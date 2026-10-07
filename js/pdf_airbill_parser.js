@@ -371,6 +371,27 @@ if (!window.shopeeOmsAirbillPdfAutofill || !window.shopeeOmsAirbillPdfAutofill._
             return /\b(sender|shipper|from|pickup|return\s+to|consignor)\b/i.test(String(line || ''));
         }
 
+        function stripDeliveryTypeLabel(value) {
+            var text = String(value == null ? '' : value).trim();
+
+            // A section header ("Recipient Details") or a bare delivery label ("Home",
+            // "Office") is not a name at all.
+            if (
+                /^(?:(?:recipient|receiver|consignee|sender|shipper|customer|buyer|delivery|shipping)\s+)?(?:details?|info|information)$/i.test(text)
+                || /^(?:recipient|receiver|consignee|sender|shipper|customer|buyer|home|office|standard|non[\s-]*cod|cod)$/i.test(text)
+            ) {
+                return '';
+            }
+
+            // The recipient row on Shopee / J&T labels also carries the delivery type
+            // ("Home" / "Standard" / "COD") or the buyer's address label ("Home" /
+            // "Office") on the same visual row as the name. Drop a trailing token like
+            // that instead of gluing it onto the customer name.
+            return text
+                .replace(/(?:[\s,\-]+\(?(?:home|office|standard|non[\s-]*cod|cod)\)?)+$/i, '')
+                .trim();
+        }
+
         function cleanNameValue(value) {
             value = normalizePlainText(value)
                 .replace(/^(?:recipient|receiver|consignee|customer|buyer|ship\s*to|deliver\s*to|to|name)\s*[:\uFF1A-]?\s*/i, '')
@@ -378,8 +399,10 @@ if (!window.shopeeOmsAirbillPdfAutofill || !window.shopeeOmsAirbillPdfAutofill._
                 .replace(/\s{2,}/g, ' ')
                 .trim();
 
-            // A section header such as "Recipient Details" must not be read as a name.
-            if (/^(?:details?|info|information|recipient|receiver|consignee|sender|shipper|customer|buyer)$/i.test(value)) {
+            // A section header such as "Recipient Details", or the delivery-type / address
+            // label on its own ("Home", "Office") when the name block sat on another row,
+            // must not be read as a name.
+            if (/^(?:details?|info|information|recipient|receiver|consignee|sender|shipper|customer|buyer|home|office|standard|non[\s-]*cod|cod)$/i.test(value)) {
                 return '';
             }
 
@@ -413,11 +436,7 @@ if (!window.shopeeOmsAirbillPdfAutofill || !window.shopeeOmsAirbillPdfAutofill._
                 return '';
             }
 
-            // The recipient row on Shopee / J&T labels also carries the delivery type
-            // ("Home" / "Standard" / "COD") or the buyer's address label ("Home" /
-            // "Office"), and it shares the visual row with the name. Drop a trailing
-            // token like that instead of gluing it onto the customer name.
-            value = value.replace(/(?:[\s,\-]+\(?(?:home|office|standard|non[\s-]*cod|cod)\)?)+$/i, '').trim();
+            value = stripDeliveryTypeLabel(value);
             if (value === '') {
                 return '';
             }
@@ -918,16 +937,35 @@ if (!window.shopeeOmsAirbillPdfAutofill || !window.shopeeOmsAirbillPdfAutofill._
                 try {
                     var storedDeliveryInfo = JSON.parse(localStorage.getItem(config.localStorageKey) || 'null');
                     if (storedDeliveryInfo) {
-                        if (airbillNo && !String(airbillNo.value || '').trim() && String(storedDeliveryInfo.airbillNo || '').trim()) {
-                            airbillNo.value = String(storedDeliveryInfo.airbillNo || '').trim();
+                        var storedAirbillNo = String(storedDeliveryInfo.airbillNo || '').trim();
+                        var storedCustomerName = stripDeliveryTypeLabel(storedDeliveryInfo.customerName);
+                        var storedCustomerAddress = String(storedDeliveryInfo.customerAddress || '').trim();
+
+                        // A copy cached before the fix still carries the label that shared the
+                        // recipient row. Clean it on read and write the corrected copy back,
+                        // otherwise the stale value keeps refilling an emptied field (a reset
+                        // clears the input, and this block is what puts "Home" back).
+                        if (storedCustomerName !== String(storedDeliveryInfo.customerName || '').trim()) {
+                            try {
+                                localStorage.setItem(config.localStorageKey, JSON.stringify({
+                                    airbillNo: storedAirbillNo,
+                                    customerName: storedCustomerName,
+                                    customerAddress: storedCustomerAddress
+                                }));
+                            } catch (error) {
+                            }
+                        }
+
+                        if (airbillNo && !String(airbillNo.value || '').trim() && storedAirbillNo) {
+                            airbillNo.value = storedAirbillNo;
                             dispatchInputEvent(airbillNo);
                         }
-                        if (customerName && !String(customerName.value || '').trim() && String(storedDeliveryInfo.customerName || '').trim()) {
-                            customerName.value = String(storedDeliveryInfo.customerName || '').trim();
+                        if (customerName && !String(customerName.value || '').trim() && storedCustomerName) {
+                            customerName.value = storedCustomerName;
                             dispatchInputEvent(customerName);
                         }
-                        if (customerAddress && !String(customerAddress.value || '').trim() && String(storedDeliveryInfo.customerAddress || '').trim()) {
-                            customerAddress.value = String(storedDeliveryInfo.customerAddress || '').trim();
+                        if (customerAddress && !String(customerAddress.value || '').trim() && storedCustomerAddress) {
+                            customerAddress.value = storedCustomerAddress;
                             dispatchInputEvent(customerAddress);
                         }
                     }

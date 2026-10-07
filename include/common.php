@@ -13842,6 +13842,9 @@ if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
         if ($deliveryCustomerName === '') {
             $deliveryCustomerName = trim((string) (isset($deliveryInfo['customer_name']) ? $deliveryInfo['customer_name'] : ''));
         }
+        // Whatever the source (order row, session, airbill), the name that reaches the
+        // warehouse must not carry the delivery type printed on the recipient row.
+        $deliveryCustomerName = shopeeOmsSanitizeDeliveryCustomerName($deliveryCustomerName);
         $deliveryCustomerAddress = $customerAddress;
         if ($deliveryCustomerAddress === '' && isset($rememberedDeliveryInfo['customer_address'])) {
             $deliveryCustomerAddress = trim((string) $rememberedDeliveryInfo['customer_address']);
@@ -14271,6 +14274,9 @@ if (!function_exists('shopeeOmsRememberWarehouseDeliveryInfo')) {
 
         foreach (array('customer_name', 'customer_address') as $fieldName) {
             $fieldValue = isset($deliveryInfo[$fieldName]) ? trim((string) $deliveryInfo[$fieldName]) : '';
+            if ($fieldName === 'customer_name') {
+                $fieldValue = shopeeOmsSanitizeDeliveryCustomerName($fieldValue);
+            }
             if ($fieldValue !== '') {
                 $currentInfo[$fieldName] = $fieldValue;
             }
@@ -14296,7 +14302,20 @@ if (!function_exists('shopeeOmsGetRememberedWarehouseDeliveryInfo')) {
             return array();
         }
 
-        return $_SESSION['shopee_oms_warehouse_delivery_info'][$platform][$orderId];
+        $rememberedInfo = $_SESSION['shopee_oms_warehouse_delivery_info'][$platform][$orderId];
+        if (isset($rememberedInfo['customer_name'])) {
+            // A value remembered before the fix can still carry "Home" / "Office". Clean it
+            // on read and drop it entirely when nothing is left, so the caller falls back to
+            // the order's own customer name instead of an emptied field.
+            $rememberedCustomerName = shopeeOmsSanitizeDeliveryCustomerName($rememberedInfo['customer_name']);
+            if ($rememberedCustomerName === '') {
+                unset($rememberedInfo['customer_name']);
+            } else {
+                $rememberedInfo['customer_name'] = $rememberedCustomerName;
+            }
+        }
+
+        return $rememberedInfo;
     }
 }
 
@@ -14352,6 +14371,37 @@ if (!function_exists('shopeeOmsNormalizeDeliveryFieldValue')) {
     }
 }
 
+if (!function_exists('shopeeOmsSanitizeDeliveryCustomerName')) {
+    /**
+     * Strips the delivery type / address label that Shopee and J&T airbills print on the
+     * same row as the recipient name ("Home", "Office", "Standard", "COD", "Non-Cod").
+     * Only a trailing label is removed, so a real name that merely contains such a word
+     * ("Home Bakery Supplies") is left untouched.
+     *
+     * Applied at every entry point - the airbill parser, the session "remembered"
+     * delivery info and the warehouse message - because a value captured before this
+     * existed keeps being reused long after the parser itself was corrected.
+     */
+    function shopeeOmsSanitizeDeliveryCustomerName($value)
+    {
+        $value = trim((string) $value);
+        if ($value === '') {
+            return '';
+        }
+
+        // A section header ("Recipient Details"), or the delivery-type / address label on
+        // its own ("Home", "Office") when the name block sat on another row, is not a name.
+        if (preg_match('/^(?:(?:recipient|receiver|consignee|sender|shipper|customer|buyer|delivery|shipping)\s+)?(?:details?|info|information)$/i', $value)
+            || preg_match('/^(?:recipient|receiver|consignee|sender|shipper|customer|buyer|home|office|standard|non[\s-]*cod|cod)$/i', $value)) {
+            return '';
+        }
+
+        $value = (string) preg_replace('/(?:[\s,\-]+\(?(?:home|office|standard|non[\s-]*cod|cod)\)?)+$/i', '', $value);
+
+        return trim($value, " ,\t\n\r\0\x0B");
+    }
+}
+
 if (!function_exists('shopeeOmsExtractAirbillDeliveryInfoFromText')) {
     function shopeeOmsExtractAirbillDeliveryInfoFromText($sourceText)
     {
@@ -14390,11 +14440,7 @@ if (!function_exists('shopeeOmsExtractAirbillDeliveryInfoFromText')) {
         $customerAddress = $extractLastMatch('/\bAddress\s*:\s*(.+?)(?=\b(?:Phone|Postcode|Name)\s*:|$)/isu', $recipientSection);
         $postcode = $extractLastMatch('/\bPostcode\s*:\s*([A-Za-z0-9\- ]{3,20})/iu', $recipientSection);
 
-        $customerName = shopeeOmsNormalizeDeliveryFieldValue($customerName);
-        // The recipient block on Shopee / J&T airbills also carries the delivery type
-        // ("Home" / "Standard" / "COD") or the buyer's address label ("Home" /
-        // "Office") on the same row as the name; strip it instead of gluing it on.
-        $customerName = trim((string) preg_replace('/(?:[\s,\-]+\(?(?:home|office|standard|non[\s-]*cod|cod)\)?)+$/i', '', $customerName), " ,\t\n\r\0\x0B");
+        $customerName = shopeeOmsSanitizeDeliveryCustomerName(shopeeOmsNormalizeDeliveryFieldValue($customerName));
         $customerAddress = shopeeOmsNormalizeDeliveryFieldValue($customerAddress);
         $postcode = shopeeOmsNormalizeDeliveryFieldValue($postcode);
 

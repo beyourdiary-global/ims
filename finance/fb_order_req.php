@@ -1874,7 +1874,7 @@ foreach ($memberPointRenderRewards as $memberPointRewardRow) {
 <head>
     <link rel="stylesheet" href="../css/main.css">
     <script src="<?= $SITEURL ?>/finance/header/js/pdf.min.js"></script>
-    <script src="<?= $SITEURL ?>/js/pdf_airbill_parser.js"></script>
+    <script src="<?= $SITEURL ?>/js/pdf_airbill_parser.js<?= function_exists('commonAssetVersion') ? '?v=' . commonAssetVersion('/js/pdf_airbill_parser.js') : '' ?>"></script>
     <script src="<?= $SITEURL ?>/finance/header/js/tesseract.min.js"></script>
     <style>
         .shopee-airbill-toggle-col {
