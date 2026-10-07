@@ -14391,6 +14391,10 @@ if (!function_exists('shopeeOmsExtractAirbillDeliveryInfoFromText')) {
         $postcode = $extractLastMatch('/\bPostcode\s*:\s*([A-Za-z0-9\- ]{3,20})/iu', $recipientSection);
 
         $customerName = shopeeOmsNormalizeDeliveryFieldValue($customerName);
+        // The recipient block on Shopee / J&T airbills also carries the delivery type
+        // ("Home" / "Standard" / "COD") or the buyer's address label ("Home" /
+        // "Office") on the same row as the name; strip it instead of gluing it on.
+        $customerName = trim((string) preg_replace('/(?:[\s,\-]+\(?(?:home|office|standard|non[\s-]*cod|cod)\)?)+$/i', '', $customerName), " ,\t\n\r\0\x0B");
         $customerAddress = shopeeOmsNormalizeDeliveryFieldValue($customerAddress);
         $postcode = shopeeOmsNormalizeDeliveryFieldValue($postcode);
 

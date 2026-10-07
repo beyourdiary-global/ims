@@ -378,6 +378,11 @@ if (!window.shopeeOmsAirbillPdfAutofill || !window.shopeeOmsAirbillPdfAutofill._
                 .replace(/\s{2,}/g, ' ')
                 .trim();
 
+            // A section header such as "Recipient Details" must not be read as a name.
+            if (/^(?:details?|info|information|recipient|receiver|consignee|sender|shipper|customer|buyer)$/i.test(value)) {
+                return '';
+            }
+
             if (value === '' || value.length > 80) {
                 return '';
             }
@@ -405,6 +410,15 @@ if (!window.shopeeOmsAirbillPdfAutofill || !window.shopeeOmsAirbillPdfAutofill._
                 return '';
             }
             if (/^[0-9\s+\-()]{6,}$/.test(value)) {
+                return '';
+            }
+
+            // The recipient row on Shopee / J&T labels also carries the delivery type
+            // ("Home" / "Standard" / "COD") or the buyer's address label ("Home" /
+            // "Office"), and it shares the visual row with the name. Drop a trailing
+            // token like that instead of gluing it onto the customer name.
+            value = value.replace(/(?:[\s,\-]+\(?(?:home|office|standard|non[\s-]*cod|cod)\)?)+$/i, '').trim();
+            if (value === '') {
                 return '';
             }
 
