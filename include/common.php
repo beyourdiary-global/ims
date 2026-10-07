@@ -12006,8 +12006,40 @@ if (!function_exists('shopeeOmsDecodePackageQtySnapshot')) {
     }
 }
 
-if (!function_exists('shopeeOmsBuildPackageQtySnapshotFromInputs')) {
-    function shopeeOmsBuildPackageQtySnapshotFromInputs($hiddenIds, $nameInputs, $connect)
+if (!function_exists('shopeeOmsLookupUniquePackageIdByName')) {
+    /**
+     * 按包名查 id；仅当唯一命中时才返回（未命中 / 重名返回 0），避免误判到别的包。
+     */
+    function shopeeOmsLookupUniquePackageIdByName($connect, $packageName)
+    {
+        $packageName = trim((string) $packageName);
+        if ($packageName === '' || !($connect instanceof mysqli)) {
+            return 0;
+        }
+
+        $safePackageName = mysqli_real_escape_string($connect, $packageName);
+        $result = getData('id', "name = '" . $safePackageName . "'", 'LIMIT 2', PKG, $connect);
+        if ($result && $result->num_rows === 1) {
+            $packageRow = $result->fetch_assoc();
+            return isset($packageRow['id']) ? (int) $packageRow['id'] : 0;
+        }
+
+        return 0;
+    }
+}
+
+if (!function_exists('shopeeOmsResolvePackageRowsFromInputs')) {
+    /**
+     * 逐行配对「包名文字」与「隐藏包 id」。
+     *
+     * 当可见文本与隐藏 id 指向的包名不一致时，以【可见文本】为准重新解析 id ——
+     * 防止「手改了包名文字但隐藏 id 没跟着更新」把订单挂到错误的包
+     * （2026-10-07 订单 1404：文字是 MOONZ 的包、隐藏 id 却是 SUNZ 的包，
+     *  扫码出库页因此显示错产品）。
+     *
+     * 返回 array of array('package_id' => int, 'package_name' => string)。
+     */
+    function shopeeOmsResolvePackageRowsFromInputs($hiddenIds, $nameInputs, $connect)
     {
         if (!is_array($hiddenIds)) {
             $hiddenIds = explode(',', (string) $hiddenIds);
@@ -12016,21 +12048,39 @@ if (!function_exists('shopeeOmsBuildPackageQtySnapshotFromInputs')) {
             $nameInputs = explode(',', (string) $nameInputs);
         }
 
+        $canQuery = ($connect instanceof mysqli);
         $rows = array();
         $rowCount = max(count($hiddenIds), count($nameInputs));
+
         for ($i = 0; $i < $rowCount; $i++) {
-            $packageId = isset($hiddenIds[$i]) && ctype_digit((string) $hiddenIds[$i]) ? (int) $hiddenIds[$i] : 0;
+            $rawId = isset($hiddenIds[$i]) ? trim((string) $hiddenIds[$i]) : '';
+            $packageId = ($rawId !== '' && ctype_digit($rawId)) ? (int) $rawId : 0;
             $packageName = trim((string) (isset($nameInputs[$i]) ? $nameInputs[$i] : ''));
 
-            if ($packageId <= 0 && $packageName !== '' && ($connect instanceof mysqli)) {
-                $safePackageName = mysqli_real_escape_string($connect, $packageName);
-                $result = getData('id, name', "name = '" . $safePackageName . "'", 'LIMIT 1', PKG, $connect);
-                if ($result && $result->num_rows > 0) {
-                    $packageRow = $result->fetch_assoc();
-                    $packageId = isset($packageRow['id']) ? (int) $packageRow['id'] : 0;
-                    if ($packageName === '' && isset($packageRow['name'])) {
-                        $packageName = (string) $packageRow['name'];
+            if ($packageId <= 0 && $packageName === '') {
+                continue;
+            }
+
+            if ($canQuery && $packageId > 0 && $packageName !== '') {
+                // 文本与 id 都在：校验 id 的真实包名是否等于文本，不一致就以文本为准
+                $idPackageName = '';
+                $idResult = getData('name', "id = '" . $packageId . "'", 'LIMIT 1', PKG, $connect);
+                if ($idResult && $idResult->num_rows > 0) {
+                    $idRow = $idResult->fetch_assoc();
+                    $idPackageName = isset($idRow['name']) ? trim((string) $idRow['name']) : '';
+                }
+
+                if ($idPackageName === '' || $idPackageName !== $packageName) {
+                    $resolvedId = shopeeOmsLookupUniquePackageIdByName($connect, $packageName);
+                    if ($resolvedId > 0) {
+                        $packageId = $resolvedId;
                     }
+                }
+            } elseif ($canQuery && $packageId <= 0 && $packageName !== '') {
+                // 只有文本：按名字解析 id
+                $resolvedId = shopeeOmsLookupUniquePackageIdByName($connect, $packageName);
+                if ($resolvedId > 0) {
+                    $packageId = $resolvedId;
                 }
             }
 
@@ -12041,6 +12091,23 @@ if (!function_exists('shopeeOmsBuildPackageQtySnapshotFromInputs')) {
             $rows[] = array(
                 'package_id' => $packageId,
                 'package_name' => $packageName,
+            );
+        }
+
+        return $rows;
+    }
+}
+
+if (!function_exists('shopeeOmsBuildPackageQtySnapshotFromInputs')) {
+    function shopeeOmsBuildPackageQtySnapshotFromInputs($hiddenIds, $nameInputs, $connect)
+    {
+        $resolvedRows = shopeeOmsResolvePackageRowsFromInputs($hiddenIds, $nameInputs, $connect);
+
+        $rows = array();
+        foreach ($resolvedRows as $resolvedRow) {
+            $rows[] = array(
+                'package_id' => (int) $resolvedRow['package_id'],
+                'package_name' => (string) $resolvedRow['package_name'],
                 'qty' => 1,
             );
         }

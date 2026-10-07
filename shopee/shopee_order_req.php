@@ -1043,11 +1043,19 @@ if (post('actionBtn') || $sorShouldSaveBeforeStatusUpdate) {
     $sor_order = postSpaceFilter('sor_order');
     $sor_date = postSpaceFilter('sor_date');
     $sor_time = postSpaceFilter('sor_time');
-    $sor_pkg = $resolveMultiIds(
+    $sorPkgResolvedRows = shopeeOmsResolvePackageRowsFromInputs(
         postSpaceFilter('sor_pkg_hidden') ?: array(),
         postSpaceFilter('sor_pkg') ?: array(),
-        PKG
+        $connect
     );
+    $sorPkgResolvedIds = array();
+    foreach ($sorPkgResolvedRows as $sorPkgResolvedRow) {
+        $sorPkgResolvedId = (int) $sorPkgResolvedRow['package_id'];
+        if ($sorPkgResolvedId > 0) {
+            $sorPkgResolvedIds[] = (string) $sorPkgResolvedId;
+        }
+    }
+    $sor_pkg = implode(',', array_values(array_unique($sorPkgResolvedIds)));
 
     $sor_brand = $resolveMultiIds(
         postSpaceFilter('sor_brand_hidden') ?: array(),

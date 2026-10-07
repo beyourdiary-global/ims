@@ -663,11 +663,19 @@ if ($action === 'parseShopeeOrderReq') { // Shopee Order HTML/PDF Parsing
         return implode(',', array_values(array_unique($resolved)));
     };
 
-    $packageIdsStr = $resolveMultiIds(
+    $packageResolvedRows = shopeeOmsResolvePackageRowsFromInputs(
         (array) post('sor_pkg_hidden') ?: array(),
         (array) post('sor_pkg') ?: array(),
-        PKG
+        $connect
     );
+    $packageResolvedIds = array();
+    foreach ($packageResolvedRows as $packageResolvedRow) {
+        $packageResolvedId = (int) $packageResolvedRow['package_id'];
+        if ($packageResolvedId > 0) {
+            $packageResolvedIds[] = (string) $packageResolvedId;
+        }
+    }
+    $packageIdsStr = implode(',', array_values(array_unique($packageResolvedIds)));
 
     $brandIdsStr = $resolveMultiIds(
         (array) post('sor_brand_hidden') ?: array(),

@@ -225,6 +225,36 @@ $(document).ready(function () {
     calculatePrice();
   });
 
+  // 防呆（2026-10-07 订单 1404 事故）：手动改包名 / 品牌文字后，清掉背后可能残留的
+  // 旧 id，避免「文字是新的、隐藏 id 是旧的」被存进订单，导致仓库照错的产品出库。
+  // 只有从下拉建议里真正选中的那一刻，隐藏 id 才会被重新写入。
+  $(document).on("focus", ".sor-pkg-input, .sor-brand-input", function () {
+    $(this).data("lookupSyncedText", $(this).val());
+  });
+
+  $(document).on("change", ".sor-pkg-input, .sor-brand-input", function () {
+    $(this).data("lookupSyncedText", $(this).val());
+  });
+
+  $(document).on("input", ".sor-pkg-input, .sor-brand-input", function () {
+    var hiddenTarget = $(this).data("hidden-target");
+    if (!hiddenTarget) {
+      return;
+    }
+
+    var $hidden = $("#" + hiddenTarget);
+    if ($hidden.length === 0 || String($hidden.val() || "") === "") {
+      return;
+    }
+
+    var syncedText = $(this).data("lookupSyncedText");
+    if (syncedText !== undefined && String(syncedText) === String($(this).val())) {
+      return;
+    }
+
+    $hidden.val("");
+  });
+
   $("#sor_acc").change(getAccountCurrency);
   $("#sor_user").change(autofill);
   $("#sor_acc").change(calculatePrice);
