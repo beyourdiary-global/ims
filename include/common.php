@@ -13660,6 +13660,145 @@ if (!function_exists('shopeeOmsResolveWarehouseNotificationTokenPage')) {
     }
 }
 
+if (!function_exists('shopeeOmsResolveUrbanismVipInfo')) {
+    /**
+     * Look up the Urbanism VIP registration record that belongs to an order's buyer.
+     * Shopee stores the buyer as a username, so the username is matched against the
+     * registration name first; the order recipient name is used as a fallback for
+     * platforms that store a real name instead of a username. Returns an empty array
+     * when the buyer has no Urbanism registration on file.
+     */
+    function shopeeOmsResolveUrbanismVipInfo($connect, $buyerUsername, $customerName = '')
+    {
+        if (!($connect instanceof mysqli)) {
+            return array();
+        }
+
+        $candidates = array();
+        foreach (array($buyerUsername, $customerName) as $candidate) {
+            $candidate = strtolower(trim((string) $candidate));
+            if ($candidate !== '' && !in_array($candidate, $candidates, true)) {
+                $candidates[] = $candidate;
+            }
+        }
+        if (empty($candidates)) {
+            return array();
+        }
+
+        // Probe the status column so a schema without it degrades to no filter
+        // instead of turning the whole lookup into a SQL error.
+        $hasStatus = shopeeOmsTableHasColumn($connect, dbname, URBAN_CUST_REG, 'status');
+
+        foreach ($candidates as $candidate) {
+            $safeName = mysqli_real_escape_string($connect, $candidate);
+            $conditions = array("LOWER(TRIM(`name`)) = '" . $safeName . "'");
+            if ($hasStatus) {
+                $conditions[] = "`status` = 'A'";
+            }
+            $sql = "SELECT * FROM `" . URBAN_CUST_REG . "`
+                WHERE " . implode(' AND ', $conditions) . "
+                ORDER BY `id` DESC
+                LIMIT 1";
+            $result = mysqli_query($connect, $sql);
+            if (!$result || !($row = mysqli_fetch_assoc($result))) {
+                continue;
+            }
+
+            $vipName = trim((string) (isset($row['name']) ? $row['name'] : ''));
+            if ($vipName === '') {
+                $vipName = $candidate;
+            }
+
+            $vipId = isset($row['id']) ? (int) $row['id'] : 0;
+            $vipUrl = '';
+            if ($vipId > 0 && defined('SITEURL')) {
+                $vipUrl = rtrim((string) SITEURL, '/') . '/customer/urb_cust_reg.php?id=' . $vipId . '&act=E';
+            }
+
+            return array(
+                'name' => $vipName,
+                'email' => shopeeOmsResolveUrbanismVipEmail($connect, $vipName),
+                'url' => $vipUrl,
+            );
+        }
+
+        return array();
+    }
+}
+
+if (!function_exists('shopeeOmsResolveUrbanismVipEmail')) {
+    /**
+     * The Urbanism registration table carries no email column, so the email shown in
+     * the warehouse notification is taken from the Customer Info master record matched
+     * by the registration name. Returns an empty string when nothing matches, which
+     * makes the caller drop the email line entirely.
+     */
+    function shopeeOmsResolveUrbanismVipEmail($connect, $vipName)
+    {
+        $vipName = strtolower(trim((string) $vipName));
+        if (!($connect instanceof mysqli) || $vipName === '') {
+            return '';
+        }
+        if (!shopeeOmsTableHasColumn($connect, dbname, CUS_INFO, 'email')) {
+            return '';
+        }
+
+        $safeName = mysqli_real_escape_string($connect, $vipName);
+        $hasStatus = shopeeOmsTableHasColumn($connect, dbname, CUS_INFO, 'status');
+        $statusCondition = $hasStatus ? " AND `status` = 'A'" : '';
+        $fullNameExpr = "LOWER(TRIM(CONCAT(`name`, ' ', COALESCE(`last_name`, ''))))";
+        $sql = "SELECT `email` FROM `" . CUS_INFO . "`
+            WHERE (`email` IS NOT NULL AND `email` <> ''" . $statusCondition . ")
+              AND (" . $fullNameExpr . " = '" . $safeName . "' OR LOWER(TRIM(`name`)) = '" . $safeName . "')
+            ORDER BY `id` DESC
+            LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if (!$result || !($row = mysqli_fetch_assoc($result))) {
+            return '';
+        }
+
+        return trim((string) (isset($row['email']) ? $row['email'] : ''));
+    }
+}
+
+if (!function_exists('shopeeOmsBuildUrbanismVipBlock')) {
+    /**
+     * Render the Urbanism VIP block that is appended to the warehouse notification.
+     * Returns an empty string when there is nothing worth showing.
+     */
+    function shopeeOmsBuildUrbanismVipBlock($vipInfo)
+    {
+        if (!is_array($vipInfo) || empty($vipInfo)) {
+            return '';
+        }
+
+        $lines = array();
+        $lines[] = 'Register VIP customer';
+
+        $vipName = trim((string) (isset($vipInfo['name']) ? $vipInfo['name'] : ''));
+        if ($vipName !== '') {
+            $lines[] = $vipName;
+        }
+
+        $vipEmail = trim((string) (isset($vipInfo['email']) ? $vipInfo['email'] : ''));
+        if ($vipEmail !== '') {
+            $lines[] = $vipEmail;
+        }
+
+        $vipUrl = trim((string) (isset($vipInfo['url']) ? $vipInfo['url'] : ''));
+        if ($vipUrl !== '') {
+            $lines[] = $vipUrl;
+        }
+
+        // Only the heading means there is nothing to show.
+        if (count($lines) <= 1) {
+            return '';
+        }
+
+        return implode("\n", $lines);
+    }
+}
+
 if (!function_exists('shopeeOmsBuildWarehouseMessage')) {
     function shopeeOmsBuildWarehouseMessage($orderRow, $tokenValue, $connect, $buyerConnect = null, $source = 'shopee')
     {
@@ -13847,6 +13986,17 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
             if ($renderedTemplate !== '') {
                 $messageText = $renderedTemplate;
             }
+        }
+
+        // Urbanism VIP customers get their registration details appended to the
+        // warehouse notification. The block is added to the final text so it shows up
+        // whether the message came from the default layout or a saved bot template.
+        $vipBlock = shopeeOmsBuildUrbanismVipBlock(
+            shopeeOmsResolveUrbanismVipInfo($connect, $customerName, $deliveryCustomerName)
+        );
+        if ($vipBlock !== '') {
+            $messageText = rtrim((string) $messageText);
+            $messageText = ($messageText !== '' ? $messageText . "\n\n" : '') . $vipBlock;
         }
 
         return array(
