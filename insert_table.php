@@ -4515,6 +4515,8 @@ if ($conn->select_db($db_cms)) {
         `campaign_name` VARCHAR(255),
         `period_start_date` DATE,
         `period_end_date` DATE,
+        `actual_start_date` DATE DEFAULT NULL,
+        `actual_end_date` DATE DEFAULT NULL,
         `rule_setting_id` INT DEFAULT NULL,
         `description` TEXT DEFAULT NULL,
         `create_by` VARCHAR(30),
@@ -4533,6 +4535,11 @@ if ($conn->select_db($db_cms)) {
     }
 
     migrationEnsureIndex($conn, $db_cms, CAMPAIGN, 'idx_campaign_rule_setting', "ALTER TABLE `" . CAMPAIGN . "` ADD INDEX `idx_campaign_rule_setting` (`rule_setting_id`)", "Verified `" . CAMPAIGN . "` rule setting index.");
+
+    // The campaign keeps its estimated period and may carry a second, actual one, because the
+    // promo dates often move after the estimate was written. NULL means "use the estimate".
+    migrationEnsureColumn($conn, $db_cms, CAMPAIGN, 'actual_start_date', "ALTER TABLE `" . CAMPAIGN . "` ADD COLUMN `actual_start_date` DATE DEFAULT NULL AFTER `period_end_date`", "Added `actual_start_date` column to `" . CAMPAIGN . "`.");
+    migrationEnsureColumn($conn, $db_cms, CAMPAIGN, 'actual_end_date', "ALTER TABLE `" . CAMPAIGN . "` ADD COLUMN `actual_end_date` DATE DEFAULT NULL AFTER `actual_start_date`", "Added `actual_end_date` column to `" . CAMPAIGN . "`.");
 
     $createCampaignPicSql = "CREATE TABLE IF NOT EXISTS `" . CAMPAIGN_PIC . "` (
         `id` INT AUTO_INCREMENT PRIMARY KEY,

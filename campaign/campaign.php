@@ -189,10 +189,16 @@ if (defined('PKG') && campaignTableExists($connect, PKG)) {
 $selectedPackageIds = $isAdd ? array() : campaignFetchCampaignPackageIds($connect, $dataId);
 
 $errors = array();
+// The actual/extended period columns come from a later migration. Check once so a campaign
+// still saves normally on a database where that migration has not been run yet.
+$hasActualPeriod = campaignColumnExists($connect, CAMPAIGN, 'actual_start_date')
+    && campaignColumnExists($connect, CAMPAIGN, 'actual_end_date');
 $formValues = array(
     'campaign_name' => isset($row['campaign_name']) ? $row['campaign_name'] : '',
     'period_start_date' => isset($row['period_start_date']) ? $row['period_start_date'] : '',
     'period_end_date' => isset($row['period_end_date']) ? $row['period_end_date'] : '',
+    'actual_start_date' => isset($row['actual_start_date']) ? $row['actual_start_date'] : '',
+    'actual_end_date' => isset($row['actual_end_date']) ? $row['actual_end_date'] : '',
     'description' => isset($row['description']) ? $row['description'] : '',
 );
 
@@ -201,6 +207,8 @@ if (post('actionBtn') === 'saveCampaign') {
     $formValues['campaign_name'] = trim((string) post('campaign_name'));
     $formValues['period_start_date'] = trim((string) post('period_start_date'));
     $formValues['period_end_date'] = trim((string) post('period_end_date'));
+    $formValues['actual_start_date'] = trim((string) post('actual_start_date'));
+    $formValues['actual_end_date'] = trim((string) post('actual_end_date'));
     $formValues['description'] = trim((string) post('description'));
     $selectedPicName = trim((string) post('pic_user_search'));
     $selectedPicId = campaignNormalizePicId(post('pic_user_id'));
@@ -234,6 +242,20 @@ if (post('actionBtn') === 'saveCampaign') {
 
     if ($formValues['period_start_date'] !== '' && $formValues['period_end_date'] !== '' && $formValues['period_start_date'] > $formValues['period_end_date']) {
         $errors[] = 'Period end date must be on or after start date.';
+    }
+
+    // The actual/extended period is optional and each end stands on its own, so an
+    // extension may move only the end date. Validate only what was filled in.
+    foreach (array('actual_start_date' => 'Actual period start', 'actual_end_date' => 'Actual period end') as $actualFieldKey => $actualFieldLabel) {
+        if ($formValues[$actualFieldKey] !== '' && !campaignIsValidDateValue($formValues[$actualFieldKey])) {
+            $errors[] = $actualFieldLabel . ' date is invalid.';
+        }
+    }
+
+    $periodStartForCheck = $formValues['actual_start_date'] !== '' ? $formValues['actual_start_date'] : $formValues['period_start_date'];
+    $periodEndForCheck = $formValues['actual_end_date'] !== '' ? $formValues['actual_end_date'] : $formValues['period_end_date'];
+    if ($periodStartForCheck !== '' && $periodEndForCheck !== '' && $periodStartForCheck > $periodEndForCheck) {
+        $errors[] = 'The actual period end must be on or after its start.';
     }
 
     if ($selectedPicId <= 0) {
@@ -277,6 +299,22 @@ if (post('actionBtn') === 'saveCampaign') {
 
             if (!campaignReplaceCampaignPackageRows($connect, $dataId, $selectedPackageIds)) {
                 throw new Exception('Unable to save Campaign Package rows.');
+            }
+
+            // Written separately because the columns only exist after the migration that adds
+            // them; an empty box means "no actual period", which must store NULL rather than
+            // an empty string (strict mode rejects '' for a DATE column).
+            if ($hasActualPeriod && $dataId > 0) {
+                $actualStartSql = $formValues['actual_start_date'] !== ''
+                    ? "'" . $connect->real_escape_string($formValues['actual_start_date']) . "'"
+                    : 'NULL';
+                $actualEndSql = $formValues['actual_end_date'] !== ''
+                    ? "'" . $connect->real_escape_string($formValues['actual_end_date']) . "'"
+                    : 'NULL';
+                $actualPeriodSaved = $connect->query("UPDATE `" . CAMPAIGN . "` SET `actual_start_date` = " . $actualStartSql . ", `actual_end_date` = " . $actualEndSql . " WHERE `id` = " . (int) $dataId . " AND `status` = 'A'");
+                if (!$actualPeriodSaved) {
+                    throw new Exception('Unable to save the actual campaign period.');
+                }
             }
 
             $connect->commit();
@@ -358,6 +396,24 @@ $readonlyAttr = $isView ? 'readonly' : '';
                             <div class="col-md-6 mb-3">
                                 <label class="form-label form_lbl" for="period_end_date">Period End Date*</label>
                                 <input class="form-control" type="date" name="period_end_date" id="period_end_date" value="<?= campaignH($formValues['period_end_date']) ?>" <?= $readonlyAttr ?> required>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="form-group">
+                        <div class="row">
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label form_lbl" for="actual_start_date">Actual Period Start</label>
+                                <input class="form-control" type="date" name="actual_start_date" id="actual_start_date" value="<?= campaignH($formValues['actual_start_date']) ?>" <?= $readonlyAttr ?>>
+                            </div>
+                            <div class="col-md-6 mb-3">
+                                <label class="form-label form_lbl" for="actual_end_date">Actual Period End</label>
+                                <input class="form-control" type="date" name="actual_end_date" id="actual_end_date" value="<?= campaignH($formValues['actual_end_date']) ?>" <?= $readonlyAttr ?>>
+                            </div>
+                        </div>
+                        <div class="row">
+                            <div class="col-12">
+                                <small class="text-muted">Optional. The dates above stay as the original estimate. Fill these in when the promo actually runs on other dates - the report, the purchase check and the nightly cron then use these instead. Leave blank to keep using the estimate. Either date can be set on its own, so you can extend just the end date.</small>
                             </div>
                         </div>
                     </div>

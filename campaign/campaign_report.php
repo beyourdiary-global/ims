@@ -149,8 +149,11 @@ function campaignReportBuildData($connect, $campaignId, $campaign = array(), $pa
         }
     }
 
-    $periodStart = campaignDateValue($campaign['period_start_date'] ?? '');
-    $periodEnd = campaignDateValue($campaign['period_end_date'] ?? '');
+    // Judged on the effective period (actual/extended when set, else the estimate), which
+    // is the same period the purchase check scans.
+    $effectivePeriod = campaignEffectivePeriod($campaign);
+    $periodStart = $effectivePeriod['start'];
+    $periodEnd = $effectivePeriod['end'];
     $periodWhere = '';
     if ($periodStart !== '' && $periodEnd !== '') {
         $periodWhere = " AND DATE(`order_date`) >= '" . $connect->real_escape_string($periodStart) . "' AND DATE(`order_date`) <= '" . $connect->real_escape_string($periodEnd) . "'";
@@ -947,6 +950,20 @@ if (post('actionBtn') === 'refreshReport') {
         }
         $refreshSummaryMessage .= ' Not-purchased breakdown: ' . implode(', ', $reasonParts) . '.';
     }
+    // Per-platform outcome. The boss could only see Shopee rows and had no way to tell
+    // whether the other platforms were empty or were never looked at, so say which.
+    if (!empty($summary['platform_scan']) && is_array($summary['platform_scan'])) {
+        $scanParts = array();
+        foreach ($summary['platform_scan'] as $scanPlatform => $scanInfo) {
+            $scanParts[] = $scanPlatform . ': ' . campaignDescribePlatformScan($scanInfo);
+        }
+        $refreshSummaryMessage .= ' Per platform - ' . implode(' | ', $scanParts) . '.';
+        $_SESSION['campaign_report_last_scan'] = array(
+            'campaign_id' => (int) $campaignId,
+            'time' => date('Y-m-d H:i'),
+            'scan' => $summary['platform_scan'],
+        );
+    }
     campaignSetPopup($refreshSummaryMessage, $pageUrl, 'ErrMO');
     echo '<script>location.href = "' . $pageUrl . '";</script>';
     exit();
@@ -1166,6 +1183,30 @@ if (input('export') === '1') {
                     <?php endif; ?>
                 </div>
             </div>
+
+            <?php
+            // Kept from the last refresh so the platform breakdown stays readable after the
+            // popup is dismissed - that popup is the only place the reason was ever shown.
+            $lastScan = (isset($_SESSION['campaign_report_last_scan']) && is_array($_SESSION['campaign_report_last_scan'])
+                && (int) ($_SESSION['campaign_report_last_scan']['campaign_id'] ?? 0) === (int) $campaignId)
+                ? $_SESSION['campaign_report_last_scan']
+                : null;
+            ?>
+            <?php if ($lastScan !== null && !empty($lastScan['scan'])): ?>
+                <div class="card mb-4">
+                    <div class="card-body">
+                        <div class="text-muted small mb-2">
+                            Platform check from the last refresh (<?= campaignH((string) ($lastScan['time'] ?? '')) ?>)
+                        </div>
+                        <?php foreach ((array) $lastScan['scan'] as $scanPlatform => $scanInfo): ?>
+                            <div class="small mb-1">
+                                <strong><?= campaignH((string) $scanPlatform) ?></strong>
+                                <span class="text-muted">- <?= campaignH(campaignDescribePlatformScan($scanInfo)) ?></span>
+                            </div>
+                        <?php endforeach; ?>
+                    </div>
+                </div>
+            <?php endif; ?>
 
             <?php if (!$reportData['has_data']): ?>
                 <div class="alert alert-secondary">No report data available</div>

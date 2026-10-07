@@ -736,7 +736,12 @@ if (!function_exists('campaignPurchasePlatformConfigs')) {
                 'currency_cols' => array('currency'),
             ),
             'Lazada' => array(
-                'conn' => $financeConnect,
+                // lazada_order_request lives in the CMS database, not the finance one:
+                // finance/lazada_order_req.php reads it through $connect, the assign-customer
+                // config below uses $connect, and insert_table.php lists its db as dbname.
+                // Pointing it at $financeConnect made campaignTableExists() fail, so the
+                // scan skipped Lazada silently and the report only ever held Shopee rows.
+                'conn' => $connect,
                 'table' => defined('LAZADA_ORDER_REQ') ? LAZADA_ORDER_REQ : 'lazada_order_request',
                 'order_no_cols' => array('orderID', 'order_id', 'order_no', 'lazada_order_id'),
                 'customer_cols' => array('buyer_username', 'buyer', 'customer_id', 'cust_id', 'name', 'customer_name', 'phone', 'contact'),
@@ -775,6 +780,124 @@ if (!function_exists('campaignPurchasePlatformConfigs')) {
                 'detail_cols' => array('package', 'remark'),
             ),
         );
+    }
+}
+
+if (!function_exists('campaignResolveOrderConnection')) {
+    /**
+     * Pick the connection that actually holds a platform's order table.
+     *
+     * The order tables are split across two databases (Shopee / Website / Facebook on
+     * finance, Lazada on CMS). A wrong pairing used to make campaignTableExists() return
+     * false and the scan skip that platform with no trace at all, so prefer the configured
+     * connection but fall back to the other one when the table is not there.
+     */
+    function campaignResolveOrderConnection($config, $connect, $financeConnect)
+    {
+        $preferred = isset($config['conn']) ? $config['conn'] : null;
+        $table = (string) ($config['table'] ?? '');
+        if ($table === '') {
+            return $preferred;
+        }
+
+        if ($preferred instanceof mysqli && campaignTableExists($preferred, $table)) {
+            return $preferred;
+        }
+
+        foreach (array($connect, $financeConnect) as $candidate) {
+            if ($candidate instanceof mysqli && $candidate !== $preferred && campaignTableExists($candidate, $table)) {
+                return $candidate;
+            }
+        }
+
+        return $preferred;
+    }
+}
+
+if (!function_exists('campaignConnectionDatabaseName')) {
+    function campaignConnectionDatabaseName($conn)
+    {
+        if (!($conn instanceof mysqli)) {
+            return '';
+        }
+
+        $result = $conn->query('SELECT DATABASE() AS db_name');
+        if ($result && ($row = $result->fetch_assoc())) {
+            return (string) ($row['db_name'] ?? '');
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('campaignEffectivePeriod')) {
+    /**
+     * The period a campaign is actually judged on.
+     *
+     * A campaign keeps its original (estimated) period and may carry a second, actual one,
+     * because the real promo dates often move after the estimate was written. When an actual
+     * date is set it wins; otherwise the estimated one is used. The two ends resolve
+     * independently so an extension can move only the end date.
+     */
+    function campaignEffectivePeriod($campaign)
+    {
+        $start = campaignDateValue($campaign['period_start_date'] ?? '');
+        $end = campaignDateValue($campaign['period_end_date'] ?? '');
+
+        $actualStart = campaignDateValue($campaign['actual_start_date'] ?? '');
+        $actualEnd = campaignDateValue($campaign['actual_end_date'] ?? '');
+
+        if ($actualStart !== '') {
+            $start = $actualStart;
+        }
+        if ($actualEnd !== '') {
+            $end = $actualEnd;
+        }
+
+        return array('start' => $start, 'end' => $end);
+    }
+}
+
+if (!function_exists('campaignDescribePlatformScan')) {
+    /** One line, plain English, saying what happened to one platform during the scan. */
+    function campaignDescribePlatformScan($scan)
+    {
+        $scan = is_array($scan) ? $scan : array();
+        $status = (string) ($scan['status'] ?? '');
+        $table = (string) ($scan['table'] ?? '');
+
+        if ($status === 'no_connection') {
+            return 'no database connection available';
+        }
+        if ($status === 'table_missing') {
+            return 'table `' . $table . '` not found on either database connection';
+        }
+        if ($status === 'no_date_column') {
+            return 'table `' . $table . '` has no usable order-date column';
+        }
+        if ($status === 'no_customer_column') {
+            return 'table `' . $table . '` has no usable customer column';
+        }
+        if ($status === 'query_failed') {
+            return 'query failed on `' . $table . '`: ' . (string) ($scan['detail'] ?? '');
+        }
+
+        $parts = array(
+            (int) ($scan['rows_in_period'] ?? 0) . ' order(s) in the period',
+            (int) ($scan['rows_kept'] ?? 0) . ' matched the campaign package',
+        );
+        if ((int) ($scan['rows_skipped_package'] ?? 0) > 0) {
+            $parts[] = (int) $scan['rows_skipped_package'] . ' skipped (bought another package)';
+        }
+        if ((int) ($scan['rows_skipped_returned'] ?? 0) > 0) {
+            $parts[] = (int) $scan['rows_skipped_returned'] . ' skipped (returned order)';
+        }
+        if ((int) ($scan['rows_skipped_no_buyer'] ?? 0) > 0) {
+            $parts[] = (int) $scan['rows_skipped_no_buyer'] . ' skipped (no buyer recorded)';
+        }
+
+        $database = trim((string) ($scan['database'] ?? ''));
+        return implode(', ', $parts) . ($database !== '' ? ' [db ' . $database . ']' : '');
     }
 }
 
@@ -1370,19 +1493,58 @@ if (!function_exists('campaignScanCampaignOrders')) {
         }
 
         foreach (campaignPurchasePlatformConfigs($connect, $financeConnect) as $platform => $config) {
-            $orderConn = isset($config['conn']) ? $config['conn'] : null;
             $table = (string) ($config['table'] ?? '');
-            if (!($orderConn instanceof mysqli) || $table === '' || !campaignTableExists($orderConn, $table)) {
+            $orderConn = campaignResolveOrderConnection($config, $connect, $financeConnect);
+
+            // Every platform reports what happened to it. Before this the scan simply
+            // skipped a platform it could not read and the report just showed fewer rows,
+            // so "no Lazada data" looked identical to "Lazada had no orders".
+            $scan = array(
+                'table' => $table,
+                'database' => campaignConnectionDatabaseName($orderConn),
+                'rows_in_period' => 0,
+                'rows_skipped_package' => 0,
+                'rows_skipped_returned' => 0,
+                'rows_skipped_no_buyer' => 0,
+                'rows_kept' => 0,
+                'status' => 'ok',
+                'detail' => '',
+            );
+            if (is_array($summary)) {
+                $summary['platform_scan'][$platform] = $scan;
+            }
+
+            if (!($orderConn instanceof mysqli)) {
+                $scan['status'] = 'no_connection';
+                if (is_array($summary)) {
+                    $summary['platform_scan'][$platform] = $scan;
+                }
+                continue;
+            }
+
+            if ($table === '' || !campaignTableExists($orderConn, $table)) {
+                $scan['status'] = 'table_missing';
+                if (is_array($summary)) {
+                    $summary['platform_scan'][$platform] = $scan;
+                }
                 continue;
             }
 
             $dateCol = campaignGetFirstExistingColumn($orderConn, $table, $config['date_cols']);
             if ($dateCol === '') {
+                $scan['status'] = 'no_date_column';
+                if (is_array($summary)) {
+                    $summary['platform_scan'][$platform] = $scan;
+                }
                 continue;
             }
 
             $customerCol = campaignGetFirstExistingColumn($orderConn, $table, $config['customer_cols']);
             if ($customerCol === '') {
+                $scan['status'] = 'no_customer_column';
+                if (is_array($summary)) {
+                    $summary['platform_scan'][$platform] = $scan;
+                }
                 continue;
             }
 
@@ -1415,13 +1577,17 @@ if (!function_exists('campaignScanCampaignOrders')) {
                     ORDER BY DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") ASC, `id` ASC";
             $result = mysqli_query($orderConn, $sql);
             if (!$result) {
+                $scan['status'] = 'query_failed';
+                $scan['detail'] = (string) mysqli_error($orderConn);
                 if (is_array($summary)) {
                     $summary['notes'][] = 'Order query failed for ' . $platform . ': ' . mysqli_error($orderConn);
+                    $summary['platform_scan'][$platform] = $scan;
                 }
                 continue;
             }
 
             while ($row = $result->fetch_assoc()) {
+                $scan['rows_in_period']++;
                 $packageText = $packageCol !== '' ? campaignNormalizeTextValue($row[$packageCol] ?? '', 65535) : '';
                 $detailText = $detailCol !== '' ? campaignNormalizeTextValue($row[$detailCol] ?? '', 65535) : '';
 
@@ -1431,6 +1597,7 @@ if (!function_exists('campaignScanCampaignOrders')) {
                 if (!empty($packageIds)) {
                     $matchingIds = array_intersect($orderPackageIds, $packageIds);
                     if (empty($matchingIds)) {
+                        $scan['rows_skipped_package']++;
                         continue;
                     }
                     $packageId = reset($matchingIds);
@@ -1441,11 +1608,13 @@ if (!function_exists('campaignScanCampaignOrders')) {
                 $orderStatus = $orderStatusCol !== '' ? campaignNormalizeTextValue($row[$orderStatusCol] ?? '', 100) : '';
                 // Returned and closed-returned orders are not purchases.
                 if (in_array(strtoupper(trim($orderStatus)), array('R', 'CR'), true)) {
+                    $scan['rows_skipped_returned']++;
                     continue;
                 }
 
                 $buyerRaw = trim((string) ($row[$customerCol] ?? ''));
                 if ($buyerRaw === '') {
+                    $scan['rows_skipped_no_buyer']++;
                     continue;
                 }
 
@@ -1474,6 +1643,11 @@ if (!function_exists('campaignScanCampaignOrders')) {
                     'shopee_acc' => $shopeeAccCol !== '' ? (int) ($row[$shopeeAccCol] ?? 0) : 0,
                     'currency' => $currencyCol !== '' ? (int) ($row[$currencyCol] ?? 0) : 0,
                 );
+                $scan['rows_kept']++;
+            }
+
+            if (is_array($summary)) {
+                $summary['platform_scan'][$platform] = $scan;
             }
         }
 
@@ -1551,6 +1725,7 @@ if (!function_exists('campaignRunPurchaseCheck')) {
             'notes' => array(),
             'skip_reasons' => array(),
             'campaign_package_ids' => array(),
+            'platform_scan' => array(),
             'debug_info' => array(),
         );
 
@@ -1563,8 +1738,11 @@ if (!function_exists('campaignRunPurchaseCheck')) {
         $summary['campaign_package_ids'] = campaignFetchCampaignPackageIds($connect, $campaignId);
         $summary['debug_info'][] = 'Campaign ID: ' . $campaignId . ', Selected Package IDs: [' . implode(', ', $summary['campaign_package_ids']) . ']';
 
-        $periodStart = campaignDateValue($fromDate !== '' ? $fromDate : ($campaign['period_start_date'] ?? ''));
-        $periodEnd = campaignDateValue($toDate !== '' ? $toDate : ($campaign['period_end_date'] ?? ''));
+        // The actual/extended period wins when it is set, so extending a campaign does not
+        // mean editing the estimate the campaign was planned with.
+        $effectivePeriod = campaignEffectivePeriod($campaign);
+        $periodStart = campaignDateValue($fromDate !== '' ? $fromDate : $effectivePeriod['start']);
+        $periodEnd = campaignDateValue($toDate !== '' ? $toDate : $effectivePeriod['end']);
         if ($periodStart === '') {
             $periodStart = date('Y-m-01');
         }

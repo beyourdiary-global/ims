@@ -124,7 +124,12 @@ if ($activeCampaignResult) {
 }
 
 // 3. Finalize ended campaigns.
-$endedCampaignWhere = array("`status`='A'", "`period_end_date` < CURDATE()");
+// A campaign can carry an actual/extended period, so it only counts as ended once the
+// period it is actually judged on has passed. The column comes from a later migration.
+$endedPeriodEndExpr = campaignColumnExists($connect, CAMPAIGN, 'actual_end_date')
+    ? "COALESCE(`actual_end_date`, `period_end_date`)"
+    : "`period_end_date`";
+$endedCampaignWhere = array("`status`='A'", $endedPeriodEndExpr . " < CURDATE()");
 if (campaignColumnExists($connect, CAMPAIGN, 'campaign_status')) {
     $endedCampaignWhere[] = "IFNULL(`campaign_status`, '') <> 'Completed'";
 }
