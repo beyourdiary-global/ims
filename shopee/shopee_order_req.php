@@ -667,10 +667,11 @@ $sorHandleStockOutPhotoReplace = function () use (
         $sorRespond(false, 'Invalid session token. Please refresh the page and try again.');
     }
 
-    // Same rule as the Airbill Attachment input on this page: only an editable
-    // order can change its Stock Out photo.
-    if ($act !== 'E') {
-        $sorRespond(false, 'You are not allowed to replace the stock out photo.');
+    // Same rule as the Airbill Attachment input on this page: every input is
+    // enabled with `$act == '' ? 'disabled' : ''`, i.e. an empty act is the
+    // read-only view (what the "eye" button on the order list opens).
+    if ($act == '') {
+        $sorRespond(false, 'Open this order in edit mode to replace the stock out photo.');
     }
 
     $sorStockOutRecordId = (int) post('sor_stock_out_record_id');
@@ -2963,7 +2964,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                                         <?php if (!empty($sorStockOutPhoto['date'])) { ?>
                                                             <span class="sor-stock-out-photo-date"><?= htmlspecialchars((string) $sorStockOutPhoto['date'], ENT_QUOTES, 'UTF-8') ?></span>
                                                         <?php } ?>
-                                                        <?php if ($act === 'E') { ?>
+                                                        <?php if ($act != '') { ?>
                                                             <label class="sor-stock-out-photo-replace" title="Upload a new photo to replace this one">
                                                                 <span>Replace</span>
                                                                 <input type="file" class="sor-stock-out-photo-replace-input" accept=".png,.jpg,.jpeg,.webp" data-stock-out-record-id="<?= (int) $sorStockOutPhoto['id'] ?>" data-stock-out-old-path="<?= htmlspecialchars($sorStockOutPhotoPath, ENT_QUOTES, 'UTF-8') ?>">
@@ -2975,6 +2976,9 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                         </div>
                                     <?php } else { ?>
                                         <div class="text-muted">No stock out attachment found for this order.</div>
+                                    <?php } ?>
+                                    <?php if ($act == '' && !empty($sorStockOutPhotos)) { ?>
+                                        <small class="text-muted d-block mt-2">Open this order in edit mode to replace a photo.</small>
                                     <?php } ?>
                                 </div>
                             <?php } ?>
@@ -3927,7 +3931,6 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 var formData = new FormData();
                 formData.append('sor_stock_out_photo_action', 'replace');
                 formData.append('shopee_order_stock_out_photo_csrf', csrfField.value || '');
-                formData.append('act', 'E');
                 formData.append('sor_stock_out_record_id', recordId);
                 formData.append('sor_stock_out_old_path', oldPath);
                 formData.append('sor_stock_out_photo_file', file);
