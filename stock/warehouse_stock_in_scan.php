@@ -330,6 +330,27 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
             $omsCanEditPackage = isActionAllowed('Edit', $omsPackagePinAccess);
             $omsCanEditProduct = isActionAllowed('Edit', $omsProductPinAccess);
         }
+        // "1) Name - N SET" per row, linked to the package editor when the user may edit.
+        $omsRenderPackageParts = function ($rows) use ($omsCanEditPackage, $SITEURL) {
+            $parts = array();
+            if (!is_array($rows)) {
+                return $parts;
+            }
+            foreach ($rows as $index => $row) {
+                $label = isset($row['label']) ? (string) $row['label'] : '';
+                $packageId = isset($row['package_id']) ? (int) $row['package_id'] : 0;
+                $displayLabel = shopeeOmsFormatWarehousePackageDisplayLabel($label, $index);
+                if ($displayLabel === '') {
+                    continue;
+                }
+                if ($omsCanEditPackage && $packageId > 0) {
+                    $parts[] = '<a href="' . htmlspecialchars($SITEURL . '/product/package.php?id=' . $packageId . '&act=E', ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer">' . htmlspecialchars($displayLabel, ENT_QUOTES, 'UTF-8') . '</a>';
+                } else {
+                    $parts[] = htmlspecialchars($displayLabel, ENT_QUOTES, 'UTF-8');
+                }
+            }
+            return $parts;
+        };
         $omsDefaultWarehouseId = shopeeOmsGetDefaultWarehouseId($connect);
         $omsStockOutWarehouseName = !empty($omsOrderRow)
             ? shopeeOmsResolveStockOutWarehouseName($connect, $omsOrderRow, $omsDefaultWarehouseId)
@@ -419,30 +440,28 @@ if ($omsToken !== '' && preg_match('/^[A-Za-z0-9\-_\.=%]+$/', $omsToken)) {
                             <h4>Warehouse Package</h4>
                             <div><span class="k">Package:</span></div>
                             <div><span class="v"><?php
-                                $omsPackageSummaryRows = isset($omsSummary['warehouse_package_summary_rows']) && is_array($omsSummary['warehouse_package_summary_rows']) && !empty($omsSummary['warehouse_package_summary_rows'])
-                                    ? $omsSummary['warehouse_package_summary_rows']
-                                    : (isset($omsSummary['package_summary_rows']) && is_array($omsSummary['package_summary_rows']) ? $omsSummary['package_summary_rows'] : array());
-                                if (!empty($omsPackageSummaryRows)) {
-                                    $omsPackageParts = array();
-                                    foreach ($omsPackageSummaryRows as $omsPackageIndex => $omsPackageRow) {
-                                        $omsPackageLabel = isset($omsPackageRow['label']) ? (string) $omsPackageRow['label'] : '';
-                                        $omsPackageId = isset($omsPackageRow['package_id']) ? (int) $omsPackageRow['package_id'] : 0;
-                                        $omsPackageDisplayLabel = shopeeOmsFormatWarehousePackageDisplayLabel($omsPackageLabel, $omsPackageIndex);
-                                        if ($omsPackageDisplayLabel === '') {
-                                            continue;
-                                        }
-                                        if ($omsCanEditPackage && $omsPackageId > 0) {
-                                            $omsPackageParts[] = '<a href="' . htmlspecialchars($SITEURL . '/product/package.php?id=' . $omsPackageId . '&act=E', ENT_QUOTES, 'UTF-8') . '" target="_blank" rel="noopener noreferrer">' . htmlspecialchars($omsPackageDisplayLabel, ENT_QUOTES, 'UTF-8') . '</a>';
-                                        } else {
-                                            $omsPackageParts[] = htmlspecialchars($omsPackageDisplayLabel, ENT_QUOTES, 'UTF-8');
-                                        }
-                                    }
+                                // Show the sold SKU here, exactly like Waiting To Pack, Shopee Order Info and
+                                // the Telegram message do, so the same order never reads differently per page.
+                                $omsPackageSummaryRows = isset($omsSummary['package_summary_rows']) && is_array($omsSummary['package_summary_rows'])
+                                    ? $omsSummary['package_summary_rows']
+                                    : array();
+                                $omsPackageParts = $omsRenderPackageParts($omsPackageSummaryRows);
+                                if (!empty($omsPackageParts)) {
                                     echo implode('<br>', $omsPackageParts);
                                 } else {
-                                    $omsWarehouseBundleName = !empty($omsSummary['warehouse_bundle_name']) ? (string) $omsSummary['warehouse_bundle_name'] : '';
-                                    echo htmlspecialchars($omsWarehouseBundleName !== '' ? $omsWarehouseBundleName : (!empty($omsSummary['bundle_name']) ? $omsSummary['bundle_name'] : '-'), ENT_QUOTES, 'UTF-8');
+                                    echo htmlspecialchars(!empty($omsSummary['bundle_name']) ? (string) $omsSummary['bundle_name'] : '-', ENT_QUOTES, 'UTF-8');
                                 }
                             ?></span></div>
+                            <?php if (!empty($omsSummary['has_parent_sku_resolution'])) {
+                                $omsWarehousePackageRows = isset($omsSummary['warehouse_package_summary_rows']) && is_array($omsSummary['warehouse_package_summary_rows'])
+                                    ? $omsSummary['warehouse_package_summary_rows']
+                                    : array();
+                                $omsWarehouseParts = $omsRenderPackageParts($omsWarehousePackageRows);
+                                if (!empty($omsWarehouseParts)) { ?>
+                            <div><span class="k">Warehouse SKU:</span></div>
+                            <div><span class="v"><?= implode('<br>', $omsWarehouseParts) ?></span></div>
+                            <?php }
+                            } ?>
                             <div><span class="k">Products:</span> <span class="v"><?php
                                 $omsProductSummaryRows = isset($omsSummary['product_summary_rows']) && is_array($omsSummary['product_summary_rows']) ? $omsSummary['product_summary_rows'] : array();
                                 if (!empty($omsProductSummaryRows)) {
