@@ -124,5 +124,45 @@ if (isset($finance_connect) && ($finance_connect instanceof mysqli)) {
     echo "SKIP  shopee_customer_info.birthday (finance connection unavailable)\n";
 }
 
+// ---- 6) API keys (api/api_key) ----
+// The REST API under /api authenticates with keys stored here. Only the
+// SHA-256 hash of a key is kept; the plaintext is shown once at creation.
+$apiKeyTable = 'api_key';
+$escDbName = mysqli_real_escape_string($connect, $dbName);
+$apiKeyCheck = mysqli_query(
+    $connect,
+    "SELECT COUNT(*) AS c FROM information_schema.TABLES
+     WHERE TABLE_SCHEMA = '$escDbName' AND TABLE_NAME = '$apiKeyTable'"
+);
+$apiKeyExists = false;
+if ($apiKeyCheck && ($apiKeyRow = mysqli_fetch_assoc($apiKeyCheck))) {
+    $apiKeyExists = ((int) $apiKeyRow['c'] > 0);
+}
+if ($apiKeyExists) {
+    echo "SKIP  table $apiKeyTable (already exists)\n";
+} else {
+    $apiKeySql = "CREATE TABLE `$apiKeyTable` (
+        `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+        `name` VARCHAR(190) NOT NULL DEFAULT '',
+        `key_hash` CHAR(64) NOT NULL,
+        `key_prefix` VARCHAR(24) NOT NULL DEFAULT '',
+        `scopes` VARCHAR(255) NOT NULL DEFAULT 'read',
+        `status` CHAR(1) NOT NULL DEFAULT 'A',
+        `created_at` DATETIME DEFAULT NULL,
+        `created_by` VARCHAR(190) DEFAULT NULL,
+        `last_used_at` DATETIME DEFAULT NULL,
+        `last_used_ip` VARCHAR(64) DEFAULT NULL,
+        `request_count` BIGINT UNSIGNED NOT NULL DEFAULT 0,
+        PRIMARY KEY (`id`),
+        UNIQUE KEY `uniq_api_key_hash` (`key_hash`),
+        KEY `idx_api_key_status` (`status`)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_general_ci";
+    if (mysqli_query($connect, $apiKeySql)) {
+        echo "OK    created table $apiKeyTable\n";
+    } else {
+        echo "ERROR creating table $apiKeyTable: " . mysqli_error($connect) . "\n";
+    }
+}
+
 echo "====================\n";
 echo "Done. 建议执行完从服务器删除本文件。\n";

@@ -1,0 +1,25 @@
+# ------------------------------------------------------------------
+# Beyourdiary CMS - REST API directory guard
+# ------------------------------------------------------------------
+# Every endpoint here is a plain PHP file. Nothing in this folder needs
+# to be served as a static asset, so block the document formats that
+# could otherwise leak (docs, key dumps, backups, SQL).
+
+<IfModule mod_authz_core.c>
+    <FilesMatch "\.(md|json|log|inc|bak|sql|txt|ini|yml|yaml)$">
+        Require all denied
+    </FilesMatch>
+</IfModule>
+
+<IfModule !mod_authz_core.c>
+    <FilesMatch "\.(md|json|log|inc|bak|sql|txt|ini|yml|yaml)$">
+        Order allow,deny
+        Deny from all
+    </FilesMatch>
+</IfModule>
+
+# The shared library must never be reachable over HTTP.
+<IfModule mod_rewrite.c>
+    RewriteEngine On
+    RewriteRule ^lib/ - [F,L]
+</IfModule>
