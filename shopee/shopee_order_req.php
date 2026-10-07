@@ -2121,6 +2121,30 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             cursor: zoom-in;
         }
 
+        .sor-stock-out-photo-item {
+            margin: 0;
+            width: 120px;
+        }
+
+        .sor-stock-out-photo-item img {
+            display: block;
+        }
+
+        .sor-stock-out-photo-meta {
+            margin-top: 4px;
+            font-size: 11px;
+            line-height: 1.35;
+            color: #6c757d;
+            text-align: center;
+            word-break: break-word;
+        }
+
+        .sor-stock-out-photo-meta .sor-stock-out-photo-id {
+            display: block;
+            font-weight: 600;
+            color: #495057;
+        }
+
         .sor-stock-out-image-lightbox {
             display: none;
             position: fixed;
@@ -2604,7 +2628,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                     </div>
                 </div>
                 <?php
-                $sorStockOutPhotoPaths = array();
+                $sorStockOutPhotos = array();
                 // Stock-out photos are captured when the warehouse scans the parcel out (TP -> SP), so they
                 // stay relevant from that step on. Do not gate this on WAERD alone: assigning the estimated
                 // received date moves the order to WR, and the operator still needs to see the photos there.
@@ -2613,21 +2637,42 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 if ($sorCanShowStockOutRecord) {
                     $sorStockOutOrderCode = isset($row['orderID']) ? trim((string) $row['orderID']) : '';
                     if ($sorStockOutOrderCode !== '') {
-                        $sorStockOutSql = "SELECT `attachment` FROM `stock_in_order`
+                        // Keep the stock_in_order record id next to every photo: the warehouse can scan the
+                        // same order again, so the operator needs to be able to tell the records apart and
+                        // see when one was added (i.e. whether an earlier photo was replaced).
+                        $sorStockOutSql = "SELECT `id`, `attachment`, `stock_in_date` FROM `stock_in_order`
                             WHERE `status`='A'
                               AND COALESCE(NULLIF(TRIM(`stock_type`), ''), 'Stock In') = 'Stock Out'
                               AND `order_number` = '" . mysqli_real_escape_string($finance_connect, $sorStockOutOrderCode) . "'
                             ORDER BY `id` ASC";
                         $sorStockOutResult = mysqli_query($finance_connect, $sorStockOutSql);
                         if ($sorStockOutResult) {
+                            $sorStockOutSeenPaths = array();
                             while ($sorStockOutRow = mysqli_fetch_assoc($sorStockOutResult)) {
+                                $sorStockOutRecordId = isset($sorStockOutRow['id']) ? (int) $sorStockOutRow['id'] : 0;
+                                $sorStockOutDateLabel = '';
+                                $sorStockOutDateRaw = isset($sorStockOutRow['stock_in_date']) ? trim((string) $sorStockOutRow['stock_in_date']) : '';
+                                if ($sorStockOutDateRaw !== '' && $sorStockOutDateRaw !== '0000-00-00 00:00:00') {
+                                    $sorStockOutTimestamp = strtotime($sorStockOutDateRaw);
+                                    $sorStockOutDateLabel = $sorStockOutTimestamp !== false
+                                        ? date('Y-m-d H:i', $sorStockOutTimestamp)
+                                        : $sorStockOutDateRaw;
+                                }
                                 foreach (siAttachmentDecodeList((string) ($sorStockOutRow['attachment'] ?? '')) as $sorStockOutAttachPath) {
-                                    $sorStockOutPhotoPaths[] = $sorStockOutAttachPath;
+                                    $sorStockOutAttachPath = trim((string) $sorStockOutAttachPath);
+                                    if ($sorStockOutAttachPath === '' || isset($sorStockOutSeenPaths[$sorStockOutAttachPath])) {
+                                        continue;
+                                    }
+                                    $sorStockOutSeenPaths[$sorStockOutAttachPath] = true;
+                                    $sorStockOutPhotos[] = array(
+                                        'id' => $sorStockOutRecordId,
+                                        'path' => $sorStockOutAttachPath,
+                                        'date' => $sorStockOutDateLabel,
+                                    );
                                 }
                             }
                         }
                     }
-                    $sorStockOutPhotoPaths = array_values(array_unique($sorStockOutPhotoPaths));
                 }
                 ?>
                 <div class="form-group">
@@ -2676,21 +2721,30 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             // Once photos exist they show at any post-stock-out status; only the empty hint
                             // stays WAERD-only, so orders that never had a stock-out do not grow a stray label.
                             $sorShowStockOutRecord = $sorCanShowStockOutRecord
-                                && (!empty($sorStockOutPhotoPaths) || $currentOrderStatusValue === 'WAERD');
+                                && (!empty($sorStockOutPhotos) || $currentOrderStatusValue === 'WAERD');
                             if ($sorShowStockOutRecord) { ?>
                                 <div class="mt-3">
                                     <label class="form-label form_lbl">Stock Out Record</label>
-                                    <?php if (!empty($sorStockOutPhotoPaths)) { ?>
+                                    <?php if (!empty($sorStockOutPhotos)) { ?>
                                         <div class="sor-stock-out-photo-grid">
-                                            <?php foreach ($sorStockOutPhotoPaths as $sorStockOutPhotoPath) { ?>
+                                            <?php foreach ($sorStockOutPhotos as $sorStockOutPhoto) { ?>
                                                 <?php
-                                                $sorStockOutPhotoExt = strtolower(pathinfo((string) $sorStockOutPhotoPath, PATHINFO_EXTENSION));
+                                                $sorStockOutPhotoPath = isset($sorStockOutPhoto['path']) ? (string) $sorStockOutPhoto['path'] : '';
+                                                $sorStockOutPhotoExt = strtolower(pathinfo($sorStockOutPhotoPath, PATHINFO_EXTENSION));
                                                 if (!in_array($sorStockOutPhotoExt, array('png', 'jpg', 'jpeg', 'webp'), true)) {
                                                     continue;
                                                 }
-                                                $sorStockOutPhotoUrl = rtrim((string) $SITEURL, '/') . '/' . ltrim((string) $sorStockOutPhotoPath, '/');
+                                                $sorStockOutPhotoUrl = rtrim((string) $SITEURL, '/') . '/' . ltrim($sorStockOutPhotoPath, '/');
                                                 ?>
-                                                <img src="<?= htmlspecialchars($sorStockOutPhotoUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Stock Out Photo" title="Click to zoom in" onclick="sorOpenStockOutLightbox(this.src)">
+                                                <figure class="sor-stock-out-photo-item">
+                                                    <img src="<?= htmlspecialchars($sorStockOutPhotoUrl, ENT_QUOTES, 'UTF-8') ?>" alt="Stock Out Photo" title="Click to zoom in" onclick="sorOpenStockOutLightbox(this.src)">
+                                                    <figcaption class="sor-stock-out-photo-meta">
+                                                        <span class="sor-stock-out-photo-id">ID: <?= (int) $sorStockOutPhoto['id'] ?></span>
+                                                        <?php if (!empty($sorStockOutPhoto['date'])) { ?>
+                                                            <span class="sor-stock-out-photo-date"><?= htmlspecialchars((string) $sorStockOutPhoto['date'], ENT_QUOTES, 'UTF-8') ?></span>
+                                                        <?php } ?>
+                                                    </figcaption>
+                                                </figure>
                                             <?php } ?>
                                         </div>
                                     <?php } else { ?>
