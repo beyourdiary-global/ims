@@ -17,6 +17,42 @@ $dataId = input('id');
 $act = input('act');
 $pageAction = getPageAction($act);
 
+if (!function_exists('resolveLookupValue')) {
+    function resolveLookupValue($tblName, $rawValue, $displayField, $connect, $altDisplayField = '')
+    {
+        $rawValue = trim((string) $rawValue);
+        $resolved = [
+            'id' => '',
+            'display' => '',
+        ];
+
+        if ($rawValue === '' || $rawValue === '0') {
+            return $resolved;
+        }
+
+        $escapedValue = mysqli_real_escape_string($connect, (string) $rawValue);
+        $result = getData("id,$displayField", "id = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
+
+        if ((!$result || $result->num_rows === 0) && $altDisplayField !== '') {
+            $result = getData("id,$displayField", "$altDisplayField = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
+        }
+
+        if ((!$result || $result->num_rows === 0) && $displayField !== $altDisplayField) {
+            $result = getData("id,$displayField", "$displayField = '$escapedValue'", 'LIMIT 1', $tblName, $connect);
+        }
+
+        if ($result && $result->num_rows > 0) {
+            $lookupRow = $result->fetch_assoc();
+            $resolved['id'] = $lookupRow['id'];
+            $resolved['display'] = $lookupRow[$displayField];
+        } else {
+            $resolved['id'] = $rawValue;
+            $resolved['display'] = $rawValue;
+        }
+
+        return $resolved;
+    }
+}
 
 $redirectPage = $SITEURL . '/customer/website_customer_record_table.php';
 $redirectLink = ("<script>location.href = '$redirectPage';</script>");
@@ -121,6 +157,33 @@ if (post('actionBtn')) {
     $wcr_country = postSpaceFilter('wcr_country_hidden');
     $wcr_brand = postSpaceFilter('wcr_brand_hidden');
     $wcr_series = postSpaceFilter('wcr_series_hidden');
+    // The autocomplete writes the hidden id only when a suggestion is clicked, so a
+    // typed (or form-restored) name leaves it empty while the visible box looks
+    // filled. Resolve the visible text here, the same way the Lazada / Shopee
+    // customer pages do, instead of rejecting a form that looks complete.
+    // postSpaceFilter() returns null for a missing key, so test with !$var rather
+    // than === '' to cover null, '' and '0' alike.
+    $wcr_pic_text = postSpaceFilter('wcr_pic');
+    $wcr_country_text = postSpaceFilter('wcr_country');
+    $wcr_brand_text = postSpaceFilter('wcr_brand');
+    $wcr_series_text = postSpaceFilter('wcr_series');
+
+    if (!$wcr_pic) {
+        $resolvedPic = resolveLookupValue(USR_USER, $wcr_pic_text, 'name', $connect);
+        $wcr_pic = (string) $resolvedPic['id'];
+    }
+    if (!$wcr_country) {
+        $resolvedCountry = resolveLookupValue(COUNTRIES, $wcr_country_text, 'nicename', $connect, 'name');
+        $wcr_country = (string) $resolvedCountry['id'];
+    }
+    if (!$wcr_brand) {
+        $resolvedBrand = resolveLookupValue(BRAND, $wcr_brand_text, 'name', $connect);
+        $wcr_brand = (string) $resolvedBrand['id'];
+    }
+    if (!$wcr_series) {
+        $resolvedSeries = resolveLookupValue(BRD_SERIES, $wcr_series_text, 'name', $connect);
+        $wcr_series = (string) $resolvedSeries['id'];
+    }
     $wcr_rec_name = postSpaceFilter('wcr_rec_name');
     $wcr_rec_ctc = postSpaceFilter('wcr_rec_ctc');
     $wcr_rec_add = postSpaceFilter('wcr_rec_add');
@@ -714,9 +777,9 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
             echo 'disabled' ?> value="<?php echo !empty($echoVal) ? ($series_row['name'] ?? '') : '' ?>">
 
         <input type="hidden" name="wcr_series_hidden" id="wcr_series_hidden" value="<?php echo (isset($row['series'])) ? $row['series'] : ''; ?>">
-            <?php if (isset($wcr_series_err)) { ?>
+            <?php if (isset($series_err)) { ?>
                 <div id="err_msg">
-                    <span class="mt-n1"><?php echo $wcr_series_err; ?></span>
+                    <span class="mt-n1"><?php echo $series_err; ?></span>
                 </div>
             <?php } ?>
         </div>
