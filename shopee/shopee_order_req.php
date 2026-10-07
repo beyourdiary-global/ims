@@ -28,6 +28,9 @@ if (empty($_SESSION['shopee_order_follow_up_csrf'])) {
 if (empty($_SESSION['shopee_order_verify_pdf_csrf'])) {
     $_SESSION['shopee_order_verify_pdf_csrf'] = bin2hex(random_bytes(32));
 }
+if (empty($_SESSION['shopee_order_stock_out_photo_csrf'])) {
+    $_SESSION['shopee_order_stock_out_photo_csrf'] = bin2hex(random_bytes(32));
+}
 
 $pageAction = getPageAction($act);
 $allowed_ext = array("png", "jpg", "jpeg", "pdf");
@@ -611,8 +614,187 @@ $sorHandleVerifyWorkflowRequest = function () use (
     exit;
 };
 
+if (!function_exists('sorStockOutPhotoDirRel')) {
+    function sorStockOutPhotoDirRel()
+    {
+        // Same folder the warehouse writes Stock In / Stock Out photos into.
+        return rtrim((string) img_server, '/') . '/finance/stock_in/';
+    }
+}
+
+if (!function_exists('sorStockOutPhotoDirAbs')) {
+    function sorStockOutPhotoDirAbs()
+    {
+        return rtrim((string) ROOT, '/\\') . '/' . ltrim((string) sorStockOutPhotoDirRel(), '/\\');
+    }
+}
+
+if (!function_exists('sorEnsureStockOutPhotoDir')) {
+    function sorEnsureStockOutPhotoDir()
+    {
+        $dir = sorStockOutPhotoDirAbs();
+        if (!is_dir($dir)) {
+            if (!mkdir($dir, 0755, true) && !is_dir($dir)) {
+                return false;
+            }
+        }
+        return is_dir($dir);
+    }
+}
+
+$sorHandleStockOutPhotoReplace = function () use (
+    $connect,
+    $finance_connect,
+    $dataId,
+    $act,
+    $pageTitle,
+    $cdate,
+    $ctime,
+    $sorPrepareAjaxJsonResponse
+) {
+    $sorPrepareAjaxJsonResponse();
+
+    $sorRespond = function ($success, $message, $extra = array()) {
+        echo json_encode(array_merge(
+            array('success' => (bool) $success, 'message' => (string) $message),
+            is_array($extra) ? $extra : array()
+        ));
+        exit;
+    };
+
+    $postedCsrfToken = (string) post('shopee_order_stock_out_photo_csrf');
+    if (!hash_equals((string) $_SESSION['shopee_order_stock_out_photo_csrf'], $postedCsrfToken)) {
+        $sorRespond(false, 'Invalid session token. Please refresh the page and try again.');
+    }
+
+    // Same rule as the Airbill Attachment input on this page: only an editable
+    // order can change its Stock Out photo.
+    if ($act !== 'E') {
+        $sorRespond(false, 'You are not allowed to replace the stock out photo.');
+    }
+
+    $sorStockOutRecordId = (int) post('sor_stock_out_record_id');
+    $sorStockOutOldPath = trim((string) post('sor_stock_out_old_path'));
+    if ($sorStockOutRecordId <= 0 || $sorStockOutOldPath === '') {
+        $sorRespond(false, 'Invalid stock out record.');
+    }
+
+    $sorFreshOrderRow = shopeeOmsLoadOrder($finance_connect, (int) $dataId, shopeeOmsResolveOrderSourceConfig('shopee'));
+    if (empty($sorFreshOrderRow)) {
+        $sorRespond(false, 'Invalid order.');
+    }
+    $sorStockOutOrderCode = isset($sorFreshOrderRow['orderID']) ? trim((string) $sorFreshOrderRow['orderID']) : '';
+    if ($sorStockOutOrderCode === '') {
+        $sorRespond(false, 'This order has no Shopee order number.');
+    }
+
+    $sorStockOutRecordResult = mysqli_query(
+        $finance_connect,
+        "SELECT `id`, `attachment`, `order_number` FROM `stock_in_order`
+            WHERE `id`='" . $sorStockOutRecordId . "'
+              AND `status`='A'
+              AND COALESCE(NULLIF(TRIM(`stock_type`), ''), 'Stock In') = 'Stock Out'
+            LIMIT 1"
+    );
+    if (!$sorStockOutRecordResult || mysqli_num_rows($sorStockOutRecordResult) === 0) {
+        $sorRespond(false, 'Stock out record was not found. Please refresh the page.');
+    }
+    $sorStockOutRecordRow = mysqli_fetch_assoc($sorStockOutRecordResult);
+
+    if (trim((string) $sorStockOutRecordRow['order_number']) !== $sorStockOutOrderCode) {
+        $sorRespond(false, 'This stock out photo does not belong to the current order.');
+    }
+
+    $sorStockOutAttachments = siAttachmentDecodeList((string) $sorStockOutRecordRow['attachment']);
+    $sorStockOutMatchIndex = -1;
+    foreach ($sorStockOutAttachments as $sorStockOutIndex => $sorStockOutAttachmentPath) {
+        if (trim((string) $sorStockOutAttachmentPath) === $sorStockOutOldPath) {
+            $sorStockOutMatchIndex = (int) $sorStockOutIndex;
+            break;
+        }
+    }
+    if ($sorStockOutMatchIndex < 0) {
+        $sorRespond(false, 'The photo you tried to replace is no longer on this record. Please refresh the page.');
+    }
+
+    if (!isset($_FILES['sor_stock_out_photo_file']) || !is_array($_FILES['sor_stock_out_photo_file'])) {
+        $sorRespond(false, 'Please choose a photo to upload.');
+    }
+    $sorStockOutFile = $_FILES['sor_stock_out_photo_file'];
+    $sorStockOutFileError = isset($sorStockOutFile['error']) ? (int) $sorStockOutFile['error'] : UPLOAD_ERR_NO_FILE;
+    if ($sorStockOutFileError === UPLOAD_ERR_NO_FILE) {
+        $sorRespond(false, 'Please choose a photo to upload.');
+    }
+    if ($sorStockOutFileError !== UPLOAD_ERR_OK) {
+        $sorRespond(false, 'The photo could not be uploaded. Please try again.');
+    }
+
+    $sorStockOutFileExt = strtolower(pathinfo(
+        (string) (isset($sorStockOutFile['name']) ? $sorStockOutFile['name'] : ''),
+        PATHINFO_EXTENSION
+    ));
+    if (!in_array($sorStockOutFileExt, array('png', 'jpg', 'jpeg', 'webp'), true)) {
+        $sorRespond(false, 'The photo must be a png, jpg, jpeg or webp file.');
+    }
+    if ((int) (isset($sorStockOutFile['size']) ? $sorStockOutFile['size'] : 0) > 8 * 1024 * 1024) {
+        $sorRespond(false, 'The photo is too large. Please upload an image smaller than 8MB.');
+    }
+
+    if (!sorEnsureStockOutPhotoDir()) {
+        $sorRespond(false, 'The stock out photo folder is not ready.');
+    }
+
+    $sorStockOutNewName = 'stock_in_' . date('Ymd_His') . '_' . mt_rand(1000, 9999) . '_replace.' . $sorStockOutFileExt;
+    $sorStockOutNewAbsPath = sorStockOutPhotoDirAbs() . $sorStockOutNewName;
+    $sorStockOutNewRelPath = sorStockOutPhotoDirRel() . $sorStockOutNewName;
+
+    if (!@move_uploaded_file((string) $sorStockOutFile['tmp_name'], $sorStockOutNewAbsPath)) {
+        $sorRespond(false, 'The photo could not be saved. Please try again.');
+    }
+
+    // Swap just this one photo, keep every other attachment on the record.
+    // The old file is intentionally left on disk: another record may still
+    // reference it, and keeping it makes the change recoverable.
+    $sorStockOutAttachments[$sorStockOutMatchIndex] = $sorStockOutNewRelPath;
+    $sorStockOutNewAttachment = siAttachmentEncodeList($sorStockOutAttachments);
+    $sorStockOutSafeAttachment = mysqli_real_escape_string($finance_connect, $sorStockOutNewAttachment);
+    $sorStockOutActorId = (int) (isset($_SESSION['userid']) ? $_SESSION['userid'] : USER_ID);
+
+    $sorStockOutUpdateSql = "UPDATE `stock_in_order` SET `attachment`='" . $sorStockOutSafeAttachment . "',"
+        . " `update_by`='" . $sorStockOutActorId . "', `update_date`=CURDATE(), `update_time`=CURTIME()"
+        . " WHERE `id`='" . $sorStockOutRecordId . "' AND `status`='A' LIMIT 1";
+    if (!mysqli_query($finance_connect, $sorStockOutUpdateSql)) {
+        @unlink($sorStockOutNewAbsPath);
+        $sorRespond(false, 'Failed to update the stock out record. Please try again.');
+    }
+
+    audit_log(array(
+        'log_act' => 'edit',
+        'cdate' => $cdate,
+        'ctime' => $ctime,
+        'uid' => $sorStockOutActorId,
+        'cby' => $sorStockOutActorId,
+        'query_rec' => $sorStockOutUpdateSql,
+        'query_table' => 'stock_in_order',
+        'page' => $pageTitle,
+        'connect' => $connect,
+        'oldval' => $sorStockOutOldPath,
+        'changes' => $sorStockOutNewRelPath,
+        'act_msg' => 'Replaced Stock Out photo (record #' . $sorStockOutRecordId . ') for order ' . $sorStockOutOrderCode . '.',
+    ));
+
+    $sorRespond(true, 'Stock out photo replaced.', array(
+        'record_id' => $sorStockOutRecordId,
+        'new_path' => $sorStockOutNewRelPath,
+    ));
+};
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && $sorIsAjaxRequest && trim((string) post('sor_verify_order_action')) !== '') {
     $sorHandleVerifyWorkflowRequest();
+}
+
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && $sorIsAjaxRequest && trim((string) post('sor_stock_out_photo_action')) === 'replace') {
+    $sorHandleStockOutPhotoReplace();
 }
 
 if ($_SERVER["REQUEST_METHOD"] == "POST" && post('submit')) {
@@ -2145,6 +2327,43 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
             color: #495057;
         }
 
+        .sor-stock-out-photo-replace {
+            position: relative;
+            display: inline-block;
+            margin-top: 4px;
+            padding: 0 8px;
+            font-size: 11px;
+            line-height: 18px;
+            color: #0d6efd;
+            border: 1px solid #0d6efd;
+            border-radius: 10px;
+            background: #ffffff;
+            cursor: pointer;
+            user-select: none;
+        }
+
+        .sor-stock-out-photo-replace:hover {
+            background: #0d6efd;
+            color: #ffffff;
+        }
+
+        .sor-stock-out-photo-replace.is-busy {
+            opacity: 0.55;
+            pointer-events: none;
+        }
+
+        .sor-stock-out-photo-replace input[type="file"] {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            padding: 0;
+            margin: -1px;
+            overflow: hidden;
+            clip: rect(0, 0, 0, 0);
+            white-space: nowrap;
+            border: 0;
+        }
+
         .sor-stock-out-image-lightbox {
             display: none;
             position: fixed;
@@ -2725,6 +2944,7 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                             if ($sorShowStockOutRecord) { ?>
                                 <div class="mt-3">
                                     <label class="form-label form_lbl">Stock Out Record</label>
+                                    <input type="hidden" id="sor_stock_out_photo_csrf" value="<?= htmlspecialchars((string) $_SESSION['shopee_order_stock_out_photo_csrf'], ENT_QUOTES, 'UTF-8') ?>">
                                     <?php if (!empty($sorStockOutPhotos)) { ?>
                                         <div class="sor-stock-out-photo-grid">
                                             <?php foreach ($sorStockOutPhotos as $sorStockOutPhoto) { ?>
@@ -2742,6 +2962,12 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                                         <span class="sor-stock-out-photo-id">ID: <?= (int) $sorStockOutPhoto['id'] ?></span>
                                                         <?php if (!empty($sorStockOutPhoto['date'])) { ?>
                                                             <span class="sor-stock-out-photo-date"><?= htmlspecialchars((string) $sorStockOutPhoto['date'], ENT_QUOTES, 'UTF-8') ?></span>
+                                                        <?php } ?>
+                                                        <?php if ($act === 'E') { ?>
+                                                            <label class="sor-stock-out-photo-replace" title="Upload a new photo to replace this one">
+                                                                <span>Replace</span>
+                                                                <input type="file" class="sor-stock-out-photo-replace-input" accept=".png,.jpg,.jpeg,.webp" data-stock-out-record-id="<?= (int) $sorStockOutPhoto['id'] ?>" data-stock-out-old-path="<?= htmlspecialchars($sorStockOutPhotoPath, ENT_QUOTES, 'UTF-8') ?>">
+                                                            </label>
                                                         <?php } ?>
                                                     </figcaption>
                                                 </figure>
@@ -3657,6 +3883,90 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 }
             });
         }
+
+        (function () {
+            var csrfField = document.getElementById('sor_stock_out_photo_csrf');
+            var inputs = document.querySelectorAll('.sor-stock-out-photo-replace-input');
+            if (!csrfField || !inputs.length) {
+                return;
+            }
+
+            var isBusy = false;
+
+            function setBusy(state) {
+                isBusy = !!state;
+                document.querySelectorAll('.sor-stock-out-photo-replace').forEach(function (label) {
+                    label.classList.toggle('is-busy', isBusy);
+                });
+            }
+
+            function replaceStockOutPhoto(input) {
+                var file = input.files && input.files[0] ? input.files[0] : null;
+                if (!file) {
+                    return;
+                }
+
+                if (!/\.(png|jpe?g|webp)$/i.test(String(file.name || ''))) {
+                    window.alert('Please choose a png, jpg, jpeg or webp image.');
+                    input.value = '';
+                    return;
+                }
+
+                var recordId = input.getAttribute('data-stock-out-record-id') || '';
+                var oldPath = input.getAttribute('data-stock-out-old-path') || '';
+                if (!recordId || !oldPath) {
+                    input.value = '';
+                    return;
+                }
+
+                if (!window.confirm('Replace this stock out photo? The photo on record #' + recordId + ' will be swapped for the new one.')) {
+                    input.value = '';
+                    return;
+                }
+
+                var formData = new FormData();
+                formData.append('sor_stock_out_photo_action', 'replace');
+                formData.append('shopee_order_stock_out_photo_csrf', csrfField.value || '');
+                formData.append('act', 'E');
+                formData.append('sor_stock_out_record_id', recordId);
+                formData.append('sor_stock_out_old_path', oldPath);
+                formData.append('sor_stock_out_photo_file', file);
+
+                setBusy(true);
+
+                fetch(window.location.href, {
+                    method: 'POST',
+                    body: formData,
+                    credentials: 'same-origin',
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest'
+                    }
+                }).then(function (response) {
+                    return response.json();
+                }).then(function (result) {
+                    setBusy(false);
+                    input.value = '';
+                    if (!result || !result.success) {
+                        window.alert(result && result.message ? result.message : 'Failed to replace the stock out photo.');
+                        return;
+                    }
+                    window.location.reload();
+                }).catch(function () {
+                    setBusy(false);
+                    input.value = '';
+                    window.alert('Failed to replace the stock out photo.');
+                });
+            }
+
+            Array.prototype.forEach.call(inputs, function (input) {
+                input.addEventListener('change', function () {
+                    if (isBusy) {
+                        return;
+                    }
+                    replaceStockOutPhoto(input);
+                });
+            });
+        })();
 
         function ensureShopeeOrderReqActionPopup() {
             var popupElement = document.getElementById('shopeeOrderReqActionPopup');
