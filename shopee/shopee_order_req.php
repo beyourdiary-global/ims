@@ -2605,7 +2605,12 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                 </div>
                 <?php
                 $sorStockOutPhotoPaths = array();
-                if ($act !== 'I' && $currentOrderStatusValue === 'WAERD') {
+                // Stock-out photos are captured when the warehouse scans the parcel out (TP -> SP), so they
+                // stay relevant from that step on. Do not gate this on WAERD alone: assigning the estimated
+                // received date moves the order to WR, and the operator still needs to see the photos there.
+                $sorStockOutPhotoStatuses = array('SP', 'WAERD', 'WR', 'PD', 'PR', 'WAFC', 'V', 'C', 'R', 'CR');
+                $sorCanShowStockOutRecord = $act !== 'I' && in_array($currentOrderStatusValue, $sorStockOutPhotoStatuses, true);
+                if ($sorCanShowStockOutRecord) {
                     $sorStockOutOrderCode = isset($row['orderID']) ? trim((string) $row['orderID']) : '';
                     if ($sorStockOutOrderCode !== '') {
                         $sorStockOutSql = "SELECT `attachment` FROM `stock_in_order`
@@ -2666,7 +2671,13 @@ if (isset($row['id']) && (int) $row['id'] > 0) {
                                     <span class="mt-n1"><?php echo $airbill_attachment_err; ?></span>
                                 </div>
                             <?php } ?>
-                            <?php if ($act !== 'I' && $currentOrderStatusValue === 'WAERD') { ?>
+                            <?php
+                            // Stays in the Airbill Attachment column, right under "Current Attachment".
+                            // Once photos exist they show at any post-stock-out status; only the empty hint
+                            // stays WAERD-only, so orders that never had a stock-out do not grow a stray label.
+                            $sorShowStockOutRecord = $sorCanShowStockOutRecord
+                                && (!empty($sorStockOutPhotoPaths) || $currentOrderStatusValue === 'WAERD');
+                            if ($sorShowStockOutRecord) { ?>
                                 <div class="mt-3">
                                     <label class="form-label form_lbl">Stock Out Record</label>
                                     <?php if (!empty($sorStockOutPhotoPaths)) { ?>
