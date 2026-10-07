@@ -86,6 +86,77 @@ function migAddIndex($connect, $dbName, $table, $index, $definition)
     return "ERROR adding index $table.$index: " . mysqli_error($connect) . "\n";
 }
 
+/**
+ * Grant a pin group to a user group inside the `user_group`.`pins` blob,
+ * which is stored as [+ separated [groupId:pinId,pinId] blocks]. Idempotent:
+ * an already-present pin id is left alone and a no-op change reports SKIP.
+ */
+function migGrantPinGroupAccess($connect, $userGroupId, $pinGroupId, $pinIds)
+{
+    $userGroupId = (int) $userGroupId;
+    $pinGroupId = (int) $pinGroupId;
+
+    if ($userGroupId <= 0 || $pinGroupId <= 0) {
+        return "ERROR invalid user_group / pin_group id\n";
+    }
+
+    $result = mysqli_query($connect, "SELECT `pins` FROM `user_group` WHERE `id` = " . $userGroupId . " LIMIT 1");
+    if (!$result || $result->num_rows === 0) {
+        return "SKIP  user_group id " . $userGroupId . " not found\n";
+    }
+
+    $row = $result->fetch_assoc();
+    $current = isset($row['pins']) ? (string) $row['pins'] : '';
+    $targetKey = (string) $pinGroupId;
+    $entries = array_filter(array_map('trim', explode('+', $current)), 'strlen');
+    $rebuilt = array();
+    $found = false;
+
+    foreach ($entries as $entry) {
+        $entry = trim($entry, '[]');
+        $parts = explode(':', $entry, 2);
+        if (count($parts) !== 2) {
+            continue;
+        }
+
+        $key = trim($parts[0]);
+        $accessList = array_filter(array_map('trim', explode(',', $parts[1])), 'strlen');
+
+        if ($key === $targetKey) {
+            foreach ($pinIds as $pinId) {
+                $pinId = (string) (int) $pinId;
+                if ($pinId !== '0' && !in_array($pinId, $accessList, true)) {
+                    $accessList[] = $pinId;
+                }
+            }
+            $found = true;
+        }
+
+        $rebuilt[] = '[' . $key . ':' . implode(',', $accessList) . ']';
+    }
+
+    if (!$found) {
+        $newList = array();
+        foreach ($pinIds as $pinId) {
+            $newList[] = (string) (int) $pinId;
+        }
+        $rebuilt[] = '[' . $targetKey . ':' . implode(',', $newList) . ']';
+    }
+
+    $updated = implode('+', $rebuilt);
+
+    if ($updated === $current) {
+        return "SKIP  user_group " . $userGroupId . " already has pin group " . $pinGroupId . "\n";
+    }
+
+    $safe = mysqli_real_escape_string($connect, $updated);
+    if (mysqli_query($connect, "UPDATE `user_group` SET `pins` = '" . $safe . "' WHERE `id` = " . $userGroupId)) {
+        return "OK    granted pin group " . $pinGroupId . " to user_group " . $userGroupId . "\n";
+    }
+
+    return "ERROR updating user_group " . $userGroupId . ": " . mysqli_error($connect) . "\n";
+}
+
 echo "Database: " . ($dbName === '' ? '(unknown)' : $dbName) . "\n";
 echo "====================\n";
 
@@ -163,6 +234,26 @@ if ($apiKeyExists) {
         echo "ERROR creating table $apiKeyTable: " . mysqli_error($connect) . "\n";
     }
 }
+
+
+// ---- 7) API Key Manager pin group (Super Admin only) ----
+// api/key_manager.php is gated by pin group 170 AND by user group 1.
+// Creating the pin group here makes the "API Key Manager" menu entry
+// and the page permission manageable from Users -> Pin Group later.
+$apiKeyPinGroupId = 170;
+$apiKeyPinGroupSql = "INSERT INTO `pin_group` (`id`, `name`, `pins`, `remark`, `create_by`, `create_date`, `create_time`, `status`) VALUES
+    ($apiKeyPinGroupId, 'API Key Manager', '1,2,3,4', 'REST API key management (Super Admin only)', '1', CURDATE(), CURTIME(), 'A')
+    ON DUPLICATE KEY UPDATE
+        `name` = VALUES(`name`),
+        `pins` = VALUES(`pins`),
+        `remark` = VALUES(`remark`),
+        `status` = 'A'";
+if (mysqli_query($connect, $apiKeyPinGroupSql)) {
+    echo "OK    verified pin group " . $apiKeyPinGroupId . " (API Key Manager)\n";
+} else {
+    echo "ERROR creating pin group " . $apiKeyPinGroupId . ": " . mysqli_error($connect) . "\n";
+}
+echo migGrantPinGroupAccess($connect, 1, $apiKeyPinGroupId, array(1, 2, 3, 4));
 
 echo "====================\n";
 echo "Done. 建议执行完从服务器删除本文件。\n";

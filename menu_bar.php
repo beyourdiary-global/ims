@@ -506,6 +506,7 @@ $menuList = array(
             array('Token Setting', 'mdi mdi-key-chain', $SITEURL . '/settings/token_setting_table.php', '133'),
             array('Theme Setting', 'mdi mdi-brush-variant', $SITEURL . '/settings/theme_setting.php', '23'),
             array('System Setting', 'mdi mdi-brush-variant', $SITEURL . '/settings/system_setting.php', '39'),
+            array('API Key Manager', 'mdi mdi-key-variant', $SITEURL . '/api/key_manager.php', '170'),
             array(
                 'User Management',
                 'mdi mdi-folder-account',
@@ -538,7 +539,7 @@ $menuList = array(
                 'pin' => array('8', '11', '10', '14', '19', '79', '127'),
             ),
         ),
-        'pin' => array('132', '133', '23', '39', '1', '2', '90', '3', '8', '11', '10', '14', '19', '79', '127')
+        'pin' => array('132', '133', '23', '39', '170', '1', '2', '90', '3', '8', '11', '10', '14', '19', '79', '127')
     ),
     array(
         'Import Shortcut',

@@ -10,7 +10,10 @@ Nothing in here can write, edit or delete CMS data.
 ## 1. Get a key
 
 1. Log in to the CMS as usual.
-2. Open **`https://cms.beyourdiary.com/api/key_manager.php`**.
+2. Open **Setting → API Key Manager** in the menu
+   (or go straight to `https://cms.beyourdiary.com/api/key_manager.php`).
+   The page is Super Admin only and additionally needs the *API Key Manager*
+   pin group (id `170`).
 3. Type a name (e.g. `Reporting AI`) and click **Create key**.
 4. **Copy the key immediately** — it is shown once. Only its SHA-256 hash is stored,
    so it can never be recovered. If you lose it, revoke it and create a new one.
@@ -185,7 +188,7 @@ curl -s -H "X-API-Key: $KEY" \
 | `customers.php` | customer list |
 | `customer.php` | one customer + log |
 | `sales.php` | order report |
-| `key_manager.php` | browser UI to create / list / revoke keys (needs a CMS login) |
+| `key_manager.php` | browser UI to create / list / revoke keys (CMS login + Super Admin + pin group 170) |
 | `lib/bootstrap.php` | JSON envelope, DB bootstrap, key auth, request helpers |
 | `lib/customer_shape.php` | shared customer row shaping |
 | `lib/.htaccess` | blocks HTTP access to the library |

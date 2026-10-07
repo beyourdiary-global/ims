@@ -140,9 +140,19 @@ register_shutdown_function(function () {
 // init.php opens both database connections. On PHP 7.4 a failed connect just
 // returns false; on newer runtimes mysqli throws instead. Catch either way so
 // a database outage always answers with JSON, never a blank page.
+$cmsApiInitFile = dirname(__DIR__, 2) . '/init.php';
+
+if (!is_file($cmsApiInitFile)) {
+    // A wrong path used to look exactly like a database outage, which hid the
+    // problem completely. Fail loudly and separately instead.
+    cmsApiFail(500, 'runtime_missing', 'The CMS runtime file (init.php) could not be found.');
+}
+
 $cmsApiPreviousErrorReporting = error_reporting(0);
 try {
-    require_once dirname(__DIR__) . '/init.php';
+    // This file lives in api/lib, so the CMS root is two levels up.
+    // dirname(__DIR__) alone would resolve to api/init.php, which does not exist.
+    require_once $cmsApiInitFile;
     error_reporting($cmsApiPreviousErrorReporting);
 } catch (Throwable $cmsApiBootstrapError) {
     error_reporting($cmsApiPreviousErrorReporting);
