@@ -2953,20 +2953,15 @@ function customizeBotMsgInsertGetDefaultComponents($context)
         customizeBotMsgInsertCreateLine('package_lines', '{{package_lines_block}}', 60, array('builder_text' => '{{package_lines_block}}', 'builder_mode' => 'readonly', 'locked_text' => '{{package_lines_block}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
         customizeBotMsgInsertCreateSpacer('package_spacer', 1, 70),
         customizeBotMsgInsertCreateLine('product_label', 'Product Details:', 80),
-        customizeBotMsgInsertCreateSpacer('product_intro_spacer', 1, 90),
         customizeBotMsgInsertCreateLine('product_lines', '{{product_details_block}}', 100, array('builder_text' => '{{product_details_block}}', 'builder_mode' => 'readonly', 'locked_text' => '{{product_details_block}}', 'use_builder_text' => 'N')),
     );
 
     if ($context === 'shopee') {
         $components[] = customizeBotMsgInsertCreateSpacer('delivery_section_spacer', 1, 110);
-        $components[] = customizeBotMsgInsertCreateLine('delivery_header', '[Delivery Info]', 120);
-        $components[] = customizeBotMsgInsertCreateSpacer('delivery_header_spacer', 1, 130);
         $components[] = customizeBotMsgInsertCreateLine('order_label', $orderLabel . ':', 140);
         $components[] = customizeBotMsgInsertCreateLine('order_value', '{{order_code}}', 150, array('builder_text' => '{{order_code}}', 'builder_mode' => 'readonly', 'locked_text' => '{{order_code}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
-        $components[] = customizeBotMsgInsertCreateSpacer('order_line_spacer', 1, 160);
         $components[] = customizeBotMsgInsertCreateLine('customer_name_label', 'Customer Name:', 170);
         $components[] = customizeBotMsgInsertCreateLine('customer_name_value', '{{customer_name}}', 180, array('builder_text' => '{{customer_name}}', 'builder_mode' => 'readonly', 'locked_text' => '{{customer_name}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
-        $components[] = customizeBotMsgInsertCreateSpacer('customer_name_spacer', 1, 190);
         $components[] = customizeBotMsgInsertCreateLine('customer_address_label', 'Customer Address:', 200);
         $components[] = customizeBotMsgInsertCreateLine('customer_address_value', '{{customer_address}}', 210, array('builder_text' => '{{customer_address}}', 'builder_mode' => 'readonly', 'locked_text' => '{{customer_address}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
     } else {

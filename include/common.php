@@ -8114,20 +8114,15 @@ if (!function_exists('customizeBotMsgGetDefaultComponents')) {
             customizeBotMsgCreateLineComponent('package_lines', '{{package_lines_block}}', 60, false, array('builder_text' => '{{package_lines_block}}', 'builder_mode' => 'readonly', 'locked_text' => '{{package_lines_block}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y')),
             customizeBotMsgCreateSpacerComponent('package_spacer', 1, 70),
             customizeBotMsgCreateLineComponent('product_label', 'Product Details:', 80),
-            customizeBotMsgCreateSpacerComponent('product_intro_spacer', 1, 90),
             customizeBotMsgCreateLineComponent('product_lines', '{{product_details_block}}', 100, false, array('builder_text' => '{{product_details_block}}', 'builder_mode' => 'readonly', 'locked_text' => '{{product_details_block}}', 'use_builder_text' => 'N')),
         );
 
         if ($context === 'shopee') {
             $components[] = customizeBotMsgCreateSpacerComponent('delivery_section_spacer', 1, 110);
-            $components[] = customizeBotMsgCreateLineComponent('delivery_header', '[Delivery Info]', 120);
-            $components[] = customizeBotMsgCreateSpacerComponent('delivery_header_spacer', 1, 130);
             $components[] = customizeBotMsgCreateLineComponent('order_label', $orderLabel . ':', 140);
             $components[] = customizeBotMsgCreateLineComponent('order_value', '{{order_code}}', 150, false, array('builder_text' => '{{order_code}}', 'builder_mode' => 'readonly', 'locked_text' => '{{order_code}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
-            $components[] = customizeBotMsgCreateSpacerComponent('order_line_spacer', 1, 160);
             $components[] = customizeBotMsgCreateLineComponent('customer_name_label', 'Customer Name:', 170);
             $components[] = customizeBotMsgCreateLineComponent('customer_name_value', '{{customer_name}}', 180, false, array('builder_text' => '{{customer_name}}', 'builder_mode' => 'readonly', 'locked_text' => '{{customer_name}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
-            $components[] = customizeBotMsgCreateSpacerComponent('customer_name_spacer', 1, 190);
             $components[] = customizeBotMsgCreateLineComponent('customer_address_label', 'Customer Address:', 200);
             $components[] = customizeBotMsgCreateLineComponent('customer_address_value', '{{customer_address}}', 210, false, array('builder_text' => '{{customer_address}}', 'builder_mode' => 'readonly', 'locked_text' => '{{customer_address}}', 'use_builder_text' => 'N', 'join_with_previous' => 'Y'));
         } else {
@@ -8161,6 +8156,14 @@ if (!function_exists('customizeBotMsgMigrateLegacyComponents')) {
             }
 
             $componentKey = trim((string) ($component['component_key'] ?? ''));
+
+            // These components belonged to the original seeded layout. The spacing was
+            // tightened and the [Delivery Info] header was dropped, so a legacy saved
+            // template must not bring them back when its components are re-hydrated.
+            if (in_array($componentKey, array('product_intro_spacer', 'delivery_header', 'delivery_header_spacer', 'order_line_spacer', 'customer_name_spacer'), true)) {
+                continue;
+            }
+
             $sortOrder = (int) ($component['sort_order'] ?? 0);
             $removed = strtoupper(trim((string) ($component['removed'] ?? 'N'))) === 'Y';
             $builderText = isset($component['builder_text']) ? (string) $component['builder_text'] : customizeBotMsgInferBuilderText(
@@ -8719,8 +8722,20 @@ if (!function_exists('customizeBotMsgFetchTemplateRowById')) {
             $row['components_json'] = customizeBotMsgRepairLegacyBracketText(isset($row['components_json']) ? $row['components_json'] : '');
             $decodedComponents = json_decode((string) (isset($row['components_json']) ? $row['components_json'] : ''), true);
             $row['components_array'] = customizeBotMsgHydrateComponents($decodedComponents, isset($row['message_context']) ? $row['message_context'] : $context);
-            if (trim((string) (isset($row['template_body']) ? $row['template_body'] : '')) === '') {
-                $row['template_body'] = customizeBotMsgBuildTemplateBodyFromComponents($row['components_array']);
+            $storedTemplateBody = trim((string) (isset($row['template_body']) ? $row['template_body'] : ''));
+            $storedComponentsJson = trim((string) (isset($row['components_json']) ? $row['components_json'] : ''));
+            $hasLayoutComponents = ($storedComponentsJson !== '' && $storedComponentsJson !== '[]' && $storedComponentsJson !== 'null');
+
+            // A template saved with the original seeded layout still carries the removed
+            // "[Delivery Info]" header and its extra blank lines. Rebuild it from the
+            // migrated components so the tightened layout applies automatically. Templates
+            // that were deliberately customised (no such marker) are left untouched.
+            $needsLayoutRefresh = ($hasLayoutComponents && $storedTemplateBody !== '' && strpos($storedTemplateBody, '[Delivery Info]') !== false);
+            if ($storedTemplateBody === '' || $needsLayoutRefresh) {
+                $rebuiltTemplateBody = customizeBotMsgBuildTemplateBodyFromComponents($row['components_array']);
+                if ($rebuiltTemplateBody !== '') {
+                    $row['template_body'] = $rebuiltTemplateBody;
+                }
             }
         }
 
@@ -13785,10 +13800,9 @@ if (!function_exists('shopeeOmsBuildUrbanismVipBlock')) {
             $lines[] = $vipEmail;
         }
 
-        $vipUrl = trim((string) (isset($vipInfo['url']) ? $vipInfo['url'] : ''));
-        if ($vipUrl !== '') {
-            $lines[] = $vipUrl;
-        }
+        // The registration URL is deliberately not shown: the name and email are
+        // enough for the warehouse team, and the long link made the message noisy.
+        // shopeeOmsResolveUrbanismVipInfo() still resolves it for other callers.
 
         // Only the heading means there is nothing to show.
         if (count($lines) <= 1) {
@@ -13871,9 +13885,9 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
         $lines[] = '【' . ($warehouseName !== '' ? $warehouseName : 'Warehouse Name') . '】';
         if ($platform !== 'shopee') {
             $lines[] = $orderFieldLabel . ': ' . ($orderCode !== '' ? $orderCode : '-');
-            $lines[] = '';
         }
         $lines[] = $customerFieldLabel . ': ' . ($customerName !== '' ? $customerName : '-');
+
         $lines[] = '';
 
         if (count($packageLines) > 1) {
@@ -13888,7 +13902,6 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
         $lines[] = '';
 
         $lines[] = 'Product Details:';
-        $lines[] = '';
 
         if (!empty($productLines)) {
             foreach ($productLines as $index => $productLine) {
@@ -13902,17 +13915,13 @@ if (!empty($summary['package_lines']) && is_array($summary['package_lines'])) {
             $lines[] = '-';
         }
 
+        $lines[] = '';
+
         if ($platform === 'shopee') {
-            $lines[] = '';
-            $lines[] = '[Delivery Info]';
-            $lines[] = '';
             $lines[] = $orderFieldLabel . ': ' . ($orderCode !== '' ? $orderCode : '-');
-            $lines[] = '';
             $lines[] = 'Customer Name: ' . ($deliveryCustomerName !== '' ? $deliveryCustomerName : '-');
-            $lines[] = '';
             $lines[] = 'Customer Address: ' . ($deliveryCustomerAddress !== '' ? $deliveryCustomerAddress : '-');
         } else if ($airbillText !== '') {
-            $lines[] = '';
             $lines[] = 'Airbill: ' . $airbillText;
         }
 
