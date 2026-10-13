@@ -6879,7 +6879,7 @@ body.task-board-page .task-board-scroll {
 .task-item-child-table-head,
 .task-item-child-row {
   display: grid;
-  grid-template-columns: var(--task-item-child-column-template, minmax(260px, 1.35fr) minmax(132px, 0.72fr) minmax(160px, 0.82fr) minmax(140px, 0.72fr));
+  grid-template-columns: var(--task-item-child-column-template, minmax(260px, 1.35fr) minmax(125px, 0.7fr) minmax(125px, 0.65fr) minmax(120px, 0.7fr) minmax(220px, max-content));
   gap: 0.65rem;
   align-items: center;
 }

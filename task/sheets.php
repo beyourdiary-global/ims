@@ -542,7 +542,7 @@ window.sheetsConfig = {
 };
 </script>
 <script src="../js/task_board_core.js"></script>
-<script src="../js/task_board_ui.js"></script>
+<script src="../js/task_board_ui.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_ui.js') ?>"></script>
 <script src="../js/task_board.js"></script>
 <script src="<?= $SITEURL ?>/header/tinymce/tinymce.min.js"></script>
 <script src="../js/text_editor.js"></script>
