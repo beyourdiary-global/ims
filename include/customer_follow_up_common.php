@@ -3422,7 +3422,14 @@ if (!function_exists('customerFollowUpApproveRound')) {
             $approvalComment
         );
 
-        if ($financeConnect instanceof mysqli && !customerFollowUpUpdateOrderApprovalTransitionRemark($connect, $financeConnect, $updatedFollowUpRow, $updatedRoundRow, $approvalComment)) {
+        // A case opened straight from a customer page has no order behind it, so there is no
+        // order status transition history to stamp the approval comment on. Skipping it is not
+        // a failure: previously the false return rolled back the whole approval, so every
+        // orderless follow-up round could never be approved. The approval comment still lands
+        // on the round (approval_comment) and in the follow-up action log.
+        if ($financeConnect instanceof mysqli
+            && !customerFollowUpIsOrderlessCase($updatedFollowUpRow)
+            && !customerFollowUpUpdateOrderApprovalTransitionRemark($connect, $financeConnect, $updatedFollowUpRow, $updatedRoundRow, $approvalComment)) {
             customerFollowUpRollbackTransactions($transactionConnections);
             return array('success' => false, 'message' => 'Failed to update the order status transition history remark.');
         }
