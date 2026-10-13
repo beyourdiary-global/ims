@@ -2245,7 +2245,7 @@ function taskChildWorkItemDefaultColumnOrder() {
   return taskChildWorkItemColumnDefinitions.map(function (column) {
     return column.key;
   }).filter(function (key) {
-    return ["work", "work_type", "original_estimate", "due_date", "status"].indexOf(key) !== -1;
+    return ["work", "original_estimate", "due_date", "status"].indexOf(key) !== -1;
   });
 }
 

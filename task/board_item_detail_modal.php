@@ -127,7 +127,6 @@
                                 <div class="task-item-child-table-scroll">
                                     <div class="task-item-child-table-head">
                                         <span>Work</span>
-                                        <span>Work Type</span>
                                         <span>Original Estimate</span>
                                         <span>Due date</span>
                                         <span>Status</span>
