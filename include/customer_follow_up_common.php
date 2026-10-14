@@ -4777,6 +4777,10 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
             return $summary;
         }
 
+        // Rounds still waiting for an admin decision are never marked missed: the ball is with
+        // the approver, not with the follow-up staff (same for a postponement awaiting approval).
+        // Everything else that is past its date - Approved / Rejected / blank - gets the Missed
+        // tag while keeping its own status.
         $sql = "SELECT
                     f.*,
                     r.`id` AS `round_id`,
@@ -4798,7 +4802,8 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                   AND " . $effectiveDateSql . " IS NOT NULL
                   AND " . $effectiveDateSql . " < '" . customerFollowUpEscape($connect, $today) . "'
                   AND IFNULL(r.`missed_flag`, 'N') <> 'Y'
-                  AND LOWER(IFNULL(r.`round_status`, '')) NOT IN ('done', 'lost', 'cancelled', 'missed follow-up')
+                  AND LOWER(IFNULL(r.`round_status`, '')) NOT IN ('done', 'lost', 'cancelled', 'missed follow-up', 'pending approval')
+                  AND LOWER(IFNULL(r.`approval_status`, '')) <> 'pending'
                   AND LOWER(IFNULL(r.`postpone_status`, 'none')) <> 'pending'
                   AND LOWER(IFNULL(f.`current_status`, '')) <> 'cancelled'";
         $result = mysqli_query($connect, $sql);
