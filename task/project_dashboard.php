@@ -79,7 +79,7 @@ foreach (taskGetAssignees($connect) as $assignee) {
 <html>
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <link rel="stylesheet" href="../css/task.css">
+    <link rel="stylesheet" href="../css/task.css?v=<?= (int) @filemtime(__DIR__ . '/../css/task.css') ?>">
     <link rel="stylesheet" href="../css/project_dashboard.css">
 </head>
 <body>

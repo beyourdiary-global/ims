@@ -616,7 +616,7 @@ $priorityStatusId2 = isset($priorityStatusIds[1]) ? (int) $priorityStatusIds[1] 
 <html>
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <link rel="stylesheet" href="../css/task.css">
+    <link rel="stylesheet" href="../css/task.css?v=<?= (int) @filemtime(__DIR__ . '/../css/task.css') ?>">
     <link rel="stylesheet" href="../css/project_settings.css">
 </head>
 <body class="project-settings-page">

@@ -188,7 +188,7 @@ $bulkConfig = array(
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title><?= $safePageTitle ?></title>
     <link rel="stylesheet" href="../css/main.css">
-    <link rel="stylesheet" href="../css/task.css">
+    <link rel="stylesheet" href="../css/task.css?v=<?= (int) @filemtime(__DIR__ . '/../css/task.css') ?>">
     <link rel="stylesheet" href="../css/task_bulk_edit.css">
 </head>
 <body class="task-bulk-edit-page">

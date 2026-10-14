@@ -670,7 +670,7 @@ asort($userGroupOptions, SORT_NATURAL | SORT_FLAG_CASE);
 <html>
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <link rel="stylesheet" href="../css/task.css">
+    <link rel="stylesheet" href="../css/task.css?v=<?= (int) @filemtime(__DIR__ . '/../css/task.css') ?>">
     <link rel="stylesheet" href="../css/project_user_access.css">
 </head>
 <body class="project-user-access-page">

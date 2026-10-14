@@ -401,7 +401,7 @@ if (empty($_SESSION['csrf_token'])) {
 <html>
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <link rel="stylesheet" href="../css/task.css">
+    <link rel="stylesheet" href="../css/task.css?v=<?= (int) @filemtime(__DIR__ . '/../css/task.css') ?>">
     <link rel="stylesheet" href="../css/sheets.css">
     <link rel="stylesheet" href="../css/task_bulk_edit.css">
 </head>
@@ -543,9 +543,9 @@ window.sheetsConfig = {
 </script>
 <script src="../js/task_board_core.js"></script>
 <script src="../js/task_board_ui.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_ui.js') ?>"></script>
-<script src="../js/task_board.js"></script>
+<script src="../js/task_board.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board.js') ?>"></script>
 <script src="<?= $SITEURL ?>/header/tinymce/tinymce.min.js"></script>
-<script src="../js/text_editor.js"></script>
+<script src="../js/text_editor.js?v=<?= (int) @filemtime(__DIR__ . '/../js/text_editor.js') ?>"></script>
 <script src="../js/sheets.js"></script>
 <?php if ($workItemCanEdit || $workItemCanDelete): ?>
 <script src="../js/task_bulk_edit.js"></script>

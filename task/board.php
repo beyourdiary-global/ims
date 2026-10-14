@@ -1522,7 +1522,7 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
 <html>
 <head>
     <link rel="stylesheet" href="../css/main.css">
-    <link rel="stylesheet" href="../css/task.css">
+    <link rel="stylesheet" href="../css/task.css?v=<?= (int) @filemtime(__DIR__ . '/../css/task.css') ?>">
 </head>
 <body class="task-board-page" style="--task-project-board-bg: <?= htmlspecialchars($projectBoardBackground, ENT_QUOTES, 'UTF-8') ?>;">
 <div class="container-fluid d-flex justify-content-center mt-3 task-page-wrap">
@@ -1810,8 +1810,8 @@ window.taskBoardConfig = {
 </script>
 <script src="../js/task_board_core.js"></script>
 <script src="../js/task_board_ui.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_ui.js') ?>"></script>
-<script src="../js/task_board.js"></script>
+<script src="../js/task_board.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board.js') ?>"></script>
 <script src="<?= $SITEURL ?>/header/tinymce/tinymce.min.js"></script>
-<script src="../js/text_editor.js"></script>
+<script src="../js/text_editor.js?v=<?= (int) @filemtime(__DIR__ . '/../js/text_editor.js') ?>"></script>
 </body>
 </html>
