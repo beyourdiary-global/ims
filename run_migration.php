@@ -260,5 +260,24 @@ echo migGrantPinGroupAccess($connect, 1, $apiKeyPinGroupId, array(1, 2, 3, 4));
 // Rejected…），missed_flag='Y' 只表示这一轮逾期过，列表上额外显示一个 Missed tag。
 echo migAddColumn($connect, $dbName, CUSTOMER_FOLLOW_UP_ROUND, 'missed_flag', "CHAR(1) NOT NULL DEFAULT 'N' COMMENT 'Y = flagged by the missed sweep; round_status keeps its real value'");
 
+// ---- 9) Lazada 订单的下单日期 ----
+// lazada_order_request 原本没有下单日期列，campaign 报表只能拿 create_date（= 导入日期）
+// 当订单日期，于是活动结束后才导入的订单永远匹配不上活动期间。导入 Lazada invoice 时
+// 会解析出真正的下单日期写进这一列；存量订单需要手工补。
+echo migAddColumn($connect, $dbName, 'lazada_order_request', 'order_date', "DATE DEFAULT NULL COMMENT 'Actual Lazada order date, parsed from the invoice PDF at import time'");
+
+// 存量订单在建列之前没有下单日期。先用导入日兜底，否则 DATE(NULL) 永远匹配不上活动期间，
+// 这些订单会从 Campaign 报表里静默消失。导入日不等于真实下单日 —— 要精确日期得重新导入
+// 对应的 invoice。幂等：第二次跑已经没有 NULL，影响 0 行。
+$lazadaOrderDateBackfill = mysqli_query(
+    $connect,
+    "UPDATE `lazada_order_request` SET `order_date` = `create_date` WHERE `order_date` IS NULL AND `create_date` IS NOT NULL"
+);
+if ($lazadaOrderDateBackfill) {
+    echo "OK    backfilled lazada_order_request.order_date from create_date (" . (int) mysqli_affected_rows($connect) . " row(s))\n";
+} else {
+    echo "ERROR backfilling lazada_order_request.order_date: " . mysqli_error($connect) . "\n";
+}
+
 echo "====================\n";
 echo "Done. 建议执行完从服务器删除本文件。\n";

@@ -132,6 +132,7 @@ if ($action === 'parseLazadaOrderReq') {
                     $importErrors[] = 'Unable to extract text from the uploaded PDF file.';
                 } else {
                     $orderNumber = lazadaImportExtractOrderNumber($sourceText);
+                    $orderDate = lazadaImportExtractOrderDate($sourceText);
                     $customerName = lazadaImportExtractCustomerName($sourceText);
                     $shippingAddress = lazadaImportExtractShippingAddress($sourceText);
                     $sku = lazadaImportExtractSellerSku($sourceText, $packageMeta);
@@ -158,6 +159,7 @@ if ($action === 'parseLazadaOrderReq') {
 
                     $previewData = array(
                         'order_number' => $orderNumber,
+                        'order_date' => $orderDate,
                         'customer_id' => (string) $customerId,
                         'customer_name' => $customerName,
                         'source_customer_name' => $customerName,
@@ -261,6 +263,9 @@ if ($action === 'parseLazadaOrderReq') {
 
     $previewData = array(
         'order_number' => trim((string) postSpaceFilter('order_number')),
+        // Prefilled from the invoice date on the preview screen. The Campaign Report uses this
+        // as the order date, so keep it strict: anything that is not Y-m-d is stored as empty.
+        'order_date' => preg_match('/^\d{4}-\d{2}-\d{2}$/', trim((string) postSpaceFilter('order_date'))) ? trim((string) postSpaceFilter('order_date')) : '',
         'customer_id' => (string) $resolvedCustomerId,
         'customer_name' => $customerNameInput,
         'source_customer_name' => trim((string) postSpaceFilter('source_customer_name')),
@@ -428,6 +433,18 @@ if ($action === 'parseLazadaOrderReq') {
         $custPhone = isset($customerRow['phone']) ? (string) $customerRow['phone'] : '';
         $shippingContact = isset($customerRow['ship_rec_contact']) ? (string) $customerRow['ship_rec_contact'] : '';
 
+        // order_date only exists once the migration has run, so probe for it rather than
+        // assuming: an un-migrated database keeps importing orders exactly as before.
+        $hasOrderDateColumn = false;
+        $orderDateColumnResult = mysqli_query($connect, "SHOW COLUMNS FROM `" . LAZADA_ORDER_REQ . "` LIKE 'order_date'");
+        if ($orderDateColumnResult && $orderDateColumnResult->num_rows > 0) {
+            $hasOrderDateColumn = true;
+        }
+        $orderDateValue = isset($previewData['order_date']) ? trim((string) $previewData['order_date']) : '';
+        if ($orderDateValue !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $orderDateValue)) {
+            $orderDateValue = '';
+        }
+
         $insertSql = "INSERT INTO `" . LAZADA_ORDER_REQ . "`
             (
                 lazada_acc,
@@ -459,7 +476,8 @@ if ($action === 'parseLazadaOrderReq') {
                 airbill_attachment,
                 create_by,
                 create_date,
-                create_time
+                create_time" . ($hasOrderDateColumn ? ",
+                order_date" : "") . "
             )
             VALUES
             (
@@ -492,7 +510,10 @@ if ($action === 'parseLazadaOrderReq') {
                 '" . mysqli_real_escape_string($connect, $previewData['airbill_attachment']) . "',
                 '" . USER_ID . "',
                 CURDATE(),
-                CURTIME()
+                CURTIME()" . ($hasOrderDateColumn
+                    ? ",
+                " . ($orderDateValue !== '' ? "'" . mysqli_real_escape_string($connect, $orderDateValue) . "'" : "NULL")
+                    : "") . "
             )";
 
         if (!mysqli_query($connect, $insertSql)) {
@@ -753,6 +774,124 @@ function lazadaImportExtractFieldByLabels($text, $labels, $stopLabels = array())
             $value = trim((string) $matches[1]);
             if ($value !== '') {
                 return normalizeImportText($value);
+            }
+        }
+    }
+
+    return '';
+}
+
+/**
+ * Turn whatever date shape the invoice printed into Y-m-d, or '' when it cannot be read.
+ * Lazada MY invoices print dd/mm/yyyy; ISO dates and "12 Aug 2026" also turn up.
+ */
+function lazadaImportNormalizeDateValue($value)
+{
+    $value = trim((string) $value);
+    if ($value === '') {
+        return '';
+    }
+
+    $value = str_replace(array("\xc2\xa0", "\t"), ' ', $value);
+
+    if (preg_match('/(\d{1,4})\s*[\/\-.]\s*(\d{1,2})\s*[\/\-.]\s*(\d{1,4})/', $value, $matches)) {
+        $first = (int) $matches[1];
+        $second = (int) $matches[2];
+        $third = (int) $matches[3];
+
+        if (strlen($matches[1]) === 4) {
+            return lazadaImportBuildDate($first, $second, $third);
+        }
+
+        $year = $third < 100 ? 2000 + $third : $third;
+        if ($first > 12) {
+            return lazadaImportBuildDate($year, $second, $first);
+        }
+        if ($second > 12) {
+            return lazadaImportBuildDate($year, $first, $second);
+        }
+        // Both numbers could be a day; Lazada MY writes day first.
+        return lazadaImportBuildDate($year, $second, $first);
+    }
+
+    if (preg_match('/(\d{1,2})\s+([A-Za-z]{3,9})\.?\s+(\d{2,4})/', $value, $matches)) {
+        $month = lazadaImportMonthNumber($matches[2]);
+        $year = (int) $matches[3];
+        if ($month > 0) {
+            return lazadaImportBuildDate($year < 100 ? 2000 + $year : $year, $month, (int) $matches[1]);
+        }
+    }
+
+    if (preg_match('/([A-Za-z]{3,9})\.?\s+(\d{1,2}),?\s+(\d{2,4})/', $value, $matches)) {
+        $month = lazadaImportMonthNumber($matches[1]);
+        $year = (int) $matches[3];
+        if ($month > 0) {
+            return lazadaImportBuildDate($year < 100 ? 2000 + $year : $year, $month, (int) $matches[2]);
+        }
+    }
+
+    return '';
+}
+
+function lazadaImportBuildDate($year, $month, $day)
+{
+    $year = (int) $year;
+    $month = (int) $month;
+    $day = (int) $day;
+
+    if ($year < 2000 || $year > 2100 || $month < 1 || $month > 12 || $day < 1 || $day > 31) {
+        return '';
+    }
+    if (!checkdate($month, $day, $year)) {
+        return '';
+    }
+
+    return sprintf('%04d-%02d-%02d', $year, $month, $day);
+}
+
+function lazadaImportMonthNumber($name)
+{
+    $map = array(
+        'jan' => 1, 'feb' => 2, 'mar' => 3, 'apr' => 4, 'may' => 5, 'jun' => 6,
+        'jul' => 7, 'aug' => 8, 'sep' => 9, 'oct' => 10, 'nov' => 11, 'dec' => 12,
+    );
+    $key = strtolower(substr(trim((string) $name), 0, 3));
+
+    return isset($map[$key]) ? $map[$key] : 0;
+}
+
+/**
+ * The order date printed on the Lazada invoice, as Y-m-d. The Campaign Report needs a real
+ * order date: create_date only records when the row was imported, so an order imported after
+ * a campaign ended could never match that campaign's period. Returns '' when nothing usable
+ * is found - the import still goes through, the date is simply left empty for the user to fill.
+ */
+function lazadaImportExtractOrderDate($text)
+{
+    $text = lazadaImportNormalizeSourceText($text);
+    if ($text === '') {
+        return '';
+    }
+
+    $labelled = lazadaImportExtractFieldByLabels(
+        $text,
+        array('Invoice Date', 'Order Date/Time', 'Order Date', 'Order Placed', 'Order Time'),
+        array('Invoice To', 'SHIPPING ADDRESS', 'BILLING ADDRESS', 'Invoice No', 'Order Number', 'Order No', 'Tracking')
+    );
+    $normalized = lazadaImportNormalizeDateValue($labelled);
+    if ($normalized !== '') {
+        return $normalized;
+    }
+
+    // No usable label: take the first date-looking line out of the invoice header.
+    $topBlock = lazadaImportGetTopInvoiceBlock($text);
+    $lines = getPdfTextLines($topBlock !== '' ? $topBlock : $text);
+    foreach ((array) $lines as $line) {
+        $line = normalizeImportText($line);
+        if (lazadaImportLooksLikeDateLine($line)) {
+            $normalized = lazadaImportNormalizeDateValue($line);
+            if ($normalized !== '') {
+                return $normalized;
             }
         }
     }
@@ -2394,6 +2533,14 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = array())
                                         <input class="form-control" type="text" id="order_number" name="order_number" value="<?= htmlspecialchars(isset($previewData['order_number']) ? $previewData['order_number'] : '', ENT_QUOTES, 'UTF-8') ?>" required>
                                         <?php if ($orderNumberFieldError !== '') { ?>
                                             <small class="text-danger fw-bold"><i class="fa-solid fa-circle-exclamation"></i> <?= htmlspecialchars($orderNumberFieldError, ENT_QUOTES, 'UTF-8') ?></small>
+                                        <?php } ?>
+                                        <?php $previewOrderDate = isset($previewData['order_date']) ? trim((string) $previewData['order_date']) : ''; ?>
+                                        <label class="form-label mt-2" for="order_date">Order Date</label>
+                                        <input class="form-control <?= $previewOrderDate === '' ? 'border-warning' : '' ?>" type="date" id="order_date" name="order_date" value="<?= htmlspecialchars($previewOrderDate, ENT_QUOTES, 'UTF-8') ?>">
+                                        <?php if ($previewOrderDate === '') { ?>
+                                            <small class="text-danger fw-bold"><i class="fa-solid fa-circle-exclamation"></i> Not detected from the invoice. The Campaign Report needs this date - please fill it in.</small>
+                                        <?php } else { ?>
+                                            <small class="text-success lzd-import-note">Read from the invoice. The Campaign Report uses it as the order date.</small>
                                         <?php } ?>
                                     </div>
                                     <div class="col-12 col-md-6 autocomplete">

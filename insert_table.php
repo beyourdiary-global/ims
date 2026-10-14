@@ -1037,7 +1037,11 @@ if ($tagCollationResult) {
 // alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'package', 255);
 // alterColumnToVarcharIfInt($conn, $db_fin, 'shopee_sg_order_request', 'brand', 255);
 if ($conn->select_db($db_cms)) {
-    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `remark`");
+    // Lazada orders had no order-date column at all, so the campaign report fell back to
+    // create_date (the import date) and orders imported after a campaign ended could never
+    // match its period. The import screen now parses the invoice date into this column.
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'order_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `order_date` DATE DEFAULT NULL AFTER `remark`");
+    addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date` DATE DEFAULT NULL AFTER `order_date`");
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'received_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `received_date` DATE DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_by', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_by` VARCHAR(30) DEFAULT NULL AFTER `estimated_received_date`");
     addColumnIfMissing($conn, $db_cms, 'lazada_order_request', 'estimated_received_date_assigned_date', "ALTER TABLE `lazada_order_request` ADD COLUMN `estimated_received_date_assigned_date` DATE DEFAULT NULL AFTER `estimated_received_date_assigned_by`");

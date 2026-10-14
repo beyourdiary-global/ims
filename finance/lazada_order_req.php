@@ -285,6 +285,14 @@ if ($_SERVER["REQUEST_METHOD"] == "POST" && post('newCustomerAction') === 'creat
 }
 
 
+// The order_date column only exists once the migration has run. Probe it once here so both the
+// edit form and the save path can skip the field on a database that has not been migrated yet.
+$lorHasOrderDateColumn = false;
+$lorOrderDateColumnCheck = mysqli_query($connect, "SHOW COLUMNS FROM `" . LAZADA_ORDER_REQ . "` LIKE 'order_date'");
+if ($lorOrderDateColumnCheck && $lorOrderDateColumnCheck->num_rows > 0) {
+    $lorHasOrderDateColumn = true;
+}
+
 if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
     $action = post('actionBtn');
     if ($action === '' && $lorShouldSaveBeforeStatusUpdate) {
@@ -300,6 +308,12 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
     $lor_cust_phone = postSpaceFilter('lor_cust_phone');
     $lor_country = postSpaceFilter('lor_country_hidden');
     $lor_oder_number = postSpaceFilter('lor_oder_number');
+    // The campaign report groups orders by this column, so keep it strictly ISO or drop it -
+    // a stray value would silently push the order out of every campaign period.
+    $lor_order_date = trim((string) postSpaceFilter('lor_order_date'));
+    if ($lor_order_date !== '' && !preg_match('/^\d{4}-\d{2}-\d{2}$/', $lor_order_date)) {
+        $lor_order_date = '';
+    }
     $lor_sales_pic = postSpaceFilter('lor_sales_pic_hidden');
     $lor_sales_pic_text = postSpaceFilter('lor_sales_pic');
     $lor_ship_rec_name = postSpaceFilter('lor_ship_rec_name');
@@ -537,6 +551,10 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                         array_push($newvalarr, $lor_remark);
                         array_push($datafield, 'remark');
                     }
+                    if ($lorHasOrderDateColumn && $lor_order_date !== '') {
+                        array_push($newvalarr, $lor_order_date);
+                        array_push($datafield, 'order_date');
+                    }
                     if ($lor_order_status) {
                         array_push($newvalarr, $lor_order_status);
                         array_push($datafield, 'order_status');
@@ -554,7 +572,16 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                         array_push($datafield, 'airbill_attachment');
                     }
                     $tblName2 = LAZADA_CUST_RCD;
-                    $query = "INSERT INTO " . $tblName . "(lazada_acc,curr_unit,lzd_country,cust_id,cust_name,cust_email,cust_phone,country,oder_number,sales_pic,ship_rec_name,ship_rec_address,ship_rec_contact,brand,series,pkg,item_price_credit,commision,other_discount,pay_fee,final_income,pay_meth,remark,order_status,stock_out_warehouse_id,airbill_no,airbill_attachment,create_by,create_date,create_time) VALUES ('$lor_lazada_acc','$lor_curr_unit','$lor_lzd_country','$lor_cust_id','$lor_cust_name','$lor_cust_email','$lor_cust_phone','$lor_country','$lor_oder_number','$lor_sales_pic','$lor_ship_rec_name','$lor_ship_rec_address','$lor_ship_rec_contact','$lor_brand','$lor_series','$lor_pkg','$lor_item_price_credit','$lor_commision','$lor_other_discount','$lor_pay_fee','$lor_final_income','$lor_pay_meth','$lor_remark','$lor_order_status'," . ($lor_stock_out_warehouse_id > 0 ? $lor_stock_out_warehouse_id : 'NULL') . ",'$lor_airbill_no','" . mysqli_real_escape_string($connect, $lor_airbill_attachment) . "','" . USER_ID . "',curdate(),curtime())";
+                    // order_date only exists after the migration; on an un-migrated database the
+                    // column must not appear in the statement at all, so the fragment stays empty.
+                    $lorOrderDateInsertCols = $lorHasOrderDateColumn ? ",order_date" : "";
+                    $lorOrderDateInsertVals = "";
+                    if ($lorHasOrderDateColumn) {
+                        $lorOrderDateInsertVals = $lor_order_date !== ''
+                            ? ",'" . mysqli_real_escape_string($connect, $lor_order_date) . "'"
+                            : ",NULL";
+                    }
+                    $query = "INSERT INTO " . $tblName . "(lazada_acc,curr_unit,lzd_country,cust_id,cust_name,cust_email,cust_phone,country,oder_number,sales_pic,ship_rec_name,ship_rec_address,ship_rec_contact,brand,series,pkg,item_price_credit,commision,other_discount,pay_fee,final_income,pay_meth,remark,order_status,stock_out_warehouse_id,airbill_no,airbill_attachment,create_by,create_date,create_time" . $lorOrderDateInsertCols . ") VALUES ('$lor_lazada_acc','$lor_curr_unit','$lor_lzd_country','$lor_cust_id','$lor_cust_name','$lor_cust_email','$lor_cust_phone','$lor_country','$lor_oder_number','$lor_sales_pic','$lor_ship_rec_name','$lor_ship_rec_address','$lor_ship_rec_contact','$lor_brand','$lor_series','$lor_pkg','$lor_item_price_credit','$lor_commision','$lor_other_discount','$lor_pay_fee','$lor_final_income','$lor_pay_meth','$lor_remark','$lor_order_status'," . ($lor_stock_out_warehouse_id > 0 ? $lor_stock_out_warehouse_id : 'NULL') . ",'$lor_airbill_no','" . mysqli_real_escape_string($connect, $lor_airbill_attachment) . "','" . USER_ID . "',curdate(),curtime()" . $lorOrderDateInsertVals . ")";
                     $query2 = "INSERT INTO " . $tblName2 . "(lcr_id,name,email,phone,sales_pic,country,brand,series,ship_rec_name,ship_rec_add,ship_rec_contact,remark,create_by,create_date,create_time) VALUES ('$lor_cust_id','$lor_cust_name','$lor_cust_email','$lor_cust_phone','$lor_sales_pic','$lor_country','$lor_brand','$lor_series','$lor_ship_rec_name','$lor_ship_rec_address','$lor_ship_rec_contact','$lor_remark','" . USER_ID . "',curdate(),curtime())";
 
                     // Execute the query
@@ -722,6 +749,14 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                         array_push($chgvalarr, $lor_remark == '' ? 'Empty Value' : $lor_remark);
                         array_push($datafield, 'remark');
                     }
+                    if ($lorHasOrderDateColumn) {
+                        $lorCurrentOrderDate = isset($row['order_date']) ? trim((string) $row['order_date']) : '';
+                        if ($lorCurrentOrderDate !== $lor_order_date) {
+                            array_push($oldvalarr, $lorCurrentOrderDate !== '' ? $lorCurrentOrderDate : 'Empty Value');
+                            array_push($chgvalarr, $lor_order_date !== '' ? $lor_order_date : 'Empty Value');
+                            array_push($datafield, 'order_date');
+                        }
+                    }
                     if (shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '') !== $lor_order_status) {
                         array_push($oldvalarr, isset($row['order_status']) && $row['order_status'] !== '' ? shopeeOmsGetStatusLabel($row['order_status']) : 'Empty Value');
                         array_push($chgvalarr, $lor_order_status !== '' ? shopeeOmsGetStatusLabel($lor_order_status) : 'Empty Value');
@@ -753,8 +788,13 @@ if (post('actionBtn') || $lorShouldSaveBeforeStatusUpdate) {
                     $chgval = implode(",", $chgvalarr);
                     $_SESSION['tempValConfirmBox'] = true;
 
+                    // Same guard as the insert path: never reference order_date before it exists.
+                    $lorOrderDateSql = $lorHasOrderDateColumn
+                        ? ", order_date = " . ($lor_order_date !== '' ? "'" . mysqli_real_escape_string($connect, $lor_order_date) . "'" : "NULL")
+                        : "";
+
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $tblName . " SET lazada_acc = '$lor_lazada_acc', curr_unit = '$lor_curr_unit', lzd_country = '$lor_lzd_country', cust_id = '$lor_cust_id', cust_name = '$lor_cust_name', cust_email = '$lor_cust_email', cust_phone = '$lor_cust_phone', country = '$lor_country', oder_number = '$lor_oder_number', sales_pic = '$lor_sales_pic', ship_rec_name = '$lor_ship_rec_name', ship_rec_address = '$lor_ship_rec_address', ship_rec_contact = '$lor_ship_rec_contact', brand = '$lor_brand', series = '$lor_series', pkg = '$lor_pkg', item_price_credit = '$lor_item_price_credit', commision = '$commision', other_discount = '$lor_other_discount', pay_fee = '$lor_pay_fee', final_income = '$lor_final_income', pay_meth = '$lor_pay_meth', remark ='$lor_remark', order_status = '$lor_order_status', stock_out_warehouse_id = " . ($lor_stock_out_warehouse_id > 0 ? $lor_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$lor_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($connect, $lor_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
+                        $query = "UPDATE " . $tblName . " SET lazada_acc = '$lor_lazada_acc', curr_unit = '$lor_curr_unit', lzd_country = '$lor_lzd_country', cust_id = '$lor_cust_id', cust_name = '$lor_cust_name', cust_email = '$lor_cust_email', cust_phone = '$lor_cust_phone', country = '$lor_country', oder_number = '$lor_oder_number', sales_pic = '$lor_sales_pic', ship_rec_name = '$lor_ship_rec_name', ship_rec_address = '$lor_ship_rec_address', ship_rec_contact = '$lor_ship_rec_contact', brand = '$lor_brand', series = '$lor_series', pkg = '$lor_pkg', item_price_credit = '$lor_item_price_credit', commision = '$commision', other_discount = '$lor_other_discount', pay_fee = '$lor_pay_fee', final_income = '$lor_final_income', pay_meth = '$lor_pay_meth', remark ='$lor_remark'" . $lorOrderDateSql . ", order_status = '$lor_order_status', stock_out_warehouse_id = " . ($lor_stock_out_warehouse_id > 0 ? $lor_stock_out_warehouse_id : 'NULL') . ", airbill_no = '$lor_airbill_no', airbill_attachment = '" . mysqli_real_escape_string($connect, $lor_airbill_attachment) . "', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id = '$dataId'";
                         $returnData = mysqli_query($connect, $query);
                         if ($returnData) {
                             customizeBotMsgSaveOrderTemplate($connect, $lorBotMsgContext, $lorBotMsgOrderTable, (int) $dataId, $lor_bot_msg_template_id);
@@ -1441,6 +1481,24 @@ $urbanismBadgeAction = getUrbanismMemberActionData(
                                         </div>
                                     <?php } ?>
                                 </div>
+
+                                <?php if ($lorHasOrderDateColumn) { ?>
+                                <div class="col-md-6 mb-3">
+                                    <label class="form-label form_lbl" for="lor_order_date">Order Date</label>
+                                    <input class="form-control" type="date" name="lor_order_date" id="lor_order_date"
+                                        value="<?php
+                                        if (isset($lor_order_date) && $lor_order_date !== '') {
+                                            echo htmlspecialchars($lor_order_date, ENT_QUOTES, 'UTF-8');
+                                        } else if (isset($row['order_date']) && $row['order_date'] !== '' && $row['order_date'] !== '0000-00-00') {
+                                            echo htmlspecialchars((string) $row['order_date'], ENT_QUOTES, 'UTF-8');
+                                        }
+                                        ?>" <?php if ($act == '')
+                                            echo 'disabled' ?>>
+                                    <small class="text-muted">The date the buyer actually placed the order. The Campaign
+                                        Report groups orders by this date; when it is empty the import date is used
+                                        instead.</small>
+                                </div>
+                                <?php } ?>
 
                                 <div class="col-md-6 mb-3 autocomplete">
                                     <label class="form-label form_lbl" id="lor_sales_pic_lbl" for="lor_sales_pic">Sales

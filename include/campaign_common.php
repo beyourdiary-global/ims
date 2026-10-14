@@ -743,15 +743,26 @@ if (!function_exists('campaignPurchasePlatformConfigs')) {
                 // scan skipped Lazada silently and the report only ever held Shopee rows.
                 'conn' => $connect,
                 'table' => defined('LAZADA_ORDER_REQ') ? LAZADA_ORDER_REQ : 'lazada_order_request',
-                'order_no_cols' => array('orderID', 'order_id', 'order_no', 'lazada_order_id'),
+                // This table's real column names differ from every other platform's, and the
+                // list used to hold the generic names instead: the order number is
+                // `oder_number` (sic, one r), the amount is `final_income`, and the package
+                // is `pkg`. With the generic names nothing matched, so every Lazada order was
+                // recorded with an empty order number and an amount of 0.00. The assign-customer
+                // config below already used the real names; this now matches it.
+                'order_no_cols' => array('oder_number', 'order_number', 'order_id', 'order_no', 'lazada_order_id'),
                 'customer_cols' => array('buyer_username', 'buyer', 'customer_id', 'cust_id', 'name', 'customer_name', 'phone', 'contact'),
-                'date_cols' => array('date', 'order_date', 'create_date'),
+                // order_date is the real order date, parsed from the invoice when the order is
+                // imported. The column only exists after the migration runs, and orders imported
+                // before that have nothing but create_date (the date the row was imported), so
+                // create_date stays as the fallback rather than being dropped.
+                'date_cols' => array('order_date', 'date', 'create_date'),
+                'date_fallback_cols' => array('create_date'),
                 'time_cols' => array('time', 'create_time'),
-                'amount_cols' => array('final_amt', 'total', 'price', 'amount'),
+                'amount_cols' => array('final_income', 'item_price_credit', 'final_amt', 'total', 'price', 'amount'),
                 'order_status_cols' => array('order_status'),
                 'row_status_cols' => array('status'),
-                'package_cols' => array('package', 'pkg'),
-                'detail_cols' => array('package', 'remark'),
+                'package_cols' => array('pkg', 'package'),
+                'detail_cols' => array('pkg', 'remark', 'package'),
             ),
             'Website' => array(
                 'conn' => $financeConnect,
@@ -1539,6 +1550,16 @@ if (!function_exists('campaignScanCampaignOrders')) {
                 continue;
             }
 
+            // A real order-date column can still be empty - Lazada's order_date is only filled
+            // from the invoice, and rows imported before that column existed have nothing but
+            // create_date. DATE(NULL) never matches a period, so those orders would drop out of
+            // the report silently; fall back to the import date instead.
+            $dateExpression = campaignPurchaseQuoteColumn($dateCol);
+            $dateFallbackCol = campaignGetFirstExistingColumn($orderConn, $table, isset($config['date_fallback_cols']) ? $config['date_fallback_cols'] : array());
+            if ($dateFallbackCol !== '' && $dateFallbackCol !== $dateCol) {
+                $dateExpression = "COALESCE(NULLIF(" . campaignPurchaseQuoteColumn($dateCol) . ", '0000-00-00'), " . campaignPurchaseQuoteColumn($dateFallbackCol) . ")";
+            }
+
             $customerCol = campaignGetFirstExistingColumn($orderConn, $table, $config['customer_cols']);
             if ($customerCol === '') {
                 $scan['status'] = 'no_customer_column';
@@ -1558,7 +1579,7 @@ if (!function_exists('campaignScanCampaignOrders')) {
             $currencyCol = isset($config['currency_cols']) ? campaignGetFirstExistingColumn($orderConn, $table, $config['currency_cols']) : '';
 
             $selectColumns = array('`id`');
-            foreach (array($orderNoCol, $dateCol, $timeCol, $amountCol, $orderStatusCol, $packageCol, $detailCol, $customerCol, $shopeeAccCol, $currencyCol) as $column) {
+            foreach (array($orderNoCol, $dateCol, $dateFallbackCol, $timeCol, $amountCol, $orderStatusCol, $packageCol, $detailCol, $customerCol, $shopeeAccCol, $currencyCol) as $column) {
                 $quotedCol = campaignPurchaseQuoteColumn($column);
                 if ($column !== '' && !in_array($quotedCol, $selectColumns, true)) {
                     $selectColumns[] = $quotedCol;
@@ -1567,14 +1588,14 @@ if (!function_exists('campaignScanCampaignOrders')) {
 
             $where = array(
                 campaignPurchaseRowStatusWhere($orderConn, $table, $config),
-                "DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") >= '" . $orderConn->real_escape_string($safeFromDate) . "'",
-                "DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") <= '" . $orderConn->real_escape_string($safeToDate) . "'",
+                "DATE(" . $dateExpression . ") >= '" . $orderConn->real_escape_string($safeFromDate) . "'",
+                "DATE(" . $dateExpression . ") <= '" . $orderConn->real_escape_string($safeToDate) . "'",
             );
 
             $sql = "SELECT " . implode(',', $selectColumns) . "
                     FROM " . campaignTableName($table) . "
                     WHERE " . implode(' AND ', $where) . "
-                    ORDER BY DATE(" . campaignPurchaseQuoteColumn($dateCol) . ") ASC, `id` ASC";
+                    ORDER BY DATE(" . $dateExpression . ") ASC, `id` ASC";
             $result = mysqli_query($orderConn, $sql);
             if (!$result) {
                 $scan['status'] = 'query_failed';
@@ -1625,6 +1646,9 @@ if (!function_exists('campaignScanCampaignOrders')) {
                 }
 
                 $orderDateRaw = campaignPurchaseReadCell($row, $dateCol);
+                if (trim((string) $orderDateRaw) === '' && $dateFallbackCol !== '' && $dateFallbackCol !== $dateCol) {
+                    $orderDateRaw = campaignPurchaseReadCell($row, $dateFallbackCol);
+                }
                 $orderTimeRaw = $timeCol !== '' ? campaignPurchaseReadCell($row, $timeCol) : '';
                 $orderDateTime = trim($orderDateRaw . ' ' . $orderTimeRaw);
 
