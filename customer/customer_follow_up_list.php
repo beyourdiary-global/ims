@@ -811,7 +811,9 @@ $listSql = "SELECT
         r.`postpone_reason`,
         r.`postpone_reject_reason`,
         r.`delay_reason`,
-        r.`missed_original_date`,
+        r.`missed_original_date`,"
+    . (customerFollowUpRoundSupportsMissedOriginalStatus($connect) ? "
+        r.`missed_original_status`," : "") . "
         r.`completed_date`,
         r.`round_status`
     FROM `" . CUSTOMER_FOLLOW_UP . "` f
@@ -1616,6 +1618,8 @@ if (!empty($customerTagLabelFilters)) {
                                             $requestedPostponeDate = trim((string) (isset($pendingPostponePayload['requested_next_follow_up_date']) ? $pendingPostponePayload['requested_next_follow_up_date'] : ''));
                                             $delayReason = trim((string) (isset($row['delay_reason']) ? $row['delay_reason'] : ''));
                                             $missedOriginalDate = trim((string) (isset($row['missed_original_date']) ? $row['missed_original_date'] : ''));
+                                            // What the round was before the missed sweep overwrote it.
+                                            $missedOriginalStatus = trim((string) (isset($row['missed_original_status']) ? $row['missed_original_status'] : ''));
                                             $postponeReason = trim((string) (isset($row['postpone_reason']) ? $row['postpone_reason'] : ''));
                                             $postponeRejectReason = trim((string) (isset($row['postpone_reject_reason']) ? $row['postpone_reject_reason'] : ''));
                                             $logRows = isset($actionLogMap[$followUpId]) ? $actionLogMap[$followUpId] : array();
@@ -1672,8 +1676,10 @@ if (!empty($customerTagLabelFilters)) {
                                             $canRequestCancel = $canRequestCancelPermission && $canManageOwnCase && customerFollowUpCanRequestCancel($row, $row);
                                             $hasPendingCancel = ($rowCancelStatus === 'pending');
                                             $canSubmitMissingNextFollowUpDate = $canManageOwnCase && $hasMissingNextFollowUpDate && !in_array($roundStatus, array('Done', 'Lost'), true);
-                                            $canApprove = $canApprovePermission && $customerType === 'new' && $roundStatus === 'Pending Approval';
-                                            $canReject = $canRejectPermission && $customerType === 'new' && $roundStatus === 'Pending Approval';
+                                            // Approval is no longer limited to new customers: every submitted
+                                            // round waits for it, so returning customers get the buttons too.
+                                            $canApprove = $canApprovePermission && $roundStatus === 'Pending Approval';
+                                            $canReject = $canRejectPermission && $roundStatus === 'Pending Approval';
                                             $canApprovePostpone = $canApprovePermission && $normalizedPostponeStatus === 'pending';
                                             $canRejectPostpone = $canRejectPermission && $normalizedPostponeStatus === 'pending';
                                             $canViewDelayInfo = ($canViewLogsPermission || $canManageOwnCase) && ($delayReason !== '' || $missedOriginalDate !== '' || $roundStatus === 'Missed Follow-Up');
@@ -2078,6 +2084,9 @@ if (!empty($customerTagLabelFilters)) {
                                                 </td>
                                                 <td>
                                                     <?= customerFollowUpFormatStatusLabel($resolvedDisplayStatus) ?>
+                                                    <?php if ($resolvedDisplayStatus === 'Missed Follow-Up' && $missedOriginalStatus !== '') { ?>
+                                                        <div class="status-subtext">Originally: <?= htmlspecialchars($missedOriginalStatus, ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <?php } ?>
                                                     <?php if ($delayReason !== '') { ?>
                                                         <div class="status-subtext">Delay Reason Saved</div>
                                                     <?php } ?>

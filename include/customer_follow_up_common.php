@@ -1058,8 +1058,13 @@ if (!function_exists('customerFollowUpResolveDisplayStatus')) {
             return $caseStatus;
         }
 
-        $nextFollowUpDate = trim((string) (isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : ''));
-        if ($nextFollowUpDate !== '' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $nextFollowUpDate) && $nextFollowUpDate > $today) {
+        // A round with no status is a placeholder: it was created (a new order took the case
+        // over, or the previous round was completed) but nothing has been submitted for it.
+        // This used to read "Approved" whenever its date was still in the future, which is
+        // how rows ended up showing Approved with no approver and no approve entry in the
+        // action log. Trust the stored approval status instead of the date.
+        $roundApprovalStatus = strtolower(trim((string) (isset($roundRow['approval_status']) ? $roundRow['approval_status'] : '')));
+        if (in_array($roundApprovalStatus, array('approved', 'not_required'), true)) {
             return 'Approved';
         }
 
@@ -1675,6 +1680,16 @@ if (!function_exists('customerFollowUpRoundSupportsApprovalComment')) {
             && function_exists('shopeeOmsTableHasColumn')
             && defined('dbname')
             && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP_ROUND, 'approval_comment');
+    }
+}
+
+if (!function_exists('customerFollowUpRoundSupportsMissedOriginalStatus')) {
+    function customerFollowUpRoundSupportsMissedOriginalStatus($connect)
+    {
+        return $connect instanceof mysqli
+            && function_exists('shopeeOmsTableHasColumn')
+            && defined('dbname')
+            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP_ROUND, 'missed_original_status');
     }
 }
 
@@ -3093,8 +3108,11 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         }
 
         $customerType = strtolower(trim((string) (isset($followUpRow['customer_type']) ? $followUpRow['customer_type'] : 'new')));
-        $approvalStatus = $customerType === 'return' ? 'not_required' : 'pending';
-        $roundStatus = $customerType === 'return' ? 'Approved' : 'Pending Approval';
+        // Every submitted round waits for admin approval, returning customers included.
+        // Returning customers used to be stamped Approved on submit, which produced rows
+        // reading "Approved" with no approver and no approve entry in the action log.
+        $approvalStatus = 'pending';
+        $roundStatus = 'Pending Approval';
         $followUpStatus = $roundStatus;
 
         mysqli_begin_transaction($connect);
@@ -3320,7 +3338,9 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             );
         }
 
-        if ($customerType === 'new') {
+        // Every submitted round is pending approval now, so admins are always notified.
+        // Returning customers used to be skipped here because their round was auto-approved.
+        if ($roundStatus === 'Pending Approval') {
             $adminUsers = customerFollowUpGetAdminUsers($connect);
             foreach ($adminUsers as $adminUser) {
                 customerFollowUpCreateNotificationRow($connect, array(
@@ -3359,10 +3379,8 @@ if (!function_exists('customerFollowUpApproveRound')) {
             return array('success' => false, 'message' => 'Follow-up round not found.');
         }
 
-        if (strtolower(trim((string) (isset($followUpRow['customer_type']) ? $followUpRow['customer_type'] : ''))) !== 'new') {
-            return array('success' => false, 'message' => 'Only New Customer follow-up requires admin approval.');
-        }
-
+        // Every submitted round is pending approval, returning customers included, so the
+        // customer type no longer decides whether a round can be approved.
         $currentRoundStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
         if ($currentRoundStatus !== 'Pending Approval') {
             return array('success' => false, 'message' => 'Only Pending Approval round can be approved.');
@@ -3472,10 +3490,7 @@ if (!function_exists('customerFollowUpRejectRound')) {
             return array('success' => false, 'message' => 'Follow-up round not found.');
         }
 
-        if (strtolower(trim((string) (isset($followUpRow['customer_type']) ? $followUpRow['customer_type'] : ''))) !== 'new') {
-            return array('success' => false, 'message' => 'Only New Customer follow-up requires admin rejection.');
-        }
-
+        // Mirrors customerFollowUpApproveRound: the customer type no longer gates rejection.
         $currentRoundStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
         if ($currentRoundStatus !== 'Pending Approval') {
             return array('success' => false, 'message' => 'Only Pending Approval round can be rejected.');
@@ -4312,9 +4327,10 @@ if (!function_exists('customerFollowUpRejectPostponement')) {
             'update_time' => customerFollowUpNowTime(),
         ));
 
+        // A round without a status was never approved, so do not claim it was.
         $fallbackStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
         if ($fallbackStatus === '') {
-            $fallbackStatus = 'Approved';
+            $fallbackStatus = 'Pending Follow-Up';
         }
         $caseUpdated = customerFollowUpUpdateCaseRecord($connect, $followUpId, array(
             'current_status' => $fallbackStatus,
@@ -4722,7 +4738,8 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                     " . $effectiveDateSql . " AS `effective_next_follow_up_date`,
                     r.`missed_original_date`,
                     r.`delay_reason`,
-                    r.`round_status`
+                    r.`round_status`,
+                    r.`approval_status`
                 FROM `" . CUSTOMER_FOLLOW_UP . "` f
                 INNER JOIN `" . CUSTOMER_FOLLOW_UP_ROUND . "` r
                     ON r.`follow_up_id` = f.`id`
@@ -4751,8 +4768,17 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                 continue;
             }
 
-            mysqli_begin_transaction($connect);
-            $roundUpdated = customerFollowUpUpdateRoundRecord($connect, $roundId, array(
+            // round_status is overwritten below, so remember what it was: "Missed Follow-Up"
+            // on its own cannot tell an approved round from one that never was approved.
+            $missedOriginalStatus = customerFollowUpNormalizeStatus(isset($row['round_status']) ? $row['round_status'] : '');
+            if ($missedOriginalStatus === '') {
+                $roundApprovalStatus = strtolower(trim((string) (isset($row['approval_status']) ? $row['approval_status'] : '')));
+                $missedOriginalStatus = in_array($roundApprovalStatus, array('approved', 'not_required'), true)
+                    ? 'Approved'
+                    : 'Not Approved';
+            }
+
+            $roundUpdateFields = array(
                 'round_status' => 'Missed Follow-Up',
                 'missed_original_date' => trim((string) (isset($row['missed_original_date']) ? $row['missed_original_date'] : '')) !== ''
                     ? $row['missed_original_date']
@@ -4760,7 +4786,13 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                 'update_by' => 'SYSTEM',
                 'update_date' => $today,
                 'update_time' => customerFollowUpNowTime(),
-            ));
+            );
+            if (customerFollowUpRoundSupportsMissedOriginalStatus($connect)) {
+                $roundUpdateFields['missed_original_status'] = $missedOriginalStatus;
+            }
+
+            mysqli_begin_transaction($connect);
+            $roundUpdated = customerFollowUpUpdateRoundRecord($connect, $roundId, $roundUpdateFields);
             $caseUpdated = customerFollowUpUpdateCaseRecord($connect, $followUpId, array(
                 'current_status' => 'Missed Follow-Up',
                 'update_by' => 'SYSTEM',
@@ -4786,6 +4818,7 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                 array(
                     'round_status' => 'Missed Follow-Up',
                     'missed_original_date' => isset($updatedRoundRow['missed_original_date']) ? $updatedRoundRow['missed_original_date'] : '',
+                    'missed_original_status' => $missedOriginalStatus,
                 ),
                 'System marked the round as missed follow-up.',
                 '',
@@ -6717,8 +6750,9 @@ if (!function_exists('customerFollowUpSubmitReceivedOrderAndTransition')) {
         $oldFollowUpState = $followUpRow;
         $isResubmit = strtolower(trim((string) (isset($roundRow['round_status']) ? $roundRow['round_status'] : ''))) === 'rejected';
         $customerType = strtolower(trim((string) (isset($followUpRow['customer_type']) ? $followUpRow['customer_type'] : 'new')));
-        $approvalStatus = $customerType === 'return' ? 'not_required' : 'pending';
-        $roundStatus = $customerType === 'return' ? 'Approved' : 'Pending Approval';
+        // Same rule as customerFollowUpSubmitRound: no customer type skips approval.
+        $approvalStatus = 'pending';
+        $roundStatus = 'Pending Approval';
 
         $roundUpdateFields = array(
             'next_follow_up_date' => $nextFollowUpDate,
@@ -6813,7 +6847,8 @@ if (!function_exists('customerFollowUpSubmitReceivedOrderAndTransition')) {
             );
         }
 
-        if ($customerType === 'new') {
+        // Every submitted round is pending approval now, so admins are always notified.
+        if ($roundStatus === 'Pending Approval') {
             $adminUsers = customerFollowUpGetAdminUsers($connect);
             foreach ($adminUsers as $adminUser) {
                 customerFollowUpCreateNotificationRow($connect, array(
@@ -6841,9 +6876,7 @@ if (!function_exists('customerFollowUpSubmitReceivedOrderAndTransition')) {
 
         return array(
             'success' => true,
-            'message' => $customerType === 'return'
-                ? 'Follow-up submitted and order moved to Parcel Received.'
-                : 'Follow-up submitted for admin approval and order moved to Parcel Received.',
+            'message' => 'Follow-up submitted for admin approval and order moved to Parcel Received.',
             'follow_up_id' => $followUpId,
             'follow_up_row' => $updatedFollowUpRow,
             'round_row' => $updatedRoundRow,
