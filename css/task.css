@@ -4309,7 +4309,10 @@ body.task-board-page .task-board-scroll {
   font-size: 0.88rem;
 }
 
-.task-item-worklog-modal-dialog,
+.task-item-worklog-modal-dialog {
+  max-width: 1000px;
+}
+
 .task-item-worklog-delete-modal-dialog {
   max-width: 720px;
 }

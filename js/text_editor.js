@@ -2136,7 +2136,7 @@
             {},
           ),
           {
-            height: 170,
+            min_height: 280,
             toolbar:
               "blocks bold styles taskListControl forecolor taskSimpleLink table undo redo",
           },
