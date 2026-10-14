@@ -5032,6 +5032,88 @@ $(document).on("click", "#taskItemDetailCopyUrlBtn", function () {
   copyCurrentWorkItemUrl();
 });
 
+// ---- 评论/描述正文里的图片：点击弹预览层 ----
+function ensureTaskItemImageLightbox() {
+  var $existing = $("#taskItemImageLightbox");
+  if ($existing.length) {
+    return $existing;
+  }
+
+  var $box = $(
+    '<div id="taskItemImageLightbox" class="task-item-image-lightbox d-none" role="dialog" aria-modal="true" aria-label="Image preview">' +
+      '<button type="button" class="btn task-item-image-lightbox-close" aria-label="Close image preview"><i class="fa-solid fa-xmark"></i></button>' +
+      '<img class="task-item-image-lightbox-img" alt="">' +
+      "</div>",
+  );
+  $("body").append($box);
+  return $box;
+}
+
+function openTaskItemImageLightbox(src, altText) {
+  var url = String(src || "").trim();
+  if (!url) {
+    return;
+  }
+
+  var $box = ensureTaskItemImageLightbox();
+  $box
+    .find(".task-item-image-lightbox-img")
+    .attr("src", url)
+    .attr("alt", String(altText || ""));
+  $box.removeClass("d-none");
+  $("body").addClass("task-item-image-lightbox-open");
+}
+
+function closeTaskItemImageLightbox() {
+  var $box = $("#taskItemImageLightbox");
+  if (!$box.length) {
+    return;
+  }
+
+  $box.addClass("d-none");
+  $box.find(".task-item-image-lightbox-img").removeAttr("src").attr("alt", "");
+  $("body").removeClass("task-item-image-lightbox-open");
+}
+
+$(document).on(
+  "click",
+  ".task-item-activity-comment-body img, .task-item-detail-description-rendered img, .task-item-activity-rich-value img",
+  function (e) {
+    var src = String($(this).attr("src") || "").trim();
+    if (!src) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    openTaskItemImageLightbox(src, $(this).attr("alt") || "");
+  },
+);
+
+$(document).on("click", "#taskItemImageLightbox", function () {
+  closeTaskItemImageLightbox();
+});
+
+// Esc 关预览层。用 capture 阶段并阻断冒泡，否则 Bootstrap 会顺手把整个任务弹窗也关掉。
+document.addEventListener(
+  "keydown",
+  function (e) {
+    if (e.key !== "Escape" && e.keyCode !== 27) {
+      return;
+    }
+
+    var box = document.getElementById("taskItemImageLightbox");
+    if (!box || box.classList.contains("d-none")) {
+      return;
+    }
+
+    e.preventDefault();
+    e.stopPropagation();
+    closeTaskItemImageLightbox();
+  },
+  true,
+);
+
 $(document).on(
   "click",
   "#taskItemDetailCreateChildAction, #taskItemChildWorkItemsAddBtn",
