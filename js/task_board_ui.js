@@ -2205,7 +2205,7 @@ function applyDetailFieldVisibility() {
 }
 
 var taskChildWorkItemColumnDefinitions = [
-  { key: "work", label: "Work", defaultWidth: "minmax(260px, 1.35fr)" },
+  { key: "work", label: "Work", defaultWidth: "minmax(380px, 2fr)" },
   { key: "work_type", label: "Work Type", defaultWidth: "minmax(125px, .7fr)" },
   { key: "original_estimate", label: "Original Estimate", defaultWidth: "minmax(125px, .65fr)" },
   { key: "labels", label: "Labels", defaultWidth: "minmax(150px, .85fr)" },
