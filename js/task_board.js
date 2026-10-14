@@ -5032,7 +5032,123 @@ $(document).on("click", "#taskItemDetailCopyUrlBtn", function () {
   copyCurrentWorkItemUrl();
 });
 
-// ---- 评论/描述正文里的图片：点击弹预览层 ----
+// ---- 评论/描述正文里的图片：点击弹预览层（支持滚轮/按钮/双击缩放 + 拖拽平移）----
+var taskItemImageLightboxState = {
+  scale: 1,
+  tx: 0,
+  ty: 0,
+  dragging: false,
+  moved: false,
+  startX: 0,
+  startY: 0,
+  startTx: 0,
+  startTy: 0,
+  pinchDist: 0,
+  pinchScale: 1,
+};
+
+var TASK_ITEM_IMAGE_LIGHTBOX_MIN_SCALE = 0.25;
+var TASK_ITEM_IMAGE_LIGHTBOX_MAX_SCALE = 8;
+
+function taskItemImageLightboxImgEl() {
+  return document.querySelector(
+    "#taskItemImageLightbox .task-item-image-lightbox-img",
+  );
+}
+
+function taskItemImageLightboxIsOpen() {
+  var box = document.getElementById("taskItemImageLightbox");
+  return !!box && !box.classList.contains("d-none");
+}
+
+function taskItemImageLightboxRender(animate) {
+  var img = taskItemImageLightboxImgEl();
+  if (!img) {
+    return;
+  }
+
+  var st = taskItemImageLightboxState;
+  taskItemImageLightboxClampPan();
+  img.classList.toggle("is-animating", !!animate);
+  img.style.transform =
+    "translate(" + st.tx + "px, " + st.ty + "px) scale(" + st.scale + ")";
+  img.classList.toggle("is-zoomed", st.scale > 1.001);
+
+  var box = document.getElementById("taskItemImageLightbox");
+  if (!box) {
+    return;
+  }
+
+  var label = box.querySelector(".task-item-image-lightbox-zoom");
+  if (label) {
+    label.textContent = Math.round(st.scale * 100) + "%";
+  }
+
+  var outBtn = box.querySelector('[data-lb-action="zoom-out"]');
+  var inBtn = box.querySelector('[data-lb-action="zoom-in"]');
+  var resetBtn = box.querySelector('[data-lb-action="reset"]');
+  if (outBtn) {
+    outBtn.disabled = st.scale <= TASK_ITEM_IMAGE_LIGHTBOX_MIN_SCALE + 0.001;
+  }
+  if (inBtn) {
+    inBtn.disabled = st.scale >= TASK_ITEM_IMAGE_LIGHTBOX_MAX_SCALE - 0.001;
+  }
+  if (resetBtn) {
+    resetBtn.disabled = st.scale === 1 && st.tx === 0 && st.ty === 0;
+  }
+}
+
+function taskItemImageLightboxZoomTo(nextScale, clientX, clientY) {
+  var st = taskItemImageLightboxState;
+  var s0 = st.scale;
+  var s1 = Math.min(
+    TASK_ITEM_IMAGE_LIGHTBOX_MAX_SCALE,
+    Math.max(TASK_ITEM_IMAGE_LIGHTBOX_MIN_SCALE, Number(nextScale) || 0),
+  );
+  if (!isFinite(s1) || Math.abs(s1 - s0) < 0.0005) {
+    return;
+  }
+
+  // 以光标（或屏幕中心）为锚点缩放：该点下的图像位置保持不动
+  var ccx = window.innerWidth / 2;
+  var ccy = window.innerHeight / 2;
+  var px = (typeof clientX === "number" ? clientX : ccx) - ccx;
+  var py = (typeof clientY === "number" ? clientY : ccy) - ccy;
+  var k = s1 / s0;
+  st.tx = px - (px - st.tx) * k;
+  st.ty = py - (py - st.ty) * k;
+  st.scale = s1;
+  taskItemImageLightboxRender(true);
+}
+
+function taskItemImageLightboxResetZoom() {
+  var st = taskItemImageLightboxState;
+  st.scale = 1;
+  st.tx = 0;
+  st.ty = 0;
+  taskItemImageLightboxRender(true);
+}
+
+// 平移边界：图片比视口小时只能居中；比视口大时最多平移到边缘对齐，避免把图拖出视野
+function taskItemImageLightboxClampPan() {
+  var img = taskItemImageLightboxImgEl();
+  if (!img) {
+    return;
+  }
+
+  var st = taskItemImageLightboxState;
+  var baseW = img.offsetWidth || 0;
+  var baseH = img.offsetHeight || 0;
+  if (!baseW || !baseH) {
+    return;
+  }
+
+  var maxTx = Math.max(0, (baseW * st.scale - window.innerWidth) / 2);
+  var maxTy = Math.max(0, (baseH * st.scale - window.innerHeight) / 2);
+  st.tx = Math.min(maxTx, Math.max(-maxTx, st.tx));
+  st.ty = Math.min(maxTy, Math.max(-maxTy, st.ty));
+}
+
 function ensureTaskItemImageLightbox() {
   var $existing = $("#taskItemImageLightbox");
   if ($existing.length) {
@@ -5042,7 +5158,16 @@ function ensureTaskItemImageLightbox() {
   var $box = $(
     '<div id="taskItemImageLightbox" class="task-item-image-lightbox d-none" role="dialog" aria-modal="true" aria-label="Image preview">' +
       '<button type="button" class="btn task-item-image-lightbox-close" aria-label="Close image preview"><i class="fa-solid fa-xmark"></i></button>' +
-      '<img class="task-item-image-lightbox-img" alt="">' +
+      '<img class="task-item-image-lightbox-img" alt="" draggable="false">' +
+      '<div class="task-item-image-lightbox-toolbar" role="toolbar" aria-label="Image zoom controls">' +
+      '<button type="button" class="btn task-item-image-lightbox-tool" data-lb-action="zoom-out" aria-label="Zoom out" title="Zoom out"><i class="fa-solid fa-magnifying-glass-minus"></i></button>' +
+      '<span class="task-item-image-lightbox-zoom" aria-live="polite">100%</span>' +
+      '<button type="button" class="btn task-item-image-lightbox-tool" data-lb-action="zoom-in" aria-label="Zoom in" title="Zoom in"><i class="fa-solid fa-magnifying-glass-plus"></i></button>' +
+      '<span class="task-item-image-lightbox-tool-sep" aria-hidden="true"></span>' +
+      '<button type="button" class="btn task-item-image-lightbox-tool" data-lb-action="reset" aria-label="Reset zoom" title="Reset zoom (100%)"><i class="fa-solid fa-arrows-rotate"></i></button>' +
+      '<span class="task-item-image-lightbox-tool-sep" aria-hidden="true"></span>' +
+      '<button type="button" class="btn task-item-image-lightbox-tool" data-lb-action="close" aria-label="Close preview" title="Close (Esc)"><i class="fa-solid fa-xmark"></i></button>' +
+      "</div>" +
       "</div>",
   );
   $("body").append($box);
@@ -5055,13 +5180,24 @@ function openTaskItemImageLightbox(src, altText) {
     return;
   }
 
+  var st = taskItemImageLightboxState;
+  st.scale = 1;
+  st.tx = 0;
+  st.ty = 0;
+  st.dragging = false;
+  st.moved = false;
+  st.pinchDist = 0;
+
   var $box = ensureTaskItemImageLightbox();
   $box
     .find(".task-item-image-lightbox-img")
+    .removeClass("is-animating is-dragging is-zoomed")
+    .css("transform", "")
     .attr("src", url)
     .attr("alt", String(altText || ""));
   $box.removeClass("d-none");
   $("body").addClass("task-item-image-lightbox-open");
+  taskItemImageLightboxRender(false);
 }
 
 function closeTaskItemImageLightbox() {
@@ -5070,8 +5206,21 @@ function closeTaskItemImageLightbox() {
     return;
   }
 
+  var st = taskItemImageLightboxState;
+  st.scale = 1;
+  st.tx = 0;
+  st.ty = 0;
+  st.dragging = false;
+  st.moved = false;
+  st.pinchDist = 0;
+
   $box.addClass("d-none");
-  $box.find(".task-item-image-lightbox-img").removeAttr("src").attr("alt", "");
+  $box
+    .find(".task-item-image-lightbox-img")
+    .removeClass("is-animating is-dragging is-zoomed")
+    .css("transform", "")
+    .removeAttr("src")
+    .attr("alt", "");
   $("body").removeClass("task-item-image-lightbox-open");
 }
 
@@ -5090,26 +5239,209 @@ $(document).on(
   },
 );
 
-$(document).on("click", "#taskItemImageLightbox", function () {
+// 工具栏按钮
+$(document).on("click", "#taskItemImageLightbox [data-lb-action]", function (e) {
+  e.preventDefault();
+  e.stopPropagation();
+  var action = String($(this).attr("data-lb-action") || "");
+  var st = taskItemImageLightboxState;
+  if (action === "zoom-in") {
+    taskItemImageLightboxZoomTo(st.scale * 1.25);
+  } else if (action === "zoom-out") {
+    taskItemImageLightboxZoomTo(st.scale / 1.25);
+  } else if (action === "reset") {
+    taskItemImageLightboxResetZoom();
+  } else if (action === "close") {
+    closeTaskItemImageLightbox();
+  }
+});
+
+// 点蒙层（图片与工具栏之外）关闭
+$(document).on("click", "#taskItemImageLightbox", function (e) {
+  var $target = $(e.target);
+  if ($target.closest(".task-item-image-lightbox-img").length) {
+    return;
+  }
+  if ($target.closest(".task-item-image-lightbox-toolbar").length) {
+    return;
+  }
+  if (taskItemImageLightboxState.moved) {
+    return;
+  }
   closeTaskItemImageLightbox();
 });
 
-// Esc 关预览层。用 capture 阶段并阻断冒泡，否则 Bootstrap 会顺手把整个任务弹窗也关掉。
+// 滚轮缩放（以光标位置为锚点）
 document.addEventListener(
-  "keydown",
+  "wheel",
   function (e) {
-    if (e.key !== "Escape" && e.keyCode !== 27) {
+    if (!e.target || !e.target.closest || !e.target.closest("#taskItemImageLightbox")) {
       return;
     }
-
-    var box = document.getElementById("taskItemImageLightbox");
-    if (!box || box.classList.contains("d-none")) {
+    if (!taskItemImageLightboxIsOpen()) {
       return;
     }
 
     e.preventDefault();
-    e.stopPropagation();
-    closeTaskItemImageLightbox();
+    var factor = e.deltaY < 0 ? 1.12 : 1 / 1.12;
+    taskItemImageLightboxZoomTo(
+      taskItemImageLightboxState.scale * factor,
+      e.clientX,
+      e.clientY,
+    );
+  },
+  { passive: false },
+);
+
+// 拖拽平移（放大后可拖动图片）
+document.addEventListener("mousedown", function (e) {
+  if (
+    !e.target ||
+    !e.target.closest ||
+    !e.target.closest("#taskItemImageLightbox .task-item-image-lightbox-img")
+  ) {
+    return;
+  }
+
+  e.preventDefault();
+  var st = taskItemImageLightboxState;
+  st.dragging = true;
+  st.moved = false;
+  st.startX = e.clientX;
+  st.startY = e.clientY;
+  st.startTx = st.tx;
+  st.startTy = st.ty;
+  e.target.classList.remove("is-animating");
+  e.target.classList.add("is-dragging");
+});
+
+document.addEventListener("mousemove", function (e) {
+  var st = taskItemImageLightboxState;
+  if (!st.dragging) {
+    return;
+  }
+
+  var dx = e.clientX - st.startX;
+  var dy = e.clientY - st.startY;
+  if (Math.abs(dx) > 3 || Math.abs(dy) > 3) {
+    st.moved = true;
+  }
+  st.tx = st.startTx + dx;
+  st.ty = st.startTy + dy;
+  taskItemImageLightboxRender(false);
+});
+
+document.addEventListener("mouseup", function () {
+  var st = taskItemImageLightboxState;
+  if (!st.dragging) {
+    return;
+  }
+
+  st.dragging = false;
+  var img = taskItemImageLightboxImgEl();
+  if (img) {
+    img.classList.remove("is-dragging");
+  }
+  // click 在 mouseup 之后同步派发，这里延后清 moved 以便 click 判断是拖拽而非点击
+  window.setTimeout(function () {
+    taskItemImageLightboxState.moved = false;
+  }, 0);
+});
+
+// 双击放大 / 还原
+document.addEventListener("dblclick", function (e) {
+  if (
+    !e.target ||
+    !e.target.closest ||
+    !e.target.closest("#taskItemImageLightbox .task-item-image-lightbox-img")
+  ) {
+    return;
+  }
+
+  e.preventDefault();
+  var st = taskItemImageLightboxState;
+  if (st.scale > 1.05) {
+    taskItemImageLightboxResetZoom();
+  } else {
+    taskItemImageLightboxZoomTo(2.5, e.clientX, e.clientY);
+  }
+});
+
+// 触屏双指缩放
+document.addEventListener(
+  "touchstart",
+  function (e) {
+    if (!e.target || !e.target.closest || !e.target.closest("#taskItemImageLightbox")) {
+      return;
+    }
+
+    var st = taskItemImageLightboxState;
+    if (e.touches.length === 2) {
+      st.pinchDist = Math.hypot(
+        e.touches[0].clientX - e.touches[1].clientX,
+        e.touches[0].clientY - e.touches[1].clientY,
+      );
+      st.pinchScale = st.scale;
+    }
+  },
+  { passive: true },
+);
+
+document.addEventListener(
+  "touchmove",
+  function (e) {
+    if (!e.target || !e.target.closest || !e.target.closest("#taskItemImageLightbox")) {
+      return;
+    }
+
+    var st = taskItemImageLightboxState;
+    if (e.touches.length !== 2 || !st.pinchDist) {
+      return;
+    }
+
+    e.preventDefault();
+    var dist = Math.hypot(
+      e.touches[0].clientX - e.touches[1].clientX,
+      e.touches[0].clientY - e.touches[1].clientY,
+    );
+    var cx = (e.touches[0].clientX + e.touches[1].clientX) / 2;
+    var cy = (e.touches[0].clientY + e.touches[1].clientY) / 2;
+    taskItemImageLightboxZoomTo(st.pinchScale * (dist / st.pinchDist), cx, cy);
+  },
+  { passive: false },
+);
+
+document.addEventListener("touchend", function () {
+  taskItemImageLightboxState.pinchDist = 0;
+});
+
+// Esc 关预览层；+ / - / 0 缩放。用 capture 阶段并阻断冒泡，否则 Bootstrap 会顺手把整个任务弹窗也关掉。
+document.addEventListener(
+  "keydown",
+  function (e) {
+    if (!taskItemImageLightboxIsOpen()) {
+      return;
+    }
+
+    var key = e.key || "";
+    var handled = true;
+
+    if (key === "Escape" || e.keyCode === 27) {
+      closeTaskItemImageLightbox();
+    } else if (key === "+" || key === "=") {
+      taskItemImageLightboxZoomTo(taskItemImageLightboxState.scale * 1.25);
+    } else if (key === "-" || key === "_") {
+      taskItemImageLightboxZoomTo(taskItemImageLightboxState.scale / 1.25);
+    } else if (key === "0") {
+      taskItemImageLightboxResetZoom();
+    } else {
+      handled = false;
+    }
+
+    if (handled) {
+      e.preventDefault();
+      e.stopPropagation();
+    }
   },
   true,
 );
