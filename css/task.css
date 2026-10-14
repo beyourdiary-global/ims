@@ -7181,6 +7181,7 @@ a.task-item-detail-key-text:focus-visible {
   display: -webkit-box;
   text-align: left;
   color: #0c66e4;
+  text-decoration: none;
   font-size: 0.92rem;
   font-weight: 500;
   white-space: normal;
