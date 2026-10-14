@@ -255,9 +255,10 @@ if (mysqli_query($connect, $apiKeyPinGroupSql)) {
 }
 echo migGrantPinGroupAccess($connect, 1, $apiKeyPinGroupId, array(1, 2, 3, 4));
 
-// ---- 8) 跟进轮次被标 Missed 前的原审批状态 ----
-// 标 Missed 会覆盖 round_status，加这一列才能看出「原本是已批准还是没批准」。
-echo migAddColumn($connect, $dbName, CUSTOMER_FOLLOW_UP_ROUND, 'missed_original_status', "VARCHAR(30) DEFAULT NULL COMMENT 'Status the round had before it was marked missed (Approved/Postponed/Not Approved)'");
+// ---- 8) 跟进轮次的 Missed 标记 ----
+// Missed 改成「标记」而不是「状态」：轮次保留原本的 round_status（Approved/Pending Approval/
+// Rejected…），missed_flag='Y' 只表示这一轮逾期过，列表上额外显示一个 Missed tag。
+echo migAddColumn($connect, $dbName, CUSTOMER_FOLLOW_UP_ROUND, 'missed_flag', "CHAR(1) NOT NULL DEFAULT 'N' COMMENT 'Y = flagged by the missed sweep; round_status keeps its real value'");
 
 echo "====================\n";
 echo "Done. 建议执行完从服务器删除本文件。\n";

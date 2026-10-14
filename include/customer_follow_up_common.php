@@ -1683,13 +1683,52 @@ if (!function_exists('customerFollowUpRoundSupportsApprovalComment')) {
     }
 }
 
-if (!function_exists('customerFollowUpRoundSupportsMissedOriginalStatus')) {
-    function customerFollowUpRoundSupportsMissedOriginalStatus($connect)
+if (!function_exists('customerFollowUpRoundSupportsMissedFlag')) {
+    function customerFollowUpRoundSupportsMissedFlag($connect)
     {
         return $connect instanceof mysqli
             && function_exists('shopeeOmsTableHasColumn')
             && defined('dbname')
-            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP_ROUND, 'missed_original_status');
+            && shopeeOmsTableHasColumn($connect, dbname, CUSTOMER_FOLLOW_UP_ROUND, 'missed_flag');
+    }
+}
+
+if (!function_exists('customerFollowUpRoundIsMissed')) {
+    /**
+     * "Missed" is a flag on the round, not a status. A round keeps the status it really has
+     * (Approved / Pending Approval / Rejected / ...) so the list can show both that status and
+     * a Missed tag. Rounds the older code stamped as `round_status = 'Missed Follow-Up'` (which
+     * destroyed the status it used to have) still answer true here.
+     */
+    function customerFollowUpRoundIsMissed($roundRow)
+    {
+        if (strtoupper(trim((string) (isset($roundRow['missed_flag']) ? $roundRow['missed_flag'] : 'N'))) === 'Y') {
+            return true;
+        }
+
+        return customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '') === 'Missed Follow-Up';
+    }
+}
+
+if (!function_exists('customerFollowUpBuildMissedRoundSql')) {
+    /**
+     * SQL predicate for "this round is flagged missed". Returns a bare OR-expression, so
+     * callers must wrap it in parentheses. Falls back to the legacy round_status value on
+     * databases that predate the flag column.
+     */
+    function customerFollowUpBuildMissedRoundSql($connect, $roundAlias = 'r')
+    {
+        $roundAlias = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $roundAlias);
+        if ($roundAlias === '') {
+            $roundAlias = 'r';
+        }
+
+        $legacySql = "LOWER(IFNULL(" . $roundAlias . ".`round_status`, '')) = 'missed follow-up'";
+        if (!customerFollowUpRoundSupportsMissedFlag($connect)) {
+            return $legacySql;
+        }
+
+        return "IFNULL(" . $roundAlias . ".`missed_flag`, 'N') = 'Y' OR " . $legacySql;
     }
 }
 
@@ -2852,20 +2891,19 @@ if (!function_exists('customerFollowUpSyncNotificationToSystemAlert')) {
 if (!function_exists('customerFollowUpRequiresDelayReasonBeforeMissedAction')) {
     function customerFollowUpRequiresDelayReasonBeforeMissedAction($roundRow)
     {
-        $roundStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
         $delayReason = trim((string) (isset($roundRow['delay_reason']) ? $roundRow['delay_reason'] : ''));
-        return $roundStatus === 'Missed Follow-Up' && $delayReason === '';
+        return customerFollowUpRoundIsMissed($roundRow) && $delayReason === '';
     }
 }
 
 if (!function_exists('customerFollowUpCanRequestPostponement')) {
     function customerFollowUpCanRequestPostponement($roundRow)
     {
-        $roundStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
-        if ($roundStatus === 'Missed Follow-Up') {
+        if (customerFollowUpRoundIsMissed($roundRow)) {
             return !customerFollowUpRequiresDelayReasonBeforeMissedAction($roundRow);
         }
 
+        $roundStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
         return in_array($roundStatus, array('Approved', 'Postponed'), true);
     }
 }
@@ -3564,11 +3602,14 @@ if (!function_exists('customerFollowUpCanCompleteRound')) {
 
         $roundStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
         $nextFollowUpDate = trim((string) (isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : ''));
-        if ($roundStatus === 'Missed Follow-Up' && customerFollowUpRequiresDelayReasonBeforeMissedAction($roundRow)) {
+        $isMissed = customerFollowUpRoundIsMissed($roundRow);
+        if ($isMissed && customerFollowUpRequiresDelayReasonBeforeMissedAction($roundRow)) {
             return false;
         }
 
-        return in_array($roundStatus, array('Approved', 'Postponed', 'Missed Follow-Up'), true)
+        // A missed round keeps whatever status it had, so the missed flag counts as completable
+        // on its own (this is what "Missed Follow-Up" used to do as a status).
+        return (in_array($roundStatus, array('Approved', 'Postponed', 'Missed Follow-Up'), true) || $isMissed)
             && $nextFollowUpDate !== ''
             && $nextFollowUpDate <= customerFollowUpNowDate();
     }
@@ -4388,7 +4429,7 @@ if (!function_exists('customerFollowUpSaveDelayReason')) {
             return array('success' => false, 'message' => 'You do not have permission to update delay reason.');
         }
 
-        if (customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '') !== 'Missed Follow-Up') {
+        if (!customerFollowUpRoundIsMissed($roundRow)) {
             return array('success' => false, 'message' => 'Delay reason is only required for missed follow-up.');
         }
 
@@ -4729,6 +4770,13 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
             'notification_count' => 0,
         );
 
+        // The flag column is what lets a round be "missed" without losing its real status.
+        // Without it, skip: the old behaviour (overwrite round_status) is exactly what the
+        // list now has to stop doing.
+        if (!customerFollowUpRoundSupportsMissedFlag($connect)) {
+            return $summary;
+        }
+
         $sql = "SELECT
                     f.*,
                     r.`id` AS `round_id`,
@@ -4737,9 +4785,9 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                     r.`previous_follow_up_date`,
                     " . $effectiveDateSql . " AS `effective_next_follow_up_date`,
                     r.`missed_original_date`,
+                    r.`missed_flag`,
                     r.`delay_reason`,
-                    r.`round_status`,
-                    r.`approval_status`
+                    r.`round_status`
                 FROM `" . CUSTOMER_FOLLOW_UP . "` f
                 INNER JOIN `" . CUSTOMER_FOLLOW_UP_ROUND . "` r
                     ON r.`follow_up_id` = f.`id`
@@ -4749,10 +4797,8 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                 WHERE f.`status` = 'A'
                   AND " . $effectiveDateSql . " IS NOT NULL
                   AND " . $effectiveDateSql . " < '" . customerFollowUpEscape($connect, $today) . "'
-                  AND (
-                        LOWER(r.`round_status`) IN ('approved', 'postponed')
-                        OR IFNULL(TRIM(r.`round_status`), '') = ''
-                  )
+                  AND IFNULL(r.`missed_flag`, 'N') <> 'Y'
+                  AND LOWER(IFNULL(r.`round_status`, '')) NOT IN ('done', 'lost', 'cancelled', 'missed follow-up')
                   AND LOWER(IFNULL(r.`postpone_status`, 'none')) <> 'pending'
                   AND LOWER(IFNULL(f.`current_status`, '')) <> 'cancelled'";
         $result = mysqli_query($connect, $sql);
@@ -4768,39 +4814,21 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                 continue;
             }
 
-            // round_status is overwritten below, so remember what it was: "Missed Follow-Up"
-            // on its own cannot tell an approved round from one that never was approved.
-            $missedOriginalStatus = customerFollowUpNormalizeStatus(isset($row['round_status']) ? $row['round_status'] : '');
-            if ($missedOriginalStatus === '') {
-                $roundApprovalStatus = strtolower(trim((string) (isset($row['approval_status']) ? $row['approval_status'] : '')));
-                $missedOriginalStatus = in_array($roundApprovalStatus, array('approved', 'not_required'), true)
-                    ? 'Approved'
-                    : 'Not Approved';
-            }
-
-            $roundUpdateFields = array(
-                'round_status' => 'Missed Follow-Up',
+            // Only the flag and the missed date are written: the round keeps the status it
+            // really has (Approved / Pending Approval / Rejected / ...) so the list can show
+            // that status next to the Missed tag instead of losing it.
+            mysqli_begin_transaction($connect);
+            $roundUpdated = customerFollowUpUpdateRoundRecord($connect, $roundId, array(
+                'missed_flag' => 'Y',
                 'missed_original_date' => trim((string) (isset($row['missed_original_date']) ? $row['missed_original_date'] : '')) !== ''
                     ? $row['missed_original_date']
                     : (isset($row['effective_next_follow_up_date']) ? $row['effective_next_follow_up_date'] : null),
                 'update_by' => 'SYSTEM',
                 'update_date' => $today,
                 'update_time' => customerFollowUpNowTime(),
-            );
-            if (customerFollowUpRoundSupportsMissedOriginalStatus($connect)) {
-                $roundUpdateFields['missed_original_status'] = $missedOriginalStatus;
-            }
-
-            mysqli_begin_transaction($connect);
-            $roundUpdated = customerFollowUpUpdateRoundRecord($connect, $roundId, $roundUpdateFields);
-            $caseUpdated = customerFollowUpUpdateCaseRecord($connect, $followUpId, array(
-                'current_status' => 'Missed Follow-Up',
-                'update_by' => 'SYSTEM',
-                'update_date' => $today,
-                'update_time' => customerFollowUpNowTime(),
             ));
 
-            if (!$roundUpdated || !$caseUpdated) {
+            if (!$roundUpdated) {
                 mysqli_rollback($connect);
                 $summary['skipped_count']++;
                 continue;
@@ -4816,11 +4844,14 @@ if (!function_exists('customerFollowUpProcessMissedRounds')) {
                 'Marked missed follow-up',
                 $row,
                 array(
-                    'round_status' => 'Missed Follow-Up',
+                    'missed_flag' => 'Y',
                     'missed_original_date' => isset($updatedRoundRow['missed_original_date']) ? $updatedRoundRow['missed_original_date'] : '',
-                    'missed_original_status' => $missedOriginalStatus,
                 ),
-                'System marked the round as missed follow-up.',
+                'System flagged the round as missed follow-up. The round keeps its '
+                    . (customerFollowUpNormalizeStatus(isset($updatedRoundRow['round_status']) ? $updatedRoundRow['round_status'] : '') !== ''
+                        ? customerFollowUpNormalizeStatus($updatedRoundRow['round_status'])
+                        : 'Pending Follow-Up')
+                    . ' status.',
                 '',
                 'SYSTEM'
             );

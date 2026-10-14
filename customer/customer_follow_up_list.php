@@ -751,9 +751,22 @@ if (!empty($platformFilters)) {
     }, $platformFilters)) . "')";
 }
 if (!empty($statusFilters)) {
-    $whereConditions[] = $effectiveStatusSql . " IN ('" . implode("','", array_map(function ($statusValue) use ($connect) {
+    $normalizedStatusFilters = array_map(function ($statusValue) use ($connect) {
         return customerFollowUpEscape($connect, strtolower($statusValue));
-    }, $statusFilters)) . "')";
+    }, $statusFilters);
+    // "Missed" is a flag now, not a stored status, so it has to be matched separately from
+    // the statuses the round actually carries.
+    $plainStatusFilters = array_values(array_diff($normalizedStatusFilters, array('missed follow-up')));
+    $statusMatchParts = array();
+    if (!empty($plainStatusFilters)) {
+        $statusMatchParts[] = $effectiveStatusSql . " IN ('" . implode("','", $plainStatusFilters) . "')";
+    }
+    if (in_array('missed follow-up', $normalizedStatusFilters, true)) {
+        $statusMatchParts[] = "(" . customerFollowUpBuildMissedRoundSql($connect) . ")";
+    }
+    if (!empty($statusMatchParts)) {
+        $whereConditions[] = '(' . implode(' OR ', $statusMatchParts) . ')';
+    }
 }
 if (!empty($assignedUserFilters)) {
     $whereConditions[] = "f.`assigned_user_id` IN (" . implode(',', array_map('intval', $assignedUserFilters)) . ")";
@@ -784,7 +797,7 @@ if ($roundIdFilter > 0) {
     $whereConditions[] = "r.`id` = " . $roundIdFilter;
 }
 if ($missedOnlyFilter) {
-    $whereConditions[] = $effectiveStatusSql . " = 'missed follow-up'";
+    $whereConditions[] = "(" . customerFollowUpBuildMissedRoundSql($connect) . ")";
 }
 if ($lostOnlyFilter) {
     $whereConditions[] = $effectiveStatusSql . " = 'lost'";
@@ -812,8 +825,8 @@ $listSql = "SELECT
         r.`postpone_reject_reason`,
         r.`delay_reason`,
         r.`missed_original_date`,"
-    . (customerFollowUpRoundSupportsMissedOriginalStatus($connect) ? "
-        r.`missed_original_status`," : "") . "
+    . (customerFollowUpRoundSupportsMissedFlag($connect) ? "
+        r.`missed_flag`," : "") . "
         r.`completed_date`,
         r.`round_status`
     FROM `" . CUSTOMER_FOLLOW_UP . "` f
@@ -1618,8 +1631,9 @@ if (!empty($customerTagLabelFilters)) {
                                             $requestedPostponeDate = trim((string) (isset($pendingPostponePayload['requested_next_follow_up_date']) ? $pendingPostponePayload['requested_next_follow_up_date'] : ''));
                                             $delayReason = trim((string) (isset($row['delay_reason']) ? $row['delay_reason'] : ''));
                                             $missedOriginalDate = trim((string) (isset($row['missed_original_date']) ? $row['missed_original_date'] : ''));
-                                            // What the round was before the missed sweep overwrote it.
-                                            $missedOriginalStatus = trim((string) (isset($row['missed_original_status']) ? $row['missed_original_status'] : ''));
+                                            // Missed is a flag on the round, not a status: the badge keeps
+                                            // showing the round's real status and a Missed tag is added next to it.
+                                            $isMissedRound = customerFollowUpRoundIsMissed($row);
                                             $postponeReason = trim((string) (isset($row['postpone_reason']) ? $row['postpone_reason'] : ''));
                                             $postponeRejectReason = trim((string) (isset($row['postpone_reject_reason']) ? $row['postpone_reject_reason'] : ''));
                                             $logRows = isset($actionLogMap[$followUpId]) ? $actionLogMap[$followUpId] : array();
@@ -1661,8 +1675,11 @@ if (!empty($customerTagLabelFilters)) {
                                             $hasMissingNextFollowUpDate = customerFollowUpIsEmptyDateValue(isset($row['next_follow_up_date']) ? $row['next_follow_up_date'] : '');
                                             $canAppeal = $canManageOwnCase && $roundStatus === 'Rejected' && $roundNo <= customerFollowUpGetMaxRoundNo();
                                             $canViewAppeal = !empty($latestAppealLog);
+                                            // A missed round is still handled through its delay reason + complete
+                                            // flow, not by submitting again, so the flag blocks submit as well.
                                             $canSubmit = !$canAppeal
                                                 && $canManageOwnCase
+                                                && !$isMissedRound
                                                 && !in_array($roundStatus, array('Pending Approval', 'Approved', 'Postponed', 'Missed Follow-Up', 'Done', 'Lost', 'Rejected'), true)
                                                 && $roundNo <= customerFollowUpGetMaxRoundNo();
                                             $canSaveDelayReason = $canManageOwnCase && customerFollowUpRequiresDelayReasonBeforeMissedAction($row);
@@ -1682,7 +1699,7 @@ if (!empty($customerTagLabelFilters)) {
                                             $canReject = $canRejectPermission && $roundStatus === 'Pending Approval';
                                             $canApprovePostpone = $canApprovePermission && $normalizedPostponeStatus === 'pending';
                                             $canRejectPostpone = $canRejectPermission && $normalizedPostponeStatus === 'pending';
-                                            $canViewDelayInfo = ($canViewLogsPermission || $canManageOwnCase) && ($delayReason !== '' || $missedOriginalDate !== '' || $roundStatus === 'Missed Follow-Up');
+                                            $canViewDelayInfo = ($canViewLogsPermission || $canManageOwnCase) && ($delayReason !== '' || $missedOriginalDate !== '' || $isMissedRound);
                                             $canViewPostponeInfo = ($canApprovePermission || $canRejectPermission || $canManageOwnCase) && ($postponeReason !== '' || $postponeRejectReason !== '' || $requestedPostponeDate !== '' || in_array($normalizedPostponeStatus, array('pending', 'approved', 'rejected'), true));
                                             $canViewLogs = $canViewLogsPermission && !empty($logRows);
                                             ?>
@@ -2083,9 +2100,12 @@ if (!empty($customerTagLabelFilters)) {
                                                     <?php } ?>
                                                 </td>
                                                 <td>
+                                                    <?php // A missed round shows the status it really has, plus a Missed tag.
+                                                    // Rounds the old code stamped as "Missed Follow-Up" lost their original
+                                                    // status, so those keep that single badge. ?>
                                                     <?= customerFollowUpFormatStatusLabel($resolvedDisplayStatus) ?>
-                                                    <?php if ($resolvedDisplayStatus === 'Missed Follow-Up' && $missedOriginalStatus !== '') { ?>
-                                                        <div class="status-subtext">Originally: <?= htmlspecialchars($missedOriginalStatus, ENT_QUOTES, 'UTF-8') ?></div>
+                                                    <?php if ($isMissedRound && $resolvedDisplayStatus !== 'Missed Follow-Up') { ?>
+                                                        <span class="badge bg-dark ms-1">Missed</span>
                                                     <?php } ?>
                                                     <?php if ($delayReason !== '') { ?>
                                                         <div class="status-subtext">Delay Reason Saved</div>

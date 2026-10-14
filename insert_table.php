@@ -2406,7 +2406,7 @@ $createCustomerFollowUpRoundSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$cus
     `postpone_reject_reason` TEXT DEFAULT NULL,
     `delay_reason` TEXT DEFAULT NULL,
     `missed_original_date` DATE DEFAULT NULL,
-    `missed_original_status` VARCHAR(30) DEFAULT NULL,
+    `missed_flag` CHAR(1) NOT NULL DEFAULT 'N',
     `completed_date` DATE DEFAULT NULL,
     `round_status` VARCHAR(30) NOT NULL DEFAULT '',
     `create_by` VARCHAR(30) DEFAULT NULL,
@@ -2450,10 +2450,11 @@ $customerFollowUpRoundColumns = array(
     'postpone_reject_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `postpone_reject_reason` TEXT DEFAULT NULL AFTER `postpone_reason`",
     'delay_reason' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `delay_reason` TEXT DEFAULT NULL AFTER `postpone_reject_reason`",
     'missed_original_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `missed_original_date` DATE DEFAULT NULL AFTER `delay_reason`",
-    // Marking a round missed overwrites round_status, so the status it had before that
-    // (approved / postponed / not approved) is kept here instead of being lost.
-    'missed_original_status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `missed_original_status` VARCHAR(30) DEFAULT NULL AFTER `missed_original_date`",
-    'completed_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `completed_date` DATE DEFAULT NULL AFTER `missed_original_status`",
+    // 'Y' once the missed sweep flagged this round. It is a flag and not a status: the round
+    // keeps the status it really has (Approved / Pending Approval / Rejected / ...) so the
+    // list can show both that status and a Missed tag.
+    'missed_flag' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `missed_flag` CHAR(1) NOT NULL DEFAULT 'N' AFTER `missed_original_date`",
+    'completed_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `completed_date` DATE DEFAULT NULL AFTER `missed_flag`",
     'round_status' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `round_status` VARCHAR(30) NOT NULL DEFAULT '' AFTER `completed_date`",
     'create_by' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `create_by` VARCHAR(30) DEFAULT NULL AFTER `round_status`",
     'create_date' => "ALTER TABLE `{$db_cms}`.`{$customerFollowUpRoundTable}` ADD COLUMN `create_date` DATE DEFAULT NULL AFTER `create_by`",
