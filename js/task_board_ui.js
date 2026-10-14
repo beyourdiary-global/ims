@@ -2221,7 +2221,7 @@ var taskChildWorkItemColumnDefinitions = [
   { key: "amendement_time", label: "Amendment Time", defaultWidth: "minmax(135px, .75fr)" },
   { key: "second_amendement_date", label: "Second Amen-Date", defaultWidth: "minmax(145px, .8fr)" },
   { key: "second_amendement_time", label: "Second Amen-Time", defaultWidth: "minmax(145px, .8fr)" },
-  { key: "status", label: "Status", defaultWidth: "minmax(220px, max-content)" },
+  { key: "status", label: "Status", defaultWidth: "minmax(150px, max-content)" },
 ];
 
 function taskChildWorkItemColumnDefinition(key) {
@@ -2288,7 +2288,7 @@ function taskChildWorkItemColumnGridTemplate(settings) {
     var width = settings.widths && settings.widths[key];
     if (key === "status") {
       var savedStatusWidth = Number.parseInt(String(width || "").replace(/px$/, ""), 10);
-      var statusMinimum = Number.isFinite(savedStatusWidth) ? Math.max(220, savedStatusWidth) : 220;
+      var statusMinimum = Number.isFinite(savedStatusWidth) ? Math.max(150, savedStatusWidth) : 150;
       return "minmax(" + statusMinimum + "px, max-content)";
     }
     return /^\d{2,4}px$/.test(String(width || "")) ? width : definition.defaultWidth;
@@ -2388,9 +2388,9 @@ function taskChildWorkItemColumnCellHtml(key, row, context) {
   if (key === "work") {
     return '<div class="task-item-child-col-work">' + (context.canEdit
       ? (context.isTitleEditing
-        ? '<div class="task-item-child-title-editor"><button type="button" class="btn task-item-child-open-trigger task-item-child-open-btn" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '"><span class="task-item-child-open-key">' + escHtml(context.workKeyText) + '</span></button><input type="text" class="form-control form-control-sm task-item-child-title-input" data-child-item-id="' + childItemId + '" value="' + escHtml(context.workTitle) + '" maxlength="255" placeholder="Work item title"><div class="task-item-child-title-editor-actions"><button type="button" class="btn task-item-child-title-save-btn" data-child-item-id="' + childItemId + '" title="Save title"><i class="fa-solid fa-check"></i></button><button type="button" class="btn task-item-child-title-cancel-btn" data-child-item-id="' + childItemId + '" title="Cancel title edit"><i class="fa-solid fa-xmark"></i></button></div></div>'
-        : '<div class="task-item-child-work-display"><button type="button" class="btn task-item-child-open-trigger task-item-child-open-btn" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '"><span class="task-item-child-open-key">' + escHtml(context.workKeyText) + '</span></button><button type="button" class="btn task-item-child-open-trigger task-item-child-title-link" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '">' + escHtml(context.workTitle || "Open work item") + '</button><button type="button" class="btn task-item-child-title-edit-btn" data-child-item-id="' + childItemId + '" title="Edit title"><i class="fa-regular fa-pen-to-square"></i></button></div>')
-      : '<button type="button" class="btn task-item-child-open-btn" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '"><span class="task-item-child-open-key">' + escHtml(context.workKeyText) + '</span><span class="task-item-child-open-title">' + escHtml(context.workTitle || "Open work item") + '</span></button>') + '</div>';
+        ? '<div class="task-item-child-title-editor"><a class="btn task-item-child-open-trigger task-item-child-open-btn" href="' + escHtml(workItemPermalinkHref(childItemId)) + '" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '"><span class="task-item-child-open-key">' + escHtml(context.workKeyText) + '</span></a><input type="text" class="form-control form-control-sm task-item-child-title-input" data-child-item-id="' + childItemId + '" value="' + escHtml(context.workTitle) + '" maxlength="255" placeholder="Work item title"><div class="task-item-child-title-editor-actions"><button type="button" class="btn task-item-child-title-save-btn" data-child-item-id="' + childItemId + '" title="Save title"><i class="fa-solid fa-check"></i></button><button type="button" class="btn task-item-child-title-cancel-btn" data-child-item-id="' + childItemId + '" title="Cancel title edit"><i class="fa-solid fa-xmark"></i></button></div></div>'
+        : '<div class="task-item-child-work-display"><a class="btn task-item-child-open-trigger task-item-child-open-btn" href="' + escHtml(workItemPermalinkHref(childItemId)) + '" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '"><span class="task-item-child-open-key">' + escHtml(context.workKeyText) + '</span></a><button type="button" class="btn task-item-child-open-trigger task-item-child-title-link" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '">' + escHtml(context.workTitle || "Open work item") + '</button><button type="button" class="btn task-item-child-title-edit-btn" data-child-item-id="' + childItemId + '" title="Edit title"><i class="fa-regular fa-pen-to-square"></i></button></div>')
+      : '<a class="btn task-item-child-open-btn" href="' + escHtml(workItemPermalinkHref(childItemId)) + '" data-child-item-id="' + childItemId + '" title="' + escHtml(context.workText || context.workKeyText) + '"><span class="task-item-child-open-key">' + escHtml(context.workKeyText) + '</span><span class="task-item-child-open-title">' + escHtml(context.workTitle || "Open work item") + '</span></a>') + '</div>';
   }
   if (key === "work_type") return '<div class="task-item-child-col-work-type">' + escHtml(context.workTypeName || "Task") + '</div>';
   if (key === "original_estimate") return '<div class="task-item-child-col-estimate">' + context.estimateHtml + '</div>';
@@ -2725,6 +2725,45 @@ function renderChildWorkItemsSection() {
   );
 }
 
+// 任务详情弹窗顶部 key trail 的 key 现在是真 <a href>，这样右键菜单能
+// 「在新标签页中打开」。左键行为不变：命中同一个 hash 时页面不动，
+// 命中别的任务时由 hashchange 把弹窗切过去。
+function workItemPermalinkHref(itemId) {
+  var id = Number(itemId || 0);
+  if (id <= 0) {
+    return "";
+  }
+  if (typeof buildWorkItemPermalink === "function") {
+    return buildWorkItemPermalink(id);
+  }
+  return "#task-item-" + String(id);
+}
+
+// parent_item_id 在父任务不在下拉候选里时会被清成 0，这里用 key 兜底反推
+// （key 形如 ATM-749，末段就是 item id）。
+function detailKeyTrailItemIdFromKey(key) {
+  var matched = String(key || "")
+    .trim()
+    .match(/-(\d+)$/);
+  return matched ? Number(matched[1] || 0) : 0;
+}
+
+function detailKeyTrailKeyHtml(key, href) {
+  var label = escHtml(key);
+  if (!href) {
+    return '<span class="task-item-detail-key-text">' + label + "</span>";
+  }
+  return (
+    '<a class="task-item-detail-key-text task-item-detail-key-link" href="' +
+    escHtml(href) +
+    '" title="Open ' +
+    label +
+    '">' +
+    label +
+    "</a>"
+  );
+}
+
 function renderDetailKeyTrail() {
   var workKey = String(itemDetailModalState.workItemKey || "").trim();
   var parentKey = String(itemDetailModalState.parentWorkItemKey || "").trim();
@@ -2755,6 +2794,12 @@ function renderDetailKeyTrail() {
   }
 
   var itemId = Number(itemDetailModalState.itemId || 0);
+  var currentKeyHref = workItemPermalinkHref(itemId);
+  var parentItemId = Number(itemDetailModalState.parentItemId || 0);
+  if (parentItemId <= 0) {
+    parentItemId = detailKeyTrailItemIdFromKey(parentKey);
+  }
+  var parentKeyHref = workItemPermalinkHref(parentItemId);
   var currentWorkTypeId = Number(
     itemDetailModalState.cardEl
       ? $(itemDetailModalState.cardEl).attr("data-work-type-id") || 0
@@ -2786,9 +2831,7 @@ function renderDetailKeyTrail() {
   var currentHtml =
     '<span class="task-item-detail-key-segment">' +
     currentTypeHtml +
-    '<span class="task-item-detail-key-text">' +
-    escHtml(workKey) +
-    "</span>" +
+    detailKeyTrailKeyHtml(workKey, currentKeyHref) +
     "</span>";
 
   var html = currentHtml;
@@ -2800,9 +2843,7 @@ function renderDetailKeyTrail() {
         parentTypeName,
         "task-item-detail-key-icon",
       ) +
-      '<span class="task-item-detail-key-text">' +
-      escHtml(parentKey) +
-      "</span>" +
+      detailKeyTrailKeyHtml(parentKey, parentKeyHref) +
       "</span>" +
       '<span class="task-item-detail-key-sep">/</span>' +
       currentHtml;

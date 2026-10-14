@@ -745,6 +745,21 @@ body.task-board-page .task-board-scroll {
   max-width: min(100%, 320px);
 }
 
+/* key trail 的 key 是真链接（可右键「在新标签页中打开」），外观保持原样 */
+a.task-item-detail-key-text,
+.task-item-detail-key-link {
+  color: inherit;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+a.task-item-detail-key-text:hover,
+a.task-item-detail-key-text:focus,
+a.task-item-detail-key-text:focus-visible {
+  color: inherit;
+  text-decoration: underline;
+}
+
 .task-project-key-action-btn i {
   font-size: 0.86rem;
 }
@@ -6882,7 +6897,7 @@ body.task-board-page .task-board-scroll {
 .task-item-child-table-head,
 .task-item-child-row {
   display: grid;
-  grid-template-columns: var(--task-item-child-column-template, minmax(380px, 2fr) minmax(125px, 0.65fr) minmax(120px, 0.7fr) minmax(220px, max-content));
+  grid-template-columns: var(--task-item-child-column-template, minmax(380px, 2fr) minmax(125px, 0.65fr) minmax(120px, 0.7fr) minmax(150px, max-content));
   gap: 0.65rem;
   align-items: center;
 }
@@ -7131,12 +7146,14 @@ body.task-board-page .task-board-scroll {
   min-width: 0;
   max-width: 100%;
   color: #0c66e4;
+  text-decoration: none;
   box-shadow: none !important;
 }
 
 .task-item-child-open-btn:hover,
 .task-item-child-open-btn:focus {
   color: #0055cc;
+  text-decoration: underline;
 }
 
 .task-item-child-open-trigger,
