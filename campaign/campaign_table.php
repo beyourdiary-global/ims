@@ -353,14 +353,15 @@ foreach ($picAutocompleteOptions as $picOption) {
                             $purchaseRate = $totalParticipants > 0 ? round(($purchasedCustomers / $totalParticipants) * 100) : 0;
                             $campaignEffectivePeriod = campaignEffectivePeriod($row);
                             $periodText = trim((string) ($row['period_start_date'] ?? '')) . ' - ' . trim((string) ($row['period_end_date'] ?? ''));
-                            // Show the period the campaign is actually judged on, and keep the
-                            // original estimate visible when they differ.
-                            if ($campaignEffectivePeriod['start'] !== '' || $campaignEffectivePeriod['end'] !== '') {
-                                $estimatedPeriodText = $periodText;
-                                $periodText = $campaignEffectivePeriod['start'] . ' - ' . $campaignEffectivePeriod['end'];
-                                if ($periodText !== $estimatedPeriodText) {
-                                    $periodText .= ' (actual, estimate ' . $estimatedPeriodText . ')';
-                                }
+                            // This column mirrors the Period Start/End fields on the campaign form, so it
+                            // leads with the same dates and both screens read alike. An actual period, when
+                            // set, is what the report judges on; it follows in brackets instead of taking
+                            // the lead, so the estimate stays the value the column is named after.
+                            $effectivePeriodText = $campaignEffectivePeriod['start'] . ' - ' . $campaignEffectivePeriod['end'];
+                            if ($effectivePeriodText !== '' && $effectivePeriodText !== $periodText) {
+                                $periodText = trim($periodText) === '-'
+                                    ? $effectivePeriodText
+                                    : $periodText . ' (actual ' . $effectivePeriodText . ')';
                             }
                             $campaignStatus = trim((string) ($row['campaign_status'] ?? ''));
                             $periodEndDate = $campaignEffectivePeriod['end'] !== '' ? $campaignEffectivePeriod['end'] : trim((string) ($row['period_end_date'] ?? ''));
