@@ -279,5 +279,13 @@ if ($lazadaOrderDateBackfill) {
     echo "ERROR backfilling lazada_order_request.order_date: " . mysqli_error($connect) . "\n";
 }
 
+// ---- 10) Campaign 的「实际活动期间」 ----
+// campaign 表的 actual_start_date / actual_end_date 一直只由 insert_table.php（建表脚本）
+// 创建，而部署只跑 .cpanel.yml 复制文件、从不执行 insert_table.php —— 所以线上从来没有
+// 这两列。表单照样渲染这两个框，但保存时 campaignColumnExists() 返回 false，写入被静默跳过：
+// 老板填了日期、看起来保存成功，刷新后就没了。
+echo migAddColumn($connect, $dbName, CAMPAIGN, 'actual_start_date', "DATE DEFAULT NULL COMMENT 'Actual campaign start; NULL = use the estimated period_start_date'");
+echo migAddColumn($connect, $dbName, CAMPAIGN, 'actual_end_date', "DATE DEFAULT NULL COMMENT 'Actual campaign end; NULL = use the estimated period_end_date'");
+
 echo "====================\n";
 echo "Done. 建议执行完从服务器删除本文件。\n";

@@ -252,6 +252,13 @@ if (post('actionBtn') === 'saveCampaign') {
         }
     }
 
+    // The two columns are created by the migration. While they are missing the write further
+    // down is skipped, which used to swallow whatever was typed without saying anything - the
+    // dates looked saved and were gone after a refresh. Report it instead.
+    if (!$hasActualPeriod && ($formValues['actual_start_date'] !== '' || $formValues['actual_end_date'] !== '')) {
+        $errors[] = 'The actual period could not be saved: the `' . CAMPAIGN . '` table has no actual_start_date / actual_end_date columns yet. Run run_migration.php?token=cms-migrate-2026, then save again.';
+    }
+
     $periodStartForCheck = $formValues['actual_start_date'] !== '' ? $formValues['actual_start_date'] : $formValues['period_start_date'];
     $periodEndForCheck = $formValues['actual_end_date'] !== '' ? $formValues['actual_end_date'] : $formValues['period_end_date'];
     if ($periodStartForCheck !== '' && $periodEndForCheck !== '' && $periodStartForCheck > $periodEndForCheck) {
@@ -416,6 +423,13 @@ $readonlyAttr = $isView ? 'readonly' : '';
                                 <small class="text-muted">Optional. The dates above stay as the original estimate. Fill these in when the promo actually runs on other dates - the report, the purchase check and the nightly cron then use these instead. Leave blank to keep using the estimate. Either date can be set on its own, so you can extend just the end date.</small>
                             </div>
                         </div>
+                        <?php if (!$hasActualPeriod) { ?>
+                        <div class="row">
+                            <div class="col-12">
+                                <small class="text-danger fw-bold"><i class="fa-solid fa-triangle-exclamation"></i> Not usable yet on this database: the campaign table has no actual_start_date / actual_end_date columns. Run <code>run_migration.php?token=cms-migrate-2026</code>, otherwise anything typed here is dropped when you save.</small>
+                            </div>
+                        </div>
+                        <?php } ?>
                     </div>
 
                     <div class="form-group">
