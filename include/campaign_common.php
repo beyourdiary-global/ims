@@ -751,6 +751,12 @@ if (!function_exists('campaignPurchasePlatformConfigs')) {
                 // config below already used the real names; this now matches it.
                 'order_no_cols' => array('oder_number', 'order_number', 'order_id', 'order_no', 'lazada_order_id'),
                 'customer_cols' => array('buyer_username', 'buyer', 'customer_id', 'cust_id', 'name', 'customer_name', 'phone', 'contact'),
+                // cust_id is only written when the import matched an existing customer, so a
+                // buyer the import could not match has no id at all - and the scan used to drop
+                // that row as "no buyer", which is why Lazada looked half-empty. The name the
+                // invoice carries (cust_name, else the ship-to name) is what identifies them,
+                // so it becomes the identity whenever the id is missing.
+                'customer_fallback_cols' => array('cust_name', 'ship_rec_name', 'name', 'customer_name'),
                 // order_date is the real order date, parsed from the invoice when the order is
                 // imported. The column only exists after the migration runs, and orders imported
                 // before that have nothing but create_date (the date the row was imported), so
@@ -1455,6 +1461,27 @@ if (!function_exists('campaignResolveBuyerDisplayName')) {
     }
 }
 
+if (!function_exists('campaignPurchaseBuyerDisplayName')) {
+    /**
+     * The name to show for a buyer.
+     *
+     * campaignResolveBuyerDisplayName() only turns a bare id into a name when the
+     * platform has a customer_lookup (Shopee does, Lazada does not), so an id it
+     * cannot resolve comes back unchanged and the report showed "27" instead of the
+     * customer. When the order row itself carries the name, prefer that.
+     */
+    function campaignPurchaseBuyerDisplayName($config, $rawValue, $rowName, &$cache)
+    {
+        $resolved = campaignResolveBuyerDisplayName($config, $rawValue, $cache);
+        $rowName = trim((string) $rowName);
+        if ($rowName !== '' && ctype_digit($resolved)) {
+            return $rowName;
+        }
+
+        return $resolved;
+    }
+}
+
 if (!function_exists('campaignBuyerIdentitySql')) {
     /**
      * SQL that identifies the buyer behind a purchase record, whichever kind they are: a
@@ -1569,6 +1596,22 @@ if (!function_exists('campaignScanCampaignOrders')) {
                 continue;
             }
 
+            // A buyer the platform could not identify by id still carries a name on the
+            // row (Lazada's cust_id is NULL whenever the import matched no existing
+            // customer). That row used to be dropped as "no buyer" further down, which
+            // is why Lazada only ever showed the buyers already in the customer system.
+            // Every fallback column is kept, not only the first one that exists: cust_name
+            // can itself be empty while the ship-to name is filled.
+            $customerNameCols = array();
+            foreach ((array) (isset($config['customer_fallback_cols']) ? $config['customer_fallback_cols'] : array()) as $fallbackCol) {
+                if ($fallbackCol === '' || $fallbackCol === $customerCol) {
+                    continue;
+                }
+                if (campaignGetFirstExistingColumn($orderConn, $table, array($fallbackCol)) !== '') {
+                    $customerNameCols[] = $fallbackCol;
+                }
+            }
+
             $orderNoCol = campaignGetFirstExistingColumn($orderConn, $table, $config['order_no_cols']);
             $timeCol = campaignGetFirstExistingColumn($orderConn, $table, $config['time_cols']);
             $amountCol = campaignGetFirstExistingColumn($orderConn, $table, $config['amount_cols']);
@@ -1579,7 +1622,11 @@ if (!function_exists('campaignScanCampaignOrders')) {
             $currencyCol = isset($config['currency_cols']) ? campaignGetFirstExistingColumn($orderConn, $table, $config['currency_cols']) : '';
 
             $selectColumns = array('`id`');
-            foreach (array($orderNoCol, $dateCol, $dateFallbackCol, $timeCol, $amountCol, $orderStatusCol, $packageCol, $detailCol, $customerCol, $shopeeAccCol, $currencyCol) as $column) {
+            foreach (array_merge(
+                array($orderNoCol, $dateCol, $dateFallbackCol, $timeCol, $amountCol, $orderStatusCol, $packageCol, $detailCol, $customerCol),
+                $customerNameCols,
+                array($shopeeAccCol, $currencyCol)
+            ) as $column) {
                 $quotedCol = campaignPurchaseQuoteColumn($column);
                 if ($column !== '' && !in_array($quotedCol, $selectColumns, true)) {
                     $selectColumns[] = $quotedCol;
@@ -1634,6 +1681,18 @@ if (!function_exists('campaignScanCampaignOrders')) {
                 }
 
                 $buyerRaw = trim((string) ($row[$customerCol] ?? ''));
+                $buyerNameFromRow = '';
+                foreach ($customerNameCols as $nameCol) {
+                    $candidate = trim((string) ($row[$nameCol] ?? ''));
+                    if ($candidate !== '') {
+                        $buyerNameFromRow = $candidate;
+                        break;
+                    }
+                }
+                if ($buyerRaw === '' && $buyerNameFromRow !== '') {
+                    // Identified by name instead of id; kept instead of dropped.
+                    $buyerRaw = $buyerNameFromRow;
+                }
                 if ($buyerRaw === '') {
                     $scan['rows_skipped_no_buyer']++;
                     continue;
@@ -1657,7 +1716,7 @@ if (!function_exists('campaignScanCampaignOrders')) {
                     'order_id' => $orderId,
                     'order_no' => $orderNo,
                     'buyer_id' => $buyerRaw,
-                    'buyer_name' => campaignResolveBuyerDisplayName($config, $buyerRaw, $nameCache),
+                    'buyer_name' => campaignPurchaseBuyerDisplayName($config, $buyerRaw, $buyerNameFromRow, $nameCache),
                     'order_detail' => $detailText !== '' ? $detailText : $packageText,
                     'order_status' => $orderStatus,
                     'order_amount' => ($amountCol !== '' && is_numeric($row[$amountCol] ?? null)) ? (float) $row[$amountCol] : 0.00,
