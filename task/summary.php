@@ -411,7 +411,7 @@ window.summaryConfig = {
     boardUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
-<script src="../js/task_board_core.js"></script>
+<script src="../js/task_board_core.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_core.js') ?>"></script>
 <script src="../js/task_board_ui.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_ui.js') ?>"></script>
 <script src="../js/task_board.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board.js') ?>"></script>
 <script src="<?= $SITEURL ?>/header/tinymce/tinymce.min.js"></script>

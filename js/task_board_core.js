@@ -835,6 +835,28 @@ function formatActivityDateTime(dateValue, timeValue) {
   }
 }
 
+// The activity feed only says how long ago something happened, which cannot
+// tell you when it actually happened - "3 days ago" covers any time that day.
+// Hovering a timestamp now shows the exact date and time, the same text the
+// work log entries already display.
+function activityAgoHtml(dateValue, timeValue, suffixHtml) {
+  var ago = formatRelativeTime(dateValue, timeValue);
+  if (!ago) {
+    return "";
+  }
+
+  var exactText = formatActivityDateTime(dateValue, timeValue);
+  var titleAttr = exactText ? ' title="' + escHtml(exactText) + '"' : "";
+  return (
+    '<div class="task-item-activity-ago"' +
+    titleAttr +
+    ">" +
+    escHtml(ago) +
+    (suffixHtml || "") +
+    "</div>"
+  );
+}
+
 function parseDurationTextToSeconds(text) {
   var source = String(text || "").trim();
   if (!source) {
@@ -1193,7 +1215,6 @@ function renderActivityFeed($target, historyRows) {
     var row = rows[i] || {};
     var actor = String(row.actor_name || "User").trim() || "User";
     var remark = String(row.remark || "updated the Work item").trim();
-    var ago = formatRelativeTime(row.create_date, row.create_time);
     var fieldName = String(row.field_name || "").trim();
     var fromValue = String(row.from_value || "").trim();
     var toValue = String(row.to_value || "").trim();
@@ -1210,9 +1231,7 @@ function renderActivityFeed($target, historyRows) {
       escHtml(remark) +
       "</div>" +
       '<div class="task-item-activity-meta">' +
-      (ago
-        ? '<div class="task-item-activity-ago">' + escHtml(ago) + "</div>"
-        : "") +
+      activityAgoHtml(row.create_date, row.create_time) +
       activityTypeBadgeHtml("history") +
       "</div>";
 
@@ -1246,7 +1265,6 @@ function buildCommentRepliesHtml(commentRow) {
     var reply = replies[i] || {};
     var replyId = Number(reply.id || 0);
     var actor = String(reply.actor_name || "User").trim() || "User";
-    var ago = formatRelativeTime(reply.create_date, reply.create_time);
     var isEdited = Number(reply.is_edited || 0) === 1;
     var replyHtml = String(reply.reply_html || "").trim();
 
@@ -1268,14 +1286,11 @@ function buildCommentRepliesHtml(commentRow) {
       escHtml(actor) +
       "</span> replied</div>" +
       '<div class="task-item-activity-meta">' +
-      (ago
-        ? '<div class="task-item-activity-ago">' +
-        escHtml(ago) +
-        (isEdited
-          ? ' <span class="task-item-comment-edited">(edited)</span>'
-          : "") +
-        "</div>"
-        : "") +
+      activityAgoHtml(
+        reply.create_date,
+        reply.create_time,
+        isEdited ? ' <span class="task-item-comment-edited">(edited)</span>' : ""
+      ) +
       '<span class="task-item-activity-type-badge task-item-activity-type-comment">REPLY</span>' +
       "</div>" +
       '<div class="task-item-activity-comment-body">' +
@@ -1318,7 +1333,6 @@ function buildCommentRepliesHtml(commentRow) {
 function buildCommentEntryHtml(row, entryPrefix) {
   var commentId = Number(row.id || 0);
   var actor = String(row.actor_name || "User").trim() || "User";
-  var ago = formatRelativeTime(row.create_date, row.create_time);
   var isEdited = Number(row.is_edited || 0) === 1;
   var isDeleted = Number(row.is_deleted || 0) === 1;
   var commentHtml = String(row.comment_html || "").trim();
@@ -1350,14 +1364,11 @@ function buildCommentEntryHtml(row, entryPrefix) {
     (isDeleted ? "deleted a comment" : "commented") +
     "</div>" +
     '<div class="task-item-activity-meta">' +
-    (ago
-      ? '<div class="task-item-activity-ago">' +
-      escHtml(ago) +
-      (isEdited
-        ? ' <span class="task-item-comment-edited">(edited)</span>'
-        : "") +
-      "</div>"
-      : "") +
+    activityAgoHtml(
+      row.create_date,
+      row.create_time,
+      isEdited ? ' <span class="task-item-comment-edited">(edited)</span>' : ""
+    ) +
     activityTypeBadgeHtml("comment") +
     "</div>" +
     '<div class="task-item-activity-comment-body">' +
@@ -1743,7 +1754,6 @@ function renderAllActivityFeed($target, historyRows, commentRows, worklogRows) {
     var row = allRows[i] || {};
     var payload = row.payload || {};
     var actor = String(payload.actor_name || "User").trim() || "User";
-    var ago = formatRelativeTime(payload.create_date, payload.create_time);
 
     if (row.type === "comment") {
       html += buildCommentEntryHtml(payload, "all");
@@ -1774,9 +1784,7 @@ function renderAllActivityFeed($target, historyRows, commentRows, worklogRows) {
       escHtml(remark) +
       "</div>" +
       '<div class="task-item-activity-meta">' +
-      (ago
-        ? '<div class="task-item-activity-ago">' + escHtml(ago) + "</div>"
-        : "") +
+      activityAgoHtml(payload.create_date, payload.create_time) +
       activityTypeBadgeHtml("history") +
       "</div>";
 

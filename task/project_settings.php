@@ -853,7 +853,7 @@ window.taskBoardConfig = {
     projectKey: <?= json_encode($projectKeySetting, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>
 };
 </script>
-<script src="../js/task_board_core.js"></script>
+<script src="../js/task_board_core.js?v=<?= (int) @filemtime(__DIR__ . '/../js/task_board_core.js') ?>"></script>
 <script>
 window.projectSettingsConfig = {
     canEdit: <?= $canEdit ? 'true' : 'false' ?>,
