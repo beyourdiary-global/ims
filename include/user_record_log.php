@@ -2043,7 +2043,19 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 $safeCustomerColumn = 'cust_id';
             }
 
-            $latestSql = "SELECT * FROM `" . $safeTable . "` WHERE `status`='A' AND `" . $safeCustomerColumn . "`='" . $customerId . "' ORDER BY `updated_at` DESC, `id` DESC LIMIT 1";
+            // The Summary box reads from the newest non-tag row (see
+            // urlGetLatestUserRecordLogSummary), so the save has to target that same row.
+            // Tag changes are logged into this table as log_type='tag' rows and carry no
+            // summary; picking the plain newest row wrote the summary onto a hidden tag
+            // row, which is why the save reported success and the audit log showed the
+            // value change while the box stayed empty.
+            $latestWhere = "`status`='A' AND `" . $safeCustomerColumn . "`='" . $customerId . "'";
+            $latestLogTypeColRst = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE 'log_type'");
+            if ($latestLogTypeColRst && $latestLogTypeColRst->num_rows > 0) {
+                $latestWhere .= " AND (log_type IS NULL OR log_type <> 'tag')";
+            }
+
+            $latestSql = "SELECT * FROM `" . $safeTable . "` WHERE " . $latestWhere . " ORDER BY `updated_at` DESC, `id` DESC LIMIT 1";
             $latestRst = mysqli_query($dbConnect, $latestSql);
             $latestRow = ($latestRst && $latestRst->num_rows > 0) ? $latestRst->fetch_assoc() : array();
 
