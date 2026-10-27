@@ -305,6 +305,7 @@ define('ORDER_RETURN_LOG', 'order_return_log');
 define('ORDER_WAREHOUSE_SCAN_TOKEN', 'order_warehouse_scan_token');
 define('YEARLYGOAL', 'yearly_goals');
 define('USER_RECORD_LOG', 'user_record_log');
+define('CUSTOMER_RECORD_SUMMARY', 'customer_record_summary');
 define('MEMBER_POINT_LEDGER', 'member_point_ledger');
 define('MEMBER_POINT_TRANSACTION', 'membership_point_transaction');
 define('MEMBER_POINT_MEMBER_STATE', 'membership_point_member_state');

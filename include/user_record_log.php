@@ -1398,6 +1398,204 @@ if (!function_exists('urlGetLatestUserRecordLogSummary')) {
     }
 }
 
+if (!function_exists('urlGetCustomerSummaryTableName')) {
+    function urlGetCustomerSummaryTableName()
+    {
+        return defined('CUSTOMER_RECORD_SUMMARY') ? (string) CUSTOMER_RECORD_SUMMARY : 'customer_record_summary';
+    }
+}
+
+if (!function_exists('urlEnsureCustomerSummaryTable')) {
+    /**
+     * One row per customer for the Summary box.
+     *
+     * The summary used to be a column on user_record_log carried forward from row to row,
+     * so reading and writing it both meant guessing which row currently owned the value.
+     * Every new kind of row (a tag change, a follow-up sync) could take that role without
+     * anyone noticing, and the box would go blank while the save still reported success.
+     * Keeping the value on its own row removes the guess; creating the table on first use
+     * means a skipped migration cannot break the box either.
+     */
+    function urlEnsureCustomerSummaryTable($dbConnect)
+    {
+        static $ready = array();
+
+        if (!($dbConnect instanceof mysqli)) {
+            return false;
+        }
+
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', urlGetCustomerSummaryTableName());
+        if ($safeTable === '') {
+            return false;
+        }
+
+        $cacheKey = spl_object_hash($dbConnect) . '|' . $safeTable;
+        if (array_key_exists($cacheKey, $ready)) {
+            return $ready[$cacheKey];
+        }
+
+        $existsRst = mysqli_query($dbConnect, "SHOW TABLES LIKE '" . $safeTable . "'");
+        if ($existsRst && $existsRst->num_rows > 0) {
+            $ready[$cacheKey] = true;
+            return true;
+        }
+
+        $createSql = "CREATE TABLE IF NOT EXISTS `" . $safeTable . "` (
+            `id` INT AUTO_INCREMENT PRIMARY KEY,
+            `customer_column` VARCHAR(32) NOT NULL,
+            `customer_id` INT NOT NULL,
+            `summary` LONGTEXT DEFAULT NULL,
+            `created_by` VARCHAR(64) DEFAULT NULL,
+            `created_at` DATETIME DEFAULT NULL,
+            `updated_by` VARCHAR(64) DEFAULT NULL,
+            `updated_at` DATETIME DEFAULT NULL,
+            UNIQUE KEY `uniq_customer_summary` (`customer_column`, `customer_id`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+
+        $ready[$cacheKey] = (bool) @mysqli_query($dbConnect, $createSql);
+        return $ready[$cacheKey];
+    }
+}
+
+if (!function_exists('urlGetCustomerSummaryColumn')) {
+    function urlGetCustomerSummaryColumn($context)
+    {
+        $column = isset($context['customer_column']) ? trim((string) $context['customer_column']) : '';
+        $column = preg_replace('/[^A-Za-z0-9_]/', '', $column);
+        return $column !== '' ? $column : 'cust_id';
+    }
+}
+
+if (!function_exists('urlGetLatestUserRecordLogSummaryAnyRow')) {
+    /**
+     * Only used when the summary row is first created: the old save wrote onto hidden tag
+     * rows, so the newest non-empty summary anywhere is the closest thing to "the text
+     * the user last typed".
+     */
+    function urlGetLatestUserRecordLogSummaryAnyRow($dbConnect, $tblName, $context = array())
+    {
+        if (!($dbConnect instanceof mysqli)) {
+            return '';
+        }
+
+        $customerId = isset($context['customer_id']) ? (int) $context['customer_id'] : 0;
+        if ($customerId <= 0) {
+            return '';
+        }
+
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+        $safeColumn = urlGetCustomerSummaryColumn($context);
+        $sql = "SELECT `summary` FROM `" . $safeTable . "`
+                WHERE `status`='A' AND `" . $safeColumn . "`='" . $customerId . "'
+                  AND `summary` IS NOT NULL AND `summary` <> ''
+                ORDER BY `updated_at` DESC, `id` DESC
+                LIMIT 1";
+        $rst = mysqli_query($dbConnect, $sql);
+        if ($rst && $rst->num_rows > 0) {
+            $row = $rst->fetch_assoc();
+            return isset($row['summary']) ? trim((string) $row['summary']) : '';
+        }
+
+        return '';
+    }
+}
+
+if (!function_exists('urlGetCustomerSummary')) {
+    function urlGetCustomerSummary($dbConnect, $tblName, $context = array())
+    {
+        $customerId = isset($context['customer_id']) ? (int) $context['customer_id'] : 0;
+        if ($customerId <= 0 || !urlEnsureCustomerSummaryTable($dbConnect)) {
+            return urlGetLatestUserRecordLogSummary($dbConnect, $tblName, $context);
+        }
+
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', urlGetCustomerSummaryTableName());
+        $safeColumn = urlGetCustomerSummaryColumn($context);
+        $rst = mysqli_query($dbConnect, "SELECT `summary` FROM `" . $safeTable . "` WHERE `customer_column`='" . urlEsc($dbConnect, $safeColumn) . "' AND `customer_id`='" . $customerId . "' LIMIT 1");
+        if ($rst && $rst->num_rows > 0) {
+            $row = $rst->fetch_assoc();
+            return isset($row['summary']) ? trim((string) $row['summary']) : '';
+        }
+
+        // First read after the switch: adopt whatever the old logic was showing, and when
+        // that is empty also look at rows the box never displayed, so text the old save
+        // stranded on a hidden tag row is not lost.
+        $seed = urlGetLatestUserRecordLogSummary($dbConnect, $tblName, $context);
+        if ($seed === '') {
+            $seed = urlGetLatestUserRecordLogSummaryAnyRow($dbConnect, $tblName, $context);
+        }
+        if ($seed !== '') {
+            @mysqli_query($dbConnect, "INSERT IGNORE INTO `" . $safeTable . "` (`customer_column`, `customer_id`, `summary`, `created_at`, `updated_at`) VALUES ('" . urlEsc($dbConnect, $safeColumn) . "', '" . $customerId . "', '" . urlEsc($dbConnect, $seed) . "', NOW(), NOW())");
+        }
+
+        return $seed;
+    }
+}
+
+if (!function_exists('urlSaveCustomerSummary')) {
+    function urlSaveCustomerSummary($dbConnect, $tblName, $context, $summary)
+    {
+        $result = array('ok' => false, 'old' => '', 'sql' => '');
+        $customerId = isset($context['customer_id']) ? (int) $context['customer_id'] : 0;
+        if ($customerId <= 0 || !urlEnsureCustomerSummaryTable($dbConnect)) {
+            return $result;
+        }
+
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', urlGetCustomerSummaryTableName());
+        $safeColumn = urlGetCustomerSummaryColumn($context);
+        $actor = defined('USER_ID') ? (string) USER_ID : '';
+
+        $result['old'] = urlGetCustomerSummary($dbConnect, $tblName, $context);
+        // An empty summary is stored as NULL on purpose: the row still exists, so the box
+        // reads back empty instead of falling through to an older row's text.
+        $valueSql = ($summary !== '') ? ("'" . urlEsc($dbConnect, $summary) . "'") : 'NULL';
+        $result['sql'] = "INSERT INTO `" . $safeTable . "` (`customer_column`, `customer_id`, `summary`, `created_by`, `created_at`, `updated_by`, `updated_at`)
+            VALUES ('" . urlEsc($dbConnect, $safeColumn) . "', '" . $customerId . "', " . $valueSql . ", '" . urlEsc($dbConnect, $actor) . "', NOW(), '" . urlEsc($dbConnect, $actor) . "', NOW())
+            ON DUPLICATE KEY UPDATE `summary`=" . $valueSql . ", `updated_by`='" . urlEsc($dbConnect, $actor) . "', `updated_at`=NOW()";
+        $result['ok'] = (bool) mysqli_query($dbConnect, $result['sql']);
+
+        return $result;
+    }
+}
+
+if (!function_exists('urlSaveCustomerSummaryLegacy')) {
+    /**
+     * Fallback for databases where the summary row cannot be created (no CREATE
+     * permission). Writes the newest visible log row, which is how the box worked
+     * before it got a row of its own.
+     */
+    function urlSaveCustomerSummaryLegacy($dbConnect, $tblName, $context, $summary, &$saveResult)
+    {
+        $customerId = isset($context['customer_id']) ? (int) $context['customer_id'] : 0;
+        $customerColumn = urlGetCustomerSummaryColumn($context);
+        $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
+        if ($customerId <= 0 || $safeTable === '' || !urlUserRecordLogColumnExists($dbConnect, $tblName, 'summary')) {
+            return false;
+        }
+
+        $saveResult['old'] = urlGetLatestUserRecordLogSummary($dbConnect, $tblName, $context);
+
+        $where = "`status`='A' AND `" . $customerColumn . "`='" . $customerId . "'";
+        $logTypeColRst = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE 'log_type'");
+        if ($logTypeColRst && $logTypeColRst->num_rows > 0) {
+            $where .= " AND (log_type IS NULL OR log_type <> 'tag')";
+        }
+
+        $valueSql = ($summary !== '') ? ("'" . urlEsc($dbConnect, $summary) . "'") : 'NULL';
+        $actor = defined('USER_ID') ? (string) USER_ID : '';
+        $latestRst = mysqli_query($dbConnect, "SELECT `id` FROM `" . $safeTable . "` WHERE " . $where . " ORDER BY `updated_at` DESC, `id` DESC LIMIT 1");
+
+        if ($latestRst && $latestRst->num_rows > 0) {
+            $latestRow = $latestRst->fetch_assoc();
+            $sql = "UPDATE `" . $safeTable . "` SET `summary`=" . $valueSql . ", `updated_by`='" . urlEsc($dbConnect, $actor) . "', `updated_at`=NOW() WHERE `id`='" . (int) $latestRow['id'] . "'";
+        } else {
+            $sql = "INSERT INTO `" . $safeTable . "` (`" . $customerColumn . "`, `content`, `summary`, `created_by`, `created_at`, `updated_by`, `updated_at`, `status`) VALUES ('" . $customerId . "', '', " . $valueSql . ", '" . urlEsc($dbConnect, $actor) . "', NOW(), '" . urlEsc($dbConnect, $actor) . "', NOW(), 'A')";
+        }
+
+        $saveResult['sql'] = $sql;
+        return (bool) mysqli_query($dbConnect, $sql);
+    }
+}
+
 if (!function_exists('urlGetUserRecordLogMessageShortcutOptions')) {
     function urlGetUserRecordLogMessageShortcutOptions($dbConnect)
     {
@@ -2028,153 +2226,35 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
             if (urlGetUserRecordLogContentPlainText($summary) === '') {
                 $summary = '';
             }
-            $hasSummaryColumn = urlUserRecordLogColumnExists($dbConnect, $tblName, 'summary');
-            if (!$hasSummaryColumn) {
-                if ($urlIsFallback) {
-                    urlFallbackResponse('User record log summary field is not ready yet. Please run insert_table.php first.', false, $context['return_url']);
-                }
-                urlJsonResponse(array('ok' => 0, 'message' => 'User record log summary field is not ready yet. Please run insert_table.php first.'));
-            }
 
             $customerId = (int) $context['customer_id'];
-            $safeTable = preg_replace('/[^A-Za-z0-9_]/', '', (string) $tblName);
-            $safeCustomerColumn = preg_replace('/[^A-Za-z0-9_]/', '', (string) $customerColumn);
-            if ($safeCustomerColumn === '') {
-                $safeCustomerColumn = 'cust_id';
+            $saveResult = urlSaveCustomerSummary($dbConnect, $tblName, $context, $summary);
+            $ok = !empty($saveResult['ok']);
+            $savedTable = $ok ? urlGetCustomerSummaryTableName() : $tblName;
+
+            if (!$ok) {
+                // The summary row could not be created or written (missing CREATE
+                // permission on an older database). Keep the edit instead of losing it by
+                // writing the newest visible log row, which is how the box worked before.
+                $ok = urlSaveCustomerSummaryLegacy($dbConnect, $tblName, $context, $summary, $saveResult);
+                $savedTable = $tblName;
             }
 
-            // The Summary box reads from the newest non-tag row (see
-            // urlGetLatestUserRecordLogSummary), so the save has to target that same row.
-            // Tag changes are logged into this table as log_type='tag' rows and carry no
-            // summary; picking the plain newest row wrote the summary onto a hidden tag
-            // row, which is why the save reported success and the audit log showed the
-            // value change while the box stayed empty.
-            $latestWhere = "`status`='A' AND `" . $safeCustomerColumn . "`='" . $customerId . "'";
-            $latestLogTypeColRst = mysqli_query($dbConnect, "SHOW COLUMNS FROM `" . $safeTable . "` LIKE 'log_type'");
-            if ($latestLogTypeColRst && $latestLogTypeColRst->num_rows > 0) {
-                $latestWhere .= " AND (log_type IS NULL OR log_type <> 'tag')";
-            }
-
-            $latestSql = "SELECT * FROM `" . $safeTable . "` WHERE " . $latestWhere . " ORDER BY `updated_at` DESC, `id` DESC LIMIT 1";
-            $latestRst = mysqli_query($dbConnect, $latestSql);
-            $latestRow = ($latestRst && $latestRst->num_rows > 0) ? $latestRst->fetch_assoc() : array();
-
-            if (!empty($latestRow)) {
-                $latestId = isset($latestRow['id']) ? (int) $latestRow['id'] : 0;
-                $oldSummary = isset($latestRow['summary']) ? trim((string) $latestRow['summary']) : '';
-                $sql = "UPDATE `" . $safeTable . "` SET `summary`=" . ($summary !== '' ? ("'" . urlEsc($dbConnect, $summary) . "'") : 'NULL') . ", `updated_by`='" . urlEsc($dbConnect, USER_ID) . "', `updated_at`=NOW() WHERE `id`='" . $latestId . "'";
-                $ok = mysqli_query($dbConnect, $sql);
-
-                $editFields = array('summary');
-                $editOld = array($oldSummary);
-                $editNew = array($summary);
-                $customerAuditValue = $customerId > 0 ? (string) $customerId : 'Empty Value';
-                $baseEditActMsg = function_exists('actMsgLog')
-                    ? actMsgLog($latestId, $editFields, '', $editOld, $editNew, $tblName, 'Edit', (!empty($ok) ? '' : mysqli_error($dbConnect)))
-                    : (USER_NAME . ' edited User Record Log Summary [ID=' . $latestId . ']');
-                $editActMsg = rtrim($baseEditActMsg) . ' [' . $customerColumn . ' : ' . $customerAuditValue . ']';
-
-                $log = array(
-                    'log_act' => 'Edit',
-                    'cdate' => $GLOBALS['cdate'],
-                    'ctime' => $GLOBALS['ctime'],
-                    'uid' => USER_ID,
-                    'cby' => USER_ID,
-                    'query_rec' => $sql,
-                    'query_table' => $tblName,
-                    'oldval' => implodeWithComma($editOld),
-                    'changes' => implodeWithComma($editNew),
-                    'newval' => '',
-                    'act_msg' => $editActMsg,
-                    'page' => $pageTitle,
-                    'connect' => $connect,
-                );
-                audit_log($log);
-
-                if (!$ok) {
-                    if ($urlIsFallback) {
-                        urlFallbackResponse('Failed to save summary.', false, $context['return_url']);
-                    }
-                    urlJsonResponse(array('ok' => 0, 'message' => 'Failed to save summary.'));
-                }
-
-                if ($urlIsFallback) {
-                    urlFallbackResponse('Summary saved successfully.', true, $context['return_url']);
-                }
-                urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.', 'summary' => $summary));
-            }
-
-            if ($summary === '') {
-                if ($urlIsFallback) {
-                    urlFallbackResponse('Summary saved successfully.', true, $context['return_url']);
-                }
-                urlJsonResponse(array('ok' => 1, 'message' => 'Summary saved successfully.', 'summary' => $summary));
-            }
-
-            $insertColumns = array(
-                $customerColumn,
-                'content',
-                'attachment',
-                'summary',
-                'created_by',
-                'created_at',
-                'updated_by',
-                'updated_at',
-                'status',
-            );
-            $insertValues = array(
-                "'" . $customerId . "'",
-                "''",
-                "''",
-                "'" . urlEsc($dbConnect, $summary) . "'",
-                "'" . urlEsc($dbConnect, USER_ID) . "'",
-                'NOW()',
-                "'" . urlEsc($dbConnect, USER_ID) . "'",
-                'NOW()',
-                "'A'",
-            );
-
-            if (urlUserRecordLogColumnExists($dbConnect, $tblName, 'next_follow_up_date')) {
-                $insertColumns[] = 'next_follow_up_date';
-                $insertValues[] = 'NULL';
-            }
-            if (urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_times')) {
-                $insertColumns[] = 'follow_up_times';
-                $insertValues[] = 'NULL';
-            }
-            if (urlUserRecordLogColumnExists($dbConnect, $tblName, 'follow_up_day')) {
-                $insertColumns[] = 'follow_up_day';
-                $insertValues[] = 'NULL';
-            }
-
-            $sql = "INSERT INTO `" . $safeTable . "` (" . implode(', ', $insertColumns) . ") VALUES (" . implode(', ', $insertValues) . ")";
-            $ok = mysqli_query($dbConnect, $sql);
-            $newId = (int) $dbConnect->insert_id;
-
-            $addFields = array('summary');
-            $addNew = array($summary);
-            $customerAuditValue = $customerId > 0 ? (string) $customerId : 'Empty Value';
-            $baseAddActMsg = function_exists('actMsgLog')
-                ? actMsgLog($newId, $addFields, $addNew, '', '', $tblName, 'Add', (!empty($ok) ? '' : mysqli_error($dbConnect)))
-                : (USER_NAME . ' added User Record Log Summary [ID=' . $newId . ']');
-            $addActMsg = rtrim($baseAddActMsg) . ' [' . $customerColumn . ' : ' . $customerAuditValue . ']';
-
-            $log = array(
-                'log_act' => 'Add',
+            audit_log(array(
+                'log_act' => 'Edit',
                 'cdate' => $GLOBALS['cdate'],
                 'ctime' => $GLOBALS['ctime'],
                 'uid' => USER_ID,
                 'cby' => USER_ID,
-                'query_rec' => $sql,
-                'query_table' => $tblName,
-                'oldval' => '',
-                'changes' => '',
-                'newval' => implodeWithComma($addNew),
-                'act_msg' => $addActMsg,
+                'query_rec' => (string) $saveResult['sql'],
+                'query_table' => $savedTable,
+                'oldval' => (string) $saveResult['old'],
+                'changes' => $summary,
+                'newval' => '',
+                'act_msg' => USER_NAME . ' edited Customer Summary [' . $customerColumn . ' : ' . $customerId . ']',
                 'page' => $pageTitle,
                 'connect' => $connect,
-            );
-            audit_log($log);
+            ));
 
             if (!$ok) {
                 if ($urlIsFallback) {
@@ -2219,6 +2299,15 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
         $summary = urlNormalizeSubmittedUserRecordLogContent((string) post('summary'));
         if (urlGetUserRecordLogContentPlainText($summary) === '') {
             $summary = '';
+        }
+        // Editing the box and then submitting the entry (instead of Save Summary) would
+        // otherwise leave the box on its previous value. Only write when the text really
+        // changed and is not empty, so a broken editor cannot wipe a saved summary.
+        if ($summary !== '' && (int) $context['customer_id'] > 0 && function_exists('urlGetCustomerSummary')) {
+            $storedSummary = urlGetCustomerSummary($dbConnect, $tblName, $context);
+            if ($summary !== $storedSummary) {
+                urlSaveCustomerSummary($dbConnect, $tblName, $context, $summary);
+            }
         }
         $messageShortcutId = (int) post('message_shortcut_id');
         // Which follow-up case this entry belongs to; 0 means "let the module decide"
@@ -2841,7 +2930,7 @@ if (!function_exists('urlRenderUserRecordLogModule')) {
         }
         $pathReturn = isset($context['return_url']) ? (string) $context['return_url'] : '';
         $initialList = urlBuildListHtml($connect, $dbConnect, $tblName, $context);
-        $currentSummary = urlGetLatestUserRecordLogSummary($dbConnect, $tblName, $context);
+        $currentSummary = urlGetCustomerSummary($dbConnect, $tblName, $context);
         if ($dbConnect instanceof mysqli && defined('MESSAGE_SHORTCUTS') && function_exists('generateDBData')) {
             generateDBData((string) MESSAGE_SHORTCUTS, $dbConnect);
         }

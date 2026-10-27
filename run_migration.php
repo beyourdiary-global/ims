@@ -178,6 +178,24 @@ echo migAddColumn($connect, $dbName, TASK_COLUMN, 'on_enter_assignee_mode', "VAR
 // ---- 3) 任务5：标记 tag 类变更，列表过滤掉 ----
 echo migAddColumn($connect, $dbName, 'user_record_log', 'log_type', "VARCHAR(32) DEFAULT NULL COMMENT 'tag=标签变更，列表过滤掉'");
 
+// ---- 3.5) 客户 Summary 独立成行 ----
+// Summary 以前存在 user_record_log 的 summary 列上、靠「最新一行」流转，任何新行类型
+// （tag 变更、follow-up 同步）都会把值顶到看不见的行里。页面首次访问也会自建这张表，
+// 这里只是让正常跑一次迁移就完整。
+$customerSummaryTbl = defined('CUSTOMER_RECORD_SUMMARY') ? CUSTOMER_RECORD_SUMMARY : 'customer_record_summary';
+$createCustomerSummarySql = "CREATE TABLE IF NOT EXISTS `" . $customerSummaryTbl . "` (
+    `id` INT AUTO_INCREMENT PRIMARY KEY,
+    `customer_column` VARCHAR(32) NOT NULL,
+    `customer_id` INT NOT NULL,
+    `summary` LONGTEXT DEFAULT NULL,
+    `created_by` VARCHAR(64) DEFAULT NULL,
+    `created_at` DATETIME DEFAULT NULL,
+    `updated_by` VARCHAR(64) DEFAULT NULL,
+    `updated_at` DATETIME DEFAULT NULL,
+    UNIQUE KEY `uniq_customer_summary` (`customer_column`, `customer_id`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4";
+echo (mysqli_query($connect, $createCustomerSummarySql) ? "OK    ensured $customerSummaryTbl\n" : "ERROR creating $customerSummaryTbl: " . mysqli_error($connect) . "\n");
+
 // ---- 4) Facebook customer record birthday ----
 echo migAddColumn($connect, $dbName, 'customer_facebook_deals_transaction', 'birthday_year', "SMALLINT DEFAULT NULL COMMENT 'Customer birthday year'");
 echo migAddColumn($connect, $dbName, 'customer_facebook_deals_transaction', 'birthday_month', "TINYINT DEFAULT NULL COMMENT 'Customer birthday month 1-12'");

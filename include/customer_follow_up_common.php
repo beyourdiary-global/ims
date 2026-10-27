@@ -1384,18 +1384,21 @@ if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
                     NOW(),
                     'A'";
 
-        // The "Summary" box on the customer page always shows the summary column of the
-        // most recently created USER_RECORD_LOG row for this customer. Without carrying the
-        // existing summary forward here, this system-generated log row becomes the newest
-        // row with a blank summary, making an already-saved Summary appear to disappear.
+        // The box has its own row now, but the log entry still snapshots whatever the
+        // summary was when it was written, so the list can show it under that entry.
         if (function_exists('urlUserRecordLogColumnExists') && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'summary')) {
-            $existingSummary = function_exists('urlGetLatestUserRecordLogSummary')
-                ? urlGetLatestUserRecordLogSummary($connect, USER_RECORD_LOG, array(
-                    'customer_id' => $customerId,
-                    'customer_column' => $customerColumn,
-                    'customer_only' => true,
-                ))
-                : '';
+            $summaryContext = array(
+                'customer_id' => $customerId,
+                'customer_column' => $customerColumn,
+                'customer_only' => true,
+            );
+            if (function_exists('urlGetCustomerSummary')) {
+                $existingSummary = urlGetCustomerSummary($connect, USER_RECORD_LOG, $summaryContext);
+            } else {
+                $existingSummary = function_exists('urlGetLatestUserRecordLogSummary')
+                    ? urlGetLatestUserRecordLogSummary($connect, USER_RECORD_LOG, $summaryContext)
+                    : '';
+            }
 
             $insertColumns .= ", `summary`";
             $insertValues .= ",\n                    " . ($existingSummary !== '' ? ("'" . customerFollowUpEscape($connect, $existingSummary) . "'") : 'NULL');
