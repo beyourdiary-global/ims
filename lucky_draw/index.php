@@ -224,29 +224,12 @@ $wheelNoteText = $luckyDrawPaused
 $heroTitle = 'Lucky Draw';
 $heroSubtitle = 'Spin once during your birthday month to unlock a verified reward. Enter your username with your birth month and year and complete the claim flow if you win.';
 
-// Only prizes that are enabled, weighted, and actually in stock make it onto the wheel.
-// Zero stock means the prize does not exist, so it is dropped instead of blocking the draw.
-$wheelPrizes = array();
-foreach ($prizeRows as $prizeRowCandidate) {
-    if ((float) ($prizeRowCandidate['weight'] ?? 0) <= 0) {
-        continue;
-    }
-
-    $candidatePrizeId = isset($prizeRowCandidate['id']) ? (int) $prizeRowCandidate['id'] : 0;
-    $candidateReservedCount = (int) ($voucherStateCounts[$candidatePrizeId]['reserved'] ?? 0);
-    $candidateAssignedCount = (int) (($voucherStateCounts[$candidatePrizeId]['assigned'] ?? 0) + ($voucherStateCounts[$candidatePrizeId]['sent'] ?? 0));
-    $candidateAvailable = luckyDrawPrizeAvailableUnits(
-        $prizeRowCandidate,
-        (int) ($voucherAvailableCounts[$candidatePrizeId] ?? 0),
-        $candidateReservedCount,
-        $candidateAssignedCount
-    );
-    if ($candidateAvailable <= 0) {
-        continue;
-    }
-
-    $wheelPrizes[] = $prizeRowCandidate;
-}
+// The wheel must only advertise prizes the draw would actually accept. luckyDrawResolveDrawPool
+// is the same resolver the submission path uses, so the wheel can no longer show a prize whose
+// warehouse shelf is empty and then refuse the winner at claim time.
+$drawPool = luckyDrawResolveDrawPool($connect, $finance_connect, $prizeRows);
+$wheelPrizes = $drawPool['drawable'];
+$drawAvailable = !empty($wheelPrizes) && empty($luckyDrawPaused);
 
 $featuredPrizes = array_slice($wheelPrizes, 0, 4);
 $segmentCount = count($wheelPrizes);
@@ -377,6 +360,9 @@ $howItWorks = array(
                         <?php } else if ($hasParticipated) { ?>
                             <p>You already participated the lucky draw. If your claim is still pending, continue below to complete it.</p>
                             <div class="ld-empty-state">You already participated the lucky draw.</div>
+                        <?php } else if (!$drawAvailable) { ?>
+                            <p>The prize pool is being restocked. Nothing can be won this moment, so we are not taking entries yet.</p>
+                            <div class="ld-empty-state">No prize is available right now. Please check back soon.</div>
                         <?php } else { ?>
                             <p>Fill in your username and pick your birth month and year, then spin the wheel.</p>
                             <form class="ld-form" id="luckyDrawForm">

@@ -11,6 +11,19 @@ $pinAccess = luckyDrawAdminPinAccess($connect);
 luckyDrawRequireAdminAction($connect, 'View', $pinAccess);
 
 $readiness = luckyDrawReadiness($connect, $finance_connect);
+
+// The public draw is gated on the same resolver the wheel uses, so when it returns nothing the
+// campaign is effectively closed. Surface that as an actionable restock list instead of leaving
+// the operator to work it out from the readiness table.
+$dashboardDrawPool = luckyDrawResolveDrawPool($connect, $finance_connect, luckyDrawFetchPrizeRows($connect, true));
+$drawablePrizeCount = count($dashboardDrawPool['drawable']);
+$restockPrizeRows = array();
+foreach ($dashboardDrawPool['blocked'] as $blockedEntry) {
+    if (($blockedEntry['reason'] ?? '') === 'warehouse_stock') {
+        $restockPrizeRows[] = $blockedEntry;
+    }
+}
+
 $isLuckyDrawSuperAdmin = (int) USER_GROUP === 1;
 $hiddenReadinessKeys = array(
     'table_' . LUCKY_DRAW_PRIZE,
@@ -93,6 +106,72 @@ luckyDrawAdminRenderPageStart($pageTitle, 'dashboard');
         <h3><?= (int) $stats['virtual_rows'] ?></h3>
     </div>
 </div>
+
+<?php if ($drawablePrizeCount <= 0 || !empty($restockPrizeRows)) { ?>
+<div class="lucky-draw-card mb-4">
+    <div class="d-flex justify-content-between align-items-center mb-3">
+        <div>
+            <h4 class="mb-1"><?= $drawablePrizeCount <= 0 ? 'The draw is closed until a prize is restocked' : 'Some prizes cannot be shipped yet' ?></h4>
+            <p class="text-muted mb-0">
+                <?php if ($drawablePrizeCount <= 0) { ?>
+                    No prize can be drawn right now, so visitors see the restock notice instead of the entry form. Add stock to at least one prize to reopen the draw.
+                <?php } else { ?>
+                    The draw still runs on the <?= (int) $drawablePrizeCount ?> prize(s) with stock. The prizes below are held out until their warehouse has stock.
+                <?php } ?>
+            </p>
+        </div>
+        <span class="badge bg-warning"><?= $drawablePrizeCount <= 0 ? 'Closed' : 'Restock needed' ?></span>
+    </div>
+    <?php if (!empty($restockPrizeRows)) { ?>
+        <div class="table-responsive">
+            <table class="table table-sm lucky-draw-admin-table align-middle mb-0">
+                <thead>
+                    <tr>
+                        <th>Prize</th>
+                        <th>Warehouse</th>
+                        <th>Shortage</th>
+                        <th>Action</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <?php foreach ($restockPrizeRows as $restockEntry) { ?>
+                        <?php
+                        $restockPrize = isset($restockEntry['prize']) && is_array($restockEntry['prize']) ? $restockEntry['prize'] : array();
+                        $restockPrizeId = (int) ($restockPrize['id'] ?? 0);
+                        $restockShortageParts = array();
+                        foreach ((array) ($restockEntry['shortages'] ?? array()) as $restockShortage) {
+                            if (!is_array($restockShortage)) {
+                                continue;
+                            }
+                            $restockLabel = trim((string) ($restockShortage['product_label'] ?? ''));
+                            if ($restockLabel === '') {
+                                $restockLabel = 'Product #' . (int) ($restockShortage['product_id'] ?? 0);
+                            }
+                            $restockShortageParts[] = $restockLabel
+                                . ' (need ' . (int) ($restockShortage['required_qty'] ?? 0)
+                                . ', have ' . (int) ($restockShortage['available_qty'] ?? 0) . ')';
+                        }
+                        ?>
+                        <tr>
+                            <td>
+                                <div class="fw-semibold"><?= htmlspecialchars((string) ($restockPrize['prize_name'] ?? ('#' . $restockPrizeId)), ENT_QUOTES, 'UTF-8') ?></div>
+                                <small class="text-muted">Campaign stock: <?= (int) ($restockEntry['available_units'] ?? 0) ?></small>
+                            </td>
+                            <td><?= htmlspecialchars(trim((string) ($restockEntry['warehouse_name'] ?? '')) !== '' ? (string) $restockEntry['warehouse_name'] : 'Not configured', ENT_QUOTES, 'UTF-8') ?></td>
+                            <td><?= htmlspecialchars(!empty($restockShortageParts) ? implode('; ', $restockShortageParts) : (string) ($restockEntry['detail'] ?? ''), ENT_QUOTES, 'UTF-8') ?></td>
+                            <td>
+                                <?php if ($restockPrizeId > 0) { ?>
+                                    <a class="btn btn-sm btn-outline-primary" href="<?= htmlspecialchars(siteUrlWithQuery(ROUTE_LUCKY_DRAW_ADMIN_PRIZES, array('id' => $restockPrizeId, 'act' => 'E')), ENT_QUOTES, 'UTF-8') ?>">Open prize</a>
+                                <?php } ?>
+                            </td>
+                        </tr>
+                    <?php } ?>
+                </tbody>
+            </table>
+        </div>
+    <?php } ?>
+</div>
+<?php } ?>
 
 <div class="lucky-draw-card mb-4">
     <div class="d-flex justify-content-between align-items-center mb-3">

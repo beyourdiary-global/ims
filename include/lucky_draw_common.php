@@ -1158,6 +1158,124 @@ if (!function_exists('luckyDrawPublicStockUnavailableMessage')) {
     }
 }
 
+if (!function_exists('luckyDrawResolveDrawPool')) {
+    /**
+     * The single answer to "which prizes can actually be drawn right now".
+     *
+     * The wheel, the draw submission and the admin dashboard all used to work this out
+     * separately, and only the submission path asked the warehouse. A prize whose shelf was
+     * empty therefore stayed advertised on the wheel and only failed after the customer had
+     * already typed an email. One shared resolver means the page can never promise something
+     * the draw would refuse.
+     *
+     * A prize is drawable when the campaign still has units AND, for a physical prize, the
+     * warehouse that ships it has stock on the shelf.
+     *
+     * @return array{drawable: array, blocked: array, drawable_ids: array}
+     */
+    function luckyDrawResolveDrawPool($connect, $financeConnect, $prizeRows)
+    {
+        $prizeRows = is_array($prizeRows) ? $prizeRows : array();
+        $pool = array('drawable' => array(), 'blocked' => array());
+
+        if (empty($prizeRows)) {
+            return $pool + array('drawable_ids' => array());
+        }
+
+        $voucherAvailableCounts = luckyDrawVoucherAvailableCounts($connect);
+        $voucherStateCounts = luckyDrawVoucherStateCounts($connect);
+
+        foreach ($prizeRows as $prizeRow) {
+            if (!is_array($prizeRow)) {
+                continue;
+            }
+
+            $prizeId = isset($prizeRow['id']) ? (int) $prizeRow['id'] : 0;
+            if ($prizeId <= 0) {
+                continue;
+            }
+
+            $prizeType = strtolower(trim((string) ($prizeRow['prize_type'] ?? '')));
+            $voucherReservedCount = (int) ($voucherStateCounts[$prizeId]['reserved'] ?? 0);
+            $voucherAssignedCount = (int) (($voucherStateCounts[$prizeId]['assigned'] ?? 0) + ($voucherStateCounts[$prizeId]['sent'] ?? 0));
+            $availableUnits = luckyDrawPrizeAvailableUnits(
+                $prizeRow,
+                (int) ($voucherAvailableCounts[$prizeId] ?? 0),
+                $voucherReservedCount,
+                $voucherAssignedCount
+            );
+
+            // A zero weight means the operator never meant this prize to be won.
+            if ((float) ($prizeRow['weight'] ?? 0) <= 0) {
+                $pool['blocked'][] = array(
+                    'prize' => $prizeRow,
+                    'reason' => 'weight',
+                    'detail' => 'Weight is 0, so this prize is not part of the draw.',
+                );
+                continue;
+            }
+
+            $defaultsCheck = luckyDrawValidatePrizeDefaults($prizeRow);
+            if (empty($defaultsCheck['success'])) {
+                $pool['blocked'][] = array(
+                    'prize' => $prizeRow,
+                    'reason' => 'config',
+                    'detail' => (string) ($defaultsCheck['message'] ?? 'Prize is not configured completely.'),
+                );
+                continue;
+            }
+
+            $voucherConfigCheck = luckyDrawValidateVoucherPrizeStockConfig($prizeRow);
+            if (empty($voucherConfigCheck['success'])) {
+                $pool['blocked'][] = array(
+                    'prize' => $prizeRow,
+                    'reason' => 'config',
+                    'detail' => (string) ($voucherConfigCheck['message'] ?? 'Prize is not configured completely.'),
+                );
+                continue;
+            }
+
+            if ($availableUnits <= 0) {
+                $pool['blocked'][] = array(
+                    'prize' => $prizeRow,
+                    'reason' => 'campaign_stock',
+                    'detail' => 'No campaign stock left, so this prize is not part of the draw.',
+                );
+                continue;
+            }
+
+            // The warehouse is the part the old wheel forgot to ask.
+            if ($prizeType === 'physical') {
+                $warehouseStockCheck = luckyDrawValidatePhysicalPrizeStock($connect, $financeConnect, $prizeRow);
+                if (empty($warehouseStockCheck['success'])) {
+                    $pool['blocked'][] = array(
+                        'prize' => $prizeRow,
+                        'reason' => 'warehouse_stock',
+                        'detail' => (string) ($warehouseStockCheck['message'] ?? 'The warehouse cannot ship this prize.'),
+                        'available_units' => $availableUnits,
+                        'warehouse_id' => isset($warehouseStockCheck['warehouse_id']) ? (int) $warehouseStockCheck['warehouse_id'] : 0,
+                        'warehouse_name' => isset($warehouseStockCheck['warehouse_name']) ? (string) $warehouseStockCheck['warehouse_name'] : '',
+                        'shortages' => isset($warehouseStockCheck['shortages']) && is_array($warehouseStockCheck['shortages'])
+                            ? $warehouseStockCheck['shortages']
+                            : array(),
+                    );
+                    continue;
+                }
+            }
+
+            $pool['drawable'][] = $prizeRow;
+        }
+
+        $drawableIds = array();
+        foreach ($pool['drawable'] as $drawableRow) {
+            $drawableIds[] = (int) $drawableRow['id'];
+        }
+        $pool['drawable_ids'] = $drawableIds;
+
+        return $pool;
+    }
+}
+
 if (!function_exists('luckyDrawUrbanRegisteredCount')) {
     function luckyDrawUrbanRegisteredCount($connect)
     {
@@ -2247,7 +2365,10 @@ if (!function_exists('luckyDrawCreateReservation')) {
             }
 
             if (empty($eligiblePrizeRows)) {
-                throw new Exception('No prize is available right now. Please try again later.');
+                // Every configured prize is either out of campaign stock or cannot be shipped from
+                // its warehouse. This is an operator-side restock problem, so the wording must not
+                // suggest the visitor did something wrong.
+                throw new Exception('The prize pool is being restocked right now. Please check back soon.');
             }
 
             $selectedPrize = luckyDrawPickWeightedPrize($eligiblePrizeRows);
