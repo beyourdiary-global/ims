@@ -6415,6 +6415,11 @@ if (!function_exists('memberPointRunMonthlyTierCron')) {
         }
         $platforms = array('shopee', 'lazada');
         $bonusPeriodMeta = memberPointGetBonusPeriodMeta('monthly', $asOfDate);
+        // The tier level is judged on the lifetime qualifying amount, so replaying an old
+        // month must not roll a member back to the level they held at that time. Only the
+        // bonus window follows the requested month.
+        $tierAsOfDate = $requestedBonusMonth !== '' ? date('Y-m-d') : $asOfDate;
+        $tierEvaluatedMonth = $requestedBonusMonth !== '' ? date('Y-m') : $bonusMonth;
         $resultSummary = array(
             'success' => true,
             'bonus_month' => $bonusMonth,
@@ -6436,7 +6441,7 @@ if (!function_exists('memberPointRunMonthlyTierCron')) {
                     continue;
                 }
 
-                $qualifyingSummary = memberPointCalculateQualifyingSummaryAsOf($connect, $financeConnect, $platform, $customerId, $customerRow, $asOfDate);
+                $qualifyingSummary = memberPointCalculateQualifyingSummaryAsOf($connect, $financeConnect, $platform, $customerId, $customerRow, $tierAsOfDate);
                 $tierMeta = memberPointResolveTierMeta(isset($qualifyingSummary['qualifying_amount']) ? (float) $qualifyingSummary['qualifying_amount'] : 0);
                 $customerLabel = memberPointResolveCustomerDisplayName($customerRow, $platform);
                 $previousState = memberPointFetchMemberState($connect, $platform, $customerId);
@@ -6449,7 +6454,7 @@ if (!function_exists('memberPointRunMonthlyTierCron')) {
                     $customerLabel,
                     $tierMeta,
                     isset($qualifyingSummary['qualifying_amount']) ? (float) $qualifyingSummary['qualifying_amount'] : 0,
-                    $bonusMonth
+                    $tierEvaluatedMonth
                 );
                 if (empty($stateResult['success'])) {
                     $resultSummary['errors'][] = ucfirst($platform) . ' #' . $customerId . ': ' . (string) ($stateResult['message'] ?? 'Unable to save member tier state.');
