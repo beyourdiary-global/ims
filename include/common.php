@@ -6406,8 +6406,12 @@ if (!function_exists('memberPointRunMonthlyTierCron')) {
             $bonusMonth = isset($monthRange['month_key']) ? (string) $monthRange['month_key'] : '';
             $asOfDate = isset($monthRange['end_date']) ? (string) $monthRange['end_date'] : date('Y-m-d');
         } else {
-            $bonusMonth = date('Y-m');
-            $asOfDate = date('Y-m-d');
+            // A repurchase reward needs a whole month of orders to judge, so settle the
+            // latest month that has already finished. Reading the calendar month instead
+            // would look at a month that has barely started when the cron runs on the 1st.
+            $settleMonth = new DateTimeImmutable('first day of last month');
+            $bonusMonth = $settleMonth->format('Y-m');
+            $asOfDate = $settleMonth->format('Y-m-t');
         }
         $platforms = array('shopee', 'lazada');
         $bonusPeriodMeta = memberPointGetBonusPeriodMeta('monthly', $asOfDate);
