@@ -24,6 +24,8 @@ echo "Members checked: " . (int) ($cronResult['members_checked'] ?? 0) . "\n";
 echo "Tier upgrades: " . (int) ($cronResult['upgrades'] ?? 0) . "\n";
 echo "Bonus created: " . (int) ($cronResult['bonus_created'] ?? 0) . "\n";
 echo "Bonus updated: " . (int) ($cronResult['bonus_updated'] ?? 0) . "\n";
+echo "Bonus skipped (no purchase in month): " . (int) ($cronResult['bonus_skipped'] ?? 0) . "\n";
+echo "Bonus retracted (was not earned): " . (int) ($cronResult['bonus_retracted'] ?? 0) . "\n";
 
 $errors = isset($cronResult['errors']) && is_array($cronResult['errors']) ? $cronResult['errors'] : array();
 if (!empty($errors)) {

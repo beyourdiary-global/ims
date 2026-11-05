@@ -6180,6 +6180,70 @@ if (!function_exists('memberPointRefreshAllActiveMemberStates')) {
     }
 }
 
+if (!function_exists('memberPointResolveTierBonusEligibility')) {
+    /**
+     * Decides whether a tier bonus is earned for the given period.
+     *
+     * The tier bonus is a repurchase reward: it only lands when the customer
+     * actually bought something in that period (by default RM300 spent or two
+     * orders, the same numbers the Monthly Purchase Bonus uses). Awarding it on
+     * a fixed schedule instead made every dormant member keep collecting it.
+     *
+     * @return array{eligible: bool, amount: float, times: int, reason: string}
+     */
+    function memberPointResolveTierBonusEligibility($connect, $financeConnect, $platform, $customerId, $customerRow, $periodMeta)
+    {
+        $eligibility = array(
+            'eligible' => false,
+            'amount' => 0.0,
+            'times' => 0,
+            'reason' => '',
+        );
+
+        $startDate = trim((string) ($periodMeta['start_date'] ?? ''));
+        $endDate = trim((string) ($periodMeta['end_date'] ?? ''));
+        if ($startDate === '' || $endDate === '') {
+            $eligibility['reason'] = 'Missing bonus period.';
+            return $eligibility;
+        }
+
+        $purchaseSummary = memberPointCalculatePeriodPurchaseSummary(
+            $connect,
+            $financeConnect,
+            $platform,
+            $customerId,
+            $customerRow,
+            $startDate,
+            $endDate
+        );
+        $purchaseAmount = round(max(0, (float) ($purchaseSummary['purchase_amount'] ?? 0)), 2);
+        $purchaseTimes = max(0, (int) ($purchaseSummary['purchase_times'] ?? 0));
+        $eligibility['amount'] = $purchaseAmount;
+        $eligibility['times'] = $purchaseTimes;
+
+        $specialConfigs = memberPointGetSpecialBonusConfigs();
+        $purchaseConfig = isset($specialConfigs['monthly_purchase']) ? $specialConfigs['monthly_purchase'] : array();
+        $minimumAmount = max(0, (float) ($purchaseConfig['minimum_purchase_amount'] ?? 300));
+        $minimumTimes = max(0, (int) ($purchaseConfig['minimum_purchase_times'] ?? 2));
+
+        if ($minimumAmount <= 0 && $minimumTimes <= 0) {
+            // No threshold configured: any purchase in the period is enough.
+            $eligibility['eligible'] = $purchaseTimes > 0;
+        } else {
+            $eligibility['eligible'] = ($minimumAmount > 0 && $purchaseAmount >= $minimumAmount)
+                || ($minimumTimes > 0 && $purchaseTimes >= $minimumTimes);
+        }
+
+        if (!$eligibility['eligible']) {
+            $eligibility['reason'] = $purchaseTimes > 0
+                ? ('Spent RM' . number_format($purchaseAmount, 2, '.', '') . ' in ' . $startDate . ' to ' . $endDate . ', below the tier bonus target.')
+                : ('No purchase in ' . $startDate . ' to ' . $endDate . '.');
+        }
+
+        return $eligibility;
+    }
+}
+
 if (!function_exists('memberPointUpsertTierBonusTransaction')) {
     function memberPointUpsertTierBonusTransaction($connect, $platform, $customerId, $customerLabel, $tierMeta, $bonusMonth, $qualifyingAmount)
     {
@@ -6246,6 +6310,8 @@ if (!function_exists('memberPointApplySpecialBonusTransactions')) {
         $specialConfigs = memberPointGetSpecialBonusConfigs();
         $monthlyPeriodMeta = memberPointGetBonusPeriodMeta('monthly', $asOfDate);
 
+        // The birthday bonus is deliberately not gated by the tier bonus eligibility
+        // above: it belongs to the birthday month, not to a purchase in the run month.
         if (isset($specialConfigs['birthday'])) {
             $birthdayConfig = $specialConfigs['birthday'];
             $birthdayMonth = memberPointResolveUrbanismBirthdayMonth($connect, $customerLabel);
@@ -6344,6 +6410,7 @@ if (!function_exists('memberPointRunMonthlyTierCron')) {
             $asOfDate = date('Y-m-d');
         }
         $platforms = array('shopee', 'lazada');
+        $bonusPeriodMeta = memberPointGetBonusPeriodMeta('monthly', $asOfDate);
         $resultSummary = array(
             'success' => true,
             'bonus_month' => $bonusMonth,
@@ -6352,6 +6419,8 @@ if (!function_exists('memberPointRunMonthlyTierCron')) {
             'upgrades' => 0,
             'bonus_created' => 0,
             'bonus_updated' => 0,
+            'bonus_skipped' => 0,
+            'bonus_retracted' => 0,
             'errors' => array(),
         );
 
@@ -6387,12 +6456,31 @@ if (!function_exists('memberPointRunMonthlyTierCron')) {
                     $resultSummary['upgrades']++;
                 }
 
+                // The tier bonus is a repurchase reward, so it only lands for a month the
+                // customer actually bought in. monthPointUpsertTierBonusTransaction writes
+                // zero-and-delete when the points are zero, which also retracts a bonus that
+                // an earlier run handed out for a month with no purchase.
+                $tierBonusEligibility = memberPointResolveTierBonusEligibility(
+                    $connect,
+                    $financeConnect,
+                    $platform,
+                    $customerId,
+                    $customerRow,
+                    $bonusPeriodMeta
+                );
+                $tierBonusMeta = $tierMeta;
+                if (empty($tierBonusEligibility['eligible'])) {
+                    $tierBonusMeta['bonus_points'] = 0;
+                    $tierBonusMeta['monthly_bonus_points'] = 0;
+                    $resultSummary['bonus_skipped']++;
+                }
+
                 $bonusResult = memberPointUpsertTierBonusTransaction(
                     $connect,
                     $platform,
                     $customerId,
                     $customerLabel,
-                    $tierMeta,
+                    $tierBonusMeta,
                     $bonusMonth,
                     isset($qualifyingSummary['qualifying_amount']) ? (float) $qualifyingSummary['qualifying_amount'] : 0
                 );
@@ -6405,6 +6493,8 @@ if (!function_exists('memberPointRunMonthlyTierCron')) {
                     $resultSummary['bonus_created']++;
                 } elseif (($bonusResult['action'] ?? '') === 'updated') {
                     $resultSummary['bonus_updated']++;
+                } elseif (($bonusResult['action'] ?? '') === 'deleted') {
+                    $resultSummary['bonus_retracted']++;
                 }
 
                 $specialBonusResult = memberPointApplySpecialBonusTransactions($connect, $financeConnect, $platform, $customerRow, $asOfDate);
