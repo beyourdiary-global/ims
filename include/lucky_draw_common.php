@@ -1176,7 +1176,9 @@ if (!function_exists('luckyDrawResolveDrawPool')) {
     function luckyDrawResolveDrawPool($connect, $financeConnect, $prizeRows)
     {
         $prizeRows = is_array($prizeRows) ? $prizeRows : array();
-        $pool = array('drawable' => array(), 'blocked' => array());
+        // available_by_id exists so callers that only want to print "Availability: N" on the
+        // dashboard do not have to recompute the voucher arithmetic a second time.
+        $pool = array('drawable' => array(), 'blocked' => array(), 'available_by_id' => array());
 
         if (empty($prizeRows)) {
             return $pool + array('drawable_ids' => array());
@@ -1204,6 +1206,7 @@ if (!function_exists('luckyDrawResolveDrawPool')) {
                 $voucherReservedCount,
                 $voucherAssignedCount
             );
+            $pool['available_by_id'][$prizeId] = $availableUnits;
 
             // A zero weight means the operator never meant this prize to be won.
             if ((float) ($prizeRow['weight'] ?? 0) <= 0) {
@@ -1211,6 +1214,7 @@ if (!function_exists('luckyDrawResolveDrawPool')) {
                     'prize' => $prizeRow,
                     'reason' => 'weight',
                     'detail' => 'Weight is 0, so this prize is not part of the draw.',
+                    'available_units' => $availableUnits,
                 );
                 continue;
             }
@@ -1221,6 +1225,7 @@ if (!function_exists('luckyDrawResolveDrawPool')) {
                     'prize' => $prizeRow,
                     'reason' => 'config',
                     'detail' => (string) ($defaultsCheck['message'] ?? 'Prize is not configured completely.'),
+                    'available_units' => $availableUnits,
                 );
                 continue;
             }
@@ -1231,6 +1236,7 @@ if (!function_exists('luckyDrawResolveDrawPool')) {
                     'prize' => $prizeRow,
                     'reason' => 'config',
                     'detail' => (string) ($voucherConfigCheck['message'] ?? 'Prize is not configured completely.'),
+                    'available_units' => $availableUnits,
                 );
                 continue;
             }
@@ -1240,6 +1246,7 @@ if (!function_exists('luckyDrawResolveDrawPool')) {
                     'prize' => $prizeRow,
                     'reason' => 'campaign_stock',
                     'detail' => 'No campaign stock left, so this prize is not part of the draw.',
+                    'available_units' => $availableUnits,
                 );
                 continue;
             }
@@ -1395,59 +1402,74 @@ if (!function_exists('luckyDrawReadiness')) {
                 : ($voucherPoolSummary['total'] . ' code(s): ' . $voucherPoolSummary['available'] . ' available, ' . $voucherPoolSummary['reserved'] . ' reserved, ' . $voucherPoolSummary['assigned'] . ' assigned. Every winner is issued their own code.'),
         );
 
+        // Readiness reports on the draw pool, so it asks the resolver instead of working the
+        // rule out again. It used to skip the weight check entirely, which let a weight-0 prize
+        // show up as ready while the draw would have refused it.
         $prizeRows = luckyDrawFetchPrizeRows($connect, true);
-        $voucherCounts = luckyDrawVoucherAvailableCounts($connect);
-        $voucherStateCounts = luckyDrawVoucherStateCounts($connect);
-        $readyPrizeCount = 0;
-        $skippedPrizeCount = 0;
+        $drawPool = luckyDrawResolveDrawPool($connect, $financeConnect, $prizeRows);
+        $readyPrizeCount = count($drawPool['drawable']);
+
+        $prizeRowsById = array();
         foreach ($prizeRows as $prizeRow) {
             $prizeId = isset($prizeRow['id']) ? (int) $prizeRow['id'] : 0;
-            $voucherReservedCount = (int) ($voucherStateCounts[$prizeId]['reserved'] ?? 0);
-            $voucherAssignedCount = (int) (($voucherStateCounts[$prizeId]['assigned'] ?? 0) + ($voucherStateCounts[$prizeId]['sent'] ?? 0));
-            $availability = luckyDrawPrizeAvailableUnits(
-                $prizeRow,
-                isset($voucherCounts[$prizeId]) ? (int) $voucherCounts[$prizeId] : 0,
-                $voucherReservedCount,
-                $voucherAssignedCount
-            );
+            if ($prizeId > 0) {
+                $prizeRowsById[$prizeId] = $prizeRow;
+            }
+        }
 
-            // Zero available stock means the prize does not exist. It is neither usable
-            // nor an error, so it must never block the rest of the draw.
-            if ($availability <= 0) {
+        foreach ($drawPool['drawable'] as $drawableRow) {
+            $prizeId = isset($drawableRow['id']) ? (int) $drawableRow['id'] : 0;
+            $items[] = array(
+                'key' => 'prize_' . $prizeId,
+                'label' => 'Prize: ' . (isset($drawableRow['prize_name']) ? $drawableRow['prize_name'] : ('#' . $prizeId)),
+                'success' => true,
+                'detail' => 'Availability: ' . (int) ($drawPool['available_by_id'][$prizeId] ?? 0),
+            );
+        }
+
+        // A prize with no campaign stock simply does not exist. It is neither usable nor an
+        // error, so it is summarised in one line instead of being flagged prize by prize.
+        $skippedPrizeCount = 0;
+        foreach ($drawPool['blocked'] as $blockedEntry) {
+            if (($blockedEntry['reason'] ?? '') === 'campaign_stock') {
                 $skippedPrizeCount++;
                 continue;
             }
 
-            $defaultsCheck = luckyDrawValidatePrizeDefaults($prizeRow);
-            $stockCheck = array('success' => true, 'message' => '');
-            $voucherConfigCheck = luckyDrawValidateVoucherPrizeStockConfig($prizeRow);
-            if (strtolower((string) ($prizeRow['prize_type'] ?? '')) === 'physical') {
-                $stockCheck = luckyDrawValidatePhysicalPrizeStock($connect, $financeConnect, $prizeRow);
+            $blockedPrize = isset($blockedEntry['prize']) && is_array($blockedEntry['prize']) ? $blockedEntry['prize'] : array();
+            $blockedPrizeId = (int) ($blockedPrize['id'] ?? 0);
+            $detailParts = array('Availability: ' . (int) ($blockedEntry['available_units'] ?? 0));
+            $detailParts[] = (string) ($blockedEntry['detail'] ?? 'This prize is not part of the draw.');
+            if (($blockedEntry['reason'] ?? '') === 'warehouse_stock') {
+                $shortageParts = array();
+                foreach ((array) ($blockedEntry['shortages'] ?? array()) as $shortage) {
+                    if (!is_array($shortage)) {
+                        continue;
+                    }
+                    $shortageLabel = trim((string) ($shortage['product_label'] ?? ''));
+                    if ($shortageLabel === '') {
+                        $shortageLabel = 'Product #' . (int) ($shortage['product_id'] ?? 0);
+                    }
+                    $shortageParts[] = $shortageLabel
+                        . ' (need ' . (int) ($shortage['required_qty'] ?? 0)
+                        . ', have ' . (int) ($shortage['available_qty'] ?? 0) . ')';
+                }
+                if (!empty($shortageParts)) {
+                    $detailParts[] = 'Short by: ' . implode('; ', $shortageParts);
+                }
+                $warehouseName = trim((string) ($blockedEntry['warehouse_name'] ?? ''));
+                if ($warehouseName !== '') {
+                    $detailParts[] = 'Warehouse: ' . $warehouseName;
+                }
             }
-
-            $prizeReady = !empty($defaultsCheck['success']) && !empty($stockCheck['success']) && !empty($voucherConfigCheck['success']);
-            if ($prizeReady) {
-                $readyPrizeCount++;
-            }
-
-            $detailParts = array('Availability: ' . $availability);
-            if (empty($voucherConfigCheck['success'])) {
-                $detailParts[] = $voucherConfigCheck['message'];
-            }
-            if (empty($defaultsCheck['success'])) {
-                $detailParts[] = $defaultsCheck['message'];
-            }
-            if (empty($stockCheck['success'])) {
-                $detailParts[] = $stockCheck['message'];
-            }
-            if (!$prizeReady) {
-                $detailParts[] = 'This prize is skipped in the draw until it is fixed.';
-            }
+            $detailParts[] = 'This prize is skipped in the draw until it is fixed.';
 
             $items[] = array(
-                'key' => 'prize_' . $prizeId,
-                'label' => 'Prize: ' . (isset($prizeRow['prize_name']) ? $prizeRow['prize_name'] : ('#' . $prizeId)),
-                'success' => $prizeReady,
+                'key' => 'prize_' . $blockedPrizeId,
+                'label' => 'Prize: ' . (isset($prizeRowsById[$blockedPrizeId]['prize_name'])
+                    ? $prizeRowsById[$blockedPrizeId]['prize_name']
+                    : ('#' . $blockedPrizeId)),
+                'success' => false,
                 'detail' => implode(' | ', $detailParts),
             );
         }
