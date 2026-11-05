@@ -2313,56 +2313,11 @@ if (!function_exists('luckyDrawCreateReservation')) {
                 }
             }
 
-            $voucherAvailableCounts = array();
-            $voucherPrizeIds = array();
-            foreach ($prizeRows as $prizeRow) {
-                $prizeId = isset($prizeRow['id']) ? (int) $prizeRow['id'] : 0;
-                if ($prizeId > 0 && strtolower((string) ($prizeRow['prize_type'] ?? '')) === 'voucher') {
-                    $voucherPrizeIds[] = $prizeId;
-                }
-            }
-            $voucherStateCounts = luckyDrawVoucherStateCounts($connect, $voucherPrizeIds, true);
-            foreach ($voucherStateCounts as $prizeId => $stateCounts) {
-                $voucherAvailableCounts[(int) $prizeId] = (int) ($stateCounts['available'] ?? 0);
-            }
-
-            $eligiblePrizeRows = array();
-            foreach ($prizeRows as $prizeRow) {
-                $prizeId = isset($prizeRow['id']) ? (int) $prizeRow['id'] : 0;
-                $voucherReservedCount = (int) ($voucherStateCounts[$prizeId]['reserved'] ?? 0);
-                $voucherAssignedCount = (int) (($voucherStateCounts[$prizeId]['assigned'] ?? 0) + ($voucherStateCounts[$prizeId]['sent'] ?? 0));
-                $availableUnits = luckyDrawPrizeAvailableUnits(
-                    $prizeRow,
-                    isset($voucherAvailableCounts[$prizeId]) ? (int) $voucherAvailableCounts[$prizeId] : 0,
-                    $voucherReservedCount,
-                    $voucherAssignedCount
-                );
-
-                // Zero available stock means the prize does not exist, so it is skipped silently
-                // instead of surfacing as a broken configuration to the customer.
-                if ((float) ($prizeRow['weight'] ?? 0) <= 0 || $availableUnits <= 0) {
-                    continue;
-                }
-
-                $defaultsCheck = luckyDrawValidatePrizeDefaults($prizeRow);
-                $voucherConfigCheck = luckyDrawValidateVoucherPrizeStockConfig($prizeRow);
-                if (empty($defaultsCheck['success']) || empty($voucherConfigCheck['success'])) {
-                    continue;
-                }
-
-                // A physical prize also has to exist in the warehouse that will ship it. The
-                // counter above only knows what the campaign promised; the warehouse knows what
-                // can actually leave the shelf. Checking here keeps a sold-out prize out of the
-                // draw pool, so a customer is never told they won something that cannot be sent.
-                if (strtolower((string) ($prizeRow['prize_type'] ?? '')) === 'physical') {
-                    $warehouseStockCheck = luckyDrawValidatePhysicalPrizeStock($connect, $financeConnect, $prizeRow);
-                    if (empty($warehouseStockCheck['success'])) {
-                        continue;
-                    }
-                }
-
-                $eligiblePrizeRows[] = $prizeRow;
-            }
+            // Same resolver the wheel and the dashboard read, so the flight of a prize onto the
+            // wheel and its acceptance here can never drift apart again. The prize rows above are
+            // already locked FOR UPDATE, which is the only lock this decision needs.
+            $drawPool = luckyDrawResolveDrawPool($connect, $financeConnect, $prizeRows);
+            $eligiblePrizeRows = $drawPool['drawable'];
 
             if (empty($eligiblePrizeRows)) {
                 // Every configured prize is either out of campaign stock or cannot be shipped from
