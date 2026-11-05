@@ -1132,6 +1132,32 @@ if (!function_exists('luckyDrawValidatePhysicalPrizeStock')) {
     }
 }
 
+if (!function_exists('luckyDrawPublicStockUnavailableMessage')) {
+    /**
+     * Customer-facing wrapper for a stock rejection.
+     *
+     * The warehouse validator is written for the order screens, so its message names the
+     * warehouse, the package and the exact availability count. That is the right detail for
+     * an operator and the wrong thing to hand a customer who just won a prize. The technical
+     * text is kept on the result for the logs and the readiness panel.
+     */
+    function luckyDrawPublicStockUnavailableMessage($stockCheck)
+    {
+        $stockCheck = is_array($stockCheck) ? $stockCheck : array();
+        $customerMessage = 'This prize is out of stock right now. Our team has been notified and will contact you shortly.';
+
+        return array(
+            'success' => false,
+            'message' => $customerMessage,
+            'customer_message' => $customerMessage,
+            'internal_message' => isset($stockCheck['message']) ? (string) $stockCheck['message'] : '',
+            'shortages' => isset($stockCheck['shortages']) && is_array($stockCheck['shortages']) ? $stockCheck['shortages'] : array(),
+            'warehouse_id' => isset($stockCheck['warehouse_id']) ? (int) $stockCheck['warehouse_id'] : 0,
+            'warehouse_name' => isset($stockCheck['warehouse_name']) ? (string) $stockCheck['warehouse_name'] : '',
+        );
+    }
+}
+
 if (!function_exists('luckyDrawUrbanRegisteredCount')) {
     function luckyDrawUrbanRegisteredCount($connect)
     {
@@ -2206,6 +2232,17 @@ if (!function_exists('luckyDrawCreateReservation')) {
                     continue;
                 }
 
+                // A physical prize also has to exist in the warehouse that will ship it. The
+                // counter above only knows what the campaign promised; the warehouse knows what
+                // can actually leave the shelf. Checking here keeps a sold-out prize out of the
+                // draw pool, so a customer is never told they won something that cannot be sent.
+                if (strtolower((string) ($prizeRow['prize_type'] ?? '')) === 'physical') {
+                    $warehouseStockCheck = luckyDrawValidatePhysicalPrizeStock($connect, $financeConnect, $prizeRow);
+                    if (empty($warehouseStockCheck['success'])) {
+                        continue;
+                    }
+                }
+
                 $eligiblePrizeRows[] = $prizeRow;
             }
 
@@ -2309,6 +2346,53 @@ if (!function_exists('luckyDrawFindClaimByToken')) {
         return ($result && ($row = mysqli_fetch_assoc($result))) ? (array) $row : array();
     }
 }
+if (!function_exists('luckyDrawClaimPrizeAvailability')) {
+    /**
+     * Tells the claim page whether the prize can still be shipped, before the customer types
+     * anything. Without this the only way to find out was to submit the form and read the
+     * rejection, which is a poor way to learn the prize is gone.
+     *
+     * Returns a customer-safe verdict; the warehouse detail stays on 'internal_message'.
+     */
+    function luckyDrawClaimPrizeAvailability($connect, $financeConnect, $claimRow)
+    {
+        $claimRow = is_array($claimRow) ? $claimRow : array();
+        $prizeType = strtolower(trim((string) ($claimRow['prize_type'] ?? '')));
+        $result = array(
+            'checked' => false,
+            'available' => true,
+            'message' => '',
+            'internal_message' => '',
+        );
+
+        // Only a physical prize is tied to a warehouse shelf. Voucher prizes are backed by the
+        // code pool, and the draw already reserved a code for the winner.
+        if ($prizeType !== 'physical') {
+            return $result;
+        }
+
+        $packageId = (int) ($claimRow['package_id'] ?? 0);
+        $warehouseId = (int) ($claimRow['stock_out_warehouse_id'] ?? 0);
+        if ($packageId <= 0 || $warehouseId <= 0) {
+            // Nothing to check against; the claim will report its own problem if it hits one.
+            return $result;
+        }
+
+        $result['checked'] = true;
+        $stockCheck = luckyDrawValidatePhysicalPrizeStock($connect, $financeConnect, $claimRow);
+        if (!empty($stockCheck['success'])) {
+            return $result;
+        }
+
+        $stockFailure = luckyDrawPublicStockUnavailableMessage($stockCheck);
+        $result['available'] = false;
+        $result['message'] = (string) $stockFailure['customer_message'];
+        $result['internal_message'] = (string) $stockFailure['internal_message'];
+
+        return $result;
+    }
+}
+
 if (!function_exists('luckyDrawCreatePhysicalFacebookOrderRequest')) {
     function luckyDrawCreatePhysicalFacebookOrderRequest($financeConnect, $drawRow, $claimData, $claimEmail)
     {
@@ -2457,7 +2541,19 @@ if (!function_exists('luckyDrawSubmitClaim')) {
 
             $stockCheck = luckyDrawValidatePhysicalPrizeStock($connect, $financeConnect, $drawRow);
             if (empty($stockCheck['success'])) {
-                throw new Exception(isset($stockCheck['message']) ? (string) $stockCheck['message'] : 'Warehouse stock is not available for this prize.');
+                // Reaching here means the warehouse ran dry between the draw and the claim, so
+                // the prize is genuinely unavailable. The customer gets a plain explanation while
+                // the warehouse detail goes to the request log and the PHP error log.
+                $stockFailure = luckyDrawPublicStockUnavailableMessage($stockCheck);
+                luckyDrawRecordRequestLog(
+                    $connect,
+                    'claim_submit',
+                    (string) ($drawRow['member_id_hmac'] ?? ''),
+                    (string) ($drawRow['ip_hmac'] ?? ''),
+                    'prize_stock_unavailable'
+                );
+                error_log('Lucky Draw claim LD #' . (int) $drawRow['id'] . ' stock unavailable: ' . (string) $stockFailure['internal_message']);
+                throw new Exception((string) $stockFailure['customer_message']);
             }
 
             $facebookOrderRequestId = (int) (isset($drawRow['facebook_order_request_id']) ? $drawRow['facebook_order_request_id'] : 0);

@@ -78,6 +78,12 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
 
 $claimExpired = !empty($claimRow['reservation_expires_at']) && strtotime((string) $claimRow['reservation_expires_at']) < time();
 $claimState = isset($claimRow['claim_state']) ? (string) $claimRow['claim_state'] : '';
+// Physical prizes are shipped from a warehouse, so check the shelf before showing the form.
+// A sold-out prize leaves the form hidden instead of failing after the customer submits.
+$claimAvailability = array('checked' => false, 'available' => true, 'message' => '', 'internal_message' => '');
+if (!empty($claimRow) && !$claimExpired && $claimState === 'awaiting_claim') {
+    $claimAvailability = luckyDrawClaimPrizeAvailability($connect, $finance_connect, $claimRow);
+}
 $pageTitle = $websiteName . ' Lucky Draw Claim';
 ?>
 <!DOCTYPE html>
@@ -443,6 +449,8 @@ $pageTitle = $websiteName . ' Lucky Draw Claim';
                         <div class="alert alert-info">This claim link has expired. If the campaign still allows it, please contact the team for assistance.</div>
                     <?php } else if ($claimState !== 'awaiting_claim') { ?>
                         <div class="alert alert-info">This claim has already been submitted.</div>
+                    <?php } else if (!$claimAvailability['available']) { ?>
+                        <div class="alert alert-info"><?= htmlspecialchars((string) $claimAvailability['message'], ENT_QUOTES, 'UTF-8') ?></div>
                     <?php } else { ?>
                         <div class="claim-form-card">
                             <h3>Claim Submission</h3>
