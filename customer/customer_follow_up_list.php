@@ -171,6 +171,95 @@ if (!function_exists('customerFollowUpPageRedirectBack')) {
     }
 }
 
+if (!function_exists('customerFollowUpPageNormalizeBulkFollowUpIds')) {
+    function customerFollowUpPageNormalizeBulkFollowUpIds($rawIds)
+    {
+        $uniqueIds = array();
+        foreach ((array) $rawIds as $rawId) {
+            $followUpId = (int) $rawId;
+            if ($followUpId > 0) {
+                $uniqueIds[$followUpId] = $followUpId;
+            }
+        }
+
+        return array_values($uniqueIds);
+    }
+}
+
+if (!function_exists('customerFollowUpPageBulkFollowUpLabel')) {
+    function customerFollowUpPageBulkFollowUpLabel($connect, $followUpId)
+    {
+        $followUpRow = customerFollowUpReadFollowUpCase($connect, $followUpId);
+        if (empty($followUpRow)) {
+            return '#' . $followUpId;
+        }
+
+        $orderNo = trim((string) (isset($followUpRow['order_no']) ? $followUpRow['order_no'] : ''));
+
+        return $orderNo !== '' ? $orderNo : '#' . $followUpId;
+    }
+}
+
+if (!function_exists('customerFollowUpPageBulkFollowUpAction')) {
+    function customerFollowUpPageBulkFollowUpAction($connect, $rawIds, $mode, $note, $actorUserId, $actorUserGroupId, $financeConnect = null)
+    {
+        $isReject = strtolower((string) $mode) === 'reject';
+        $note = trim((string) $note);
+        if ($isReject && $note === '') {
+            return array('success' => false, 'message' => 'Reject reason is required.');
+        }
+
+        $followUpIds = customerFollowUpPageNormalizeBulkFollowUpIds($rawIds);
+        if (empty($followUpIds)) {
+            return array('success' => false, 'message' => 'Select at least one follow-up first.');
+        }
+
+        // Every round commits on its own, so a row somebody else already handled cannot roll
+        // the rest back. The cap keeps one big selection from outrunning the request timeout.
+        $maxPerRequest = 100;
+        if (count($followUpIds) > $maxPerRequest) {
+            return array('success' => false, 'message' => 'Select at most ' . $maxPerRequest . ' follow-ups at a time.');
+        }
+
+        $doneCount = 0;
+        $failures = array();
+        foreach ($followUpIds as $followUpId) {
+            // Reuse the single-row functions instead of writing those columns here again: they
+            // already own the action log, the notification and the order remark side effects.
+            $result = $isReject
+                ? customerFollowUpRejectRound($connect, $followUpId, $note, $actorUserId, $actorUserGroupId)
+                : customerFollowUpApproveRound($connect, $followUpId, $note, $actorUserId, $actorUserGroupId, $financeConnect);
+
+            if (!empty($result['success'])) {
+                $doneCount++;
+                continue;
+            }
+
+            $failureReason = trim((string) (isset($result['message']) ? $result['message'] : 'Action failed.'));
+            $failures[] = customerFollowUpPageBulkFollowUpLabel($connect, $followUpId) . ' - ' . $failureReason;
+        }
+
+        $verb = $isReject ? 'rejected' : 'approved';
+
+        if ($doneCount === 0) {
+            return array(
+                'success' => false,
+                'message' => 'Nothing was ' . $verb . '. ' . implode(' | ', array_slice($failures, 0, 3)),
+            );
+        }
+
+        $message = $doneCount . ' follow-up' . ($doneCount > 1 ? 's' : '') . ' ' . $verb . '.';
+        if (!empty($failures)) {
+            $message .= ' Skipped ' . count($failures) . ': ' . implode(' | ', array_slice($failures, 0, 3));
+            if (count($failures) > 3) {
+                $message .= ' | and ' . (count($failures) - 3) . ' more.';
+            }
+        }
+
+        return array('success' => true, 'message' => $message);
+    }
+}
+
 if (!function_exists('customerFollowUpPagePlatformLabel')) {
     function customerFollowUpPagePlatformLabel($platform)
     {
@@ -554,6 +643,37 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
                 break;
             }
             $result = customerFollowUpRejectRound($connect, $followUpId, postSpaceFilter('reject_reason'), USER_ID, USER_GROUP);
+            break;
+
+        case 'bulk_approve_follow_up':
+            if (!$canApprovePermission) {
+                $result = array('success' => false, 'message' => 'You do not have approval permission for Customer Follow-Up.');
+                break;
+            }
+            $result = customerFollowUpPageBulkFollowUpAction(
+                $connect,
+                isset($_POST['follow_up_ids']) && is_array($_POST['follow_up_ids']) ? $_POST['follow_up_ids'] : array(),
+                'approve',
+                post('approval_comment'),
+                USER_ID,
+                USER_GROUP,
+                isset($finance_connect) ? $finance_connect : null
+            );
+            break;
+
+        case 'bulk_reject_follow_up':
+            if (!$canRejectPermission) {
+                $result = array('success' => false, 'message' => 'You do not have decline permission for Customer Follow-Up.');
+                break;
+            }
+            $result = customerFollowUpPageBulkFollowUpAction(
+                $connect,
+                isset($_POST['follow_up_ids']) && is_array($_POST['follow_up_ids']) ? $_POST['follow_up_ids'] : array(),
+                'reject',
+                postSpaceFilter('reject_reason'),
+                USER_ID,
+                USER_GROUP
+            );
             break;
 
         case 'complete_follow_up':
@@ -1360,6 +1480,46 @@ if (!empty($customerTagLabelFilters)) {
             }
         }
 
+        .customer-follow-up-page .bulk-select-col {
+            width: 44px;
+            text-align: center;
+            vertical-align: middle;
+        }
+
+        .customer-follow-up-page .bulk-select-col input[type="checkbox"] {
+            margin: 0;
+            cursor: pointer;
+        }
+
+        .customer-follow-up-page .bulk-select-col input[type="checkbox"]:disabled {
+            cursor: not-allowed;
+        }
+
+        .customer-follow-up-page .customer-follow-up-bulk-toolbar {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            justify-content: space-between;
+            gap: 0.75rem;
+        }
+
+        .customer-follow-up-page .customer-follow-up-bulk-toolbar-info {
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+            color: #6c757d;
+            font-size: 0.9rem;
+        }
+
+        .customer-follow-up-page .customer-follow-up-bulk-summary {
+            margin-top: 0.5rem;
+            font-size: 0.82rem;
+            color: #6c757d;
+            max-height: 110px;
+            overflow-y: auto;
+            word-break: break-word;
+        }
+
 
     </style>
 
@@ -1582,7 +1742,49 @@ if (!empty($customerTagLabelFilters)) {
                     </form>
                 </div>
 
+                <?php
+                // The bulk controls only earn their screen space when at least one listed round
+                // is actually waiting for approval. A page where everything is already decided
+                // would otherwise show a row of greyed-out checkboxes and a dead button.
+                // Mirrors $canApprove / $canReject inside the row loop, so the toolbar and the
+                // enabled checkboxes always agree.
+                $bulkSelectableCount = 0;
+                if ($canApprovePermission || $canRejectPermission) {
+                    foreach ($rows as $bulkProbeRow) {
+                        $bulkProbeStatus = customerFollowUpNormalizeStatus(isset($bulkProbeRow['round_status']) ? $bulkProbeRow['round_status'] : '');
+                        if ($bulkProbeStatus === 'Pending Approval') {
+                            $bulkSelectableCount++;
+                        }
+                    }
+                }
+                $showBulkControls = $bulkSelectableCount > 0;
+                ?>
                 <div id="customer_follow_up_table_section">
+                <?php if ($showBulkControls) { ?>
+                    <div class="card mb-3">
+                        <div class="card-body py-2">
+                            <div class="customer-follow-up-bulk-toolbar">
+                                <div class="customer-follow-up-bulk-toolbar-info">
+                                    <i class="fa-solid fa-list-check"></i>
+                                    <span id="customer_follow_up_bulk_count">No follow-up selected</span>
+                                </div>
+                                <div class="d-flex flex-wrap gap-2">
+                                    <?php if ($canApprovePermission) { ?>
+                                        <button type="button" class="btn btn-sm btn-rounded btn-success" id="customer_follow_up_bulk_approve_btn" data-bs-toggle="modal" data-bs-target="#bulkApproveFollowUpModal" disabled>
+                                            <i class="fa-solid fa-circle-check"></i><span class="ms-1">Approve Selected</span>
+                                        </button>
+                                    <?php } ?>
+                                    <?php if ($canRejectPermission) { ?>
+                                        <button type="button" class="btn btn-sm btn-rounded btn-danger" id="customer_follow_up_bulk_reject_btn" data-bs-toggle="modal" data-bs-target="#bulkRejectFollowUpModal" disabled>
+                                            <i class="fa-solid fa-circle-xmark"></i><span class="ms-1">Reject Selected</span>
+                                        </button>
+                                    <?php } ?>
+                                    <button type="button" class="btn btn-sm btn-rounded btn-outline-secondary" id="customer_follow_up_bulk_clear_btn" disabled>Clear</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                <?php } ?>
                 <div class="card">
                     <div class="card-body">
                         <?php if (empty($rows)) { ?>
@@ -1597,6 +1799,9 @@ if (!empty($customerTagLabelFilters)) {
                                         <tr>
                                             <th class="hideColumn">ID</th>
                                             <th width="60">S/N</th>
+                                            <?php if ($showBulkControls) { ?>
+                                                <th class="bulk-select-col"><input type="checkbox" class="form-check-input" id="customer_follow_up_select_all" aria-label="Select all follow-ups on this page" title="Select all follow-ups on this page"></th>
+                                            <?php } ?>
                                             <th class="action-col">Actions</th>
                                             <th>Order ID</th>
                                             <th>Username</th>
@@ -1706,6 +1911,16 @@ if (!empty($customerTagLabelFilters)) {
                                             <tr>
                                                 <td class="hideColumn"><?= $followUpId ?></td>
                                                 <td><?= $index + 1 ?></td>
+                                                <?php if ($showBulkControls) { ?>
+                                                    <td class="bulk-select-col">
+                                                        <input type="checkbox"
+                                                            class="form-check-input customer-follow-up-bulk-checkbox"
+                                                            value="<?= $followUpId ?>"
+                                                            data-order-no="<?= htmlspecialchars($orderDisplayValue, ENT_QUOTES, 'UTF-8') ?>"
+                                                            aria-label="Select follow-up <?= htmlspecialchars($orderDisplayValue, ENT_QUOTES, 'UTF-8') ?>"
+                                                            <?= ($canApprove || $canReject) ? '' : 'disabled title="Only rounds pending approval can be approved or rejected."' ?>>
+                                                    </td>
+                                                <?php } ?>
                                                 <td class="btn-container action-col">
                                                     <div class="btn-action-row">
                                                     <?php if ($canViewAppeal) { ?>
@@ -2127,6 +2342,9 @@ if (!empty($customerTagLabelFilters)) {
                                         <tr>
                                             <th class="hideColumn">ID</th>
                                             <th width="60">S/N</th>
+                                            <?php if ($showBulkControls) { ?>
+                                                <th class="bulk-select-col"></th>
+                                            <?php } ?>
                                             <th class="action-col">Actions</th>
                                             <th>Order ID</th>
                                             <th>Username</th>
@@ -2506,6 +2724,66 @@ if (!empty($customerTagLabelFilters)) {
         </div>
     </div>
 
+    <?php if ($canApprovePermission) { ?>
+    <div class="modal fade" id="bulkApproveFollowUpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" class="customer-follow-up-action-form">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Approve Selected Follow-Ups</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="cfu_action" value="bulk_approve_follow_up">
+                        <div id="bulk_approve_ids_container"></div>
+                        <div class="mb-2 text-muted small" id="bulk_approve_summary_text"></div>
+                        <div class="mb-3">
+                            <label class="form-label" for="bulk_approval_comment">Comment (saved on every selected follow-up)</label>
+                            <textarea class="form-control" id="bulk_approval_comment" name="approval_comment" rows="3"></textarea>
+                        </div>
+                        <div class="customer-follow-up-bulk-summary" id="bulk_approve_order_list"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
+                        <button type="submit" class="btn btn-success" style="text-transform: none !important;">Approve Selected</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <?php } ?>
+
+    <?php if ($canRejectPermission) { ?>
+    <div class="modal fade" id="bulkRejectFollowUpModal" tabindex="-1" aria-hidden="true">
+        <div class="modal-dialog">
+            <div class="modal-content">
+                <form method="post" class="customer-follow-up-action-form">
+                    <div class="modal-header">
+                        <h5 class="modal-title">Reject Selected Follow-Ups</h5>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
+                    <div class="modal-body">
+                        <input type="hidden" name="customer_follow_up_csrf" value="<?= htmlspecialchars((string) $_SESSION['customer_follow_up_csrf'], ENT_QUOTES, 'UTF-8') ?>">
+                        <input type="hidden" name="cfu_action" value="bulk_reject_follow_up">
+                        <div id="bulk_reject_ids_container"></div>
+                        <div class="mb-2 text-muted small" id="bulk_reject_summary_text"></div>
+                        <div class="mb-3">
+                            <label class="form-label" for="bulk_reject_reason">Reject Reason<span class="customer-follow-up-required-star">*</span></label>
+                            <textarea class="form-control" id="bulk_reject_reason" name="reject_reason" rows="4" required placeholder="The same reason is saved on every selected follow-up."></textarea>
+                        </div>
+                        <div class="customer-follow-up-bulk-summary" id="bulk_reject_order_list"></div>
+                    </div>
+                    <div class="modal-footer">
+                        <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Cancel</button>
+                        <button type="submit" class="btn btn-danger" style="text-transform: none !important;">Reject Selected</button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+    <?php } ?>
+
     <div class="modal fade" id="requestCancelFollowUpModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog">
             <div class="modal-content">
@@ -2844,14 +3122,180 @@ if (!empty($customerTagLabelFilters)) {
             modalInstance.hide();
         }
 
+        function customerFollowUpBulkCheckboxes() {
+            return Array.prototype.slice.call(document.querySelectorAll('.customer-follow-up-bulk-checkbox'));
+        }
+
+        function customerFollowUpBulkRowIsVisible(checkbox) {
+            var row = checkbox ? checkbox.closest('tr') : null;
+            if (!row) {
+                return false;
+            }
+
+            // DataTables hides the rows of other pages and the filtered-out rows with
+            // display:none, so this counts exactly what the user can see right now.
+            return !!(row.offsetParent !== null || row.getClientRects().length > 0);
+        }
+
+        function customerFollowUpBulkSelection() {
+            return customerFollowUpBulkCheckboxes().filter(function (checkbox) {
+                return checkbox.checked && !checkbox.disabled;
+            });
+        }
+
+        function customerFollowUpUpdateBulkToolbar() {
+            var selected = customerFollowUpBulkSelection();
+            var countLabel = document.getElementById('customer_follow_up_bulk_count');
+            if (countLabel) {
+                countLabel.textContent = selected.length
+                    ? selected.length + ' follow-up' + (selected.length > 1 ? 's' : '') + ' selected'
+                    : 'No follow-up selected';
+            }
+
+            ['customer_follow_up_bulk_approve_btn', 'customer_follow_up_bulk_reject_btn', 'customer_follow_up_bulk_clear_btn'].forEach(function (buttonId) {
+                var button = document.getElementById(buttonId);
+                if (button) {
+                    button.disabled = selected.length === 0;
+                }
+            });
+
+            var selectAll = document.getElementById('customer_follow_up_select_all');
+            if (selectAll) {
+                var selectable = customerFollowUpBulkCheckboxes().filter(function (checkbox) {
+                    return !checkbox.disabled && customerFollowUpBulkRowIsVisible(checkbox);
+                });
+                var checkedCount = selectable.filter(function (checkbox) {
+                    return checkbox.checked;
+                }).length;
+
+                selectAll.disabled = selectable.length === 0;
+                selectAll.checked = selectable.length > 0 && checkedCount === selectable.length;
+                selectAll.indeterminate = checkedCount > 0 && checkedCount < selectable.length;
+            }
+        }
+
+        function customerFollowUpClearBulkSelection() {
+            customerFollowUpBulkCheckboxes().forEach(function (checkbox) {
+                checkbox.checked = false;
+            });
+            customerFollowUpUpdateBulkToolbar();
+        }
+
+        function customerFollowUpBindBulkSelection() {
+            var selectAll = document.getElementById('customer_follow_up_select_all');
+            if (selectAll && !selectAll.dataset.bulkBound) {
+                selectAll.dataset.bulkBound = '1';
+                selectAll.addEventListener('click', function (event) {
+                    event.stopPropagation();
+                });
+                selectAll.addEventListener('change', function () {
+                    var shouldCheck = selectAll.checked;
+                    customerFollowUpBulkCheckboxes().forEach(function (checkbox) {
+                        if (checkbox.disabled || !customerFollowUpBulkRowIsVisible(checkbox)) {
+                            return;
+                        }
+                        checkbox.checked = shouldCheck;
+                    });
+                    customerFollowUpUpdateBulkToolbar();
+                });
+            }
+
+            customerFollowUpBulkCheckboxes().forEach(function (checkbox) {
+                if (checkbox.dataset.bulkBound) {
+                    return;
+                }
+                checkbox.dataset.bulkBound = '1';
+                checkbox.addEventListener('change', customerFollowUpUpdateBulkToolbar);
+            });
+
+            var clearButton = document.getElementById('customer_follow_up_bulk_clear_btn');
+            if (clearButton && !clearButton.dataset.bulkBound) {
+                clearButton.dataset.bulkBound = '1';
+                clearButton.addEventListener('click', customerFollowUpClearBulkSelection);
+            }
+
+            customerFollowUpUpdateBulkToolbar();
+        }
+
+        function customerFollowUpFillBulkIds(containerId, summaryId, listId, actionLabel) {
+            var container = document.getElementById(containerId);
+            var summary = document.getElementById(summaryId);
+            var orderList = document.getElementById(listId);
+            var selected = customerFollowUpBulkSelection();
+
+            if (container) {
+                container.innerHTML = '';
+                selected.forEach(function (checkbox) {
+                    var input = document.createElement('input');
+                    input.type = 'hidden';
+                    input.name = 'follow_up_ids[]';
+                    input.value = checkbox.value;
+                    container.appendChild(input);
+                });
+            }
+
+            if (summary) {
+                summary.textContent = selected.length
+                    ? selected.length + ' follow-up' + (selected.length > 1 ? 's' : '') + ' selected for ' + actionLabel + '.'
+                    : 'No follow-up selected.';
+            }
+
+            if (orderList) {
+                orderList.textContent = '';
+                if (selected.length) {
+                    var labels = selected.map(function (checkbox) {
+                        return checkbox.getAttribute('data-order-no') || ('#' + checkbox.value);
+                    });
+                    var shownLabels = labels.slice(0, 12);
+                    var labelText = shownLabels.join(', ');
+                    if (labels.length > shownLabels.length) {
+                        labelText += ' and ' + (labels.length - shownLabels.length) + ' more';
+                    }
+                    orderList.textContent = labelText;
+                }
+            }
+        }
+
+        function customerFollowUpBindBulkModals() {
+            var approveModal = document.getElementById('bulkApproveFollowUpModal');
+            if (approveModal && !approveModal.dataset.bulkBound) {
+                approveModal.dataset.bulkBound = '1';
+                approveModal.addEventListener('show.bs.modal', function () {
+                    var commentField = document.getElementById('bulk_approval_comment');
+                    if (commentField) {
+                        commentField.value = '';
+                    }
+                    customerFollowUpFillBulkIds('bulk_approve_ids_container', 'bulk_approve_summary_text', 'bulk_approve_order_list', 'approval');
+                });
+            }
+
+            var rejectModal = document.getElementById('bulkRejectFollowUpModal');
+            if (rejectModal && !rejectModal.dataset.bulkBound) {
+                rejectModal.dataset.bulkBound = '1';
+                rejectModal.addEventListener('show.bs.modal', function () {
+                    var reasonField = document.getElementById('bulk_reject_reason');
+                    if (reasonField) {
+                        reasonField.value = '';
+                    }
+                    customerFollowUpFillBulkIds('bulk_reject_ids_container', 'bulk_reject_summary_text', 'bulk_reject_order_list', 'rejection');
+                });
+            }
+        }
+
         function customerFollowUpInitializeTableSection() {
             if (document.getElementById('customer_follow_up_table')) {
-                createSortingTable('customer_follow_up_table', { searching: true });
+                // The checkbox column must not be sortable, otherwise clicking its header
+                // reshuffles the rows the user just picked from.
+                createSortingTable('customer_follow_up_table', {
+                    searching: true,
+                    columnDefs: [<?= $showBulkControls ? '{ orderable: false, targets: 2 }' : '' ?>]
+                });
                 datatableAlignment('customer_follow_up_table');
                 keepDataTableControlsVisible('customer_follow_up_table');
             }
 
             customerFollowUpBindAjaxForms();
+            customerFollowUpBindBulkSelection();
             dropdownMenuDispFix();
             setButtonColor();
         }
@@ -4093,6 +4537,8 @@ if (!empty($customerTagLabelFilters)) {
         }
 
         customerFollowUpInitializeMultiSelectFilters();
+
+        customerFollowUpBindBulkModals();
 
         customerFollowUpInitializeTableSection();
 
