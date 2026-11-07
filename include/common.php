@@ -20207,6 +20207,106 @@ if (!function_exists('orderDeleteApprovalReadLatestRequestBySource')) {
     }
 }
 
+if (!function_exists('orderDeleteApprovalReadPendingRequestsBySourceIds')) {
+    /**
+     * Load the pending delete requests for a batch of source records in one query.
+     *
+     * The list pages need to know, per row, whether a request is already waiting. Asking
+     * orderDeleteApprovalReadPendingRequestBySource once per row would fire one query per
+     * visible order, so the whole page is fetched in a single round trip and keyed by the
+     * source id. Callers only need to look up $map[$rowId].
+     */
+    function orderDeleteApprovalReadPendingRequestsBySourceIds($connect, $moduleKey, $sourceOrderIds)
+    {
+        $moduleKey = trim((string) $moduleKey);
+        if (!($connect instanceof mysqli) || $moduleKey === '' || !is_array($sourceOrderIds)) {
+            return array();
+        }
+
+        $idList = array();
+        foreach ($sourceOrderIds as $sourceOrderId) {
+            $sourceOrderId = (int) $sourceOrderId;
+            if ($sourceOrderId > 0) {
+                $idList[$sourceOrderId] = $sourceOrderId;
+            }
+        }
+        if (empty($idList)) {
+            return array();
+        }
+
+        $tableName = orderDeleteApprovalGetTableName();
+        $safeModuleKey = mysqli_real_escape_string($connect, $moduleKey);
+        $sql = "SELECT *
+                FROM `" . $tableName . "`
+                WHERE `module_key` = '" . $safeModuleKey . "'
+                  AND `source_order_id` IN (" . implode(',', $idList) . ")
+                  AND `request_status` = 'pending'
+                  AND `status` = 'A'
+                ORDER BY `id` ASC";
+        $result = mysqli_query($connect, $sql);
+        if (!$result) {
+            return array();
+        }
+
+        $pendingMap = array();
+        while ($row = mysqli_fetch_assoc($result)) {
+            $sourceOrderId = (int) (isset($row['source_order_id']) ? $row['source_order_id'] : 0);
+            if ($sourceOrderId <= 0) {
+                continue;
+            }
+            // Later rows overwrite earlier ones on purpose: the newest request wins, which
+            // matches the ORDER BY id DESC LIMIT 1 the single-record helper uses.
+            $pendingMap[$sourceOrderId] = (array) $row;
+        }
+
+        return $pendingMap;
+    }
+}
+
+if (!function_exists('orderDeleteApprovalCancelPendingRequest')) {
+    /**
+     * Retire a pending request that can never be decided.
+     *
+     * Only used for the self-filed case: the requester is also the approver, so the row
+     * blocks the order while nobody is able to act on it. It is cancelled rather than
+     * deleted so the history still shows it existed.
+     */
+    function orderDeleteApprovalCancelPendingRequest($connect, $requestId, $pageTitle, $reason)
+    {
+        $requestId = (int) $requestId;
+        if (!($connect instanceof mysqli) || $requestId <= 0) {
+            return false;
+        }
+
+        $tableName = orderDeleteApprovalGetTableName();
+        $safeReason = mysqli_real_escape_string($connect, (string) $reason);
+        $safeUpdateBy = mysqli_real_escape_string($connect, defined('USER_ID') ? (string) USER_ID : 'SYSTEM');
+        $sql = "UPDATE `" . $tableName . "`
+                SET `request_status` = 'cancelled',
+                    `approval_remark` = '" . $safeReason . "',
+                    `decision_user_id` = " . (defined('USER_ID') ? (int) USER_ID : 0) . ",
+                    `decision_date` = CURDATE(),
+                    `decision_time` = CURTIME(),
+                    `update_by` = '" . $safeUpdateBy . "',
+                    `update_date` = CURDATE(),
+                    `update_time` = CURTIME()
+                WHERE `id` = " . $requestId . "
+                  AND `request_status` = 'pending'
+                  AND `status` = 'A'
+                LIMIT 1";
+
+        if (!mysqli_query($connect, $sql)) {
+            return false;
+        }
+
+        if (function_exists('orderDeleteApprovalWriteAuditLog')) {
+            orderDeleteApprovalWriteAuditLog($connect, (string) $pageTitle, 'approval', (string) $reason, $sql, $tableName);
+        }
+
+        return true;
+    }
+}
+
 if (!function_exists('orderDeleteApprovalCanUserReviewRequest')) {
     function orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $userId)
     {
@@ -20712,12 +20812,52 @@ if (!function_exists('orderDeleteApprovalRequestDelete')) {
 
         $pendingRequest = orderDeleteApprovalReadPendingRequestBySource($connect, $moduleKey, $sourceOrderId);
         if (!empty($pendingRequest)) {
+            $pendingRequestUserId = (int) (isset($pendingRequest['request_user_id']) ? $pendingRequest['request_user_id'] : 0);
+            $currentUserId = (int) USER_ID;
+            $canCurrentUserDecide = orderDeleteApprovalCanUserReviewRequest($pendingRequest, $moduleKey, $sourceOrderId, $currentUserId);
+
+            // A request the user filed against their own approval is a loop with no exit: the
+            // only person who could decide it is the person waiting on it. Retire the stale row
+            // and let the delete go through, otherwise the order stays undeletable forever.
+            if ($canCurrentUserDecide && $pendingRequestUserId === $currentUserId) {
+                orderDeleteApprovalCancelPendingRequest(
+                    $connect,
+                    (int) (isset($pendingRequest['id']) ? $pendingRequest['id'] : 0),
+                    $pageTitle,
+                    'Retired a self-filed delete request so the delete could proceed.'
+                );
+
+                return array(
+                    'success' => true,
+                    'direct_delete' => true,
+                    'notification_type' => 'success',
+                    'message' => '',
+                );
+            }
+
+            // A request that the current user is allowed to decide is not a dead end. Sending
+            // them to the decision screen is more useful than repeating "already pending" with
+            // no way forward, which is all the old message offered.
+            if ($canCurrentUserDecide) {
+                return array(
+                    'success' => false,
+                    'direct_delete' => false,
+                    'notification_type' => 'warning',
+                    'message' => 'This order already has a delete request waiting for approval, and you are the approver. Use the link below to approve or reject it.',
+                    'request_row' => $pendingRequest,
+                    'review_url' => orderDeleteApprovalBuildPageUrl($moduleKey, $sourceOrderId, (int) $pendingRequest['id'], true, $connect),
+                    'review_label' => 'Review Request',
+                );
+            }
+
             return array(
                 'success' => false,
                 'direct_delete' => false,
                 'notification_type' => 'warning',
                 'message' => 'Delete request is already pending for this order.',
                 'request_row' => $pendingRequest,
+                'review_url' => orderDeleteApprovalBuildPageUrl($moduleKey, $sourceOrderId, (int) $pendingRequest['id'], true, $connect),
+                'review_label' => 'View Request',
             );
         }
 
@@ -20733,6 +20873,18 @@ if (!function_exists('orderDeleteApprovalRequestDelete')) {
                 );
             }
 
+            return array(
+                'success' => true,
+                'direct_delete' => true,
+                'notification_type' => 'success',
+                'message' => '',
+            );
+        }
+
+        // Asking a supervisor who is yourself to approve your own request is a dead end:
+        // the request is filed, the notification goes to you, and nothing else happens until
+        // someone notices. A user who is their own approver deletes directly instead.
+        if (in_array((int) USER_ID, $supervisorIds, true)) {
             return array(
                 'success' => true,
                 'direct_delete' => true,

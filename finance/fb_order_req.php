@@ -1709,10 +1709,18 @@ if (post('act') == 'D') {
                 exit;
             }
 
+            // When the request is already pending and the current user is the one who can
+            // decide it, send them straight to the decision screen. Bouncing back to the list
+            // with only a message leaves them exactly where they started.
+            $deleteApprovalRedirect = $redirectPage;
+            if (!empty($deleteApprovalResult['review_url'])) {
+                $deleteApprovalRedirect = (string) $deleteApprovalResult['review_url'];
+            }
+
             renderNotificationScript(
                 $deleteApprovalResult['message'],
                 isset($deleteApprovalResult['notification_type']) ? $deleteApprovalResult['notification_type'] : (!empty($deleteApprovalResult['success']) ? 'success' : 'error'),
-                $redirectPage,
+                $deleteApprovalRedirect,
                 1200,
                 true
             );

@@ -215,6 +215,24 @@ $redirectPage = $SITEURL . '/finance/fb_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/fb_order_req_table.php';
 $result = getData('*', '', '', FB_ORDER_REQ, $finance_connect);
 
+$fbOrderDeleteApprovalModuleKey = 'facebook_order_request';
+$fbPendingDeleteRequests = array();
+if ($result instanceof mysqli_result) {
+    $pendingSourceIds = array();
+    while ($pendingRow = $result->fetch_assoc()) {
+        $pendingSourceIds[] = (int) (isset($pendingRow['id']) ? $pendingRow['id'] : 0);
+    }
+    $result->data_seek(0);
+    if (!empty($pendingSourceIds) && function_exists('orderDeleteApprovalReadPendingRequestsBySourceIds')) {
+        $fbPendingDeleteRequests = orderDeleteApprovalReadPendingRequestsBySourceIds(
+            $connect,
+            $fbOrderDeleteApprovalModuleKey,
+            $pendingSourceIds
+        );
+    }
+}
+$fbCurrentUserId = defined('USER_ID') ? (int) USER_ID : 0;
+
 function fbReqFetchAssoc($result)
 {
     if ($result instanceof mysqli_result && $result->num_rows > 0) {
@@ -357,6 +375,57 @@ function fbReqFetchAssoc($result)
                                     <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
                                     <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                     <?php renderDeleteButton($pinAccess, $row['id'], $row['name'], $row['contact'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
+                                    <?php
+                                    $fbRowId = (int) (isset($row['id']) ? $row['id'] : 0);
+                                    $fbPendingRequest = isset($fbPendingDeleteRequests[$fbRowId]) ? $fbPendingDeleteRequests[$fbRowId] : array();
+                                    $fbCanDecideThisRow = false;
+                                    if (
+                                        !empty($fbPendingRequest)
+                                        && function_exists('orderDeleteApprovalCanUserReviewRequest')
+                                    ) {
+                                        $fbCanDecideThisRow = orderDeleteApprovalCanUserReviewRequest(
+                                            $fbPendingRequest,
+                                            $fbOrderDeleteApprovalModuleKey,
+                                            $fbRowId,
+                                            $fbCurrentUserId
+                                        );
+                                    }
+                                    ?>
+                                    <?php if ($fbCanDecideThisRow) { ?>
+                                        <?php
+                                        // Approving straight from the list keeps the decision where the
+                                        // order is, instead of asking the supervisor to fish the request
+                                        // out of the notification bell first. Both buttons post to the
+                                        // order page so the decision runs through the same audited path
+                                        // as the form on that page - a plain link cannot do it safely.
+                                        $fbDecisionRequestId = (int) (isset($fbPendingRequest['id']) ? $fbPendingRequest['id'] : 0);
+                                        $fbDecisionTarget = $redirectPage . '?' . http_build_query(array(
+                                            'id' => $fbRowId,
+                                            'approval_mode' => 1,
+                                            'approval_request_id' => $fbDecisionRequestId,
+                                        ));
+                                        ?>
+                                        <form method="post" action="<?= htmlspecialchars((string) $fbDecisionTarget, ENT_QUOTES, 'UTF-8') ?>"
+                                            class="d-inline me-1"
+                                            onsubmit="return confirm('Approve this delete request? The order will be deleted.');">
+                                            <input type="hidden" name="id" value="<?= $fbRowId ?>">
+                                            <input type="hidden" name="approval_mode" value="1">
+                                            <input type="hidden" name="approval_request_id" value="<?= $fbDecisionRequestId ?>">
+                                            <input type="hidden" name="approveDeleteApproval" value="1">
+                                            <button type="submit" class="btn btn-sm btn-success" title="Approve delete request"><i class="fas fa-check"></i></button>
+                                        </form>
+                                        <form method="post" action="<?= htmlspecialchars((string) $fbDecisionTarget, ENT_QUOTES, 'UTF-8') ?>"
+                                            class="d-inline me-1"
+                                            onsubmit="return confirm('Reject this delete request?');">
+                                            <input type="hidden" name="id" value="<?= $fbRowId ?>">
+                                            <input type="hidden" name="approval_mode" value="1">
+                                            <input type="hidden" name="approval_request_id" value="<?= $fbDecisionRequestId ?>">
+                                            <input type="hidden" name="rejectDeleteApproval" value="1">
+                                            <button type="submit" class="btn btn-sm btn-danger" title="Reject delete request"><i class="fas fa-times"></i></button>
+                                        </form>
+                                    <?php } else if (!empty($fbPendingRequest)) { ?>
+                                        <span class="badge bg-warning text-dark me-1" title="Delete request waiting for supervisor approval">Delete Pending</span>
+                                    <?php } ?>
                                     <?php
                                     $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                     $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);
