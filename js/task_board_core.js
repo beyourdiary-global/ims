@@ -812,7 +812,7 @@ function formatRelativeTime(dateValue, timeValue) {
   return diffDay + (diffDay === 1 ? " day ago" : " days ago");
 }
 
-function formatActivityDateTime(dateValue, timeValue) {
+function formatActivityDateTime(dateValue, timeValue, includeSeconds) {
   var createdAtMs = parseDateTimeToMs(dateValue, timeValue);
   if (!createdAtMs) {
     return "";
@@ -825,33 +825,47 @@ function formatActivityDateTime(dateValue, timeValue) {
       day: "numeric",
       year: "numeric",
     }).format(dt);
-    var timeText = new Intl.DateTimeFormat("en-US", {
-      hour: "numeric",
+
+    // With no stored time there is no moment to name. Printing 00:00:00 would
+    // state something the record never said, so show the date alone.
+    if (!String(timeValue || "").trim()) {
+      return dateText;
+    }
+
+    var timeOptions = {
+      hour: "2-digit",
       minute: "2-digit",
-    }).format(dt);
-    return dateText + " at " + timeText;
+      hour12: false,
+    };
+    if (includeSeconds) {
+      timeOptions.second = "2-digit";
+    }
+    var timeText = new Intl.DateTimeFormat("en-GB", timeOptions).format(dt);
+    return dateText + " " + timeText;
   } catch (e) {
     return String(dateValue || "").trim();
   }
 }
 
-// The activity feed only says how long ago something happened, which cannot
-// tell you when it actually happened - "3 days ago" covers any time that day.
-// Hovering a timestamp now shows the exact date and time, the same text the
-// work log entries already display.
+// Activity timestamps read as an exact moment, not "3 days ago". "3 days ago"
+// covers a whole day and there is no way back from it to the real minute, which
+// is exactly what you need when two changes land close together. The relative
+// text survives as the hover hint so the quick scan still works.
 function activityAgoHtml(dateValue, timeValue, suffixHtml) {
-  var ago = formatRelativeTime(dateValue, timeValue);
-  if (!ago) {
+  var exactText = formatActivityDateTime(dateValue, timeValue, true);
+  if (!exactText) {
     return "";
   }
 
-  var exactText = formatActivityDateTime(dateValue, timeValue);
-  var titleAttr = exactText ? ' title="' + escHtml(exactText) + '"' : "";
+  // No stored time means no elapsed time to report either - a hint computed
+  // from an invented 00:00:00 would be wrong, not just vague.
+  var ago = String(timeValue || "").trim() ? formatRelativeTime(dateValue, timeValue) : "";
+  var titleAttr = ago ? ' title="' + escHtml(ago) + '"' : "";
   return (
     '<div class="task-item-activity-ago"' +
     titleAttr +
     ">" +
-    escHtml(ago) +
+    escHtml(exactText) +
     (suffixHtml || "") +
     "</div>"
   );
@@ -1444,6 +1458,7 @@ function renderWorklogEntryHtml(row, options) {
   var startedText = formatActivityDateTime(
     row && row.started_date ? row.started_date : "",
     row && row.started_time ? row.started_time : "",
+    true,
   );
   var descriptionHtml = String((row || {}).work_description_html || "").trim();
   var isEdited = Number((row || {}).is_edited || 0) === 1;

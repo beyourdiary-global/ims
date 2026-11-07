@@ -2868,13 +2868,16 @@ function formatDetailMetaTime(value) {
     return "";
   }
 
-  var suffix = hours >= 12 ? "PM" : "AM";
-  var hourValue = hours % 12;
-  if (!hourValue) {
-    hourValue = 12;
-  }
+  var secondsText = parts.length > 2 ? ":" + String(parts[2] || "00").padStart(2, "0") : "";
 
-  return hourValue + ":" + String(minutes).padStart(2, "0") + " " + suffix;
+  // 24-hour, same shape as the activity feed above it. Two clocks on one dialog
+  // read like two different moments.
+  return (
+    String(hours).padStart(2, "0") +
+    ":" +
+    String(minutes).padStart(2, "0") +
+    secondsText
+  );
 }
 
 function formatDetailMetaDateTime(dateValue, timeValue) {
@@ -2903,16 +2906,15 @@ function renderDetailMeta(info) {
     detail.update_time,
   );
   var updatedRelativeText = formatRelativeFromCardDate(detail.update_date);
-  var updatedText = "";
-
-  if (updatedRelativeText && /ago/i.test(updatedRelativeText)) {
-    updatedText = updatedRelativeText;
-  } else {
-    updatedText = updatedExactText || updatedRelativeText;
-  }
+  var updatedText = updatedExactText || updatedRelativeText;
 
   $("#taskItemDetailCreatedMeta").text(createdText || "Not available");
   $("#taskItemDetailUpdatedMeta").text(updatedText || "Not available");
+  if (updatedRelativeText && updatedExactText) {
+    $("#taskItemDetailUpdatedMeta").attr("title", updatedRelativeText);
+  } else {
+    $("#taskItemDetailUpdatedMeta").removeAttr("title");
+  }
 }
 
 function renderModalLabelChips() {
