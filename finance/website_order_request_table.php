@@ -321,6 +321,12 @@ if ($picResult) {
 }
 
 $result = getData('*', $whereSql, $groupBySql, WEB_ORDER_REQ, $finance_connect);
+
+$worOrderDeleteApprovalModuleKey = 'website_order_request';
+$worPendingDeleteRequests = function_exists('orderDeleteApprovalLoadPendingRequestsForResultSet')
+    ? orderDeleteApprovalLoadPendingRequestsForResultSet($connect, $worOrderDeleteApprovalModuleKey, $result)
+    : array();
+$worCurrentUserId = defined('USER_ID') ? (int) USER_ID : 0;
 ?>
 
 <!DOCTYPE html>
@@ -637,6 +643,16 @@ $result = getData('*', $whereSql, $groupBySql, WEB_ORDER_REQ, $finance_connect);
                                             <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
                                             <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                             <?php renderDeleteButton($pinAccess, $row['id'], $row['order_id'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
+                                            <?php
+                                            $worRowId = (int) (isset($row['id']) ? $row['id'] : 0);
+                                            echo orderDeleteApprovalRenderInlineDecision(
+                                                isset($worPendingDeleteRequests[$worRowId]) ? $worPendingDeleteRequests[$worRowId] : array(),
+                                                $worOrderDeleteApprovalModuleKey,
+                                                $worRowId,
+                                                $worCurrentUserId,
+                                                $redirectPage
+                                            );
+                                            ?>
                                             <?php
                                             $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                             $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);

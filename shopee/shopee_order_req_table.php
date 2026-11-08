@@ -344,6 +344,12 @@ if ($result instanceof mysqli_result) {
     $shopeeBuyerMetaMap = customerLabelGetShopeeCustomerMetaMap($connect, $finance_connect, $shopeeBuyerLookupValues);
 }
 $hasRows = ($result && mysqli_num_rows($result) > 0);
+
+$shpOrderDeleteApprovalModuleKey = 'shopee_order_request';
+$shpPendingDeleteRequests = function_exists('orderDeleteApprovalLoadPendingRequestsForResultSet')
+    ? orderDeleteApprovalLoadPendingRequestsForResultSet($connect, $shpOrderDeleteApprovalModuleKey, $result)
+    : array();
+$shpCurrentUserId = defined('USER_ID') ? (int) USER_ID : 0;
 ?>
 
 <!DOCTYPE html>
@@ -747,6 +753,16 @@ $hasRows = ($result && mysqli_num_rows($result) > 0);
                                 <?php renderViewEditButtonByPin("1", $redirectPage, $row, $accessActionKey); ?>
                                 <?php renderViewEditButtonByPin("2", $redirectPage, $row, $accessActionKey, $act_2); ?>
                                 <?php renderDeleteButtonByPin($accessActionKey, $row['id'], $row['orderID'], $row['remark'], $pageTitle, $redirectPage, $deleteRedirectPage); ?> 
+                                <?php
+                                $shpRowId = (int) (isset($row['id']) ? $row['id'] : 0);
+                                echo orderDeleteApprovalRenderInlineDecision(
+                                    isset($shpPendingDeleteRequests[$shpRowId]) ? $shpPendingDeleteRequests[$shpRowId] : array(),
+                                    $shpOrderDeleteApprovalModuleKey,
+                                    $shpRowId,
+                                    $shpCurrentUserId,
+                                    $redirectPage
+                                );
+                                ?>
                                 <?php
                                 $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                 $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);

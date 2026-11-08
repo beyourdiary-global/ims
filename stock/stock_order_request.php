@@ -348,6 +348,11 @@ if ($act == 'D' && $dataId) {
         exit;
     }
 
+    // A pending request the current user can decide is not a dead end. Send them to the
+    // decision screen rather than back to the list with only a message.
+    if (!empty($deleteApprovalResult['review_url'])) {
+        $redirectPage = (string) $deleteApprovalResult['review_url'];
+    }
     renderNotificationScript(
         $deleteApprovalResult['message'],
         isset($deleteApprovalResult['notification_type']) ? $deleteApprovalResult['notification_type'] : (!empty($deleteApprovalResult['success']) ? 'success' : 'error'),

@@ -211,6 +211,12 @@ $redirectPage = $SITEURL . '/finance/lazada_order_req.php';
 $deleteRedirectPage = $SITEURL . '/finance/lazada_order_req_table.php';
 $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
 
+$lazOrderDeleteApprovalModuleKey = 'lazada_order_request';
+$lazPendingDeleteRequests = function_exists('orderDeleteApprovalLoadPendingRequestsForResultSet')
+    ? orderDeleteApprovalLoadPendingRequestsForResultSet($connect, $lazOrderDeleteApprovalModuleKey, $result)
+    : array();
+$lazCurrentUserId = defined('USER_ID') ? (int) USER_ID : 0;
+
 ?>
 
 <!DOCTYPE html>
@@ -343,6 +349,16 @@ $result = getData('*', $whereCondition, '', LAZADA_ORDER_REQ, $connect);
                                     <?php renderViewEditButton("View", $redirectPage, $row, $pinAccess); ?>
                                     <?php renderViewEditButton("Edit", $redirectPage, $row, $pinAccess, $act_2); ?>
                                     <?php renderDeleteButton($pinAccess, $row['id'], $row['curr_unit'], $row['country'], $pageTitle, $redirectPage, $deleteRedirectPage); ?>
+                                    <?php
+                                    $lazRowId = (int) (isset($row['id']) ? $row['id'] : 0);
+                                    echo orderDeleteApprovalRenderInlineDecision(
+                                        isset($lazPendingDeleteRequests[$lazRowId]) ? $lazPendingDeleteRequests[$lazRowId] : array(),
+                                        $lazOrderDeleteApprovalModuleKey,
+                                        $lazRowId,
+                                        $lazCurrentUserId,
+                                        $redirectPage
+                                    );
+                                    ?>
                                     <?php
                                     $statusCode = shopeeOmsNormalizeStatusCode(isset($row['order_status']) ? $row['order_status'] : '');
                                     $canAssignThisOrder = $canAssignEstimatedReceivedDate && shopeeOmsPassesAssignmentScope($connect, $row, USER_ID, USER_GROUP);

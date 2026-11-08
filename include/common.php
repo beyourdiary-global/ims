@@ -20307,6 +20307,108 @@ if (!function_exists('orderDeleteApprovalCancelPendingRequest')) {
     }
 }
 
+if (!function_exists('orderDeleteApprovalLoadPendingRequestsForResultSet')) {
+    /**
+     * Batch the pending-request lookup for a whole list page.
+     *
+     * The list pages all arrive with a mysqli_result already open for the rows they are
+     * about to render. Asking for the pending request per row would fire one query for
+     * every visible order, so the ids are collected in one pass, the cursor is rewound,
+     * and a single IN(...) query answers for the entire page.
+     */
+    function orderDeleteApprovalLoadPendingRequestsForResultSet($connect, $moduleKey, $result)
+    {
+        if (!($result instanceof mysqli_result)) {
+            return array();
+        }
+
+        $sourceOrderIds = array();
+        while ($row = $result->fetch_assoc()) {
+            if (is_array($row)) {
+                $sourceOrderIds[] = (int) (isset($row['id']) ? $row['id'] : 0);
+            }
+        }
+
+        // The caller still has to render every row, so the cursor must come back to the
+        // first record. Forgetting this leaves the table body empty while the header and
+        // footer look perfectly normal.
+        $result->data_seek(0);
+
+        return orderDeleteApprovalReadPendingRequestsBySourceIds($connect, $moduleKey, $sourceOrderIds);
+    }
+}
+
+if (!function_exists('orderDeleteApprovalRenderInlineDecision')) {
+    /**
+     * Render the per-row delete-request state for an order list.
+     *
+     * Two outcomes matter to whoever is looking at the list. If the request is theirs to
+     * decide, they get approve and reject buttons right on the row - the notification bell
+     * is easy to miss and, once an alert has been read, there is no way back to the request
+     * from the page that shows the order. If it is someone else's to decide, a "Delete
+     * Pending" badge says so, which is at least honest about why delete appears to do
+     * nothing.
+     *
+     * The buttons post instead of linking. Approving by GET would let a prefetch or a
+     * refreshed URL delete an order, so the decision goes through a form to the order page,
+     * which runs the same audited path the review screen uses.
+     */
+    function orderDeleteApprovalRenderInlineDecision($pendingRequest, $moduleKey, $sourceOrderId, $currentUserId, $orderPageUrl = '')
+    {
+        if (empty($pendingRequest) || !is_array($pendingRequest)) {
+            return '';
+        }
+
+        $moduleKey = trim((string) $moduleKey);
+        $sourceOrderId = (int) $sourceOrderId;
+        $currentUserId = (int) $currentUserId;
+        $requestId = (int) (isset($pendingRequest['id']) ? $pendingRequest['id'] : 0);
+        if ($moduleKey === '' || $sourceOrderId <= 0 || $requestId <= 0) {
+            return '';
+        }
+
+        $orderPageUrl = trim((string) $orderPageUrl);
+        if ($orderPageUrl === '') {
+            $orderPageUrl = orderDeleteApprovalBuildPageUrl($moduleKey, $sourceOrderId);
+        }
+        if ($orderPageUrl === '') {
+            return '';
+        }
+
+        if (!orderDeleteApprovalCanUserReviewRequest($pendingRequest, $moduleKey, $sourceOrderId, $currentUserId)) {
+            return '<span class="badge bg-warning text-dark me-1" title="Delete request waiting for supervisor approval">Delete Pending</span>';
+        }
+
+        $separator = strpos($orderPageUrl, '?') === false ? '?' : '&';
+        $actionUrl = $orderPageUrl . $separator . http_build_query(array(
+            'id' => $sourceOrderId,
+            'approval_mode' => 1,
+            'approval_request_id' => $requestId,
+        ));
+        $escapedActionUrl = htmlspecialchars($actionUrl, ENT_QUOTES, 'UTF-8');
+
+        $hiddenFields = '<input type="hidden" name="id" value="' . $sourceOrderId . '">'
+            . '<input type="hidden" name="approval_mode" value="1">'
+            . '<input type="hidden" name="approval_request_id" value="' . $requestId . '">';
+
+        $html = '<form method="post" action="' . $escapedActionUrl . '" class="d-inline me-1"'
+            . ' onsubmit="return confirm(\'Approve this delete request? The order will be deleted.\');">'
+            . $hiddenFields
+            . '<input type="hidden" name="approveDeleteApproval" value="1">'
+            . '<button type="submit" class="btn btn-sm btn-success" title="Approve delete request"><i class="fas fa-check"></i></button>'
+            . '</form>';
+
+        $html .= '<form method="post" action="' . $escapedActionUrl . '" class="d-inline me-1"'
+            . ' onsubmit="return confirm(\'Reject this delete request?\');">'
+            . $hiddenFields
+            . '<input type="hidden" name="rejectDeleteApproval" value="1">'
+            . '<button type="submit" class="btn btn-sm btn-danger" title="Reject delete request"><i class="fas fa-times"></i></button>'
+            . '</form>';
+
+        return $html;
+    }
+}
+
 if (!function_exists('orderDeleteApprovalCanUserReviewRequest')) {
     function orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $userId)
     {

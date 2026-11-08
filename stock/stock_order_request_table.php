@@ -84,6 +84,16 @@ if ($result && mysqli_num_rows($result) > 0) {
     }
 }
 
+$sorOrderDeleteApprovalModuleKey = 'stock_order_request';
+// The approval table lives in the main database, so this must not use $finance_connect even
+// though every other query on this page does.
+$sorPendingDeleteRequests = function_exists('orderDeleteApprovalReadPendingRequestsBySourceIds')
+    ? orderDeleteApprovalReadPendingRequestsBySourceIds($connect, $sorOrderDeleteApprovalModuleKey, array_map(function ($sorPendingRow) {
+        return (int) (isset($sorPendingRow['id']) ? $sorPendingRow['id'] : 0);
+    }, $rows))
+    : array();
+$sorCurrentUserId = defined('USER_ID') ? (int) USER_ID : 0;
+
 $stockedInOrderMap = array();
 if (!empty($requestOrderNumbers)) {
     $escapedOrderNumbers = array();
@@ -438,6 +448,16 @@ function sorAttachmentHref($relativePath, $siteUrl)
                                     <?php renderViewEditButton('View', $redirectPage, $row, $pinAccess); ?>
                                     <?php renderViewEditButton('Edit', $redirectPage, $row, $pinAccess, $act_2); ?>
                                     <?php renderDeleteButton($pinAccess, $row['id'], isset($row['invoice_no']) ? $row['invoice_no'] : '', '', $pageTitle, $redirectPage, $deleteRedirectPage); ?>
+                                    <?php
+                                    $sorRowId = (int) (isset($row['id']) ? $row['id'] : 0);
+                                    echo orderDeleteApprovalRenderInlineDecision(
+                                        isset($sorPendingDeleteRequests[$sorRowId]) ? $sorPendingDeleteRequests[$sorRowId] : array(),
+                                        $sorOrderDeleteApprovalModuleKey,
+                                        $sorRowId,
+                                        $sorCurrentUserId,
+                                        $redirectPage
+                                    );
+                                    ?>
                                     <?php
                                     $resolvedOrderNumber = strtolower(trim((string) (isset($row['_resolved_order_number']) ? $row['_resolved_order_number'] : '')));
                                     $isStockedInOrder = ($resolvedOrderNumber !== '' && isset($stockedInOrderMap[$resolvedOrderNumber]));
