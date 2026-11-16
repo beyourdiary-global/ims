@@ -566,8 +566,10 @@
                 backgroundColor,
                 labelColor: getWheelLabelColor(backgroundColor),
                 image: prizeImage,
-                imageRadius: prizeImage ? (useDenseWheelMode ? 0.42 : (useCompactWheelMode ? 0.44 : 0.46)) : 0,
-                imageScale: prizeImage ? (useDenseWheelMode ? 0.13 : (useCompactWheelMode ? 0.16 : 0.20)) : 0,
+                // The icon sits just inside the rim so the radial label owns the mid band
+                // of the sector; both draw along the spoke, so they must not share it.
+                imageRadius: prizeImage ? (useDenseWheelMode ? 0.84 : 0.86) : 0,
+                imageScale: prizeImage ? (useDenseWheelMode ? 0.10 : 0.11) : 0,
                 imageRotation: 0,
             };
         });
@@ -581,15 +583,16 @@
             lineWidth: useDenseWheelMode ? 2 : 3,
             itemLabelFont: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
             itemLabelFontSizeMax: useCompactWheelMode ? 11 : 14,
-            // Labels run along the sector's tangent instead of its radius: a radial label
-            // only ever reaches the two thirds of the sector nearest the rim, so long
-            // prize names were squeezed against the edge while the middle sat empty.
-            // Tangential text uses the sector's full width, and the centre placement
-            // keeps it clear of the icon at 0.46.
-            itemLabelRadius: useDenseWheelMode ? 0.74 : 0.72,
-            itemLabelRadiusMax: useDenseWheelMode ? 0.34 : 0.30,
-            itemLabelAlign: 'center',
-            itemLabelRotation: -90,
+            // Labels run along the spoke, rotating with the sector as the wheel turns -
+            // that is the classic wheel-of-names look and it is what the boss asked for
+            // after seeing the tangential layout. The label anchors at itemLabelRadius
+            // and grows toward the centre, so the band between itemLabelRadius and
+            // itemLabelRadiusMax is its whole width; the centre hub (26% of the wrap)
+            // sets the inner limit, and the icon at 0.86 sets the outer one.
+            itemLabelRadius: useDenseWheelMode ? 0.74 : 0.76,
+            itemLabelRadiusMax: useDenseWheelMode ? 0.32 : 0.28,
+            itemLabelAlign: 'right',
+            itemLabelRotation: 0,
             itemLabelColors: ['#ffffff'],
             itemLabelStrokeColor: 'rgba(0, 0, 0, 0.42)',
             itemLabelStrokeWidth: useCompactWheelMode ? 2 : 3,
