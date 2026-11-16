@@ -274,11 +274,14 @@
         return luminance >= 186 ? '#111827' : '#ffffff';
     }
 
-    function getWheelPrizeLabel(value) {
+    function getWheelPrizeLabel(value, prizeCount) {
         // Prize names are longer than the old percentage labels, so keep them short enough
-        // to stay inside the wheel instead of spilling over the rim.
+        // to stay inside the wheel instead of spilling over the rim. Tangential labels use
+        // the sector's full width, so the cap scales with how many sectors must share the
+        // wheel: few sectors fit the whole name, dense ones need a hard cut.
         const label = String(value || 'Prize').trim();
-        return label.length > 14 ? `${label.slice(0, 13)}…` : label;
+        const maxChars = prizeCount > 10 ? 10 : (prizeCount >= 8 ? 14 : 20);
+        return label.length > maxChars ? `${label.slice(0, maxChars - 1)}…` : label;
     }
 
     function escapeSvgText(value) {
@@ -547,14 +550,15 @@
 
         const wheelItems = sourceWheelRows.map((row, index) => {
             const backgroundColor = String(row && row.color ? row.color : (wheelColors[index % wheelColors.length] || themeColor));
-            const prizeType = String(row && row.type ? row.type : '').toLowerCase();
-            const isVoucherPrize = prizeType === 'voucher';
-            const prizeImage = buildWheelPrizeImage(
-                useCompactWheelMode ? getWheelDisplayImage(row) : getPrizeDisplayImage(row)
-            );
+            // The wheel sector is far too small for the prize card artwork, which prints
+            // the prize name in large type - scaled down to 18% it turned into an
+            // unreadable smear stacked under the label. Sectors always get the plain
+            // icon; the name itself is the text label next to it. The full card and
+            // product photo still show in the featured-prizes grid below.
+            const prizeImage = buildWheelPrizeImage(getWheelDisplayImage(row));
 
             return {
-                label: getWheelPrizeLabel(row && row.name ? row.name : 'Prize'),
+                label: getWheelPrizeLabel(row && row.name ? row.name : 'Prize', sourceWheelRows.length),
                 value: row && row.id ? row.id : 0,
                 // Equal weight keeps every sector the same size, so the odds we configured
                 // in the backend can never be read off the wheel.
@@ -562,8 +566,8 @@
                 backgroundColor,
                 labelColor: getWheelLabelColor(backgroundColor),
                 image: prizeImage,
-                imageRadius: prizeImage ? (useDenseWheelMode ? 0.42 : (useCompactWheelMode ? 0.44 : (isVoucherPrize ? 0.46 : 0.48))) : 0,
-                imageScale: prizeImage ? (useDenseWheelMode ? (isVoucherPrize ? 0.13 : 0.12) : (useCompactWheelMode ? (isVoucherPrize ? 0.16 : 0.15) : (isVoucherPrize ? 0.24 : 0.18))) : 0,
+                imageRadius: prizeImage ? (useDenseWheelMode ? 0.42 : (useCompactWheelMode ? 0.44 : 0.46)) : 0,
+                imageScale: prizeImage ? (useDenseWheelMode ? 0.13 : (useCompactWheelMode ? 0.16 : 0.20)) : 0,
                 imageRotation: 0,
             };
         });
@@ -577,10 +581,15 @@
             lineWidth: useDenseWheelMode ? 2 : 3,
             itemLabelFont: 'Segoe UI, Tahoma, Geneva, Verdana, sans-serif',
             itemLabelFontSizeMax: useCompactWheelMode ? 11 : 14,
-            itemLabelRadius: useCompactWheelMode ? 0.92 : 0.90,
-            itemLabelRadiusMax: useCompactWheelMode ? 0.20 : 0.28,
-            itemLabelAlign: 'right',
-            itemLabelRotation: 0,
+            // Labels run along the sector's tangent instead of its radius: a radial label
+            // only ever reaches the two thirds of the sector nearest the rim, so long
+            // prize names were squeezed against the edge while the middle sat empty.
+            // Tangential text uses the sector's full width, and the centre placement
+            // keeps it clear of the icon at 0.46.
+            itemLabelRadius: useDenseWheelMode ? 0.74 : 0.72,
+            itemLabelRadiusMax: useDenseWheelMode ? 0.34 : 0.30,
+            itemLabelAlign: 'center',
+            itemLabelRotation: -90,
             itemLabelColors: ['#ffffff'],
             itemLabelStrokeColor: 'rgba(0, 0, 0, 0.42)',
             itemLabelStrokeWidth: useCompactWheelMode ? 2 : 3,
