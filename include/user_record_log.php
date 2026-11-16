@@ -2064,7 +2064,7 @@ if (!function_exists('urlHandleUserRecordLogRequest')) {
                 if (
                     !empty($approvalRequestRow) &&
                     function_exists('orderDeleteApprovalCanUserAccessRequestView') &&
-                    orderDeleteApprovalCanUserAccessRequestView($approvalRequestRow, 'user_record_log', $approvalRecordId, (int) USER_ID) &&
+                    orderDeleteApprovalCanUserAccessRequestView($approvalRequestRow, 'user_record_log', $approvalRecordId, (int) USER_ID, $connect) &&
                     function_exists('orderDeleteApprovalRenderDecisionPanel')
                 ) {
                     $context['approval_record_id'] = $approvalRecordId;

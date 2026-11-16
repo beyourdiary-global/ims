@@ -20085,6 +20085,13 @@ if (!function_exists('orderDeleteApprovalIsSuperAdmin')) {
             return false;
         }
 
+        // List pages evaluate this once per rendered row, so the group lookup
+        // is cached per user for the lifetime of the request.
+        static $superAdminCache = array();
+        if (array_key_exists($userId, $superAdminCache)) {
+            return $superAdminCache[$userId];
+        }
+
         $userRow = orderDeleteApprovalReadUserRow($connect, $userId);
         $accessId = isset($userRow['access_id']) ? (int) $userRow['access_id'] : 0;
         if ($accessId <= 0) {
@@ -20097,7 +20104,9 @@ if (!function_exists('orderDeleteApprovalIsSuperAdmin')) {
         }
 
         $groupRow = $groupResult->fetch_assoc();
-        return strtolower(trim((string) (isset($groupRow['name']) ? $groupRow['name'] : ''))) === 'superadmin';
+        $isSuperAdmin = strtolower(trim((string) (isset($groupRow['name']) ? $groupRow['name'] : ''))) === 'superadmin';
+        $superAdminCache[$userId] = $isSuperAdmin;
+        return $isSuperAdmin;
     }
 }
 
@@ -20353,7 +20362,7 @@ if (!function_exists('orderDeleteApprovalRenderInlineDecision')) {
      * refreshed URL delete an order, so the decision goes through a form to the order page,
      * which runs the same audited path the review screen uses.
      */
-    function orderDeleteApprovalRenderInlineDecision($pendingRequest, $moduleKey, $sourceOrderId, $currentUserId, $orderPageUrl = '')
+    function orderDeleteApprovalRenderInlineDecision($pendingRequest, $moduleKey, $sourceOrderId, $currentUserId, $orderPageUrl = '', $connect = null)
     {
         if (empty($pendingRequest) || !is_array($pendingRequest)) {
             return '';
@@ -20375,7 +20384,7 @@ if (!function_exists('orderDeleteApprovalRenderInlineDecision')) {
             return '';
         }
 
-        if (!orderDeleteApprovalCanUserReviewRequest($pendingRequest, $moduleKey, $sourceOrderId, $currentUserId)) {
+        if (!orderDeleteApprovalCanUserReviewRequest($pendingRequest, $moduleKey, $sourceOrderId, $currentUserId, $connect)) {
             return '<span class="badge bg-warning text-dark me-1" title="Delete request waiting for supervisor approval">Delete Pending</span>';
         }
 
@@ -20410,7 +20419,7 @@ if (!function_exists('orderDeleteApprovalRenderInlineDecision')) {
 }
 
 if (!function_exists('orderDeleteApprovalCanUserReviewRequest')) {
-    function orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $userId)
+    function orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $userId, $connect = null)
     {
         $moduleKey = trim((string) $moduleKey);
         $sourceOrderId = (int) $sourceOrderId;
@@ -20427,20 +20436,28 @@ if (!function_exists('orderDeleteApprovalCanUserReviewRequest')) {
             return false;
         }
 
+        // The request row freezes the supervisor list as of the day the request
+        // was filed. A superadmin outranks that list by definition - without this
+        // branch the top admin would see "Delete Pending" with no button anywhere,
+        // which is exactly the dead end the inline controls were built to remove.
+        if ($connect instanceof mysqli && orderDeleteApprovalIsSuperAdmin($connect, $userId)) {
+            return true;
+        }
+
         $supervisorIds = orderDeleteApprovalParseSupervisorIds(isset($requestRow['supervisor_user_ids']) ? $requestRow['supervisor_user_ids'] : '');
         return in_array($userId, $supervisorIds, true);
     }
 }
 
 if (!function_exists('orderDeleteApprovalCanUserAccessRequestView')) {
-    function orderDeleteApprovalCanUserAccessRequestView($requestRow, $moduleKey, $sourceOrderId, $userId)
+    function orderDeleteApprovalCanUserAccessRequestView($requestRow, $moduleKey, $sourceOrderId, $userId, $connect = null)
     {
         $userId = (int) $userId;
         if ($userId <= 0 || !is_array($requestRow) || empty($requestRow)) {
             return false;
         }
 
-        if (orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $userId)) {
+        if (orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $userId, $connect)) {
             return true;
         }
 
@@ -20916,7 +20933,7 @@ if (!function_exists('orderDeleteApprovalRequestDelete')) {
         if (!empty($pendingRequest)) {
             $pendingRequestUserId = (int) (isset($pendingRequest['request_user_id']) ? $pendingRequest['request_user_id'] : 0);
             $currentUserId = (int) USER_ID;
-            $canCurrentUserDecide = orderDeleteApprovalCanUserReviewRequest($pendingRequest, $moduleKey, $sourceOrderId, $currentUserId);
+            $canCurrentUserDecide = orderDeleteApprovalCanUserReviewRequest($pendingRequest, $moduleKey, $sourceOrderId, $currentUserId, $connect);
 
             // A request the user filed against their own approval is a loop with no exit: the
             // only person who could decide it is the person waiting on it. Retire the stale row
@@ -21124,7 +21141,7 @@ if (!function_exists('orderDeleteApprovalProcessDecision')) {
         if (empty($requestRow)) {
             return array('success' => false, 'message' => 'Delete request was not found.');
         }
-        if (!orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, (int) USER_ID)) {
+        if (!orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, (int) USER_ID, $connect)) {
             return array('success' => false, 'message' => $decisionConfig['permission_message']);
         }
         if (trim((string) (isset($requestRow['request_status']) ? $requestRow['request_status'] : '')) !== 'pending') {
@@ -21248,7 +21265,7 @@ if (!function_exists('orderDeleteApprovalRenderDecisionPanel')) {
         $requestUserId = isset($requestRow['request_user_id']) ? (int) $requestRow['request_user_id'] : 0;
         $requestUserName = orderDeleteApprovalResolveDisplayName($connect, $requestUserId);
 
-        $canReview = orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $currentUserId);
+        $canReview = orderDeleteApprovalCanUserReviewRequest($requestRow, $moduleKey, $sourceOrderId, $currentUserId, $connect);
         $decisionUserId = isset($requestRow['decision_user_id']) ? (int) $requestRow['decision_user_id'] : 0;
         $decisionUserName = orderDeleteApprovalResolveDisplayName($connect, $decisionUserId);
 
@@ -21333,7 +21350,7 @@ if (!function_exists('orderDeleteApprovalHandlePageFlow')) {
             $requestRow = orderDeleteApprovalReadRequest($connect, $requestId);
             if (
                 empty($requestRow) ||
-                !orderDeleteApprovalCanUserAccessRequestView($requestRow, $moduleKey, $dataId, $currentUserId)
+                !orderDeleteApprovalCanUserAccessRequestView($requestRow, $moduleKey, $dataId, $currentUserId, $connect)
             ) {
                 renderNotificationScript('You do not have permission to review this delete request.', 'error', $redirectPage, 1200, true);
                 exit;

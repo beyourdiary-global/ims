@@ -760,7 +760,8 @@ $shpCurrentUserId = defined('USER_ID') ? (int) USER_ID : 0;
                                     $shpOrderDeleteApprovalModuleKey,
                                     $shpRowId,
                                     $shpCurrentUserId,
-                                    $redirectPage
+                                    $redirectPage,
+                                $connect
                                 );
                                 ?>
                                 <?php

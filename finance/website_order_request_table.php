@@ -650,7 +650,8 @@ $worCurrentUserId = defined('USER_ID') ? (int) USER_ID : 0;
                                                 $worOrderDeleteApprovalModuleKey,
                                                 $worRowId,
                                                 $worCurrentUserId,
-                                                $redirectPage
+                                                $redirectPage,
+                                            $connect
                                             );
                                             ?>
                                             <?php

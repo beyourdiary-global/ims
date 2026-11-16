@@ -455,7 +455,8 @@ function sorAttachmentHref($relativePath, $siteUrl)
                                         $sorOrderDeleteApprovalModuleKey,
                                         $sorRowId,
                                         $sorCurrentUserId,
-                                        $redirectPage
+                                        $redirectPage,
+                                    $connect
                                     );
                                     ?>
                                     <?php

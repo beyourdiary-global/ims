@@ -356,7 +356,8 @@ $lazCurrentUserId = defined('USER_ID') ? (int) USER_ID : 0;
                                         $lazOrderDeleteApprovalModuleKey,
                                         $lazRowId,
                                         $lazCurrentUserId,
-                                        $redirectPage
+                                        $redirectPage,
+                                    $connect
                                     );
                                     ?>
                                     <?php

@@ -371,7 +371,8 @@ function fbReqFetchAssoc($result)
                                         $fbOrderDeleteApprovalModuleKey,
                                         $fbRowId,
                                         $fbCurrentUserId,
-                                        $redirectPage
+                                        $redirectPage,
+                                    $connect
                                     );
                                     ?>
                                     <?php
