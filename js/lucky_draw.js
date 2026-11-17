@@ -593,9 +593,12 @@
             itemLabelRadiusMax: useDenseWheelMode ? 0.32 : 0.28,
             itemLabelAlign: 'right',
             itemLabelRotation: 0,
+            // Per-item labelColor picks white or near-black from the sector's own
+            // luminance, so the stroke the old config drew under every label was doing
+            // no contrast work - just a fat grey outline that read as a shadow doubled
+            // behind the text. Zero it out; the text stands alone.
             itemLabelColors: ['#ffffff'],
-            itemLabelStrokeColor: 'rgba(0, 0, 0, 0.42)',
-            itemLabelStrokeWidth: useCompactWheelMode ? 2 : 3,
+            itemLabelStrokeWidth: 0,
             pointerAngle: 0,
             isInteractive: false,
             rotationSpeedMax: 520,
