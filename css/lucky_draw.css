@@ -375,6 +375,9 @@ img {
     aspect-ratio: 1;
     display: grid;
     place-items: center;
+    /* Container so the hub text can scale in cqi with the wheel: the old fixed
+       rem sizes spilled "NOW" over the hub's gold ring on smaller wheels. */
+    container-type: inline-size;
     isolation: isolate;
     filter:
         drop-shadow(0 26px 40px rgba(10, 12, 28, 0.30))
@@ -490,9 +493,9 @@ img {
     flex-direction: column;
     justify-content: center;
     align-items: center;
-    gap: 4px;
-    padding: 18px 16px 18px;
-    border: 6px solid rgba(247, 199, 96, 0.98);
+    gap: 0.9cqi;
+    padding: 3.2cqi 3cqi;
+    border: 1.2cqi solid rgba(247, 199, 96, 0.98);
     background:
         radial-gradient(circle at 38% 18%, rgba(255, 255, 255, 1) 0%, rgba(247, 234, 255, 0.94) 18%, rgba(207, 162, 255, 0.60) 39%, rgba(141, 84, 230, 0.96) 69%, rgba(68, 28, 150, 1) 100%),
         linear-gradient(180deg, #ca96ff 0%, #8745e7 54%, #5220ad 100%);
@@ -524,8 +527,10 @@ img {
 .ld-wheel-center div:first-child {
     position: relative;
     z-index: 1;
-    margin-top: -4px;
-    font-size: 0.9rem;
+    margin-top: -0.8cqi;
+    /* Scaled in cqi so "SPIN NOW" stays inside the gold ring at every wheel
+       size - the fixed 3.15rem used to push "NOW" out over the ring. */
+    font-size: 2.5cqi;
     font-weight: 500;
     letter-spacing: 0.08em;
     text-transform: uppercase;
@@ -536,7 +541,7 @@ img {
 .ld-wheel-center div:last-child {
     position: relative;
     z-index: 1;
-    font-size: 3.15rem;
+    font-size: 8.6cqi;
     font-weight: 900;
     letter-spacing: -0.05em;
     line-height: 0.86;

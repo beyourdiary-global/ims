@@ -274,14 +274,105 @@
         return luminance >= 186 ? '#111827' : '#ffffff';
     }
 
-    function getWheelPrizeLabel(value, prizeCount) {
-        // Prize names are longer than the old percentage labels, so keep them short enough
-        // to stay inside the wheel instead of spilling over the rim. Tangential labels use
-        // the sector's full width, so the cap scales with how many sectors must share the
-        // wheel: few sectors fit the whole name, dense ones need a hard cut.
-        const label = String(value || 'Prize').trim();
-        const maxChars = prizeCount > 10 ? 10 : (prizeCount >= 8 ? 14 : 20);
-        return label.length > maxChars ? `${label.slice(0, maxChars - 1)}…` : label;
+    function getWheelPrizeLabel(value) {
+        // No ellipsis, ever: a name either fits on one line or wraps onto two at
+        // the space closest to its middle. The canvas font sizing shrinks to fit
+        // whatever is left, so nothing is cut away and nothing overflows.
+        const label = String(value || 'Prize').trim().replace(/\s+/g, ' ');
+        if (label.length <= 14) {
+            return label;
+        }
+
+        const middle = Math.ceil(label.length / 2);
+        let splitAt = -1;
+        for (let i = 0; i < label.length; i++) {
+            if (label[i] !== ' ') {
+                continue;
+            }
+            if (splitAt === -1 || Math.abs(i - middle) < Math.abs(splitAt - middle)) {
+                splitAt = i;
+            }
+        }
+
+        if (splitAt === -1) {
+            return label;
+        }
+        return `${label.slice(0, splitAt)}\n${label.slice(splitAt + 1)}`;
+    }
+
+    // The stock spin-wheel build draws each label with a single fillText, so a
+    // "\n" would render as one long line and the font fitter would measure the
+    // joined width of both halves. These overrides re-fit the font against the
+    // longest line and paint each line separately, stacked and centred on the
+    // same anchor. Same math as the stock renderer otherwise - same anchor
+    // radius, rotation, alignment and clipping - just line-aware.
+    function ensureMultilineWheelLabels(WheelClass) {
+        const proto = WheelClass.prototype;
+        if (!proto || proto.__multilineLabelsPatched) {
+            return;
+        }
+        proto.__multilineLabelsPatched = true;
+
+        const toRadians = (degrees) => degrees * Math.PI / 180;
+        const fitFontFor = (text, font, maxWidth, context) => {
+            context.save();
+            context.font = `1px ${font}`;
+            const width = context.measureText(text).width;
+            context.restore();
+            return width > 0 ? maxWidth / width : 0;
+        };
+
+        const originalResize = proto.resize;
+        proto.resize = function () {
+            originalResize.call(this);
+            let fontSize = this.itemLabelFontSizeMax * (this._size / 500);
+            for (const item of this._items) {
+                const label = String(item.label || '');
+                const longest = label.split('\n').reduce((carry, line) => (line.length > carry.length ? line : carry), '');
+                if (!longest) {
+                    continue;
+                }
+                fontSize = Math.min(fontSize, fitFontFor(longest, this.itemLabelFont, this._labelMaxWidth, this._context));
+            }
+            this._itemLabelFontSize = fontSize;
+        };
+
+        proto.drawItemLabels = function (context, angles = []) {
+            const baseline = this._itemLabelFontSize * -this.itemLabelBaselineOffset;
+            for (const [index, angle] of angles.entries()) {
+                const item = this._items[index];
+                const label = item ? String(item.label || '') : '';
+                const color = item ? (item.labelColor || this._itemLabelColors[index % this._itemLabelColors.length] || 'transparent') : 'transparent';
+                if (label.trim() === '' || color === 'transparent') {
+                    continue;
+                }
+
+                context.save();
+                context.clip(item.path);
+                const mid = angle.start + (angle.end - angle.start) / 2;
+                context.translate(
+                    this._center.x + Math.cos(toRadians(mid - 90)) * (this._actualRadius * this.itemLabelRadius),
+                    this._center.y + Math.sin(toRadians(mid - 90)) * (this._actualRadius * this.itemLabelRadius)
+                );
+                context.rotate(toRadians(mid - 90));
+                context.rotate(toRadians(this.itemLabelRotation));
+                context.textBaseline = 'middle';
+                context.textAlign = this.itemLabelAlign;
+                context.font = `${this._itemLabelFontSize}px ${this.itemLabelFont}`;
+                // The stock renderer sets fillStyle right before its single fillText;
+                // with per-line calls the value must be set here or every label
+                // inherits whatever fill colour the background pass left behind.
+                context.fillStyle = color;
+
+                const lines = label.split('\n');
+                const lineHeight = this._itemLabelFontSize * 1.12;
+                const startOffset = baseline - (lines.length - 1) * lineHeight / 2;
+                for (let i = 0; i < lines.length; i++) {
+                    context.fillText(lines[i], 0, startOffset + i * lineHeight);
+                }
+                context.restore();
+            }
+        };
     }
 
     function escapeSvgText(value) {
@@ -539,6 +630,7 @@
 
     function initLuckyWheel() {
         const SpinWheelClass = getSpinWheelClass();
+        ensureMultilineWheelLabels(SpinWheelClass);
         if (!wheelContainer || !SpinWheelClass || luckyWheelInstance) {
             return;
         }
@@ -558,7 +650,7 @@
             const prizeImage = buildWheelPrizeImage(getWheelDisplayImage(row));
 
             return {
-                label: getWheelPrizeLabel(row && row.name ? row.name : 'Prize', sourceWheelRows.length),
+                label: getWheelPrizeLabel(row && row.name ? row.name : 'Prize'),
                 value: row && row.id ? row.id : 0,
                 // Equal weight keeps every sector the same size, so the odds we configured
                 // in the backend can never be read off the wheel.
