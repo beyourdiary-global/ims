@@ -60,6 +60,10 @@ $seriesLookupMap = isset($lookupMaps['series']) && is_array($lookupMaps['series'
             filters: [
                 { key: 'customer_label', label: 'Customer Label', attr: 'customer_label', type: 'select', placeholder: 'All Customer Labels' },
                 { key: 'customer_tag', label: 'Tag', attr: 'customer_tag', type: 'select', placeholder: 'All Tags' },
+                // Members and non-members: the attribute is only present on rows
+                // that have an Urbanism member match, so filtering to "members"
+                // hides everyone else. No URL param - it is page-local.
+                { key: 'urbanism_member', label: 'Urbanism Members', attr: 'urbanism_member', type: 'select', placeholder: 'All Customers' },
                 { key: 'country', label: 'Country', attr: 'country', type: 'select', placeholder: 'All Countries' },
                 { key: 'brand', label: 'Brand', attr: 'brand', type: 'select', placeholder: 'All Brands' },
                 { key: 'series', label: 'Series', attr: 'series', type: 'select', placeholder: 'All Series' },
@@ -155,6 +159,9 @@ $seriesLookupMap = isset($lookupMaps['series']) && is_array($lookupMaps['series'
                                         : '';
                                     $filterAttributes = customerRecordBuildFilterDataAttributes(array(
                                         'customer_name' => isset($row['buyer_username']) ? $row['buyer_username'] : '',
+                                        // Only present for Urbanism members so the filter panel can
+                                        // show a members / non-members split; absent = non-member.
+                                        'urbanism_member' => $urbanismBuyerName !== '' && $urbanismFullName !== '' ? array('member') : array('non-member'),
                                         'customer_label' => customerRecordExtractLabelNames($customerLabelMeta),
                                         'customer_tag' => customerRecordExtractTagNames($customerTagRows),
                                         'sales_person' => $picName,
