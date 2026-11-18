@@ -63,7 +63,7 @@ $seriesLookupMap = isset($lookupMaps['series']) && is_array($lookupMaps['series'
                 // Members and non-members: the attribute is only present on rows
                 // that have an Urbanism member match, so filtering to "members"
                 // hides everyone else. No URL param - it is page-local.
-                { key: 'urbanism_member', label: 'Urbanism Members', attr: 'urbanism_member', type: 'select', placeholder: 'All Customers' },
+                { key: 'urbanism_member', label: 'Urbanism Members', attr: 'urbanism_member', type: 'select', placeholder: 'All Customers', options: ['member', 'non-member'] },
                 { key: 'country', label: 'Country', attr: 'country', type: 'select', placeholder: 'All Countries' },
                 { key: 'brand', label: 'Brand', attr: 'brand', type: 'select', placeholder: 'All Brands' },
                 { key: 'series', label: 'Series', attr: 'series', type: 'select', placeholder: 'All Series' },

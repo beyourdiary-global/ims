@@ -2620,6 +2620,15 @@ function initCustomerRecordTableFilters(config) {
       });
     });
 
+    // Fixed options: fields may declare option values that do not come from the
+    // rows on screen. The urbanism member filter is the first one - with a
+    // filtered or paginated list there may be no member row anywhere, and the
+    // auto-scanner would then offer only "non-member" and make "members"
+    // unselectable.
+    (field.options || []).forEach(function (value) {
+      optionValues[value] = true;
+    });
+
     let sortedOptionValues = normalizeCustomerRecordFilterValuesList(
       Object.keys(optionValues),
     ).sort(function (leftValue, rightValue) {
