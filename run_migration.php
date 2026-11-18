@@ -169,6 +169,12 @@ echo migAddColumn($connect, $dbName, 'lucky_draw_draw_log', 'customer_username',
 echo migAddColumn($connect, $dbName, 'lucky_draw_draw_log', 'birthday_year', "SMALLINT DEFAULT NULL");
 echo migAddColumn($connect, $dbName, 'lucky_draw_draw_log', 'birthday_month', "TINYINT DEFAULT NULL");
 echo migAddColumn($connect, $dbName, 'lucky_draw_prize', 'voucher_code', "VARCHAR(255) DEFAULT NULL");
+// ---- 1b) Urbanism member full name ----
+// urb_cust_reg.php grew a Full Name field beside Name: for VIP customers the
+// Shopee buyer username and the registered full name are not always the same,
+// and the boss wants both visible on the customer list.
+echo migAddColumn($connect, $dbName, 'urbanism_customer_register_info', 'full_name', "VARCHAR(190) DEFAULT NULL COMMENT 'Registered full name; may differ from the Shopee username in name'");
+
 echo migAddColumn($connect, $dbName, 'lucky_draw_virtual_winner', 'is_enabled', "CHAR(1) NOT NULL DEFAULT 'Y'");
 echo migAddIndex($connect, $dbName, 'lucky_draw_virtual_winner', 'idx_lucky_draw_virtual_board', "(`is_enabled`, `status`)");
 

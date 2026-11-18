@@ -27,6 +27,7 @@ foreach ($tableRows as $tableRow) {
 }
 $customerTagActivityMap = customerTagGetAssignmentActivityMap($connect, 'shopee', $customerIds);
 $lookupMaps = isset($tableDataset['lookup_maps']) && is_array($tableDataset['lookup_maps']) ? $tableDataset['lookup_maps'] : array();
+$urbanismFullNameMap = isset($tableDataset['urbanism_full_name_map']) && is_array($tableDataset['urbanism_full_name_map']) ? $tableDataset['urbanism_full_name_map'] : array();
 $picLookupMap = isset($lookupMaps['pic']) && is_array($lookupMaps['pic']) ? $lookupMaps['pic'] : array();
 $countryLookupMap = isset($lookupMaps['country']) && is_array($lookupMaps['country']) ? $lookupMaps['country'] : array();
 $brandLookupMap = isset($lookupMaps['brand']) && is_array($lookupMaps['brand']) ? $lookupMaps['brand'] : array();
@@ -107,6 +108,7 @@ $seriesLookupMap = isset($lookupMaps['series']) && is_array($lookupMaps['series'
                                 <th scope="col">S/N</th>
                                 <th scope="col" id="action_col">Action</th>
                                 <th scope="col">Shopee Buyer Username</th>
+                                <th scope="col">Urbanism Full Name</th>
                                 <th scope="col">Tag Last Update</th>
                                 <th scope="col">Customer Label</th>
                                 <th scope="col">Sales Person In Charge</th>
@@ -147,6 +149,10 @@ $seriesLookupMap = isset($lookupMaps['series']) && is_array($lookupMaps['series'
                                         $seriesName = isset($seriesLookupMap[$seriesValue]) ? $seriesLookupMap[$seriesValue] : $seriesValue;
                                     }
 
+                                    $urbanismBuyerName = isset($row['buyer_username']) ? trim((string) $row['buyer_username']) : '';
+                                    $urbanismFullName = $urbanismBuyerName !== '' && isset($urbanismFullNameMap[strtolower($urbanismBuyerName)])
+                                        ? $urbanismFullNameMap[strtolower($urbanismBuyerName)]
+                                        : '';
                                     $filterAttributes = customerRecordBuildFilterDataAttributes(array(
                                         'customer_name' => isset($row['buyer_username']) ? $row['buyer_username'] : '',
                                         'customer_label' => customerRecordExtractLabelNames($customerLabelMeta),
@@ -181,6 +187,9 @@ $seriesLookupMap = isset($lookupMaps['series']) && is_array($lookupMaps['series'
                                                 <?= $urbanismAction['disabled'] ? 'onclick="return false;" aria-disabled="true"' : '' ?>><i class="<?= $urbanismAction['icon_class'] ?>"></i></a>
                                         </td>
                                         <td scope="row"><?= customerLabelRenderNameCell(isset($row['buyer_username']) ? $row['buyer_username'] : '', $customerLabelMeta) ?></td>
+                                        <td scope="row" title="<?= htmlspecialchars($urbanismBuyerName !== '' ? ('Urbanism member: ' . $urbanismBuyerName) : 'Not registered as an Urbanism member', ENT_QUOTES, 'UTF-8') ?>">
+                                            <?php if ($urbanismFullName !== '') { echo htmlspecialchars($urbanismFullName, ENT_QUOTES, 'UTF-8'); } else { echo '<span class="text-muted">-</span>'; } ?>
+                                        </td>
                                         <td scope="row" class="customer-tag-assignment-activity-column"><?= customerTagRenderAssignmentActivity($customerTagActivityRows) ?></td>
                                         <td scope="row" class="customer-label-summary-column"><?= customerLabelRenderSummaryCell($customerLabelMeta, $customerTagRows) ?></td>
                                         <td scope="row"><?= htmlspecialchars($picName, ENT_QUOTES, 'UTF-8') ?></td>
@@ -199,6 +208,7 @@ $seriesLookupMap = isset($lookupMaps['series']) && is_array($lookupMaps['series'
                                 <th scope="col">S/N</th>
                                 <th scope="col" id="action_col">Action</th>
                                 <th scope="col">Shopee Buyer Username</th>
+                                <th scope="col">Urbanism Full Name</th>
                                 <th scope="col">Tag Last Update</th>
                                 <th scope="col">Customer Label</th>
                                 <th scope="col">Sales Person In Charge</th>

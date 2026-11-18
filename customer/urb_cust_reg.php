@@ -219,6 +219,7 @@ if (post('actionBtn')) {
 
     $umr_name = postSpaceFilter('umr_name_hidden');
     $umr_ic = postSpaceFilter('umr_ic');
+    $umr_full_name = postSpaceFilter('umr_full_name');
     $umr_add = postSpaceFilter('umr_add');
     $umr_date = postSpaceFilter('umr_date');
     $umr_attach = null;
@@ -231,6 +232,11 @@ if (post('actionBtn')) {
 
     $datafield = $oldvalarr = $chgvalarr = $newvalarr = array();
     $uploadedNewAttachment = false;
+
+    $regHasFullNameColumn = false;
+    if (function_exists('urbanismRegisterHasFullNameColumn')) {
+        $regHasFullNameColumn = urbanismRegisterHasFullNameColumn($connect, $reg_tblName);
+    }
 
     switch ($action) {
         case 'addRecord':
@@ -314,7 +320,8 @@ if (post('actionBtn')) {
                         array_push($datafield, 'attachment');
                     }
 
-                    $query = "INSERT INTO " . $reg_tblName . "(name,ic,address,reg_date,attachment,create_by,create_date,create_time) VALUES ('$umr_name','$umr_ic','$umr_add','$umr_date','$umr_attach','" . USER_ID . "',curdate(),curtime())";
+                    $regFullNameEscaped = mysqli_real_escape_string($connect, (string) $umr_full_name);
+                    $query = "INSERT INTO " . $reg_tblName . "(name,ic,address,reg_date,attachment,create_by,create_date,create_time" . ($regHasFullNameColumn ? ',full_name' : '') . ") VALUES ('$umr_name','$umr_ic','$umr_add','$umr_date','$umr_attach','" . USER_ID . "',curdate(),curtime()" . ($regHasFullNameColumn ? ",'" . $regFullNameEscaped . "'" : '') . ")";
                     // Execute the query
                     $returnData = mysqli_query($connect, $query);
                     $_SESSION['tempValConfirmBox'] = true;
@@ -374,13 +381,21 @@ if (post('actionBtn')) {
                         array_push($datafield, 'attachment');
                     }
 
+                    $regHasFullNameColumn = $regHasFullNameColumn || isset($row['full_name']);
+                    if ($regHasFullNameColumn && (isset($row['full_name']) ? $row['full_name'] : '') != $umr_full_name) {
+                        array_push($oldvalarr, isset($row['full_name']) ? $row['full_name'] : '');
+                        array_push($chgvalarr, $umr_full_name);
+                        array_push($datafield, 'full name');
+                    }
+
                     // convert into string
                     $oldval = implode(",", $oldvalarr);
                     $chgval = implode(",", $chgvalarr);
                     $_SESSION['tempValConfirmBox'] = true;
 
                     if (count($oldvalarr) > 0 && count($chgvalarr) > 0) {
-                        $query = "UPDATE " . $reg_tblName . " SET name = '$umr_name', ic = '$umr_ic', address = '$umr_add', reg_date = '$umr_date', attachment = '$umr_attach', update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id='" . $currentRowId . "'";
+                        $regFullNameEscaped = mysqli_real_escape_string($connect, (string) $umr_full_name);
+                        $query = "UPDATE " . $reg_tblName . " SET name = '$umr_name', ic = '$umr_ic', address = '$umr_add', reg_date = '$umr_date', attachment = '$umr_attach'" . ($regHasFullNameColumn ? ", full_name = '" . $regFullNameEscaped . "'" : '') . ", update_date = curdate(), update_time = curtime(), update_by ='" . USER_ID . "' WHERE id='" . $currentRowId . "'";
                         $returnData = mysqli_query($connect, $query);
 } else {
                         $act = 'NC';
@@ -432,6 +447,13 @@ if (isset($umr_name) && trim((string) $umr_name) !== '') {
     $urbanismFormName = trim((string) $row['name']);
 } else if ($urbanismSeedName !== '') {
     $urbanismFormName = $urbanismSeedName;
+}
+
+$urbanismFormFullName = '';
+if (isset($umr_full_name) && trim((string) $umr_full_name) !== '') {
+    $urbanismFormFullName = trim((string) $umr_full_name);
+} else if (isset($row['full_name']) && trim((string) $row['full_name']) !== '') {
+    $urbanismFormFullName = trim((string) $row['full_name']);
 }
 
 $urbanismOrderFbLink = $urbanismSeedFbLink;
@@ -491,7 +513,7 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
 
                     <div class="form-group">
                         <div class="row">
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label form_lbl" id="umr_name_lbl" for="umr_name">Name<span
                                         class="requireRed">*</span></label>
                                 <input class="form-control" type="text" name="umr_name" id="umr_name" value="<?php echo htmlspecialchars($urbanismFormName, ENT_QUOTES, 'UTF-8'); ?>" <?php echo 'disabled' ?>>
@@ -505,7 +527,11 @@ if ($urbanismOrderFbLink === '' && $urbanismFormName !== '') {
                                     </div>
                                 <?php } ?>
                             </div>
-                            <div class="col-md-6 mb-3">
+                            <div class="col-md-4 mb-3">
+                                <label class="form-label form_lbl" id="umr_full_name_lbl" for="umr_full_name">Full Name</label>
+                                <input class="form-control" type="text" name="umr_full_name" id="umr_full_name" value="<?php echo htmlspecialchars($urbanismFormFullName, ENT_QUOTES, 'UTF-8'); ?>">
+                            </div>
+                            <div class="col-md-4 mb-3">
                                 <label class="form-label form_lbl" id="umr_ic_lbl" for="umr_ic">IC<span
                                         class="requireRed">*</span></label>
                                 <input class="form-control" type="text" name="umr_ic" id="umr_ic" value="<?php

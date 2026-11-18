@@ -2805,6 +2805,38 @@ function renderDeleteButton($pinAccess, $rowId, $rowName, $rowRemark, $pageTitle
     }
 }
 
+if (!function_exists('urbanismRegisterHasFullNameColumn')) {
+    function urbanismRegisterHasFullNameColumn($connect, $tableName = URBAN_CUST_REG)
+    {
+        // The full_name column was added after this page shipped, so until the
+        // migration runs on a given database the INSERT/UPDATE on the urbanism
+        // registration page must skip it instead of failing on an unknown column.
+        // Probed once per request from the page, cached in the static.
+        static $cache = array();
+        $key = strtolower((string) $tableName);
+        if (array_key_exists($key, $cache)) {
+            return $cache[$key];
+        }
+
+        $available = false;
+        if ($connect instanceof mysqli) {
+            try {
+                $result = @mysqli_query($connect, "SHOW COLUMNS FROM `{$key}` LIKE 'full_name'");
+                if ($result instanceof mysqli_result) {
+                    $available = mysqli_num_rows($result) > 0;
+                }
+            } catch (Throwable $e) {
+                // PHP 8 throws from @mysqli_query on a connection that is not
+                // fully initialised; treat that as "column not confirmed".
+                $available = false;
+            }
+        }
+
+        $cache[$key] = $available;
+        return $available;
+    }
+}
+
 if (!function_exists('getUrbanismMemberActionData')) {
     function getUrbanismMemberActionData($connect, $seedId = '', $seedName = '', $returnPage = '', $returnLabel = '')
     {
@@ -11017,6 +11049,49 @@ if (!function_exists('shopeeCustomerRecordResolveLookupMap')) {
     }
 }
 
+if (!function_exists('shopeeCustomerRecordResolveUrbanismFullNameMap')) {
+    function shopeeCustomerRecordResolveUrbanismFullNameMap($connect, array $tableRows)
+    {
+        // The Shopee customer list is built from the finance customer table; the
+        // urbanism member registry (and therefore the registered full name)
+        // lives in the main database. One IN(...) round-trip per page keeps
+        // the list fast no matter how many rows the page carries.
+        $map = array();
+        $buyerNames = array();
+        foreach ($tableRows as $tableRow) {
+            $buyerName = isset($tableRow['buyer_username']) ? trim((string) $tableRow['buyer_username']) : '';
+            if ($buyerName !== '') {
+                $buyerNames[$buyerName] = true;
+            }
+        }
+        $buyerNames = array_keys($buyerNames);
+        if ($connect instanceof mysqli && !empty($buyerNames)) {
+            $inList = array();
+            foreach ($buyerNames as $buyerName) {
+                $inList[] = "'" . mysqli_real_escape_string($connect, $buyerName) . "'";
+            }
+            $result = @mysqli_query($connect, "SELECT name, full_name FROM " . URBAN_CUST_REG . " WHERE LOWER(TRIM(name)) IN (" . implode(',', $inList) . ")");
+            if ($result instanceof mysqli_result) {
+                while ($memberRow = $result->fetch_assoc()) {
+                    $memberName = isset($memberRow['name']) ? trim((string) $memberRow['name']) : '';
+                    if ($memberName === '') {
+                        continue;
+                    }
+                    $fullName = isset($memberRow['full_name']) ? trim((string) $memberRow['full_name']) : '';
+                    if ($fullName === '') {
+                        // A member record without full_name filled in yet:
+                        // fall back to the registry name so the column does
+                        // not go blank just because the field was added later.
+                        $fullName = $memberName;
+                    }
+                    $map[strtolower($memberName)] = $fullName;
+                }
+            }
+        }
+        return $map;
+    }
+}
+
 if (!function_exists('shopeeCustomerRecordBuildListDataset')) {
     function shopeeCustomerRecordBuildListDataset($connect, $financeConnect)
     {
@@ -11041,6 +11116,7 @@ if (!function_exists('shopeeCustomerRecordBuildListDataset')) {
                 'brand' => shopeeCustomerRecordResolveLookupMap($connect, $tableRows, 'brand', BRAND, 'name', array('name')),
                 'series' => shopeeCustomerRecordResolveLookupMap($connect, $tableRows, 'series', BRD_SERIES, 'name', array('name')),
             ),
+            'urbanism_full_name_map' => shopeeCustomerRecordResolveUrbanismFullNameMap($connect, $tableRows),
         );
     }
 }
