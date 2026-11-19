@@ -390,6 +390,29 @@ function campaignAssignCustomerPayload($row)
     return $json === false ? '' : base64_encode($json);
 }
 
+function campaignAssignCustomerRecordUrl($platform, $recordId)
+{
+    $recordId = (int) $recordId;
+    if ($recordId <= 0) {
+        return '';
+    }
+
+    $pageByPlatform = array(
+        'shopee' => 'shopee/shopee_cust_info.php',
+        'lazada' => 'finance/lazada_cust_rcd.php',
+        'website' => 'customer/website_customer_record.php',
+        'facebook' => 'customer/fb_cust_deals.php',
+    );
+
+    $key = strtolower(trim((string) $platform));
+    if (!isset($pageByPlatform[$key])) {
+        return '';
+    }
+
+    $base = defined('SITEURL') ? rtrim((string) SITEURL, '/') : '';
+    return $base . '/' . $pageByPlatform[$key] . '?id=' . $recordId;
+}
+
 function campaignAssignDecodePayload($payload)
 {
     $decodedJson = base64_decode((string) $payload, true);
@@ -1111,6 +1134,7 @@ foreach ($platformConfigs as $platformName => $config) {
         $customerRows[] = array(
             'platform' => $platformName,
             'customer_id' => $customerId,
+            'record_id' => $internalId,
             'customer_name' => $customerName,
             'customer_contact' => $customerContact,
             'customer_label' => implode(', ', isset($labelMap[(int) $internalId]) ? customerRecordExtractLabelNames($labelMap[(int) $internalId]) : array()),
@@ -1392,7 +1416,8 @@ ksort($platformFilterOptions, SORT_NATURAL | SORT_FLAG_CASE);
                                     <td><input type="checkbox" class="campaign-row-check campaign-table-row-check" name="selected_customers[]" value="<?= campaignH(campaignAssignCustomerPayload($row)) ?>" <?= $canManage ? '' : 'disabled' ?>></td>
                                     <td><?= $num++ ?></td>
                                     <td><?= campaignH($row['platform']) ?></td>
-                                    <td><?= campaignH($row['customer_name']) ?></td>
+                                    <?php $customerRecordUrl = campaignAssignCustomerRecordUrl($row['platform'], $row['record_id'] ?? 0); ?>
+                                    <td><?= $customerRecordUrl !== '' ? '<a href="' . $customerRecordUrl . '" target="_blank" rel="noopener">' . campaignH($row['customer_name']) . '</a>' : campaignH($row['customer_name']) ?></td>
                                     <td class="campaign-tag-cell"><?= campaignAssignRenderTagRowsAsBadges($row['customer_tag_rows'] ?? array()) ?></td>
                                     <td><?= campaignH($row['brand']) ?></td>
                                     <td><?= campaignH($row['package']) ?></td>
