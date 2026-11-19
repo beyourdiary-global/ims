@@ -13966,6 +13966,11 @@ if (!function_exists('shopeeOmsResolveUrbanismVipInfo')) {
                 $vipName = $candidate;
             }
 
+            // The full name (added by the urbanism register migration) is the
+            // preferred display name in the warehouse message; fall back to the
+            // short name when the column is absent or empty.
+            $vipFullName = trim((string) (isset($row['full_name']) ? $row['full_name'] : ''));
+
             $vipId = isset($row['id']) ? (int) $row['id'] : 0;
             $vipUrl = '';
             if ($vipId > 0 && defined('SITEURL')) {
@@ -13974,6 +13979,7 @@ if (!function_exists('shopeeOmsResolveUrbanismVipInfo')) {
 
             return array(
                 'name' => $vipName,
+                'full_name' => $vipFullName,
                 'email' => shopeeOmsResolveUrbanismVipEmail($connect, $vipName),
                 'url' => $vipUrl,
             );
@@ -14032,9 +14038,13 @@ if (!function_exists('shopeeOmsBuildUrbanismVipBlock')) {
         $lines = array();
         $lines[] = 'Register VIP customer';
 
+        // Prefer the registered full name; only fall back to the short name
+        // when the full name is missing (column not migrated / not filled).
+        $vipFullName = trim((string) (isset($vipInfo['full_name']) ? $vipInfo['full_name'] : ''));
         $vipName = trim((string) (isset($vipInfo['name']) ? $vipInfo['name'] : ''));
-        if ($vipName !== '') {
-            $lines[] = $vipName;
+        $displayName = $vipFullName !== '' ? $vipFullName : $vipName;
+        if ($displayName !== '') {
+            $lines[] = $displayName;
         }
 
         $vipEmail = trim((string) (isset($vipInfo['email']) ? $vipInfo['email'] : ''));
