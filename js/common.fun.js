@@ -2783,10 +2783,16 @@ function initCustomerRecordTableFilters(config) {
                 }
               });
             } else if (!isAll && currentCheckbox.is(":checked")) {
-              // Picking a specific option narrows the list, so drop "All".
+              // Picking one specific option is a single-choice filter: drop
+              // "All" and untick the other specific options, so the button
+              // reads exactly that one value and the search narrows to it.
               checkboxNodes.each(function () {
                 let checkbox = $(this);
-                if (String(checkbox.val()).trim() === "") {
+                let otherValue = String(checkbox.val()).trim();
+                if (checkbox.get(0) !== currentCheckbox.get(0) && otherValue !== "") {
+                  checkbox.prop("checked", false);
+                }
+                if (otherValue === "") {
                   checkbox.prop("checked", false);
                 }
               });
