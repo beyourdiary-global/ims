@@ -2421,6 +2421,10 @@ function initCustomerRecordTableFilters(config) {
     }
 
     let fieldNode = fieldNodes[field.key];
+    let optionLabels =
+      field.optionLabels && typeof field.optionLabels === "object"
+        ? field.optionLabels
+        : {};
     let selectedValues = normalizeCustomerRecordFilterValuesList(
       fieldNode.inputs
         .filter(":checked")
@@ -2436,7 +2440,10 @@ function initCustomerRecordTableFilters(config) {
     if (!selectedValues.length) {
       fieldNode.button.text(field.placeholder || "All");
     } else if (selectedValues.length === 1) {
-      fieldNode.button.text(selectedValues[0]);
+      let single = selectedValues[0];
+      fieldNode.button.text(
+        optionLabels[single] != null ? optionLabels[single] : single,
+      );
     } else {
       fieldNode.button.text(selectedValues.length + " selected");
     }
@@ -2481,10 +2488,27 @@ function initCustomerRecordTableFilters(config) {
       return value !== "";
     });
 
+    // By default the "All" box is a "clear everything" shortcut - tick it and
+    // the specific options untick. Fields with allOptionsTickAll instead treat
+    // "All" as "show everything": it stays ticked while every specific option
+    // (or none) is selected, and unticks the moment only a strict subset is
+    // chosen, which is a genuine narrowing filter.
+    let allTickAll = field.allOptionsTickAll === true;
+    let allOptionsTickAllState;
+
+    if (allTickAll) {
+      let knownValues = fieldNode.inputs
+        .filter(function () {
+          return String($(this).val()).trim() !== "";
+        })
+        .length;
+      allOptionsTickAllState = selectedValues.length === 0 || selectedValues.length === knownValues;
+    }
+
     fieldNode.inputs.each(function () {
       let input = $(this);
       if (String(input.val()) === "") {
-        input.prop("checked", selectedValues.length === 0);
+        input.prop("checked", allTickAll ? allOptionsTickAllState : selectedValues.length === 0);
       }
     });
   };
@@ -2682,6 +2706,17 @@ function initCustomerRecordTableFilters(config) {
       dropdownMenu.append(placeholderCheckboxWrap);
       checkboxNodes = checkboxNodes.add(placeholderCheckboxNode);
 
+      // Fields may pair a raw filter value with a friendlier display label
+      // (e.g. the urbanism "member" value reads better as "Member").
+      let optionLabels =
+        field.optionLabels && typeof field.optionLabels === "object"
+          ? field.optionLabels
+          : {};
+      let optionLabelFor = function (value) {
+        let key = String(value == null ? "" : value).trim();
+        return optionLabels[key] != null ? optionLabels[key] : value;
+      };
+
       sortedOptionValues.forEach(function (value, index) {
         let checkboxId = fieldId + "_" + index;
         let checkboxWrap = $('<div class="form-check"></div>');
@@ -2700,7 +2735,7 @@ function initCustomerRecordTableFilters(config) {
           '<label class="form-check-label" for="' +
             checkboxId +
             '">' +
-            $("<div></div>").text(value).html() +
+            $("<div></div>").text(optionLabelFor(value)).html() +
             "</label>",
         );
 
@@ -2727,21 +2762,53 @@ function initCustomerRecordTableFilters(config) {
         .on("change.customerRecordFilter", function () {
           let currentCheckbox = $(this);
           let currentValue = String(currentCheckbox.val()).trim();
+          let isAll = currentValue === "";
+          let allTickAll = field.allOptionsTickAll === true;
 
-          if (currentValue === "" && currentCheckbox.is(":checked")) {
-            checkboxNodes.each(function () {
-              let checkbox = $(this);
-              if (checkbox.get(0) !== currentCheckbox.get(0)) {
-                checkbox.prop("checked", false);
-              }
-            });
-          } else if (currentValue !== "" && currentCheckbox.is(":checked")) {
-            checkboxNodes.each(function () {
-              let checkbox = $(this);
-              if (String(checkbox.val()).trim() === "") {
-                checkbox.prop("checked", false);
-              }
-            });
+          if (allTickAll) {
+            if (isAll && currentCheckbox.is(":checked")) {
+              // "All" = show everything, so tick every real option too.
+              checkboxNodes.each(function () {
+                let checkbox = $(this);
+                if (String(checkbox.val()).trim() !== "") {
+                  checkbox.prop("checked", true);
+                }
+              });
+            } else if (isAll && !currentCheckbox.is(":checked")) {
+              // Un-checking "All" narrows the list; clear the real options.
+              checkboxNodes.each(function () {
+                let checkbox = $(this);
+                if (String(checkbox.val()).trim() !== "") {
+                  checkbox.prop("checked", false);
+                }
+              });
+            } else if (!isAll && currentCheckbox.is(":checked")) {
+              // Picking a specific option narrows the list, so drop "All".
+              checkboxNodes.each(function () {
+                let checkbox = $(this);
+                if (String(checkbox.val()).trim() === "") {
+                  checkbox.prop("checked", false);
+                }
+              });
+            }
+          } else {
+            if (currentValue === "" && currentCheckbox.is(":checked")) {
+              // "All" clears everything except itself.
+              checkboxNodes.each(function () {
+                let checkbox = $(this);
+                if (checkbox.get(0) !== currentCheckbox.get(0)) {
+                  checkbox.prop("checked", false);
+                }
+              });
+            } else if (currentValue !== "" && currentCheckbox.is(":checked")) {
+              // Picking a specific option clears "All".
+              checkboxNodes.each(function () {
+                let checkbox = $(this);
+                if (String(checkbox.val()).trim() === "") {
+                  checkbox.prop("checked", false);
+                }
+              });
+            }
           }
 
           syncMultiSelectPlaceholderState(field);
