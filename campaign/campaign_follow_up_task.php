@@ -532,15 +532,30 @@ if ($followUpSaveRequested) {
 
             $connect->begin_transaction();
 
-            $campaignTagResult = campaignFollowUpAssignCampaignTagToCustomer(
-                $connect,
-                isset($finance_connect) ? $finance_connect : $connect,
-                $task,
-                $labelPreview,
-                $pageTitle
-            );
-            if (empty($campaignTagResult['success'])) {
-                throw new Exception((string) ($campaignTagResult['message'] ?? 'Unable to assign campaign tag.'));
+            // Mark mode = "mark as notified" -> assign the campaign tag. Edit mode is a
+            // correction of an already-completed follow-up (e.g. attaching the failed-notify
+            // screenshot) and must NOT claim the customer was notified, so it skips the tag.
+            $modalMode = strtolower(trim((string) post('modal_mode')));
+            $shouldAssignTag = ($modalMode !== 'edit');
+            $campaignTagResult = array('success' => true, 'message' => '', 'tag_row' => null, 'source_platform' => '', 'source_customer_id' => 0);
+
+            if ($shouldAssignTag) {
+                $campaignTagResult = campaignFollowUpAssignCampaignTagToCustomer(
+                    $connect,
+                    isset($finance_connect) ? $finance_connect : $connect,
+                    $task,
+                    $labelPreview,
+                    $pageTitle
+                );
+                if (empty($campaignTagResult['success'])) {
+                    throw new Exception((string) ($campaignTagResult['message'] ?? 'Unable to assign campaign tag.'));
+                }
+            } else {
+                // Edit: no tag, but still resolve the source customer so the User Record Log
+                // entry lands on the right person.
+                $sourceCustomer = campaignFollowUpResolveSourceCustomerForTag($connect, isset($finance_connect) ? $finance_connect : $connect, $task);
+                $campaignTagResult['source_platform'] = (string) ($sourceCustomer['platform'] ?? '');
+                $campaignTagResult['source_customer_id'] = (int) ($sourceCustomer['customer_id'] ?? 0);
             }
 
             $stmt = $connect->prepare("UPDATE `" . CAMPAIGN_FOLLOW_UP . "` SET `screenshot_path`=?, `remark`=?, `follow_up_status`=?, `label_preview`=?, `completed_by`=?, `completed_date`=?, `completed_time`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
@@ -559,8 +574,8 @@ if ($followUpSaveRequested) {
                 $recordLogLines = array();
                 $recordLogLines[] = 'Campaign follow-up completed for campaign "' . (string) ($task['campaign_name'] ?? '') . '".';
                 $recordLogLines[] = 'Message: ' . (string) ($task['message_preview'] ?? '');
-                $tagNameForLog = trim((string) ($campaignTagResult['tag_row']['name'] ?? $labelPreview));
-                if ($tagNameForLog !== '') {
+                $tagNameForLog = trim((string) ($campaignTagResult['tag_row']['name'] ?? ''));
+                if ($shouldAssignTag && $tagNameForLog !== '') {
                     $recordLogLines[] = 'Tag added: ' . $tagNameForLog . '.';
                 }
                 if ($remark !== '') {
@@ -1057,6 +1072,7 @@ if ($stmt) {
                     <input type="hidden" name="csrf_token" value="<?= campaignH($csrfToken) ?>">
                     <input type="hidden" name="campaign_id" value="<?= (int) $campaignId ?>">
                     <input type="hidden" name="task_id" id="campaign_follow_up_task_id" value="">
+                    <input type="hidden" name="modal_mode" id="campaign_follow_up_modal_mode" value="">
                     <input type="hidden" name="actionBtn" value="saveFollowUp">
 
                     <div class="arrival-follow-up-summary">
@@ -1459,6 +1475,7 @@ if ($stmt) {
             var isCompleted = statusLabel === 'Completed';
 
             document.getElementById('campaign_follow_up_task_id').value = taskId;
+            document.getElementById('campaign_follow_up_modal_mode').value = (isMarkMode ? 'mark' : (isViewMode ? 'view' : 'edit'));
             document.getElementById('campaignFollowUpModalTitle').textContent =
                 (isViewMode ? 'View Follow Up - ' : (isMarkMode ? 'Mark Follow Up - ' : 'Edit Follow Up - ')) + customerName;
             document.getElementById('campaign_follow_up_customer_text').textContent = customerName;
