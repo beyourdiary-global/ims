@@ -777,6 +777,24 @@ if ($stmt) {
             margin-top: 0.35rem;
         }
 
+        /* Keep the edit/view follow-up modal inside the viewport so the summary,
+           attachment preview and remark never overlap the page behind it. */
+        .campaign-follow-up-page .campaign-follow-up-modal-dialog {
+            max-width: 720px;
+            margin: 1.5rem auto;
+        }
+
+        .campaign-follow-up-page .campaign-follow-up-modal-dialog .modal-content {
+            max-height: calc(100vh - 3rem);
+            display: flex;
+            flex-direction: column;
+        }
+
+        .campaign-follow-up-page .campaign-follow-up-modal-dialog .modal-body {
+            overflow-y: auto;
+            flex: 1 1 auto;
+        }
+
         .campaign-follow-up-image-lightbox {
             display: none;
             position: fixed;
@@ -1061,7 +1079,7 @@ if ($stmt) {
 </div>
 
 <div class="modal fade" id="campaignFollowUpModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog">
+    <div class="modal-dialog modal-dialog-scrollable campaign-follow-up-modal-dialog">
         <div class="modal-content">
             <form method="post" enctype="multipart/form-data" id="campaign_follow_up_modal_form" novalidate>
                 <div class="modal-header">
