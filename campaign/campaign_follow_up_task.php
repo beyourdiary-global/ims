@@ -21,6 +21,10 @@ if (!isActionAllowed('View', $pinAccess)) {
 
 $canSave = isActionAllowed('Add', $pinAccess) || isActionAllowed('Edit', $pinAccess);
 $canDelete = isActionAllowed('Delete', $pinAccess);
+// Removing a test / wrongly-assigned customer is operationally the same tier
+// as editing the list, so anyone who can save follow-ups can also delete one.
+// A dedicated Delete pin permission still works if the account has it.
+$canManage = $canSave || $canDelete;
 $csrfToken = campaignCsrfToken('follow_up_task');
 $backUrl = $SITEURL . '/campaign/campaign_table.php';
 $pageUrl = $SITEURL . '/campaign/campaign_follow_up_task.php' . ($campaignId > 0 ? '?campaign_id=' . $campaignId : '');
@@ -439,7 +443,7 @@ $followUpSaveRequested = post('actionBtn') === 'saveFollowUp';
 if (($followUpSaveRequested || $followUpDeleteRequested)
     && (($followUpSaveRequested && !campaignVerifyCsrf('follow_up_task', post('csrf_token')))
         || (!$canSave && $followUpSaveRequested)
-        || (!$canDelete && $followUpDeleteRequested))) {
+        || (!$canManage && $followUpDeleteRequested))) {
     campaignSetPopup('Unable to update Campaign Follow-Up Task.', $pageUrl, 'ErrMO');
     echo '<script>location.href = "' . $pageUrl . '";</script>';
     exit();
@@ -458,7 +462,7 @@ if ($followUpDeleteRequested) {
         $postedToken = (string) post('csrf_token');
     }
 
-    if (!hash_equals($csrfToken, $postedToken) || !$canDelete) {
+    if (!hash_equals($csrfToken, $postedToken) || !$canManage) {
         if ($followUpDeleteUsesCommonDialog) {
             http_response_code(403);
             echo 'Unable to delete Campaign Follow-Up Customer.';
@@ -1007,7 +1011,7 @@ if ($stmt) {
                                     <i class="fas fa-edit"></i>
                                 </button>
                             <?php endif; ?>
-                            <?php if ($canDelete): ?>
+                            <?php if ($canManage): ?>
                                 <?php
                                 $deletePayload = (string) ((int) $row['id']) . '|' . (string) $csrfToken;
                                 $deleteOnClick = 'confirmationDialog('
