@@ -1747,8 +1747,12 @@ if (!function_exists('luckyDrawResolveCustomerBirthdayParts')) {
         $day = isset($customerRow['birthday_day']) ? (int) $customerRow['birthday_day'] : 0;
 
         if ($year <= 0 || $month <= 0) {
-            // Fallback: legacy birthday(DATE) column.
+            // Fallback: legacy birthday(DATE) column. Website rows carry the date in
+            // cust_birthday instead of birthday, so try both.
             $legacy = trim((string) (isset($customerRow['birthday']) ? $customerRow['birthday'] : ''));
+            if ($legacy === '' && isset($customerRow['cust_birthday'])) {
+                $legacy = trim((string) $customerRow['cust_birthday']);
+            }
             if ($legacy !== '' && substr($legacy, 0, 4) !== '0000' && strpos($legacy, '-') !== false) {
                 $parts = explode('-', $legacy);
                 if (count($parts) === 3) {
@@ -1957,6 +1961,16 @@ if (!function_exists('luckyDrawLookupCustomerByUsername')) {
             if ($lazadaRow !== null) {
                 $row = $lazadaRow;
                 $source = 'lazada';
+            }
+        }
+
+        // 5) The username typed is a Website customer name / email / record id.
+        //    Website rows live in the CMS database like the other non-Shopee platforms.
+        if ($row === null) {
+            $websiteRow = luckyDrawFindCustomerByPlatformUsername($connect, WEB_CUST_RCD, $username, array('name', 'cust_email', 'cust_id'));
+            if ($websiteRow !== null) {
+                $row = $websiteRow;
+                $source = 'website';
             }
         }
 
