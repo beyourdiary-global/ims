@@ -76,7 +76,10 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
     }
 }
 
-$duplicateGroups = $schemaReady ? customerFollowUpFindDuplicateCaseGroups($connect) : array();
+// Duplicate detection does not depend on the superseded column. Keep showing the
+// cases that need review even when the migration is missing; only the merge action
+// requires that column to preserve round history safely.
+$duplicateGroups = customerFollowUpFindDuplicateCaseGroups($connect);
 $unlinkedLogs = $schemaReady ? customerFollowUpFindUnlinkedFollowUpLogs($connect) : array();
 
 $customerLabelMapByPlatform = array();
