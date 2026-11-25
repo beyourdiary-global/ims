@@ -1078,6 +1078,48 @@ if (!function_exists('orderReportBuildSourceQuery')) {
     }
 }
 
+// Keep filter choices available even when their records fall outside the selected period.
+if (!function_exists('orderReportBuildGlobalShopeeFilterOptionSets')) {
+    function orderReportBuildGlobalShopeeFilterOptionSets($optionSets, $referenceMaps, $statusRows)
+    {
+        $mapFilters = array(
+            'package' => 'package_map',
+            'brand' => 'brand_map',
+            'warehouse' => 'warehouse_map',
+        );
+
+        foreach ($mapFilters as $filterKey => $mapKey) {
+            if (!isset($optionSets[$filterKey]) || !is_array($optionSets[$filterKey])) {
+                $optionSets[$filterKey] = array();
+            }
+            $lookupMap = isset($referenceMaps[$mapKey]) && is_array($referenceMaps[$mapKey])
+                ? $referenceMaps[$mapKey]
+                : array();
+            foreach ($lookupMap as $rawId => $label) {
+                $optionId = (int) $rawId;
+                $label = trim((string) $label);
+                if ($optionId > 0 && $label !== '') {
+                    $optionSets[$filterKey][(string) $optionId] = $label;
+                }
+            }
+        }
+
+        if (!isset($optionSets['order_status']) || !is_array($optionSets['order_status'])) {
+            $optionSets['order_status'] = array();
+        }
+        foreach ((array) $statusRows as $statusRow) {
+            $statusRaw = isset($statusRow['status_value']) ? trim((string) $statusRow['status_value']) : '';
+            $statusKey = $statusRaw !== '' ? $statusRaw : '__EMPTY__';
+            $statusLabel = $statusRaw !== ''
+                ? (function_exists('shopeeOmsGetStatusLabel') ? shopeeOmsGetStatusLabel($statusRaw) : $statusRaw)
+                : (function_exists('shopeeOmsGetTransitionStatusLabel') ? shopeeOmsGetTransitionStatusLabel('', 'from') : 'New Order (blank status)');
+            $optionSets['order_status'][$statusKey] = $statusLabel;
+        }
+
+        return $optionSets;
+    }
+}
+
 if (!function_exists('orderReportBuildOptionSets')) {
     function orderReportBuildOptionSets($connect, $platformConfig, $rows, $referenceMaps, $connectForOrders)
     {
@@ -1130,6 +1172,21 @@ if (!function_exists('orderReportBuildOptionSets')) {
         $warehouseMap = isset($referenceMaps['warehouse_map']) ? $referenceMaps['warehouse_map'] : array();
         $defaultWarehouseId = isset($referenceMaps['default_warehouse_id']) ? (int) $referenceMaps['default_warehouse_id'] : 0;
         $isShopee = strtolower(trim((string) ($platformConfig['platform'] ?? ''))) === 'shopee';
+        if ($isShopee) {
+            // Status choices must span active orders across periods, not only the current report date.
+            $statusRows = array();
+            $orderTableName = isset($platformConfig['table']) ? trim((string) $platformConfig['table']) : '';
+            $statusField = isset($platformConfig['status_field']) ? trim((string) $platformConfig['status_field']) : 'order_status';
+            if ($orderTableName !== '' && $statusField !== '' && tableExists($orderTableName, $connectForOrders)) {
+                $quotedOrderTable = '`' . str_replace('`', '``', $orderTableName) . '`';
+                $quotedStatusField = '`' . str_replace('`', '``', $statusField) . '`';
+                $statusRows = orderReportFetchRows(
+                    $connectForOrders,
+                    "SELECT DISTINCT " . $quotedStatusField . " AS `status_value` FROM " . $quotedOrderTable . " WHERE `status` = 'A' ORDER BY `status_value` ASC"
+                );
+            }
+            $optionSets = orderReportBuildGlobalShopeeFilterOptionSets($optionSets, $referenceMaps, $statusRows);
+        }
         $shopeeAccountMap = array();
         if ($isShopee && defined('SHOPEE_ACC')) {
             $accountTableName = (string) SHOPEE_ACC;
@@ -2478,7 +2535,7 @@ if (!function_exists('orderReportRenderPage')) {
         $reportScriptVersion = @filemtime(ROOT . '/js/order_report.js');
         $reportScriptUrl = $reportScriptPath . ($reportScriptVersion ? ('?v=' . $reportScriptVersion) : '');
 
-        echo '<!-- order_report_common build 2026-10-03a -->';
+        echo '<!-- order_report_common build 2026-11-25b -->';
         echo '<div class="container-fluid d-flex justify-content-center mt-3">';
         echo '  <div class="col-12 col-md-11">';
         echo '      <div class="d-flex flex-column mb-3">';
