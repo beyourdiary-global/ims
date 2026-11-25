@@ -919,11 +919,6 @@ if ($hasTaskManagementAccess) {
 <?php endif; ?>
 
 <script>
-    <?php
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
-    ?>
     function isMobileViewport() {
         return window.matchMedia('(max-width: 768px)').matches;
     }
@@ -1244,7 +1239,7 @@ if ($hasTaskManagementAccess) {
         const input = createRow ? createRow.querySelector('input') : null;
         const confirmBtn = document.getElementById('taskGlobalCreateProjectConfirmBtn');
         const cancelBtn = document.getElementById('taskGlobalCreateProjectCancelBtn');
-        const csrfToken = <?php echo json_encode(isset($_SESSION['csrf_token']) ? $_SESSION['csrf_token'] : '', JSON_UNESCAPED_UNICODE); ?>;
+        const csrfToken = <?php echo json_encode(cmsGetCsrfToken(), JSON_UNESCAPED_UNICODE); ?>;
 
         // OPEN create row
         if (createBtn && createRow) {

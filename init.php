@@ -30,6 +30,65 @@ ini_set('session.save_path', $sessionPath);
 
 session_start();
 
+if (!function_exists('cmsGetCsrfToken')) {
+    function cmsGetCsrfToken()
+    {
+        if (!isset($_SESSION['csrf_token']) || !is_string($_SESSION['csrf_token']) || $_SESSION['csrf_token'] === '') {
+            $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
+        }
+
+        return $_SESSION['csrf_token'];
+    }
+}
+
+if (!function_exists('cmsVerifyCsrfToken')) {
+    function cmsVerifyCsrfToken($submittedToken)
+    {
+        $expectedToken = isset($_SESSION['csrf_token']) && is_string($_SESSION['csrf_token'])
+            ? $_SESSION['csrf_token']
+            : '';
+
+        return $expectedToken !== ''
+            && is_string($submittedToken)
+            && $submittedToken !== ''
+            && hash_equals($expectedToken, $submittedToken);
+    }
+}
+
+// Keep legacy feature-specific session slots aligned to one session-wide token.
+// Existing forms can keep their field names; new code should use these helpers
+// rather than create a feature-specific CSRF token.
+$cmsSessionCsrfToken = cmsGetCsrfToken();
+$cmsLegacyCsrfSessionKeys = array(
+    'campaign_form_csrf_token',
+    'campaign_csrf_token',
+    'customer_follow_up_cleanup_csrf',
+    'customer_follow_up_csrf',
+    'arrival_follow_up_csrf',
+    'order_warehouse_transfer_search_csrf',
+    'order_warehouse_transfer_submit_csrf',
+    'member_redeem_setting_csrf_token',
+    'member_bonus_management_csrf_token',
+    'lucky_draw_csrf_token',
+    'lucky_draw_claim_csrf',
+    'shopee_order_follow_up_csrf',
+    'shopee_order_verify_pdf_csrf',
+    'shopee_order_stock_out_photo_csrf',
+    'task_board_csrf_token',
+);
+foreach ($cmsLegacyCsrfSessionKeys as $cmsSessionKey) {
+    if (!isset($_SESSION[$cmsSessionKey]) || $_SESSION[$cmsSessionKey] !== $cmsSessionCsrfToken) {
+        $_SESSION[$cmsSessionKey] = $cmsSessionCsrfToken;
+    }
+}
+foreach (array_keys($_SESSION) as $cmsSessionKey) {
+    if ($cmsSessionKey !== 'csrf_token' && stripos((string) $cmsSessionKey, 'csrf') !== false
+        && (!isset($_SESSION[$cmsSessionKey]) || $_SESSION[$cmsSessionKey] !== $cmsSessionCsrfToken)) {
+        $_SESSION[$cmsSessionKey] = $cmsSessionCsrfToken;
+    }
+}
+unset($cmsSessionCsrfToken, $cmsLegacyCsrfSessionKeys, $cmsSessionKey);
+
 // Auto-detect environment based on the URL host
 $host = isset($_SERVER['HTTP_HOST']) ? $_SERVER['HTTP_HOST'] : 'localhost';
 $hostOnly = strtolower(trim(explode(':', $host)[0]));

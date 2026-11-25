@@ -14,10 +14,7 @@ if (!isActionAllowed('View', $pinAccess)) {
     exit();
 }
 
-if (empty($_SESSION['campaign_csrf_token'])) {
-    $_SESSION['campaign_csrf_token'] = bin2hex(random_bytes(32));
-}
-$csrfToken = $_SESSION['campaign_csrf_token'];
+$csrfToken = cmsGetCsrfToken();
 
 function campaignTableAudit($connect, $pageTitle, $action, $message, $query = '')
 {
@@ -50,7 +47,7 @@ if ($campaignTableDeleteRequested) {
         $postedToken = (string) post('csrf_token');
     }
 
-    if (!hash_equals($csrfToken, $postedToken) || !isActionAllowed('Delete', $pinAccess)) {
+    if (!cmsVerifyCsrfToken($postedToken) || !isActionAllowed('Delete', $pinAccess)) {
         if ($campaignTableDeleteUsesCommonDialog) {
             http_response_code(403);
             echo 'Unable to delete Campaign.';

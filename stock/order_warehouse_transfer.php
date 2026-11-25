@@ -10,28 +10,6 @@ if (trim((string) $pinGroupTitle) !== '') {
     $pageTitle = $pinGroupTitle;
 }
 
-if (!function_exists('owtGenerateSecureHex')) {
-    function owtGenerateSecureHex($byteLength = 32)
-    {
-        $byteLength = (int) $byteLength;
-        if ($byteLength <= 0) {
-            $byteLength = 32;
-        }
-
-        if (function_exists('random_bytes')) {
-            return bin2hex(random_bytes($byteLength));
-        }
-
-        return sha1(uniqid((string) mt_rand(), true) . microtime(true));
-    }
-}
-
-if (empty($_SESSION['order_warehouse_transfer_search_csrf'])) {
-    $_SESSION['order_warehouse_transfer_search_csrf'] = owtGenerateSecureHex(32);
-}
-if (empty($_SESSION['order_warehouse_transfer_submit_csrf'])) {
-    $_SESSION['order_warehouse_transfer_submit_csrf'] = owtGenerateSecureHex(32);
-}
 
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 if (!is_array($pinAccess)) {
@@ -44,6 +22,18 @@ $canTransfer = isActionAllowed('Transfer', $pinAccess);
 if (!$canSearch) {
     echo "<script>location.href = '" . $SITEURL . "/dashboard.php';</script>";
     exit;
+}
+
+if (!function_exists('owtGenerateSecureHex')) {
+    function owtGenerateSecureHex($byteLength = 32)
+    {
+        $byteLength = (int) $byteLength;
+        if ($byteLength <= 0) {
+            $byteLength = 32;
+        }
+
+        return bin2hex(random_bytes($byteLength));
+    }
 }
 
 if (!function_exists('owtEsc')) {
@@ -418,7 +408,7 @@ $transferLogRows = owtGetTransferLogRows($connect, $finance_connect);
 
                 <form class="row g-3 owt-search-form" method="post" action="<?= $SITEURL ?>/stock/order_warehouse_transfer_process.php" id="owtSearchForm" novalidate>
                     <input type="hidden" name="action" value="search_order">
-                    <input type="hidden" name="search_csrf" value="<?= owtEsc($_SESSION['order_warehouse_transfer_search_csrf']) ?>">
+                    <input type="hidden" name="search_csrf" value="<?= owtEsc(cmsGetCsrfToken()) ?>">
 
                     <div class="col-12 col-md-4">
                         <label class="form-label form_lbl" for="order_code">Order Number</label>
@@ -575,7 +565,7 @@ $transferLogRows = owtGetTransferLogRows($connect, $finance_connect);
                                         <?php } else { ?>
                                             <form class="mt-4 owt-actions" method="post" action="<?= $SITEURL ?>/stock/order_warehouse_transfer_process.php">
                                                 <input type="hidden" name="action" value="transfer_warehouse">
-                                                <input type="hidden" name="transfer_csrf" value="<?= owtEsc($_SESSION['order_warehouse_transfer_submit_csrf']) ?>">
+                                                <input type="hidden" name="transfer_csrf" value="<?= owtEsc(cmsGetCsrfToken()) ?>">
                                                 <input type="hidden" name="idempotency_key" value="<?= owtEsc($result['idempotency_key']) ?>">
                                                 <input type="hidden" name="platform" value="<?= owtEsc($result['platform']) ?>">
                                                 <input type="hidden" name="order_id" value="<?= (int) $result['order_id'] ?>">

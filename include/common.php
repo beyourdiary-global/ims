@@ -15968,11 +15968,9 @@ if (!function_exists('shopeeOmsHandleMoveToWafcWithReceivedDatePost')) {
             ? (string) $options['redirect_url']
             : (string) ($_SERVER['REQUEST_URI'] ?? '');
         $csrfFieldName = isset($options['csrf_field_name']) && trim((string) $options['csrf_field_name']) !== '' ? trim((string) $options['csrf_field_name']) : 'csrf_token';
-        $csrfSessionKey = isset($options['csrf_session_key']) && trim((string) $options['csrf_session_key']) !== '' ? trim((string) $options['csrf_session_key']) : 'csrf_token';
         $submittedToken = (string) post($csrfFieldName);
-        $sessionToken = isset($_SESSION[$csrfSessionKey]) ? (string) $_SESSION[$csrfSessionKey] : '';
 
-        if (!hash_equals($sessionToken, $submittedToken)) {
+        if (!cmsVerifyCsrfToken($submittedToken)) {
             renderNotificationScript('Invalid session token. Please refresh the page and try again.', 'error', $redirectUrl, 1200, true);
             exit;
         }
@@ -16040,7 +16038,7 @@ if (!function_exists('shopeeOmsRenderReceivedDateModal')) {
         $orderIdInputId = isset($config['order_id_input_id']) && trim((string) $config['order_id_input_id']) !== '' ? trim((string) $config['order_id_input_id']) : 'received_date_order_id';
         $dateInputId = isset($config['date_input_id']) && trim((string) $config['date_input_id']) !== '' ? trim((string) $config['date_input_id']) : 'received_date';
         $formAction = isset($config['form_action']) ? (string) $config['form_action'] : '';
-        $csrfToken = isset($config['csrf_token']) ? (string) $config['csrf_token'] : (isset($_SESSION['csrf_token']) ? (string) $_SESSION['csrf_token'] : '');
+        $csrfToken = cmsGetCsrfToken();
         $buttonName = isset($config['button_name']) && trim((string) $config['button_name']) !== '' ? trim((string) $config['button_name']) : 'move_to_wafc_with_received_date_btn';
         $csrfFieldName = isset($config['csrf_field_name']) && trim((string) $config['csrf_field_name']) !== '' ? trim((string) $config['csrf_field_name']) : 'csrf_token';
         $orderIdField = isset($config['order_id_field']) && trim((string) $config['order_id_field']) !== '' ? trim((string) $config['order_id_field']) : 'force_wafc_id';

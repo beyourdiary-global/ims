@@ -11,17 +11,6 @@ if (!function_exists('taskEsc')) {
     }
 }
 
-if (!function_exists('taskEnsureBoardCsrfToken')) {
-    function taskEnsureBoardCsrfToken()
-    {
-        if (empty($_SESSION['task_board_csrf_token'])) {
-            $_SESSION['task_board_csrf_token'] = bin2hex(random_bytes(32));
-        }
-
-        return (string) $_SESSION['task_board_csrf_token'];
-    }
-}
-
 if (!function_exists('taskJsonResponse')) {
     function taskJsonNormalizeUtf8($value)
     {

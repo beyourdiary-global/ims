@@ -22,19 +22,14 @@ if (!function_exists('campaignJson')) {
 if (!function_exists('campaignCsrfToken')) {
     function campaignCsrfToken($key)
     {
-        $key = 'campaign_csrf_' . preg_replace('/[^a-z0-9_]/i', '_', (string) $key);
-        if (empty($_SESSION[$key])) {
-            $_SESSION[$key] = bin2hex(random_bytes(32));
-        }
-
-        return $_SESSION[$key];
+        return cmsGetCsrfToken();
     }
 }
 
 if (!function_exists('campaignVerifyCsrf')) {
     function campaignVerifyCsrf($key, $token)
     {
-        return hash_equals(campaignCsrfToken($key), (string) $token);
+        return cmsVerifyCsrfToken($token);
     }
 }
 

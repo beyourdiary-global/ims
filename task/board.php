@@ -46,10 +46,8 @@ if (
         taskJsonResponse(array('ok' => 0, 'message' => 'You do not have permission to access task board.'));
     }
 
-    // The task board keeps its own CSRF token under a dedicated key so the ~10
-    // other pages that regenerate $_SESSION['csrf_token'] on load can't stomp
-    // it and silently invalidate the board's frozen embedded token.
-    taskEnsureBoardCsrfToken();
+    // All CMS pages share the same stable session CSRF token.
+    cmsGetCsrfToken();
 
     // Read-only actions (get_*/search_*) don't mutate state, so they are not
     // CSRF-gated. Only state-changing writes need the token check, which keeps
@@ -69,7 +67,7 @@ if (
 
     if (!$isReadAction) {
         $submittedToken = post('csrf_token');
-        if (!hash_equals($_SESSION['task_board_csrf_token'], $submittedToken)) {
+        if (!cmsVerifyCsrfToken($submittedToken)) {
             taskJsonResponse(array('ok' => 0, 'message' => 'Invalid session token. Please refresh the page and try again.'));
         }
     }
@@ -1793,14 +1791,14 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
 
 <script>
 <?php
-    // Ensure the embedded page uses the same dedicated token as write requests.
-    taskEnsureBoardCsrfToken();
+    // Ensure the embedded page uses the same session-wide token as write requests.
+    cmsGetCsrfToken();
 ?>
 window.taskBoardConfig = {
     ajaxUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     enableTaskItemHashUrl: true,
     siteUrl: <?= json_encode(rtrim((string) $SITEURL, '/'), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    csrfToken: <?= json_encode(taskEnsureBoardCsrfToken(), JSON_UNESCAPED_UNICODE) ?>,
+    csrfToken: <?= json_encode(cmsGetCsrfToken(), JSON_UNESCAPED_UNICODE) ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     currentProjectId: <?= (int) $currentProjectId ?>,
     canAdd: <?= $canAdd ? 'true' : 'false' ?>,

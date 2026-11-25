@@ -33,10 +33,7 @@ if (!$isAdd && $dataId <= 0) {
     exit();
 }
 
-if (empty($_SESSION['campaign_form_csrf_token'])) {
-    $_SESSION['campaign_form_csrf_token'] = bin2hex(random_bytes(32));
-}
-$csrfToken = $_SESSION['campaign_form_csrf_token'];
+$csrfToken = cmsGetCsrfToken();
 
 function campaignFormAudit($connect, $pageTitle, $action, $message, $query = '', $oldValue = '', $newValue = '', $changes = '')
 {
@@ -216,7 +213,7 @@ if (post('actionBtn') === 'saveCampaign') {
         return $value > 0;
     })));
 
-    if (!hash_equals($csrfToken, $postedToken)) {
+    if (!cmsVerifyCsrfToken($postedToken)) {
         $errors[] = 'Invalid security token. Please try again.';
     }
 

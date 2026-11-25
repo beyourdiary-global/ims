@@ -106,7 +106,7 @@ window.taskBulkEditConfig = <?= json_encode(array(
     'ajaxUrl' => 'sheets.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''),
     'siteUrl' => rtrim((string) $SITEURL, '/'),
     'projectId' => $currentProjectId,
-    'csrfToken' => (string) $_SESSION['csrf_token'],
+    'csrfToken' => cmsGetCsrfToken(),
     'canEdit' => $workItemCanEdit ? 1 : 0,
     'canDelete' => $workItemCanDelete ? 1 : 0,
     'workTypes' => $workTypesForBulk,

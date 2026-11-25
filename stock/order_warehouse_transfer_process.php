@@ -475,10 +475,7 @@ switch ($action) {
         }
 
         $postedSearchCsrf = (string) post('search_csrf');
-        if (
-            empty($_SESSION['order_warehouse_transfer_search_csrf'])
-            || !hash_equals((string) $_SESSION['order_warehouse_transfer_search_csrf'], $postedSearchCsrf)
-        ) {
+        if (!cmsVerifyCsrfToken($postedSearchCsrf)) {
             owtpSetFlash('danger', 'Invalid search session token. Please refresh and try again.');
             owtpRedirectToPage($orderWarehouseTransferPageUrl);
         }
@@ -505,10 +502,7 @@ switch ($action) {
         }
 
         $postedTransferCsrf = (string) post('transfer_csrf');
-        if (
-            empty($_SESSION['order_warehouse_transfer_submit_csrf'])
-            || !hash_equals((string) $_SESSION['order_warehouse_transfer_submit_csrf'], $postedTransferCsrf)
-        ) {
+        if (!cmsVerifyCsrfToken($postedTransferCsrf)) {
             owtpSetFlash('danger', 'Invalid transfer session token. Please refresh and try again.');
             owtpRedirectToPage($orderWarehouseTransferPageUrl, $searchOrderCode, $searchPlatform);
         }

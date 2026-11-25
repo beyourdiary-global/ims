@@ -20,7 +20,7 @@ if (
     $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
     $submittedToken = post('csrf_token');
-    if (!hash_equals(taskEnsureBoardCsrfToken(), $submittedToken)) {
+    if (!cmsVerifyCsrfToken($submittedToken)) {
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 0, 'message' => 'Invalid session token. Please refresh the page and try again.'));
         exit;
@@ -494,7 +494,7 @@ window.taskBoardConfig = {
     ajaxUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     enableTaskItemHashUrl: true,
     siteUrl: <?= json_encode(rtrim((string) $SITEURL, '/'), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    csrfToken: <?= json_encode(taskEnsureBoardCsrfToken(), JSON_UNESCAPED_UNICODE) ?>,
+    csrfToken: <?= json_encode(cmsGetCsrfToken(), JSON_UNESCAPED_UNICODE) ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     currentProjectId: <?= (int) $currentProjectId ?>,
     canAdd: <?= $workItemCanAdd ? 'true' : 'false' ?>,
@@ -518,7 +518,7 @@ window.sheetsConfig = {
     ajaxUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     sheetsDataAjaxUrl: <?= json_encode('sheets.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    csrfToken: <?= json_encode(taskEnsureBoardCsrfToken(), JSON_UNESCAPED_UNICODE) ?>,
+    csrfToken: <?= json_encode(cmsGetCsrfToken(), JSON_UNESCAPED_UNICODE) ?>,
     canEdit: <?= $workItemCanEdit ? 'true' : 'false' ?>,
     canAdd: <?= $canAdd ? 'true' : 'false' ?>,
     currentProjectId: <?= (int) $currentProjectId ?>,
