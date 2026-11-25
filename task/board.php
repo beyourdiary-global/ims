@@ -49,9 +49,7 @@ if (
     // The task board keeps its own CSRF token under a dedicated key so the ~10
     // other pages that regenerate $_SESSION['csrf_token'] on load can't stomp
     // it and silently invalidate the board's frozen embedded token.
-    if (empty($_SESSION['task_board_csrf_token'])) {
-        $_SESSION['task_board_csrf_token'] = bin2hex(random_bytes(32));
-    }
+    taskEnsureBoardCsrfToken();
 
     // Read-only actions (get_*/search_*) don't mutate state, so they are not
     // CSRF-gated. Only state-changing writes need the token check, which keeps
@@ -1795,16 +1793,14 @@ $projectBoardBackground = isset($currentProject['board_background_color']) ? (st
 
 <script>
 <?php
-    // Ensure token exists for initial page load rendering
-    if (empty($_SESSION['task_board_csrf_token'])) {
-        $_SESSION['task_board_csrf_token'] = bin2hex(random_bytes(32));
-    }
+    // Ensure the embedded page uses the same dedicated token as write requests.
+    taskEnsureBoardCsrfToken();
 ?>
 window.taskBoardConfig = {
     ajaxUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     enableTaskItemHashUrl: true,
     siteUrl: <?= json_encode(rtrim((string) $SITEURL, '/'), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    csrfToken: <?= json_encode($_SESSION['task_board_csrf_token'], JSON_UNESCAPED_UNICODE) ?>,
+    csrfToken: <?= json_encode(taskEnsureBoardCsrfToken(), JSON_UNESCAPED_UNICODE) ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     currentProjectId: <?= (int) $currentProjectId ?>,
     canAdd: <?= $canAdd ? 'true' : 'false' ?>,

@@ -19,11 +19,8 @@ if (
     $pageTitle = taskGetPinGroupTitleById($connect, $pageTitlePin, $pageTitle);
     $taskParentTitle = taskGetPinGroupTitleById($connect, $taskParentPin, $taskParentTitle);
 
-    if (empty($_SESSION['csrf_token'])) {
-        $_SESSION['csrf_token'] = bin2hex(random_bytes(32));
-    }
     $submittedToken = post('csrf_token');
-    if (!hash_equals($_SESSION['csrf_token'], $submittedToken)) {
+    if (!hash_equals(taskEnsureBoardCsrfToken(), $submittedToken)) {
         header('Content-Type: application/json');
         echo json_encode(array('ok' => 0, 'message' => 'Invalid session token. Please refresh the page and try again.'));
         exit;
@@ -497,7 +494,7 @@ window.taskBoardConfig = {
     ajaxUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     enableTaskItemHashUrl: true,
     siteUrl: <?= json_encode(rtrim((string) $SITEURL, '/'), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    csrfToken: <?= json_encode($_SESSION['csrf_token'], JSON_UNESCAPED_UNICODE) ?>,
+    csrfToken: <?= json_encode(taskEnsureBoardCsrfToken(), JSON_UNESCAPED_UNICODE) ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     currentProjectId: <?= (int) $currentProjectId ?>,
     canAdd: <?= $workItemCanAdd ? 'true' : 'false' ?>,
@@ -521,7 +518,7 @@ window.sheetsConfig = {
     ajaxUrl: <?= json_encode('board.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     sheetsDataAjaxUrl: <?= json_encode('sheets.php' . ($currentProjectId > 0 ? '?project_id=' . $currentProjectId : ''), JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
     currentUserId: <?= json_encode($currentUserId, JSON_UNESCAPED_UNICODE | JSON_INVALID_UTF8_SUBSTITUTE) ?>,
-    csrfToken: <?= json_encode($_SESSION['csrf_token'], JSON_UNESCAPED_UNICODE) ?>,
+    csrfToken: <?= json_encode(taskEnsureBoardCsrfToken(), JSON_UNESCAPED_UNICODE) ?>,
     canEdit: <?= $workItemCanEdit ? 'true' : 'false' ?>,
     canAdd: <?= $canAdd ? 'true' : 'false' ?>,
     currentProjectId: <?= (int) $currentProjectId ?>,
