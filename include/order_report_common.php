@@ -1202,6 +1202,15 @@ if (!function_exists('orderReportBuildOptionSets')) {
             }
         }
 
+        if ($isShopee) {
+            foreach ($shopeeAccountMap as $accountId => $accountName) {
+                $optionSets['shopee_acc'][(string) $accountId] = (string) $accountName;
+            }
+            foreach ($paymentMap as $paymentId => $paymentName) {
+                $optionSets['payment'][(string) $paymentId] = (string) $paymentName;
+            }
+        }
+
         foreach ((array) $rows as $row) {
             foreach (orderReportResolvePackageOptionsFromRow($connect, $platformConfig['platform'], $row, isset($referenceMaps['package_map']) ? $referenceMaps['package_map'] : array(), $referenceMaps) as $rawValue => $label) {
                 $optionSets['package'][$rawValue] = $label;
@@ -1603,8 +1612,67 @@ if (!function_exists('orderReportResolveMetrics')) {
     }
 }
 
+if (!function_exists('orderReportBuildGlobalCustomerLabelOptionSets')) {
+    function orderReportBuildGlobalCustomerLabelOptionSets($connect, $platform)
+    {
+        $optionSets = array(
+            'customer_label' => array(),
+            'segmentation' => array(),
+            'level' => array(),
+            'repeat' => array(),
+        );
+        if (strtolower(trim((string) $platform)) !== 'shopee' || !($connect instanceof mysqli)) {
+            return $optionSets;
+        }
+
+        $typeTables = array();
+        if (defined('CUR_SEGMENTATION')) {
+            $typeTables['segmentation'] = CUR_SEGMENTATION;
+        }
+        if (defined('CUS_LEVEL')) {
+            $typeTables['level'] = CUS_LEVEL;
+        }
+        if (defined('CUS_REPEAT')) {
+            $typeTables['repeat'] = CUS_REPEAT;
+        }
+        foreach ($typeTables as $filterKey => $tableName) {
+            $tableName = trim((string) $tableName);
+            if ($tableName === '' || !tableExists($tableName, $connect)) {
+                continue;
+            }
+
+            $rows = orderReportFetchRows(
+                $connect,
+                "SELECT `name` FROM `" . str_replace('`', '``', $tableName) . "` WHERE `status` = 'A' ORDER BY `name` ASC"
+            );
+            foreach ($rows as $row) {
+                $name = isset($row['name']) ? trim((string) $row['name']) : '';
+                if ($name !== '') {
+                    $optionSets[$filterKey][$name] = $name;
+                }
+            }
+        }
+
+        $tagTableName = defined('TAG') ? trim((string) TAG) : '';
+        if ($tagTableName !== '' && tableExists($tagTableName, $connect)) {
+            $rows = orderReportFetchRows(
+                $connect,
+                "SELECT `name` FROM `" . str_replace('`', '``', $tagTableName) . "` WHERE `status` = 'A' ORDER BY `name` ASC"
+            );
+            foreach ($rows as $row) {
+                $name = isset($row['name']) ? trim((string) $row['name']) : '';
+                if ($name !== '') {
+                    $optionSets['customer_label'][$name] = $name;
+                }
+            }
+        }
+
+        return $optionSets;
+    }
+}
+
 if (!function_exists('orderReportBuildLabelOptionSets')) {
-    function orderReportBuildLabelOptionSets($enrichedRows)
+    function orderReportBuildLabelOptionSets($enrichedRows, $connect = null, $platform = '')
     {
         $optionSets = array(
             'customer_label' => array(),
@@ -1625,6 +1693,15 @@ if (!function_exists('orderReportBuildLabelOptionSets')) {
                 $value = isset($row[$key . '_name']) ? trim((string) $row[$key . '_name']) : '';
                 if ($value !== '') {
                     $optionSets[$key][$value] = $value;
+                }
+            }
+        }
+
+        $globalOptionSets = orderReportBuildGlobalCustomerLabelOptionSets($connect, $platform);
+        foreach ($globalOptionSets as $key => $set) {
+            foreach ($set as $value => $label) {
+                if (!isset($optionSets[$key][$value])) {
+                    $optionSets[$key][$value] = $label;
                 }
             }
         }
@@ -2218,7 +2295,7 @@ if (!function_exists('orderReportBuildFilterOptionSetsFromRows')) {
 
         $rowMeta = orderReportBuildRowMeta($connect, $financeConnect, $platformConfig, $rows, $referenceMaps);
         $enrichedRows = isset($rowMeta['rows']) ? $rowMeta['rows'] : array();
-        $labelOptionSets = orderReportBuildLabelOptionSets($enrichedRows);
+        $labelOptionSets = orderReportBuildLabelOptionSets($enrichedRows, $connect, isset($platformConfig['platform']) ? $platformConfig['platform'] : '');
 
         return array_merge($scalarOptionSets, $labelOptionSets);
     }
@@ -2339,7 +2416,7 @@ if (!function_exists('orderReportBuildView')) {
         $rowMeta = orderReportBuildRowMeta($connect, $financeConnect, $platformConfig, $filteredRows, $referenceMaps);
         $enrichedRows = isset($rowMeta['rows']) ? $rowMeta['rows'] : array();
         $resolvedScalarRows = orderReportApplyResolvedScalarFilters($enrichedRows, $state['filters'], $platformConfig, isset($state['range_filters']) ? $state['range_filters'] : array());
-        $labelOptionSets = orderReportBuildLabelOptionSets($resolvedScalarRows);
+        $labelOptionSets = orderReportBuildLabelOptionSets($resolvedScalarRows, $connect, isset($platformConfig['platform']) ? $platformConfig['platform'] : '');
 
         foreach (array('customer_label', 'segmentation', 'level', 'repeat') as $key) {
             if (!isset($state['filters'][$key])) {
@@ -2434,7 +2511,7 @@ if (!function_exists('orderReportBuildMultiSelectOptionPayload')) {
 }
 
 if (!function_exists('orderReportRenderMultiSelect')) {
-    function orderReportRenderMultiSelect($fieldKey, $label, $options, $selectedValues, $placeholder)
+    function orderReportRenderMultiSelect($fieldKey, $label, $options, $selectedValues, $placeholder, $searchable = false)
     {
         $optionsJson = orderReportEscape(json_encode(orderReportBuildMultiSelectOptionPayload($options)));
         $selectedJson = orderReportEscape(json_encode(array_values((array) $selectedValues)));
@@ -2442,7 +2519,8 @@ if (!function_exists('orderReportRenderMultiSelect')) {
 
         echo '<div class="col-lg-3 col-md-6 col-12 mb-3">';
         echo '  <label class="form-label customer-record-filter-label" for="' . orderReportEscape($fieldId) . '">Filter by ' . orderReportEscape($label) . '</label>';
-        echo '  <div id="' . orderReportEscape($fieldId) . '" class="js-order-report-multiselect dropdown campaign-filter-dropdown" data-name="' . orderReportEscape($fieldKey) . '[]" data-placeholder="' . orderReportEscape($placeholder) . '" data-options="' . $optionsJson . '" data-selected="' . $selectedJson . '"></div>';
+        $searchableAttribute = $searchable ? ' data-searchable="1" data-search-placeholder="Search packages..."' : '';
+        echo '  <div id="' . orderReportEscape($fieldId) . '" class="js-order-report-multiselect dropdown campaign-filter-dropdown" data-name="' . orderReportEscape($fieldKey) . '[]" data-placeholder="' . orderReportEscape($placeholder) . '" data-options="' . $optionsJson . '" data-selected="' . $selectedJson . '"' . $searchableAttribute . '></div>';
         echo '</div>';
     }
 }
@@ -2611,7 +2689,8 @@ if (!function_exists('orderReportRenderPage')) {
                 isset($filterMeta['label']) ? $filterMeta['label'] : ucfirst(str_replace('_', ' ', $fieldKey)),
                 isset($optionSets[$fieldKey]) ? $optionSets[$fieldKey] : array(),
                 isset($state['filters'][$fieldKey]) ? $state['filters'][$fieldKey] : array(),
-                isset($filterMeta['placeholder']) ? $filterMeta['placeholder'] : ('All ' . ucfirst(str_replace('_', ' ', $fieldKey)))
+                isset($filterMeta['placeholder']) ? $filterMeta['placeholder'] : ('All ' . ucfirst(str_replace('_', ' ', $fieldKey))),
+                strtolower(trim((string) ($platformConfig['platform'] ?? ''))) === 'shopee' && $fieldKey === 'package'
             );
         }
 

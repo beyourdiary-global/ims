@@ -236,6 +236,27 @@
 
     var list = document.createElement("div");
     list.className = "customer-record-filter-multiselect-list";
+    if (container.getAttribute("data-searchable") === "1") {
+      menu.style.maxHeight = "280px";
+      menu.style.overflowY = "hidden";
+      list.style.maxHeight = "200px";
+      list.style.overflowY = "auto";
+    }
+    var searchInput = null;
+    var noResults = null;
+    if (container.getAttribute("data-searchable") === "1") {
+      searchInput = document.createElement("input");
+      searchInput.type = "search";
+      searchInput.className = "form-control form-control-sm order-report-package-search";
+      searchInput.placeholder = container.getAttribute("data-search-placeholder") || "Search packages...";
+      searchInput.setAttribute("aria-label", "Search packages");
+      searchInput.style.marginBottom = ".5rem";
+      searchInput.style.backgroundColor = "#fff";
+      noResults = document.createElement("div");
+      noResults.className = "text-muted small customer-record-filter-multiselect-no-results";
+      noResults.textContent = "No packages found.";
+      noResults.style.display = "none";
+    }
 
     function closeMenu() {
       container.classList.remove("is-open");
@@ -296,9 +317,12 @@
         });
 
       var displayText = labels.length ? labels.join(", ") : placeholderLabel;
+      if (container.getAttribute("data-searchable") === "1" && labels.length > 0) {
+        displayText = labels.length + (labels.length === 1 ? " package selected" : " packages selected");
+      }
       toggleText.textContent = displayText;
       toggleText.classList.toggle("is-placeholder", labels.length === 0);
-      toggle.title = displayText;
+      toggle.title = labels.length ? labels.join(", ") : displayText;
     }
 
     function setSelectedValues(values) {
@@ -358,6 +382,32 @@
       });
     });
 
+    function filterOptions() {
+      if (!searchInput) {
+        return;
+      }
+
+      var query = searchInput.value.trim().toLowerCase();
+      var matchCount = 0;
+      Array.prototype.slice.call(list.children).forEach(function (optionLabel) {
+        var checkbox = optionLabel.querySelector(".customer-record-filter-multiselect-checkbox");
+        var isPlaceholder = !checkbox || checkbox.value === placeholderValue;
+        var matches = isPlaceholder || query === "" || optionLabel.textContent.toLowerCase().indexOf(query) !== -1;
+        optionLabel.style.display = matches ? "" : "none";
+        if (!isPlaceholder && matches) {
+          matchCount += 1;
+        }
+      });
+
+      if (noResults) {
+        noResults.style.display = query !== "" && matchCount === 0 ? "" : "none";
+      }
+    }
+
+    if (searchInput) {
+      searchInput.addEventListener("input", filterOptions);
+    }
+
     list.addEventListener("change", function (event) {
       var checkbox = event.target;
       if (
@@ -397,7 +447,16 @@
       }
     });
 
+    if (searchInput) {
+      menu.appendChild(searchInput);
+    }
     menu.appendChild(list);
+    if (noResults) {
+      menu.appendChild(noResults);
+    }
+    menu.addEventListener("click", function (event) {
+      event.stopPropagation();
+    });
     container.appendChild(toggle);
     container.appendChild(menu);
 
