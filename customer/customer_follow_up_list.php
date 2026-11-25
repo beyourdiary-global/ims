@@ -330,7 +330,12 @@ if (!function_exists('customerFollowUpPageBuildCustomerDetailUrl')) {
         }
 
         $customerMeta = customerDailyReportGetCustomerMeta($connect, $financeConnect, $platform, $customerId);
-        return trim((string) (isset($customerMeta['record_url']) ? $customerMeta['record_url'] : ''));
+        $recordUrl = trim((string) (isset($customerMeta['record_url']) ? $customerMeta['record_url'] : ''));
+        if ($recordUrl === '') {
+            return '';
+        }
+
+        return $recordUrl . (strpos($recordUrl, '?') === false ? '?' : '&') . 'act=E';
     }
 }
 
@@ -1805,6 +1810,7 @@ if (!empty($customerTagLabelFilters)) {
                                             <th class="action-col">Actions</th>
                                             <th>Order ID</th>
                                             <th>Username</th>
+                                            <th>Message Content</th>
                                             <th>Customer Tag / Label</th>
                                             <th>Package</th>
                                             <th>Received Date</th>
@@ -1875,6 +1881,14 @@ if (!empty($customerTagLabelFilters)) {
                                             $appealNextFollowUpDate = trim((string) (isset($latestAppealPayload['next_follow_up_date']) ? $latestAppealPayload['next_follow_up_date'] : $displayNextFollowUpDate));
                                             $appealContactNo = trim((string) (isset($latestAppealPayload['contact_no']) ? $latestAppealPayload['contact_no'] : $effectiveContactNo));
                                             $appealRejectReason = trim((string) (isset($latestAppealPayload['reject_reason']) ? $latestAppealPayload['reject_reason'] : (isset($row['reject_reason']) ? $row['reject_reason'] : '')));
+                                            $messageShortcutId = (int) (isset($row['message_shortcut_id']) ? $row['message_shortcut_id'] : 0);
+                                            $messageContentSource = trim((string) (isset($row['message_shortcut_text']) ? $row['message_shortcut_text'] : ''));
+                                            if ($messageContentSource === '' && $messageShortcutId > 0 && isset($messageShortcutMap[$messageShortcutId])) {
+                                                $messageContentSource = isset($messageShortcutMap[$messageShortcutId]['shortcuts_message'])
+                                                    ? (string) $messageShortcutMap[$messageShortcutId]['shortcuts_message']
+                                                    : '';
+                                            }
+                                            $messageContent = customerFollowUpCleanText($messageContentSource);
 
                                             $canManageOwnCase = customerFollowUpCanUserManageCase($row, USER_ID, USER_GROUP, $connect);
                                             $hasMissingNextFollowUpDate = customerFollowUpIsEmptyDateValue(isset($row['next_follow_up_date']) ? $row['next_follow_up_date'] : '');
@@ -2286,6 +2300,21 @@ if (!empty($customerTagLabelFilters)) {
                                                     </div>
                                                     <div class="text-muted small"><?= htmlspecialchars($customerType === 'return' ? 'Return' : 'New', ENT_QUOTES, 'UTF-8') ?></div>
                                                 </td>
+                                                <td>
+                                                    <?php if ($messageContent !== '') { ?>
+                                                        <button
+                                                            type="button"
+                                                            class="btn btn-sm btn-outline-primary text-nowrap"
+                                                            data-bs-toggle="modal"
+                                                            data-bs-target="#customerFollowUpMessageModal"
+                                                            data-message-title="<?= htmlspecialchars('Message Content - ' . $orderDisplayValue, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-message-content="<?= htmlspecialchars($messageContent, ENT_QUOTES, 'UTF-8') ?>">
+                                                            <i class="fa-solid fa-message"></i><span class="ms-1">View Message</span>
+                                                        </button>
+                                                    <?php } else { ?>
+                                                        <span class="text-muted">-</span>
+                                                    <?php } ?>
+                                                </td>
                                                 <td><?= customerFollowUpPageRenderCustomerTagLabelCell($customerLabelMeta, $customerTagRows) ?></td>
                                                 <td><?= htmlspecialchars((string) (isset($row['package_name']) ? $row['package_name'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
                                                 <td><?= htmlspecialchars((string) (isset($row['received_date']) ? $row['received_date'] : ''), ENT_QUOTES, 'UTF-8') ?></td>
@@ -2348,6 +2377,7 @@ if (!empty($customerTagLabelFilters)) {
                                             <th class="action-col">Actions</th>
                                             <th>Order ID</th>
                                             <th>Username</th>
+                                            <th>Message Content</th>
                                             <th>Customer Tag / Label</th>
                                             <th>Package</th>
                                             <th>Received Date</th>
@@ -2409,6 +2439,23 @@ if (!empty($customerTagLabelFilters)) {
                         </div>
                     <?php } ?>
                 <?php } ?>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="modal fade" id="customerFollowUpMessageModal" tabindex="-1" aria-labelledby="customerFollowUpMessageModalTitle" aria-hidden="true">
+        <div class="modal-dialog modal-lg modal-dialog-scrollable">
+            <div class="modal-content">
+                <div class="modal-header">
+                    <h5 class="modal-title" id="customerFollowUpMessageModalTitle">Message Content</h5>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="border rounded p-3 bg-light" id="customerFollowUpMessageModalBody" style="white-space: pre-wrap; overflow-wrap: anywhere;"></div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" style="text-transform: none !important;">Close</button>
                 </div>
             </div>
         </div>
@@ -3288,7 +3335,7 @@ if (!empty($customerTagLabelFilters)) {
                 // reshuffles the rows the user just picked from.
                 createSortingTable('customer_follow_up_table', {
                     searching: true,
-                    columnDefs: [<?= $showBulkControls ? '{ orderable: false, targets: 2 }' : '' ?>]
+                    columnDefs: [<?= $showBulkControls ? '{ orderable: false, targets: 2 }, ' : '' ?>{ orderable: false, targets: <?= $showBulkControls ? 6 : 5 ?> }]
                 });
                 datatableAlignment('customer_follow_up_table');
                 keepDataTableControlsVisible('customer_follow_up_table');
@@ -4533,6 +4580,24 @@ if (!empty($customerTagLabelFilters)) {
                 document.getElementById('postpone_reject_reason').value = '';
                 document.getElementById('rejectPostponeModalTitle').textContent = 'Reject Postponement - Round ' + (button.getAttribute('data-round-no') || '');
                 document.getElementById('reject_postpone_requested_date_text').textContent = requestedNextDate ? 'Requested new next follow-up date: ' + requestedNextDate : '';
+            });
+        }
+
+        var customerFollowUpMessageModal = document.getElementById('customerFollowUpMessageModal');
+        if (customerFollowUpMessageModal) {
+            customerFollowUpMessageModal.addEventListener('show.bs.modal', function (event) {
+                var button = event.relatedTarget;
+                var title = button ? (button.getAttribute('data-message-title') || 'Message Content') : 'Message Content';
+                var content = button ? (button.getAttribute('data-message-content') || '') : '';
+                var titleElement = document.getElementById('customerFollowUpMessageModalTitle');
+                var bodyElement = document.getElementById('customerFollowUpMessageModalBody');
+
+                if (titleElement) {
+                    titleElement.textContent = title;
+                }
+                if (bodyElement) {
+                    bodyElement.textContent = content || 'No message content is available.';
+                }
             });
         }
 
