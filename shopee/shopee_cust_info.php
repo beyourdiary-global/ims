@@ -782,6 +782,22 @@ if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && em
                             </div>
                         </div>
 
+                            <div class="form-group mt-3 mb-4 d-flex justify-content-center flex-md-row flex-column">
+                                <?php
+                                switch ($act) {
+                                    case 'I':
+                                        echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" form="SCRForm" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
+                                        break;
+                                    case 'E':
+                                        echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" form="SCRForm" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
+                                        break;
+                                }
+                                ?>
+                                <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel backBtn" type="button" form="SCRForm" name="actionBtn"
+                                    id="backBtn" value="back"
+                                    onclick="clearLocalStoragePreservingCustomerRecordFilters(); window.location.href = <?= htmlspecialchars(json_encode($redirectPage), ENT_QUOTES, 'UTF-8') ?>;">Back</button>
+                            </div>
+
                     <?php
                     if ($dataId) {
                         $orderRows = array();
@@ -918,21 +934,6 @@ if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && em
                 }
                 ?>
 
-                <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
-                    <?php
-                    switch ($act) {
-                        case 'I':
-                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" form="SCRForm" name="actionBtn" id="actionBtn" value="addRecord">Add Record</button>';
-                            break;
-                        case 'E':
-                            echo '<button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 submitBtn" type="submit" form="SCRForm" name="actionBtn" id="actionBtn" value="updRecord">Edit Record</button>';
-                            break;
-                    }
-                    ?>
-                    <button class="btn btn-lg btn-rounded btn-primary mx-2 mb-2 cancel backBtn" type="button" form="SCRForm" name="actionBtn"
-                        id="backBtn" value="back"
-                        onclick="clearLocalStoragePreservingCustomerRecordFilters(); window.location.href = <?= htmlspecialchars(json_encode($redirectPage), ENT_QUOTES, 'UTF-8') ?>;">Back</button>
-                </div>
             </div>
         </div>
     </div>
