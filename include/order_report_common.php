@@ -2519,7 +2519,12 @@ if (!function_exists('orderReportRenderMultiSelect')) {
 
         echo '<div class="col-lg-3 col-md-6 col-12 mb-3">';
         echo '  <label class="form-label customer-record-filter-label" for="' . orderReportEscape($fieldId) . '">Filter by ' . orderReportEscape($label) . '</label>';
-        $searchableAttribute = $searchable ? ' data-searchable="1" data-search-placeholder="Search packages..."' : '';
+        $searchableAttribute = '';
+        if ($searchable) {
+            $searchNoun = $fieldKey === 'customer_label' ? 'customer label' : 'package';
+            $searchNounPlural = $fieldKey === 'customer_label' ? 'customer labels' : 'packages';
+            $searchableAttribute = ' data-searchable="1" data-search-noun="' . orderReportEscape($searchNoun) . '" data-search-noun-plural="' . orderReportEscape($searchNounPlural) . '"';
+        }
         echo '  <div id="' . orderReportEscape($fieldId) . '" class="js-order-report-multiselect dropdown campaign-filter-dropdown" data-name="' . orderReportEscape($fieldKey) . '[]" data-placeholder="' . orderReportEscape($placeholder) . '" data-options="' . $optionsJson . '" data-selected="' . $selectedJson . '"' . $searchableAttribute . '></div>';
         echo '</div>';
     }
@@ -2613,7 +2618,7 @@ if (!function_exists('orderReportRenderPage')) {
         $reportScriptVersion = @filemtime(ROOT . '/js/order_report.js');
         $reportScriptUrl = $reportScriptPath . ($reportScriptVersion ? ('?v=' . $reportScriptVersion) : '');
 
-        echo '<!-- order_report_common build 2026-11-25b -->';
+        echo '<!-- order_report_common build 2026-11-26a -->';
         echo '<div class="container-fluid d-flex justify-content-center mt-3">';
         echo '  <div class="col-12 col-md-11">';
         echo '      <div class="d-flex flex-column mb-3">';
@@ -2690,7 +2695,7 @@ if (!function_exists('orderReportRenderPage')) {
                 isset($optionSets[$fieldKey]) ? $optionSets[$fieldKey] : array(),
                 isset($state['filters'][$fieldKey]) ? $state['filters'][$fieldKey] : array(),
                 isset($filterMeta['placeholder']) ? $filterMeta['placeholder'] : ('All ' . ucfirst(str_replace('_', ' ', $fieldKey))),
-                strtolower(trim((string) ($platformConfig['platform'] ?? ''))) === 'shopee' && $fieldKey === 'package'
+                strtolower(trim((string) ($platformConfig['platform'] ?? ''))) === 'shopee' && in_array($fieldKey, array('package', 'customer_label'), true)
             );
         }
 

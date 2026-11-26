@@ -215,6 +215,8 @@
     var placeholderLabel =
       container.getAttribute("data-placeholder") || "All";
     var placeholderValue = "";
+    var searchNoun = container.getAttribute("data-search-noun") || "option";
+    var searchNounPlural = container.getAttribute("data-search-noun-plural") || "options";
 
     container.innerHTML = "";
     container.classList.add("customer-record-multiselect");
@@ -247,14 +249,14 @@
     if (container.getAttribute("data-searchable") === "1") {
       searchInput = document.createElement("input");
       searchInput.type = "search";
-      searchInput.className = "form-control form-control-sm order-report-package-search";
-      searchInput.placeholder = container.getAttribute("data-search-placeholder") || "Search packages...";
-      searchInput.setAttribute("aria-label", "Search packages");
+      searchInput.className = "form-control form-control-sm order-report-multiselect-search";
+      searchInput.placeholder = "Search " + searchNounPlural + "...";
+      searchInput.setAttribute("aria-label", "Search " + searchNounPlural);
       searchInput.style.marginBottom = ".5rem";
       searchInput.style.backgroundColor = "#fff";
       noResults = document.createElement("div");
       noResults.className = "text-muted small customer-record-filter-multiselect-no-results";
-      noResults.textContent = "No packages found.";
+      noResults.textContent = "No " + searchNounPlural + " found.";
       noResults.style.display = "none";
     }
 
@@ -318,7 +320,7 @@
 
       var displayText = labels.length ? labels.join(", ") : placeholderLabel;
       if (container.getAttribute("data-searchable") === "1" && labels.length > 0) {
-        displayText = labels.length + (labels.length === 1 ? " package selected" : " packages selected");
+        displayText = labels.length + " " + (labels.length === 1 ? searchNoun : searchNounPlural) + " selected";
       }
       toggleText.textContent = displayText;
       toggleText.classList.toggle("is-placeholder", labels.length === 0);

@@ -4900,7 +4900,6 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                                 <small class="text-danger d-block mt-1">Current Attachment: <?= htmlspecialchars($previewData['airbill_attachment']) ?></small>
                                             <?php } ?>
                                             <input type="hidden" id="airbill_attachment_value" name="airbill_attachment_value" value="<?= htmlspecialchars(isset($previewData['airbill_attachment']) ? $previewData['airbill_attachment'] : '') ?>">
-                                            <input type="hidden" id="customer_name" name="customer_name" value="<?= htmlspecialchars(isset($previewData['customer_name']) ? $previewData['customer_name'] : '', ENT_QUOTES, 'UTF-8') ?>">
                                         </div>
                                     </div>
 
@@ -4942,6 +4941,11 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
                                     </div>
 
                                     <div class="row mb-3">
+                                        <div class="col-12 col-md-6">
+                                            <label class="form-label" for="customer_name">Customer Name</label>
+                                            <input class="form-control" type="text" id="customer_name" name="customer_name" value="<?= htmlspecialchars(isset($previewData['customer_name']) ? $previewData['customer_name'] : '', ENT_QUOTES, 'UTF-8') ?>">
+                                            <small class="form-text text-muted">Automatically read from the uploaded airbill. Please verify before inserting.</small>
+                                        </div>
                                         <div class="col-12 col-md-6">
                                             <label class="form-label" for="customer_address">Customer Address<span class="requireRed">*</span></label>
                                             <textarea class="form-control" id="customer_address" name="customer_address" rows="2"><?= htmlspecialchars(isset($previewData['customer_address']) ? $previewData['customer_address'] : '') ?></textarea>
@@ -5134,19 +5138,21 @@ function resolveImportOptionId($rawValue, $options, $fallbacks = [])
             var updateAirbillToggle = previewForm.querySelector('#update_airbill_toggle');
             var airbillNo = previewForm.querySelector('#airbill_no');
             var airbillAttachment = previewForm.querySelector('#airbill_attachment');
+            var customerName = previewForm.querySelector('#customer_name');
             var customerAddress = previewForm.querySelector('#customer_address');
             var existingAttachment = previewForm.querySelector('#airbill_attachment_value');
-            if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment || !customerAddress) return;
+            if (!updateAirbill || !updateAirbillToggle || !airbillNo || !airbillAttachment || !customerName || !customerAddress) return;
 
             updateAirbill.value = updateAirbillToggle.checked ? 'yes' : 'no';
             var enabled = updateAirbillToggle.checked;
             airbillNo.disabled = !enabled;
             airbillAttachment.disabled = !enabled;
+            customerName.disabled = !enabled;
             customerAddress.disabled = !enabled;
             airbillNo.required = enabled;
             customerAddress.required = enabled;
             airbillAttachment.required = enabled && (!existingAttachment || existingAttachment.value.trim() === '');
-            [airbillNo, airbillAttachment, customerAddress].forEach(clearInlineError);
+            [airbillNo, airbillAttachment, customerName, customerAddress].forEach(clearInlineError);
         }
 
         toggleAirbillFields();
