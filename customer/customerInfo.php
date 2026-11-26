@@ -5,6 +5,7 @@ $pageTitle = "Customer Info";
 include '../menuHeader.php';
 include '../checkCurrentPagePin.php';
 include_once ROOT . '/include/user_record_log.php';
+include_once ROOT . '/include/customer_timeline_preview.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 
 $tblName = CUS_INFO;
@@ -703,6 +704,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         ));
                     }
                     ?>
+
+                <?php
+                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                    customerTimelineRenderCustomerInfoPreview($connect, (int) $dataId);
+                }
+                ?>
 
                 <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                 <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
