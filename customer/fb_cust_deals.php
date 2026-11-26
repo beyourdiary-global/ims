@@ -11,6 +11,7 @@ include_once ROOT . '/include/customer_tag.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 include_once ROOT . '/include/user_record_log.php';
+include_once ROOT . '/include/customer_timeline_preview.php';
 
 $tblName = FB_CUST_DEALS;
 
@@ -1074,6 +1075,9 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 </form>
 
                 <?php
+                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                    customerTimelineRenderCustomerPreview($connect, 'facebook', (int) $dataId);
+                }
                 if ($dataId) {
                     $customerLogReturnUrl = $SITEURL . '/customer/fb_cust_deals.php?id=' . (int) $dataId;
                     if ($act !== '') {
@@ -1089,6 +1093,11 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         'customer_only' => true,
                     ));
 
+                    $hasPendingLogApproval = !empty($facebookUserRecordLogApproval['panel_html']);
+                    if ($act === '') {
+                        echo '<details class="customer-original-log"' . ($hasPendingLogApproval ? ' open' : '') . '>';
+                        echo '<summary>Original User Record Log and entry tools</summary>';
+                    }
                     urlRenderUserRecordLogModule($connect, $connect, array(
                         'table_name' => USER_RECORD_LOG,
                         'context' => $customerLogContext,
@@ -1099,6 +1108,9 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         'approval_request_id' => isset($facebookUserRecordLogApproval['approval_request_id']) ? $facebookUserRecordLogApproval['approval_request_id'] : 0,
                         'approval_action_url' => isset($facebookUserRecordLogApproval['action_url']) ? $facebookUserRecordLogApproval['action_url'] : '',
                     ));
+                    if ($act === '') {
+                        echo '</details>';
+                    }
                 }
                 ?>
 

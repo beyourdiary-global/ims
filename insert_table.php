@@ -2390,6 +2390,12 @@ migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'previous_follow_up_info'
 // JSON list of every follow-up action recorded on this entry. One entry per follow-up
 // round is reused and updated in place, so this is what keeps the earlier states visible.
 migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'follow_up_history', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `follow_up_history` TEXT DEFAULT NULL AFTER `previous_follow_up_info`", "Verified `" . USER_RECORD_LOG . "` includes `follow_up_history`.");
+// Stable source keys let editable campaign tasks update their original customer event.
+// The nested history records revisions without creating another top-level log entry.
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'source_type', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `source_type` VARCHAR(40) DEFAULT NULL AFTER `follow_up_history`", "Verified `" . USER_RECORD_LOG . "` includes `source_type`.");
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'source_id', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `source_id` INT DEFAULT NULL AFTER `source_type`", "Verified `" . USER_RECORD_LOG . "` includes `source_id`.");
+migrationEnsureColumn($conn, $db_cms, USER_RECORD_LOG, 'source_history', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD COLUMN `source_history` TEXT DEFAULT NULL AFTER `source_id`", "Verified `" . USER_RECORD_LOG . "` includes `source_history`.");
+migrationEnsureIndex($conn, $db_cms, USER_RECORD_LOG, 'uq_url_source_record', "ALTER TABLE `{$db_cms}`.`" . USER_RECORD_LOG . "` ADD UNIQUE INDEX `uq_url_source_record` (`source_type`, `source_id`)", "Verified `" . USER_RECORD_LOG . "` stable source key index.");
 
 $createCustomerFollowUpRoundSql = "CREATE TABLE IF NOT EXISTS `{$db_cms}`.`{$customerFollowUpRoundTable}` (
     `id` INT NOT NULL AUTO_INCREMENT,

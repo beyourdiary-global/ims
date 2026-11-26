@@ -184,37 +184,39 @@ function campaignFollowUpEnsureCustomerTag($connect, $tagName)
     );
 }
 
-function campaignFollowUpResolveSourceCustomerForTag($connect, $financeConnect, $task)
+function campaignFollowUpResolveSourceCustomerForTag($connect, $financeConnect, $task, $requireActive = true)
 {
     $platform = strtolower(trim((string) ($task['platform'] ?? '')));
     $customerId = trim((string) ($task['customer_id'] ?? ''));
-    $customerName = trim((string) ($task['customer_name'] ?? ''));
 
-    if ($platform === '') {
-        return array('platform' => '', 'customer_id' => 0);
+    if ($platform === '' || !preg_match('/^[1-9][0-9]*$/', $customerId)) {
+        return array('platform' => $platform, 'customer_id' => 0);
     }
 
-    if ($platform === 'shopee' && function_exists('customerLabelResolveShopeeCustomerMeta')) {
-        $buyerMeta = customerLabelResolveShopeeCustomerMeta($connect, $financeConnect, $customerId, $customerName);
-        $sourceCustomerId = (int) ($buyerMeta['id'] ?? 0);
-        return array('platform' => $platform, 'customer_id' => $sourceCustomerId);
+    // campaign_customer.customer_id is populated from the platform customer row's
+    // primary key. Resolve only that key; names and external identifiers are not
+    // reliable enough to choose a customer record for a write.
+    $sourceCustomerId = (int) $customerId;
+    if ($sourceCustomerId <= 0) {
+        return array('platform' => $platform, 'customer_id' => 0);
     }
 
     $platformConfigMap = array(
+        'shopee' => array(
+            'conn' => $financeConnect,
+            'table' => defined('SHOPEE_CUST_INFO') ? SHOPEE_CUST_INFO : 'shopee_customer_info',
+        ),
         'lazada' => array(
             'conn' => $connect,
             'table' => defined('LAZADA_CUST_RCD') ? LAZADA_CUST_RCD : 'customer_lazada_deals_transaction',
-            'columns' => array('id', 'lcr_id', 'name', 'customer_name'),
         ),
         'website' => array(
             'conn' => $connect,
             'table' => defined('WEB_CUST_RCD') ? WEB_CUST_RCD : 'customer_website_deals_transaction',
-            'columns' => array('id', 'cust_id', 'name', 'customer_name'),
         ),
         'facebook' => array(
             'conn' => $connect,
             'table' => defined('FB_CUST_DEALS') ? FB_CUST_DEALS : 'customer_facebook_deals_transaction',
-            'columns' => array('id', 'name', 'customer_name'),
         ),
     );
 
@@ -224,48 +226,36 @@ function campaignFollowUpResolveSourceCustomerForTag($connect, $financeConnect, 
 
     $platformConfig = $platformConfigMap[$platform];
     $customerConn = $platformConfig['conn'];
-    $customerTable = $platformConfig['table'];
-    if (!($customerConn instanceof mysqli) || !function_exists('campaignTableExists') || !campaignTableExists($customerConn, $customerTable)) {
+    $customerTable = (string) $platformConfig['table'];
+    if (!($customerConn instanceof mysqli)
+        || !function_exists('campaignTableExists')
+        || !campaignTableExists($customerConn, $customerTable)
+        || !function_exists('campaignColumnExists')
+        || !campaignColumnExists($customerConn, $customerTable, 'id')
+    ) {
         return array('platform' => $platform, 'customer_id' => 0);
     }
 
-    $lookupValues = array_values(array_unique(array_filter(array($customerId, $customerName), function ($value) {
-        return trim((string) $value) !== '';
-    })));
-    if (empty($lookupValues)) {
+    $safeTable = str_replace('`', '``', $customerTable);
+    $whereSql = '`id`=?';
+    if ($requireActive && campaignColumnExists($customerConn, $customerTable, 'status')) {
+        $whereSql .= " AND `status`='A'";
+    }
+    $stmt = $customerConn->prepare("SELECT `id` FROM `" . $safeTable . "` WHERE " . $whereSql . " LIMIT 1");
+    if (!$stmt) {
         return array('platform' => $platform, 'customer_id' => 0);
     }
-
-    $whereParts = array();
-    foreach ($platformConfig['columns'] as $column) {
-        if (!function_exists('campaignColumnExists') || !campaignColumnExists($customerConn, $customerTable, $column)) {
-            continue;
-        }
-
-        $safeValues = array();
-        foreach ($lookupValues as $lookupValue) {
-            $safeValues[] = "'" . mysqli_real_escape_string($customerConn, (string) $lookupValue) . "'";
-        }
-        $whereParts[] = "`" . str_replace('`', '``', $column) . "` IN (" . implode(',', $safeValues) . ")";
-    }
-
-    if (empty($whereParts)) {
+    $stmt->bind_param('i', $sourceCustomerId);
+    if (!$stmt->execute()) {
+        $stmt->close();
         return array('platform' => $platform, 'customer_id' => 0);
     }
+    $result = $stmt->get_result();
+    $row = ($result && $result->num_rows === 1) ? $result->fetch_assoc() : array();
+    $stmt->close();
 
-    $whereClause = "(" . implode(' OR ', $whereParts) . ")";
-    if (function_exists('campaignColumnExists') && campaignColumnExists($customerConn, $customerTable, 'status')) {
-        $whereClause .= " AND `status`='A'";
-    }
-
-    $sql = "SELECT `id` FROM `" . str_replace('`', '``', $customerTable) . "` WHERE " . $whereClause . " ORDER BY `id` ASC LIMIT 1";
-    $result = mysqli_query($customerConn, $sql);
-    if ($result instanceof mysqli_result && $result->num_rows > 0) {
-        $row = $result->fetch_assoc();
-        return array('platform' => $platform, 'customer_id' => (int) ($row['id'] ?? 0));
-    }
-
-    return array('platform' => $platform, 'customer_id' => 0);
+    $resolvedId = (int) ($row['id'] ?? 0);
+    return array('platform' => $platform, 'customer_id' => $resolvedId === $sourceCustomerId ? $resolvedId : 0);
 }
 
 function campaignFollowUpBuildCustomerProfileUrl($connect, $financeConnect, $task)
@@ -390,8 +380,9 @@ function campaignFollowUpDeleteCustomerAssignment($connect, $task)
     }
 }
 
-function campaignFollowUpUploadScreenshot($fieldName, $task)
+function campaignFollowUpUploadScreenshot($fieldName, $task, &$createdAbsolutePath = null)
 {
+    $createdAbsolutePath = '';
     if (empty($_FILES[$fieldName]) || !is_array($_FILES[$fieldName]) || (int) $_FILES[$fieldName]['error'] === UPLOAD_ERR_NO_FILE) {
         return '';
     }
@@ -433,6 +424,7 @@ function campaignFollowUpUploadScreenshot($fieldName, $task)
         throw new Exception('Unable to save screenshot.');
     }
 
+    $createdAbsolutePath = $targetPath;
     return $relativeDir . '/' . $fileName;
 }
 
@@ -511,32 +503,82 @@ if ($followUpDeleteRequested) {
 }
 
 if ($followUpSaveRequested) {
+    $uploadedProofAbsolutePath = '';
+    $saveTransactionStarted = false;
+    $saveTransactionCommitted = false;
     $taskId = (int) post('task_id');
     $task = campaignFollowUpFetchTask($connect, $taskId);
     if (!empty($task)) {
         try {
             $remark = trim((string) post('remark'));
-            $uploadPath = campaignFollowUpUploadScreenshot('screenshot', $task);
-            $existingScreenshot = isset($task['screenshot_path']) ? trim((string) $task['screenshot_path']) : '';
+            $userId = (string) USER_ID;
+            if (!$connect->begin_transaction()) {
+                throw new Exception('Unable to start the follow-up transaction. No changes were saved.');
+            }
+            $saveTransactionStarted = true;
+
+            // Serialize edits to the task so concurrent Mark requests cannot both assign
+            // the tag or compute proof/remark changes from stale values.
+            $stateStmt = $connect->prepare("SELECT `follow_up_status`, `completed_by`, `completed_date`, `completed_time`, `screenshot_path`, `remark` FROM `" . CAMPAIGN_FOLLOW_UP . "` WHERE `id`=? AND `status`='A' LIMIT 1 FOR UPDATE");
+            if (!$stateStmt) {
+                throw new Exception($connect->error);
+            }
+            $stateStmt->bind_param('i', $taskId);
+            if (!$stateStmt->execute()) {
+                $stateError = $stateStmt->error;
+                $stateStmt->close();
+                throw new Exception($stateError);
+            }
+            $stateResult = $stateStmt->get_result();
+            $lockedTaskState = ($stateResult && $stateResult->num_rows > 0) ? $stateResult->fetch_assoc() : array();
+            $stateStmt->close();
+            if (empty($lockedTaskState)) {
+                throw new Exception('This follow-up is no longer available. Reload the page and try again.');
+            }
+            $task = array_merge($task, $lockedTaskState);
+
+            // The posted mode is only a request, not authority. Once the database says the
+            // task is completed, only Edit is accepted and it can never assign the campaign
+            // tag again. Pending tasks retain the explicit Mark/Edit distinction.
+            $modalMode = strtolower(trim((string) post('modal_mode')));
+            $isCompletedTask = strtolower(trim((string) ($task['follow_up_status'] ?? ''))) === 'completed';
+            if ($isCompletedTask && $modalMode !== 'edit') {
+                throw new Exception('This follow-up is already completed. Reload the page and use Edit to update its proof or remark.');
+            }
+            if (!$isCompletedTask && !in_array($modalMode, array('mark', 'edit'), true)) {
+                throw new Exception('Please reopen this follow-up and choose Mark or Edit before saving.');
+            }
+            $shouldAssignTag = !$isCompletedTask && $modalMode === 'mark';
+            $preserveOriginalContent = $isCompletedTask;
+            $status = 'Completed';
+            $labelPreview = campaignFollowUpBuildCampaignLabelName($task);
+            $uploadPath = campaignFollowUpUploadScreenshot('screenshot', $task, $uploadedProofAbsolutePath);
+            $existingScreenshot = trim((string) ($task['screenshot_path'] ?? ''));
             if ($uploadPath === '' && $existingScreenshot === '') {
                 throw new Exception('Screenshot / Attachment is required.');
             }
-
             $screenshotPath = $uploadPath !== '' ? $uploadPath : $existingScreenshot;
-            $status = 'Completed';
-            $labelPreview = campaignFollowUpBuildCampaignLabelName($task);
-            $completedBy = (string) USER_ID;
-            $completedDate = date('Y-m-d');
-            $completedTime = date('H:i:s');
-            $userId = (string) USER_ID;
-
-            $connect->begin_transaction();
-
-            // Mark mode = "mark as notified" -> assign the campaign tag. Edit mode is a
-            // correction of an already-completed follow-up (e.g. attaching the failed-notify
-            // screenshot) and must NOT claim the customer was notified, so it skips the tag.
-            $modalMode = strtolower(trim((string) post('modal_mode')));
-            $shouldAssignTag = ($modalMode !== 'edit');
+            $sourceChanges = array();
+            if ($existingScreenshot !== $screenshotPath) {
+                $sourceChanges[] = array(
+                    'field' => 'Proof',
+                    'from' => $existingScreenshot !== '' ? $existingScreenshot : 'No proof',
+                    'to' => $screenshotPath,
+                );
+            }
+            $existingRemark = trim((string) ($task['remark'] ?? ''));
+            if ($existingRemark !== $remark) {
+                $sourceChanges[] = array(
+                    'field' => 'Remark',
+                    'from' => $existingRemark !== '' ? $existingRemark : 'Empty',
+                    'to' => $remark !== '' ? $remark : 'Cleared',
+                );
+            }
+            // A proof/remark correction is not a new completion. Keep the original completion
+            // actor and timestamp; update_by/update_date/update_time capture this edit.
+            $completedBy = $isCompletedTask ? ($task['completed_by'] ?? null) : $userId;
+            $completedDate = $isCompletedTask ? ($task['completed_date'] ?? null) : date('Y-m-d');
+            $completedTime = $isCompletedTask ? ($task['completed_time'] ?? null) : date('H:i:s');
             $campaignTagResult = array('success' => true, 'message' => '', 'tag_row' => null, 'source_platform' => '', 'source_customer_id' => 0);
 
             if ($shouldAssignTag) {
@@ -552,55 +594,86 @@ if ($followUpSaveRequested) {
                 }
             } else {
                 // Edit: no tag, but still resolve the source customer so the User Record Log
-                // entry lands on the right person.
-                $sourceCustomer = campaignFollowUpResolveSourceCustomerForTag($connect, isset($finance_connect) ? $finance_connect : $connect, $task);
+                // entry lands on the right person. Pending tasks require an active source;
+                // completed history remains editable if the customer was later deactivated.
+                $sourceCustomer = campaignFollowUpResolveSourceCustomerForTag($connect, isset($finance_connect) ? $finance_connect : $connect, $task, !$isCompletedTask);
                 $campaignTagResult['source_platform'] = (string) ($sourceCustomer['platform'] ?? '');
                 $campaignTagResult['source_customer_id'] = (int) ($sourceCustomer['customer_id'] ?? 0);
+                if ($campaignTagResult['source_customer_id'] <= 0) {
+                    throw new Exception('Unable to resolve this task to one exact platform customer record. No changes were saved.');
+                }
             }
 
-            $stmt = $connect->prepare("UPDATE `" . CAMPAIGN_FOLLOW_UP . "` SET `screenshot_path`=?, `remark`=?, `follow_up_status`=?, `label_preview`=?, `completed_by`=?, `completed_date`=?, `completed_time`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=?");
+            $stmt = $connect->prepare("UPDATE `" . CAMPAIGN_FOLLOW_UP . "` SET `screenshot_path`=?, `remark`=?, `follow_up_status`=?, `label_preview`=?, `completed_by`=?, `completed_date`=?, `completed_time`=?, `update_by`=?, `update_date`=CURDATE(), `update_time`=CURTIME() WHERE `id`=? AND `status`='A'");
             if (!$stmt) {
                 throw new Exception($connect->error);
             }
             $stmt->bind_param('ssssssssi', $screenshotPath, $remark, $status, $labelPreview, $completedBy, $completedDate, $completedTime, $userId, $taskId);
-            $stmt->execute();
+            if (!$stmt->execute()) {
+                $updateError = $stmt->error;
+                $stmt->close();
+                throw new Exception('Unable to update the follow-up task: ' . $updateError);
+            }
             $stmt->close();
 
             // Merge this completed follow-up into the customer's own User Record Log so it
             // shows up alongside their other interaction history, not just inside the
-            // campaign module. Uses the same platform-customer id already resolved for
-            // tagging above.
-            if (function_exists('customerFollowUpInsertReadableUserRecordLog')) {
-                $recordLogLines = array();
-                $recordLogLines[] = 'Campaign follow-up completed for campaign "' . (string) ($task['campaign_name'] ?? '') . '".';
-                $recordLogLines[] = 'Message: ' . (string) ($task['message_preview'] ?? '');
-                $tagNameForLog = trim((string) ($campaignTagResult['tag_row']['name'] ?? ''));
-                if ($shouldAssignTag && $tagNameForLog !== '') {
-                    $recordLogLines[] = 'Tag added: ' . $tagNameForLog . '.';
-                }
-                if ($remark !== '') {
-                    $recordLogLines[] = 'Remark: ' . $remark;
-                }
-                $recordLogContent = implode("\n", $recordLogLines);
+            // campaign module. Uses the same exact platform-customer id resolved above.
+            if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
+                throw new Exception('The customer timeline writer is unavailable. No changes were saved.');
+            }
+            $recordLogLines = array();
+            $recordLogLines[] = 'Campaign follow-up completed for campaign "' . (string) ($task['campaign_name'] ?? '') . '".';
+            $recordLogLines[] = 'Message: ' . (string) ($task['message_preview'] ?? '');
+            $tagNameForLog = trim((string) ($campaignTagResult['tag_row']['name'] ?? ''));
+            if ($shouldAssignTag && $tagNameForLog !== '') {
+                $recordLogLines[] = 'Tag added: ' . $tagNameForLog . '.';
+            }
+            if ($remark !== '') {
+                $recordLogLines[] = 'Remark: ' . $remark;
+            }
+            $recordLogContent = implode("\n", $recordLogLines);
 
-                customerFollowUpInsertReadableUserRecordLog($connect, array(
-                    'platform' => (string) ($campaignTagResult['source_platform'] ?? ''),
-                    'customer_id' => (int) ($campaignTagResult['source_customer_id'] ?? 0),
-                    'content' => $recordLogContent,
-                    'attachment' => $screenshotPath,
-                    'created_by' => $userId,
-                ));
+            $sourceCustomerId = (int) ($campaignTagResult['source_customer_id'] ?? 0);
+            $sourcePlatform = (string) ($campaignTagResult['source_platform'] ?? '');
+            if ($sourceCustomerId <= 0 || $sourcePlatform === '') {
+                throw new Exception('Unable to resolve this task to one exact platform customer record. No changes were saved.');
+            }
+            $userRecordLogId = customerFollowUpInsertReadableUserRecordLog($connect, array(
+                'platform' => $sourcePlatform,
+                'customer_id' => $sourceCustomerId,
+                'content' => $recordLogContent,
+                'attachment' => $screenshotPath,
+                'created_by' => $userId,
+                'source_type' => 'campaign_follow_up_task',
+                'source_id' => $taskId,
+                'source_changes' => $sourceChanges,
+                // Editing a completed task updates its proof and revision details
+                // without rewriting the original completion description.
+                'preserve_content' => $preserveOriginalContent,
+            ));
+            if ($userRecordLogId <= 0) {
+                throw new Exception('Unable to update the original customer timeline entry. Run insert_table.php if the source-key fields are missing. If this task was completed before stable source links were added, its old log cannot be matched safely, so no duplicate was created.');
             }
 
-            $connect->commit();
+            if (!$connect->commit()) {
+                throw new Exception('Unable to commit the follow-up transaction. No changes were confirmed.');
+            }
+            $saveTransactionCommitted = true;
 
             campaignAudit($connect, $pageTitle, 'edit', USER_NAME . " updated campaign follow-up task " . $taskId . ".", '', CAMPAIGN_FOLLOW_UP);
             campaignSetPopup('Successful Save Follow Up', $pageUrl, 'ErrMO');
         } catch (Exception $e) {
-            if ($connect instanceof mysqli && $connect->errno !== null) {
+            if ($connect instanceof mysqli && $saveTransactionStarted && !$saveTransactionCommitted) {
                 @mysqli_rollback($connect);
             }
-            campaignSetPopup($e->getMessage(), $pageUrl, 'ErrMO');
+            $errorMessage = $e->getMessage();
+            if (!$saveTransactionCommitted && $uploadedProofAbsolutePath !== '' && is_file($uploadedProofAbsolutePath)) {
+                if (!@unlink($uploadedProofAbsolutePath)) {
+                    $errorMessage .= ' The uploaded proof could not be removed after the failed save; please contact an administrator.';
+                }
+            }
+            campaignSetPopup($errorMessage, $pageUrl, 'ErrMO');
         }
     }
     echo '<script>location.href = "' . $pageUrl . '";</script>';

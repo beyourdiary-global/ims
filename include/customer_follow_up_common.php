@@ -1234,6 +1234,26 @@ if (!function_exists('customerFollowUpBuildLogHistoryEntry')) {
     }
 }
 
+if (!function_exists('customerFollowUpHasSystemRoundHistory')) {
+    function customerFollowUpHasSystemRoundHistory($value)
+    {
+        $history = is_array($value) ? $value : json_decode((string) $value, true);
+        if (!is_array($history)) {
+            return false;
+        }
+        foreach ($history as $entry) {
+            if (!is_array($entry)) {
+                continue;
+            }
+            $action = strtolower(trim((string) (isset($entry['action']) ? $entry['action'] : '')));
+            if ($action !== '' && $action !== 'updated from customer page' && array_key_exists('detail', $entry)) {
+                return true;
+            }
+        }
+        return false;
+    }
+}
+
 if (!function_exists('customerFollowUpFindRoundUserRecordLogId')) {
     /**
      * The entry already written for this follow-up round, which the next action on the
@@ -1250,28 +1270,48 @@ if (!function_exists('customerFollowUpFindRoundUserRecordLogId')) {
         if (!function_exists('urlUserRecordLogColumnExists')
             || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_id')
             || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_round_id')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'follow_up_history')
         ) {
             return 0;
         }
 
         $customerColumn = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $customerColumn);
-        $sql = "SELECT `id`
+        $hasSourceColumns = urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'source_type')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'source_id');
+        $selectFields = array('`id`', '`follow_up_history`');
+        $sourceFilter = " AND IFNULL(`follow_up_history`, '') <> ''";
+        if ($hasSourceColumns) {
+            $selectFields[] = '`source_type`';
+            $selectFields[] = '`source_id`';
+            $sourceFilter = " AND ((`source_type` = 'customer_follow_up_round' AND `source_id` = " . $roundId . ")"
+                . " OR (IFNULL(`source_type`, '') = '' AND IFNULL(`follow_up_history`, '') <> ''))";
+        }
+        $sql = "SELECT " . implode(', ', $selectFields) . "
                 FROM `" . USER_RECORD_LOG . "`
                 WHERE `status` = 'A'
                   AND `" . $customerColumn . "` = " . $customerId . "
                   AND `follow_up_id` = " . $followUpId . "
-                  AND `follow_up_round_id` = " . $roundId . "
+                  AND `follow_up_round_id` = " . $roundId . $sourceFilter . "
                 ORDER BY `id` DESC
-                LIMIT 1";
+                LIMIT 100";
 
         $result = mysqli_query($connect, $sql);
-        if (!$result || mysqli_num_rows($result) === 0) {
+        if (!$result) {
             return 0;
         }
+        while ($row = mysqli_fetch_assoc($result)) {
+            $sourceType = strtolower(trim((string) (isset($row['source_type']) ? $row['source_type'] : '')));
+            if ($sourceType === 'customer_follow_up_round'
+                && (int) (isset($row['source_id']) ? $row['source_id'] : 0) === $roundId
+            ) {
+                return (int) $row['id'];
+            }
+            if ($sourceType === '' && customerFollowUpHasSystemRoundHistory(isset($row['follow_up_history']) ? $row['follow_up_history'] : '')) {
+                return (int) $row['id'];
+            }
+        }
 
-        $row = mysqli_fetch_assoc($result);
-
-        return isset($row['id']) ? (int) $row['id'] : 0;
+        return 0;
     }
 }
 
@@ -1331,11 +1371,137 @@ if (!function_exists('customerFollowUpUpdateRoundUserRecordLog')) {
             $updateParts[] = "`next_follow_up_date` = '" . customerFollowUpEscape($connect, $nextFollowUpDate) . "'";
         }
 
+        $roundId = (int) (isset($data['round_id']) ? $data['round_id'] : 0);
+        if ($roundId > 0
+            && function_exists('urlUserRecordLogColumnExists')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'source_type')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'source_id')
+        ) {
+            $updateParts[] = "`source_type` = 'customer_follow_up_round'";
+            $updateParts[] = "`source_id` = " . $roundId;
+        }
+
         $sql = "UPDATE `" . USER_RECORD_LOG . "`
                 SET " . implode(', ', $updateParts) . "
                 WHERE `id` = " . $logId . "
                 LIMIT 1";
 
+        return mysqli_query($connect, $sql) ? $logId : 0;
+    }
+}
+
+if (!function_exists('customerFollowUpFindSourceUserRecordLogId')) {
+    function customerFollowUpFindSourceUserRecordLogId($connect, $customerColumn, $customerId, $sourceType, $sourceId)
+    {
+        $customerId = (int) $customerId;
+        $sourceId = (int) $sourceId;
+        $sourceType = trim((string) $sourceType);
+        $customerColumn = preg_replace('/[^a-zA-Z0-9_]/', '', (string) $customerColumn);
+        if ($customerId <= 0 || $sourceId <= 0 || $sourceType === '' || $customerColumn === ''
+            || !function_exists('urlUserRecordLogColumnExists')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, $customerColumn)
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'source_type')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'source_id')
+        ) {
+            return 0;
+        }
+
+        $sql = "SELECT `id`
+                FROM `" . USER_RECORD_LOG . "`
+                WHERE `status` = 'A'
+                  AND `" . $customerColumn . "` = " . $customerId . "
+                  AND `source_type` = '" . customerFollowUpEscape($connect, $sourceType) . "'
+                  AND `source_id` = " . $sourceId . "
+                ORDER BY `id` DESC
+                LIMIT 1";
+        $result = mysqli_query($connect, $sql);
+        if (!$result || mysqli_num_rows($result) === 0) {
+            return 0;
+        }
+        $row = mysqli_fetch_assoc($result);
+        return isset($row['id']) ? (int) $row['id'] : 0;
+    }
+}
+
+if (!function_exists('customerFollowUpUpdateSourceUserRecordLog')) {
+    function customerFollowUpUpdateSourceUserRecordLog($connect, $logId, $content, $attachment, $actorUserId, $data)
+    {
+        $logId = (int) $logId;
+        $sourceType = trim((string) (isset($data['source_type']) ? $data['source_type'] : ''));
+        $sourceId = (int) (isset($data['source_id']) ? $data['source_id'] : 0);
+        if ($logId <= 0 || $sourceType === '' || $sourceId <= 0) {
+            return 0;
+        }
+
+        $hasSourceHistory = function_exists('urlUserRecordLogColumnExists')
+            && urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'source_history');
+        $selectFields = array('`content`', '`attachment`');
+        if ($hasSourceHistory) {
+            $selectFields[] = '`source_history`';
+        }
+        $existingResult = mysqli_query($connect, "SELECT " . implode(', ', $selectFields) . " FROM `" . USER_RECORD_LOG . "` WHERE `id` = " . $logId . " AND `status` = 'A' LIMIT 1");
+        if (!$existingResult || mysqli_num_rows($existingResult) === 0) {
+            return 0;
+        }
+        $existingRow = mysqli_fetch_assoc($existingResult);
+        $oldContent = (string) (isset($existingRow['content']) ? $existingRow['content'] : '');
+        $oldAttachment = trim((string) (isset($existingRow['attachment']) ? $existingRow['attachment'] : ''));
+        $historyEntries = array();
+        if ($hasSourceHistory) {
+            $decodedHistory = json_decode((string) (isset($existingRow['source_history']) ? $existingRow['source_history'] : ''), true);
+            if (is_array($decodedHistory)) {
+                $historyEntries = $decodedHistory;
+            }
+        }
+
+        $changes = isset($data['source_changes']) && is_array($data['source_changes']) ? $data['source_changes'] : array();
+        if (empty($changes) && empty($data['preserve_content']) && $oldContent !== (string) $content) {
+            $changes[] = array('field' => 'Activity details', 'from' => 'Previous details', 'to' => 'Updated details');
+        }
+        if (empty($changes) && $attachment !== '' && $oldAttachment !== $attachment) {
+            $changes[] = array('field' => 'Proof', 'from' => $oldAttachment, 'to' => $attachment);
+        }
+        $normalizedChanges = array();
+        foreach ($changes as $change) {
+            if (!is_array($change) || trim((string) (isset($change['field']) ? $change['field'] : '')) === '') {
+                continue;
+            }
+            $normalizedChanges[] = array(
+                'field' => trim((string) $change['field']),
+                'from' => isset($change['from']) ? (string) $change['from'] : '',
+                'to' => isset($change['to']) ? (string) $change['to'] : '',
+            );
+        }
+        $contentChanged = empty($data['preserve_content']) && $oldContent !== (string) $content;
+        $attachmentChanged = $attachment !== '' && $oldAttachment !== $attachment;
+        if (empty($normalizedChanges) && !$contentChanged && !$attachmentChanged) {
+            return $logId;
+        }
+        if (!empty($normalizedChanges) && $hasSourceHistory) {
+            $historyEntries[] = array(
+                'time' => trim(customerFollowUpNowDate() . ' ' . customerFollowUpNowTime()),
+                'by' => trim((string) $actorUserId),
+                'changes' => $normalizedChanges,
+            );
+        }
+
+        $updateParts = array(
+            "`updated_by` = '" . customerFollowUpEscape($connect, $actorUserId) . "'",
+            '`updated_at` = NOW()',
+            "`source_type` = '" . customerFollowUpEscape($connect, $sourceType) . "'",
+            '`source_id` = ' . $sourceId,
+        );
+        if (empty($data['preserve_content'])) {
+            $updateParts[] = "`content` = '" . customerFollowUpEscape($connect, $content) . "'";
+        }
+        if ($attachment !== '') {
+            $updateParts[] = "`attachment` = '" . customerFollowUpEscape($connect, $attachment) . "'";
+        }
+        if ($hasSourceHistory && !empty($normalizedChanges)) {
+            $updateParts[] = "`source_history` = '" . customerFollowUpEscape($connect, json_encode($historyEntries)) . "'";
+        }
+
+        $sql = "UPDATE `" . USER_RECORD_LOG . "` SET " . implode(', ', $updateParts) . " WHERE `id` = " . $logId . " LIMIT 1";
         return mysqli_query($connect, $sql) ? $logId : 0;
     }
 }
@@ -1362,11 +1528,44 @@ if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
 
         $attachment = trim((string) (isset($data['attachment']) ? $data['attachment'] : ''));
         $actorUserId = trim((string) (isset($data['created_by']) ? $data['created_by'] : (defined('USER_ID') ? USER_ID : '')));
+        $followUpId = isset($data['follow_up_id']) ? (int) $data['follow_up_id'] : 0;
+        $roundId = isset($data['round_id']) ? (int) $data['round_id'] : 0;
+        $sourceType = trim((string) (isset($data['source_type']) ? $data['source_type'] : ''));
+        $sourceId = (int) (isset($data['source_id']) ? $data['source_id'] : 0);
+        if ($sourceType === '' && !empty($data['upsert']) && $followUpId > 0 && $roundId > 0) {
+            $sourceType = 'customer_follow_up_round';
+            $sourceId = $roundId;
+        }
+
+        if ($sourceType !== '' && ($sourceId <= 0
+            || !function_exists('urlUserRecordLogColumnExists')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'source_type')
+            || !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'source_id')
+            || ($sourceType === 'campaign_follow_up_task'
+                && !urlUserRecordLogColumnExists($connect, USER_RECORD_LOG, 'source_history'))
+        )) {
+            // Without a durable source key, do not create another row for an edit.
+            return 0;
+        }
+        if ($sourceType !== '' && $sourceType !== 'customer_follow_up_round') {
+            $existingSourceLogId = customerFollowUpFindSourceUserRecordLogId($connect, $customerColumn, $customerId, $sourceType, $sourceId);
+            if ($existingSourceLogId > 0) {
+                return customerFollowUpUpdateSourceUserRecordLog($connect, $existingSourceLogId, $content, $attachment, $actorUserId, array_merge($data, array(
+                    'source_type' => $sourceType,
+                    'source_id' => $sourceId,
+                )));
+            }
+            if ($sourceType === 'campaign_follow_up_task' && !empty($data['preserve_content'])) {
+                // An edit to a completed legacy task must never create a second top-level
+                // customer record when its original row has no stable task source key.
+                // Without that key, matching the old row by text or date would be guesswork.
+                return 0;
+            }
+        }
 
         // Approving, rejecting or rescheduling the same round is the same follow-up moving
-        // on, not a new one, so those actions reuse the round's entry and append to its
-        // history rather than filling the customer timeline with a row per click. Callers
-        // that write a one-off message (tag assignment) leave this off and still insert.
+        // on, not a new one, so those actions reuse only the system round entry and append
+        // to its history; a manually entered note for the same round remains untouched.
         if (!empty($data['upsert'])) {
             $existingLogId = customerFollowUpFindRoundUserRecordLogId($connect, $customerColumn, $customerId, $data);
             if ($existingLogId > 0) {
@@ -1420,6 +1619,10 @@ if (!function_exists('customerFollowUpInsertReadableUserRecordLog')) {
                 $insertColumns .= ", `follow_up_round_id`";
                 $insertValues .= ",\n                    " . $roundId;
             }
+        }
+        if ($sourceType !== '' && $sourceId > 0) {
+            $insertColumns .= ", `source_type`, `source_id`";
+            $insertValues .= ",\n                    '" . customerFollowUpEscape($connect, $sourceType) . "', " . $sourceId;
         }
 
         if ($nextFollowUpDate !== ''

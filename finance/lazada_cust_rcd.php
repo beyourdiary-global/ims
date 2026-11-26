@@ -10,6 +10,7 @@ include_once ROOT . '/include/customer_tag.php';
 $pageTitle = getPinGroupNameById($connect, $currentPagePin);
 $pinAccess = checkCurrentPin($connect, $pageTitle);
 include_once ROOT . '/include/user_record_log.php';
+include_once ROOT . '/include/customer_timeline_preview.php';
 
 $tblName = LAZADA_CUST_RCD;
 
@@ -993,6 +994,9 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 </form>
 
                 <?php
+                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                    customerTimelineRenderCustomerPreview($connect, 'lazada', (int) $dataId);
+                }
                 if ($dataId) {
                     $customerLogReturnUrl = $SITEURL . '/finance/lazada_cust_rcd.php?id=' . (int) $dataId;
                     if ($act !== '') {
@@ -1008,6 +1012,11 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         'customer_only' => true,
                     ));
 
+                    $hasPendingLogApproval = !empty($lazadaUserRecordLogApproval['panel_html']);
+                    if ($act === '') {
+                        echo '<details class="customer-original-log"' . ($hasPendingLogApproval ? ' open' : '') . '>';
+                        echo '<summary>Original User Record Log and entry tools</summary>';
+                    }
                     urlRenderUserRecordLogModule($connect, $connect, array(
                         'table_name' => USER_RECORD_LOG,
                         'context' => $customerLogContext,
@@ -1018,6 +1027,9 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         'approval_request_id' => isset($lazadaUserRecordLogApproval['approval_request_id']) ? $lazadaUserRecordLogApproval['approval_request_id'] : 0,
                         'approval_action_url' => isset($lazadaUserRecordLogApproval['action_url']) ? $lazadaUserRecordLogApproval['action_url'] : '',
                     ));
+                    if ($act === '') {
+                        echo '</details>';
+                    }
                 }
                 ?>
 

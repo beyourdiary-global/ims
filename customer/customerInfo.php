@@ -667,6 +667,12 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     </div>
                 </form>
 
+                <?php
+                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                    customerTimelineRenderCustomerInfoPreview($connect, (int) $dataId);
+                }
+                ?>
+
                     <?php
                     if ($dataId) {
                         $customerLabel = '';
@@ -692,6 +698,11 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             'customer_lookup_connect' => $connect,
                         ));
 
+                        $hasPendingLogApproval = !empty($customerInfoUserRecordLogApproval['panel_html']);
+                        if ($act === '') {
+                            echo '<details class="customer-original-log"' . ($hasPendingLogApproval ? ' open' : '') . '>';
+                            echo '<summary>Original User Record Log and entry tools</summary>';
+                        }
                         urlRenderUserRecordLogModule($connect, $connect, array(
                             'table_name' => USER_RECORD_LOG,
                             'context' => $customerLogContext,
@@ -702,14 +713,11 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             'approval_request_id' => isset($customerInfoUserRecordLogApproval['approval_request_id']) ? $customerInfoUserRecordLogApproval['approval_request_id'] : 0,
                             'approval_action_url' => isset($customerInfoUserRecordLogApproval['action_url']) ? $customerInfoUserRecordLogApproval['action_url'] : '',
                         ));
+                        if ($act === '') {
+                            echo '</details>';
+                        }
                     }
                     ?>
-
-                <?php
-                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
-                    customerTimelineRenderCustomerInfoPreview($connect, (int) $dataId);
-                }
-                ?>
 
                 <?php echo commonRenderCreateUpdateInfo(isset($row) ? $row : array(), $connect, isset($act) ? $act : ''); ?>
                 <div class="form-group mt-5 d-flex justify-content-center flex-md-row flex-column">
