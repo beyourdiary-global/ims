@@ -667,12 +667,6 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                     </div>
                 </form>
 
-                <?php
-                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
-                    customerTimelineRenderCustomerInfoPreview($connect, (int) $dataId);
-                }
-                ?>
-
                     <?php
                     if ($dataId) {
                         $customerLabel = '';
@@ -716,6 +710,9 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                         if ($act === '') {
                             echo '</details>';
                         }
+                    }
+                    if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                        customerTimelineRenderCustomerInfoPreview($connect, (int) $dataId);
                     }
                     ?>
 

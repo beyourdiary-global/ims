@@ -907,9 +907,6 @@ if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && em
                 </form>
 
                 <?php
-                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
-                    customerTimelineRenderCustomerPreview($connect, 'shopee', (int) $dataId);
-                }
                 if ($dataId) {
                     $customerLogReturnUrl = $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $dataId;
                     if ($act !== '') {
@@ -943,6 +940,9 @@ if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && em
                     if ($act === '') {
                         echo '</details>';
                     }
+                }
+                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                    customerTimelineRenderCustomerPreview($connect, 'shopee', (int) $dataId);
                 }
                 ?>
 

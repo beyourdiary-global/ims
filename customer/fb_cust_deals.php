@@ -1075,9 +1075,6 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 </form>
 
                 <?php
-                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
-                    customerTimelineRenderCustomerPreview($connect, 'facebook', (int) $dataId);
-                }
                 if ($dataId) {
                     $customerLogReturnUrl = $SITEURL . '/customer/fb_cust_deals.php?id=' . (int) $dataId;
                     if ($act !== '') {
@@ -1111,6 +1108,9 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                     if ($act === '') {
                         echo '</details>';
                     }
+                }
+                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                    customerTimelineRenderCustomerPreview($connect, 'facebook', (int) $dataId);
                 }
                 ?>
 

@@ -974,9 +974,6 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 </form>
 
                 <?php
-                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
-                    customerTimelineRenderCustomerPreview($connect, 'website', (int) $dataId);
-                }
                 if ($dataId) {
                     $customerLogReturnUrl = $SITEURL . '/customer/website_customer_record.php?id=' . (int) $dataId;
                     if ($act !== '') {
@@ -1010,6 +1007,9 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                     if ($act === '') {
                         echo '</details>';
                     }
+                }
+                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                    customerTimelineRenderCustomerPreview($connect, 'website', (int) $dataId);
                 }
                 ?>
 

@@ -994,9 +994,6 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                 </form>
 
                 <?php
-                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
-                    customerTimelineRenderCustomerPreview($connect, 'lazada', (int) $dataId);
-                }
                 if ($dataId) {
                     $customerLogReturnUrl = $SITEURL . '/finance/lazada_cust_rcd.php?id=' . (int) $dataId;
                     if ($act !== '') {
@@ -1030,6 +1027,9 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                     if ($act === '') {
                         echo '</details>';
                     }
+                }
+                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                    customerTimelineRenderCustomerPreview($connect, 'lazada', (int) $dataId);
                 }
                 ?>
 
