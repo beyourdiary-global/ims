@@ -289,6 +289,28 @@ if (!function_exists('customerTimelineHandleFollowUpReviewPost')) {
     }
 }
 
+if (!function_exists('customerTimelinePreviewActionRows')) {
+    /**
+     * Both the review queue and the timeline need a case's full action history for the same
+     * page render, so the rows are fetched once and shared instead of queried twice.
+     */
+    function customerTimelinePreviewActionRows($connect, $followUpId)
+    {
+        static $cache = array();
+        $followUpId = (int) $followUpId;
+        if ($followUpId <= 0 || !function_exists('customerFollowUpFetchActionLogRows')) {
+            return array();
+        }
+
+        $cacheKey = ($connect instanceof mysqli ? spl_object_hash($connect) : 'none') . '|' . $followUpId;
+        if (!array_key_exists($cacheKey, $cache)) {
+            $cache[$cacheKey] = customerFollowUpFetchActionLogRows($connect, $followUpId, 0);
+        }
+
+        return $cache[$cacheKey];
+    }
+}
+
 if (!function_exists('customerTimelinePreviewIsRoundMirror')) {
     function customerTimelinePreviewIsRoundMirror($row)
     {
@@ -662,7 +684,7 @@ if (!function_exists('customerTimelinePreviewRenderFollowUpWorkflow')) {
                     }
                 }
             }
-            $actionRows = customerFollowUpFetchActionLogRows($connect, $followUpId, 0);
+            $actionRows = customerTimelinePreviewActionRows($connect, $followUpId);
             $allRoundActions = array();
             $latestSubmission = array();
             foreach ($actionRows as $actionRow) {
@@ -953,10 +975,10 @@ if (!function_exists('customerTimelineRenderCustomerPreview')) {
         ) {
             foreach ($followUpRows as $followUpRow) {
                 $followUpId = (int) (isset($followUpRow['id']) ? $followUpRow['id'] : 0);
-                if ($followUpId <= 0 || !function_exists('customerFollowUpFetchActionLogRows')) {
+                if ($followUpId <= 0) {
                     continue;
                 }
-                foreach (customerFollowUpFetchActionLogRows($connect, $followUpId, 0) as $actionRow) {
+                foreach (customerTimelinePreviewActionRows($connect, $followUpId) as $actionRow) {
                     $roundId = (int) (isset($actionRow['round_id']) ? $actionRow['round_id'] : 0);
                     $key = $followUpId . ':' . $roundId;
                     $roundNo = isset($roundMap[$roundId]['round_no']) ? (int) $roundMap[$roundId]['round_no'] : 0;

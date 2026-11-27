@@ -90,7 +90,7 @@ if (isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
         $connect,
         'customer_info',
         (int) $row['id'],
-        $SITEURL . '/customer/customerInfo.php?id=' . (int) $row['id']
+        $SITEURL . '/customer/customerInfo.php?id=' . (int) $row['id'] . (trim((string) $act) !== '' ? '&act=' . urlencode((string) $act) : '')
     );
 }
 

@@ -79,7 +79,7 @@ if (isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
         $connect,
         'website',
         (int) $row['id'],
-        $SITEURL . '/customer/website_customer_record.php?id=' . (int) $row['id']
+        $SITEURL . '/customer/website_customer_record.php?id=' . (int) $row['id'] . (trim((string) $act) !== '' ? '&act=' . urlencode((string) $act) : '')
     );
 }
 

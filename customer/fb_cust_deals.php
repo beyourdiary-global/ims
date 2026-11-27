@@ -44,7 +44,7 @@ if (isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
         $connect,
         'facebook',
         (int) $row['id'],
-        $SITEURL . '/customer/fb_cust_deals.php?id=' . (int) $row['id']
+        $SITEURL . '/customer/fb_cust_deals.php?id=' . (int) $row['id'] . (trim((string) $act) !== '' ? '&act=' . urlencode((string) $act) : '')
     );
 }
 

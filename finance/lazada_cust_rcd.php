@@ -79,7 +79,7 @@ if (isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
         $connect,
         'lazada',
         (int) $row['id'],
-        $SITEURL . '/finance/lazada_cust_rcd.php?id=' . (int) $row['id']
+        $SITEURL . '/finance/lazada_cust_rcd.php?id=' . (int) $row['id'] . (trim((string) $act) !== '' ? '&act=' . urlencode((string) $act) : '')
     );
 }
 

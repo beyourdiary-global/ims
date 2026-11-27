@@ -102,7 +102,7 @@ if (isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
         $connect,
         'shopee',
         (int) $row['id'],
-        $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $row['id']
+        $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $row['id'] . (trim((string) $act) !== '' ? '&act=' . urlencode((string) $act) : '')
     );
 }
 
