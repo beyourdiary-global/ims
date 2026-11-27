@@ -39,6 +39,15 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+if (isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+    customerTimelineHandleFollowUpReviewPost(
+        $connect,
+        'facebook',
+        (int) $row['id'],
+        $SITEURL . '/customer/fb_cust_deals.php?id=' . (int) $row['id']
+    );
+}
+
 $facebookCustomerPageUrl = $SITEURL . '/customer/fb_cust_deals.php?id=' . (int) $dataId;
 $facebookUserRecordLogApproval = orderDeleteApprovalPrepareUserRecordLogCustomerPage(
     $connect,
@@ -1109,7 +1118,7 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         echo '</details>';
                     }
                 }
-                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                if ($dataId && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
                     customerTimelineRenderCustomerPreview($connect, 'facebook', (int) $dataId);
                 }
                 ?>

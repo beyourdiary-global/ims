@@ -97,6 +97,15 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+if (isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+    customerTimelineHandleFollowUpReviewPost(
+        $connect,
+        'shopee',
+        (int) $row['id'],
+        $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $row['id']
+    );
+}
+
 $shopeeCustomerPageUrl = $SITEURL . '/shopee/shopee_cust_info.php?id=' . (int) $dataId;
 $shopeeUserRecordLogApproval = orderDeleteApprovalPrepareUserRecordLogCustomerPage(
     $connect,
@@ -551,6 +560,12 @@ if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && em
                                 echo customerTagRenderTitle($shopeeCustomerPageActionTitle, $shopeeCustomerActiveTags);
                                 ?>
                             </h2>
+                            <?php if ($dataId && isset($row['id'])) { ?>
+                                <nav class="d-flex flex-wrap gap-2 mt-2" aria-label="Customer activity navigation">
+                                    <a class="btn btn-sm btn-outline-primary" href="#customer-follow-up-workflow">Follow-Up Records &amp; Approval</a>
+                                    <a class="btn btn-sm btn-outline-secondary" href="#customer-activity-timeline">Activity Timeline</a>
+                                </nav>
+                            <?php } ?>
                             <?php echo customerTagRenderStickyActions($shopeeCustomerTagPlatform, $shopeeCustomerTagCustomerId, isActionAllowed('Edit', $pinAccess) && $act !== 'I', array('member_point_url' => $shopeeMemberPointStickyUrl, 'member_point_count' => $shopeeMemberPointStickyCount)); ?>
                         </div>
                         <?php echo $shopeeCustomerLabelDisplayHtml; ?>
@@ -941,7 +956,7 @@ if (($dataId) && !($act) && (USER_ID != '') && empty($_SESSION['viewChk']) && em
                         echo '</details>';
                     }
                 }
-                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                if ($dataId && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
                     customerTimelineRenderCustomerPreview($connect, 'shopee', (int) $dataId);
                 }
                 ?>

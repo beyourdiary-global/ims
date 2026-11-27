@@ -611,6 +611,8 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST') {
         case 'submit_follow_up':
             $result = customerFollowUpSubmitRound($connect, $followUpId, array(
                 'message_shortcut_id' => postSpaceFilter('message_shortcut_id'),
+                'sent_message_status' => postSpaceFilter('sent_message_status'),
+                'sent_message_text' => post('sent_message_text'),
                 'next_follow_up_date' => postSpaceFilter('next_follow_up_date'),
                 'contact_no' => postSpaceFilter('contact_no'),
                 'submit_mode' => postSpaceFilter('submit_mode'),
@@ -1881,6 +1883,8 @@ if (!empty($customerTagLabelFilters)) {
                                             $appealNextFollowUpDate = trim((string) (isset($latestAppealPayload['next_follow_up_date']) ? $latestAppealPayload['next_follow_up_date'] : $displayNextFollowUpDate));
                                             $appealContactNo = trim((string) (isset($latestAppealPayload['contact_no']) ? $latestAppealPayload['contact_no'] : $effectiveContactNo));
                                             $appealRejectReason = trim((string) (isset($latestAppealPayload['reject_reason']) ? $latestAppealPayload['reject_reason'] : (isset($row['reject_reason']) ? $row['reject_reason'] : '')));
+                                            $appealSentMessageText = isset($latestAppealPayload['sent_message_text']) ? (string) $latestAppealPayload['sent_message_text'] : '';
+                                            $appealSentMessageStatus = isset($latestAppealPayload['sent_message_status']) ? (string) $latestAppealPayload['sent_message_status'] : 'unspecified';
                                             $messageShortcutId = (int) (isset($row['message_shortcut_id']) ? $row['message_shortcut_id'] : 0);
                                             $messageContentSource = trim((string) (isset($row['message_shortcut_text']) ? $row['message_shortcut_text'] : ''));
                                             if ($messageContentSource === '' && $messageShortcutId > 0 && isset($messageShortcutMap[$messageShortcutId])) {
@@ -1963,7 +1967,9 @@ if (!empty($customerTagLabelFilters)) {
 
                                                             data-max-date="<?= htmlspecialchars((string) (isset($maxDateInfo['max_date']) ? $maxDateInfo['max_date'] : ''), ENT_QUOTES, 'UTF-8') ?>"
                                                             data-rule-label="<?= htmlspecialchars((string) (isset($maxDateInfo['rule_label']) ? $maxDateInfo['rule_label'] : ''), ENT_QUOTES, 'UTF-8') ?>"
-                                                            data-reject-reason="<?= htmlspecialchars($appealRejectReason, ENT_QUOTES, 'UTF-8') ?>">
+                                                            data-reject-reason="<?= htmlspecialchars($appealRejectReason, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-sent-message-status="<?= htmlspecialchars($appealSentMessageStatus, ENT_QUOTES, 'UTF-8') ?>"
+                                                            data-sent-message="<?= htmlspecialchars($appealSentMessageText, ENT_QUOTES, 'UTF-8') ?>">
                                                             <i class="fa-solid fa-eye"></i><span class="ms-1">View Appeal</span>
                                                         </button>
                                                     <?php } ?>
@@ -2566,6 +2572,21 @@ if (!empty($customerTagLabelFilters)) {
                                 <span class="arrival-follow-up-summary-label">Customer Type</span>
                                 <span id="submit_follow_up_customer_type_text"></span>
                             </div>
+                        </div>
+
+                        <div class="mb-3">
+                            <label class="form-label" for="sent_message_status">Message sent during this follow-up</label>
+                            <select class="form-select" id="sent_message_status" name="sent_message_status">
+                                <option value="sent" selected>A written message was sent</option>
+                                <option value="not_sent">No written message (call or other contact)</option>
+                                <option value="unspecified" id="sent_message_legacy_option" disabled>No message snapshot on this older submission</option>
+                            </select>
+                            <div class="form-text">This is the actual message for the round being submitted, not the shortcut for the next planned follow-up.</div>
+                        </div>
+                        <div class="mb-3" id="sent_message_text_wrap">
+                            <label class="form-label" for="sent_message_text">Exact message text sent to the customer</label>
+                            <textarea class="form-control" id="sent_message_text" name="sent_message_text" rows="5" maxlength="12000" placeholder="Paste the complete message exactly as sent, including line breaks."></textarea>
+                            <div class="customer-follow-up-field-error" id="sent_message_text_error">Enter the full message, or select that no written message was sent.</div>
                         </div>
 
                         <div class="mb-3">
@@ -3553,6 +3574,22 @@ if (!empty($customerTagLabelFilters)) {
             customerFollowUpSetSubmitAttachmentError(false);
             setCustomerFollowUpFieldError('submit_message_shortcut_id', 'submit_message_shortcut_error', false);
             setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', false);
+            setCustomerFollowUpFieldError('sent_message_text', 'sent_message_text_error', false);
+        }
+
+        function customerFollowUpUpdateSentMessageFields() {
+            var statusField = document.getElementById('sent_message_status');
+            var textField = document.getElementById('sent_message_text');
+            var wrapper = document.getElementById('sent_message_text_wrap');
+            if (!statusField || !textField || !wrapper) {
+                return;
+            }
+            var messageIsSent = statusField.value === 'sent';
+            wrapper.classList.toggle('d-none', !messageIsSent);
+            textField.required = messageIsSent;
+            if (!messageIsSent) {
+                setCustomerFollowUpFieldError('sent_message_text', 'sent_message_text_error', false);
+            }
         }
 
         function customerFollowUpValidateYmdDate(value) {
@@ -3861,7 +3898,7 @@ if (!empty($customerTagLabelFilters)) {
         }
 
         function customerFollowUpSetSubmitFollowUpModalReadOnly(isReadOnly) {
-            ['submit_message_shortcut_id', 'submit_next_follow_up_date', 'submit_contact_no'].forEach(function (fieldId) {
+            ['submit_message_shortcut_id', 'submit_next_follow_up_date', 'submit_contact_no', 'sent_message_status', 'sent_message_text'].forEach(function (fieldId) {
                 var field = document.getElementById(fieldId);
                 if (!field) {
                     return;
@@ -3913,6 +3950,8 @@ if (!empty($customerTagLabelFilters)) {
             var attachmentInput = document.getElementById('submit_attachment');
             var shortcutInput = document.getElementById('submit_message_shortcut_id');
             var nextDateInput = document.getElementById('submit_next_follow_up_date');
+            var sentMessageStatusInput = document.getElementById('sent_message_status');
+            var sentMessageInput = document.getElementById('sent_message_text');
 
             var attachmentIsRequired = attachmentInput ? attachmentInput.required : true;
             var attachmentMissing = attachmentIsRequired && (!attachmentInput || !attachmentInput.files || attachmentInput.files.length === 0);
@@ -3920,12 +3959,14 @@ if (!empty($customerTagLabelFilters)) {
             // be decided yet, so it is optional.
             var shortcutMissing = false;
             var nextDateMissing = !nextDateInput || nextDateInput.value.trim() === '';
+            var sentMessageMissing = !!(sentMessageStatusInput && sentMessageStatusInput.value === 'sent' && (!sentMessageInput || sentMessageInput.value.trim() === ''));
 
             customerFollowUpSetSubmitAttachmentError(attachmentMissing);
             setCustomerFollowUpFieldError('submit_message_shortcut_id', 'submit_message_shortcut_error', shortcutMissing);
             setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', nextDateMissing);
+            setCustomerFollowUpFieldError('sent_message_text', 'sent_message_text_error', sentMessageMissing);
 
-            if (attachmentMissing || shortcutMissing || nextDateMissing || !customerFollowUpValidateYmdDate(nextDateInput ? nextDateInput.value : '')) {
+            if (attachmentMissing || shortcutMissing || nextDateMissing || sentMessageMissing || !customerFollowUpValidateYmdDate(nextDateInput ? nextDateInput.value : '')) {
                 var nextDateInvalid = !nextDateMissing && !customerFollowUpValidateYmdDate(nextDateInput ? nextDateInput.value : '');
                 if (nextDateInvalid) {
                     setCustomerFollowUpFieldError('submit_next_follow_up_date', 'submit_next_follow_up_date_error', true);
@@ -3933,7 +3974,7 @@ if (!empty($customerTagLabelFilters)) {
 
                 var firstInvalidField = attachmentMissing
                     ? attachmentInput
-                    : (shortcutMissing ? shortcutInput : nextDateInput);
+                    : (sentMessageMissing ? sentMessageInput : (shortcutMissing ? shortcutInput : nextDateInput));
 
                 if (firstInvalidField) {
                     firstInvalidField.focus();
@@ -4230,6 +4271,12 @@ if (!empty($customerTagLabelFilters)) {
             });
         }
 
+        var sentMessageStatusField = document.getElementById('sent_message_status');
+        if (sentMessageStatusField) {
+            sentMessageStatusField.addEventListener('change', customerFollowUpUpdateSentMessageFields);
+            customerFollowUpUpdateSentMessageFields();
+        }
+
         var submitFollowUpModal = document.getElementById('submitFollowUpModal');
         if (submitFollowUpModal) {
             submitFollowUpModal.addEventListener('show.bs.modal', function (event) {
@@ -4266,6 +4313,16 @@ if (!empty($customerTagLabelFilters)) {
                         ? 'Return Customer (' + (button.getAttribute('data-purchase-count') || '0') + ' previous purchase)'
                         : 'New Customer';
                 document.getElementById('submit_message_shortcut_id').value = messageShortcutId;
+                var sentStatusField = document.getElementById('sent_message_status');
+                var sentTextField = document.getElementById('sent_message_text');
+                var submittedMessageStatus = isViewAppeal ? (button.getAttribute('data-sent-message-status') || 'unspecified') : 'sent';
+                var legacyMessageOption = document.getElementById('sent_message_legacy_option');
+                if (legacyMessageOption) {
+                    legacyMessageOption.disabled = !(isViewAppeal && submittedMessageStatus === 'unspecified');
+                }
+                sentStatusField.value = submittedMessageStatus;
+                sentTextField.value = isViewAppeal ? (button.getAttribute('data-sent-message') || '') : '';
+                customerFollowUpUpdateSentMessageFields();
                 document.getElementById('submit_previous_next_follow_up_date').value = customerFollowUpFormatYmdDateForDisplay(nextFollowUpDate);
                 document.getElementById('submit_next_follow_up_date').value = nextFollowUpDate;
                 document.getElementById('submit_next_follow_up_date').max = maxDate;

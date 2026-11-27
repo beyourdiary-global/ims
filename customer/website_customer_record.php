@@ -74,6 +74,15 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+if (isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+    customerTimelineHandleFollowUpReviewPost(
+        $connect,
+        'website',
+        (int) $row['id'],
+        $SITEURL . '/customer/website_customer_record.php?id=' . (int) $row['id']
+    );
+}
+
 $websiteCustomerPageUrl = $SITEURL . '/customer/website_customer_record.php?id=' . (int) $dataId;
 $websiteUserRecordLogApproval = orderDeleteApprovalPrepareUserRecordLogCustomerPage(
     $connect,
@@ -1008,7 +1017,7 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         echo '</details>';
                     }
                 }
-                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                if ($dataId && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
                     customerTimelineRenderCustomerPreview($connect, 'website', (int) $dataId);
                 }
                 ?>

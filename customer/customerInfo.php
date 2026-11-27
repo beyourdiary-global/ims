@@ -85,6 +85,15 @@ if ($act != 'I' && (!$result || !($row = $result->fetch_assoc()))) {
     $act = "F";
 }
 
+if (isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+    customerTimelineHandleFollowUpReviewPost(
+        $connect,
+        'customer_info',
+        (int) $row['id'],
+        $SITEURL . '/customer/customerInfo.php?id=' . (int) $row['id']
+    );
+}
+
 $customerInfoPageUrl = $SITEURL . '/customer/customerInfo.php?id=' . (int) $dataId;
 $customerInfoUserRecordLogApproval = orderDeleteApprovalPrepareUserRecordLogCustomerPage(
     $connect,
@@ -711,7 +720,7 @@ if (isset($_SESSION['tempValConfirmBox'])) {
                             echo '</details>';
                         }
                     }
-                    if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                    if ($dataId && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
                         customerTimelineRenderCustomerInfoPreview($connect, (int) $dataId);
                     }
                     ?>

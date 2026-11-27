@@ -3131,7 +3131,8 @@ if (!function_exists('customerFollowUpFetchActionLogRows')) {
     function customerFollowUpFetchActionLogRows($connect, $followUpId, $limit = 20)
     {
         $followUpId = (int) $followUpId;
-        $limit = max(1, (int) $limit);
+        $limit = $limit === null ? 0 : (int) $limit;
+        $limitSql = $limit > 0 ? ' LIMIT ' . max(1, $limit) : '';
         if (!($connect instanceof mysqli) || $followUpId <= 0) {
             return array();
         }
@@ -3140,8 +3141,7 @@ if (!function_exists('customerFollowUpFetchActionLogRows')) {
                 FROM `" . CUSTOMER_FOLLOW_UP_ACTION_LOG . "`
                 WHERE `follow_up_id` = " . $followUpId . "
                   AND `status` = 'A'
-                ORDER BY `id` DESC
-                LIMIT " . $limit;
+                ORDER BY `id` DESC" . $limitSql;
         $result = mysqli_query($connect, $sql);
         $rows = array();
         if ($result) {
@@ -3305,6 +3305,37 @@ if (!function_exists('customerFollowUpSubmitRound')) {
         }
         $uploadedAttachmentPath = isset($uploadResult['path']) ? (string) $uploadResult['path'] : '';
         $uploadedNewAttachment = empty($uploadResult['reused']) && $uploadedAttachmentPath !== '';
+
+        // Keep the exact message sent during this round separate from the shortcut for the
+        // next scheduled follow-up. The action log stores this as the submission snapshot.
+        $sentMessageStatus = strtolower(trim((string) (isset($formData['sent_message_status']) && is_scalar($formData['sent_message_status']) ? $formData['sent_message_status'] : '')));
+        if (!in_array($sentMessageStatus, array('sent', 'not_sent'), true)) {
+            if ($uploadedNewAttachment) {
+                customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
+            }
+            return array('success' => false, 'message' => 'Select whether a written message was sent for this follow-up.');
+        }
+        $sentMessageText = isset($formData['sent_message_text']) && is_scalar($formData['sent_message_text'])
+            ? str_replace(array("\r\n", "\r"), "\n", (string) $formData['sent_message_text'])
+            : '';
+        // The textarea caps at 12000 characters; enforce the same bound here so a hand-made
+        // POST cannot push an oversized snapshot into the action log.
+        $sentMessageLength = function_exists('mb_strlen') ? mb_strlen($sentMessageText, 'UTF-8') : strlen($sentMessageText);
+        if ($sentMessageLength > 12000) {
+            if ($uploadedNewAttachment) {
+                customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
+            }
+            return array('success' => false, 'message' => 'The sent message is too long. Keep it under 12000 characters.');
+        }
+        if ($sentMessageStatus === 'sent' && trim($sentMessageText) === '') {
+            if ($uploadedNewAttachment) {
+                customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
+            }
+            return array('success' => false, 'message' => 'Enter the exact message sent, or select that no written message was sent.');
+        }
+        if ($sentMessageStatus === 'not_sent') {
+            $sentMessageText = '';
+        }
 
         // The shortcut names the message for the follow-up being scheduled next, so it may
         // legitimately be left blank when that has not been decided yet.
@@ -3477,6 +3508,8 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             'message_shortcut_id' => $messageShortcutId,
             'message_shortcut_label' => isset($messageShortcutRow['shortcuts_tag']) ? $messageShortcutRow['shortcuts_tag'] : '',
             'message_shortcut_text' => isset($messageShortcutRow['shortcuts_message_text']) ? $messageShortcutRow['shortcuts_message_text'] : '',
+            'sent_message_status' => $sentMessageStatus,
+            'sent_message_text' => $sentMessageText,
             'approval_status' => $approvalStatus,
             'round_status' => $roundStatus,
             'reject_reason' => $isAppeal ? trim((string) (isset($oldRoundState['reject_reason']) ? $oldRoundState['reject_reason'] : '')) : '',
@@ -3600,10 +3633,8 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             }
         }
 
-        if ($existingAttachmentPath !== '' && $existingAttachmentPath !== (isset($uploadResult['path']) ? $uploadResult['path'] : '') && empty($uploadResult['reused'])) {
-            customerFollowUpDeleteAttachmentFile($existingAttachmentPath);
-        }
-
+        // Keep replaced proof files: earlier action-log snapshots still point to them,
+        // and reviewers need the evidence that was attached to each past submission.
         mysqli_commit($connect);
         return array('success' => true, 'message' => $isAppeal ? 'Rejected follow-up appeal submitted successfully.' : ($isResubmit ? 'Rejected follow-up resubmitted successfully.' : 'Follow-up submitted successfully.'));
     }
@@ -3723,7 +3754,7 @@ if (!function_exists('customerFollowUpRejectRound')) {
             return array('success' => false, 'message' => 'You do not have decline permission for Customer Follow-Up.');
         }
 
-        $rejectReason = trim((string) $rejectReason);
+        $rejectReason = is_scalar($rejectReason) ? trim((string) $rejectReason) : '';
         if ($rejectReason === '') {
             return array('success' => false, 'message' => 'Reject reason is required.');
         }

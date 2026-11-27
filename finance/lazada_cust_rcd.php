@@ -74,6 +74,15 @@ if ($dataId) { //edit/remove/view
     }
 }
 
+if (isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+    customerTimelineHandleFollowUpReviewPost(
+        $connect,
+        'lazada',
+        (int) $row['id'],
+        $SITEURL . '/finance/lazada_cust_rcd.php?id=' . (int) $row['id']
+    );
+}
+
 $lazadaCustomerPageUrl = $SITEURL . '/finance/lazada_cust_rcd.php?id=' . (int) $dataId;
 $lazadaUserRecordLogApproval = orderDeleteApprovalPrepareUserRecordLogCustomerPage(
     $connect,
@@ -1028,7 +1037,7 @@ if (($dataId) && !($act) && (USER_ID != '') && ($_SESSION['viewChk'] != 1) && ($
                         echo '</details>';
                     }
                 }
-                if ($dataId && $act === '' && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
+                if ($dataId && isset($row['id']) && isActionAllowed($pageAction, $pinAccess)) {
                     customerTimelineRenderCustomerPreview($connect, 'lazada', (int) $dataId);
                 }
                 ?>
