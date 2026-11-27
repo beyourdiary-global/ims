@@ -73,7 +73,9 @@ if (!$canViewPage) {
 }
 
 $pagePinIds = customerFollowUpPageGetAllowedPinIds($connect, $currentPagePin);
-$canViewLogsPermission = defined('USER_GROUP') && (int) USER_GROUP === 1;
+// The action log is the shared record of who did what on a case, so anybody allowed to
+// open this page can read it.
+$canViewLogsPermission = true;
 $canApprovePermission = in_array(11, $pagePinIds, true);
 $canRejectPermission = in_array(12, $pagePinIds, true);
 // Raising a cancel request is its own right; approving one stays with Approve/Reject, so
@@ -585,10 +587,9 @@ foreach (customerFollowUpPageReadRequestValues('assigned_user_id') as $assignedU
 }
 $assignedUserFilters = array_values($assignedUserFilters);
 
-$canViewAllFollowUpRecords = customerFollowUpIsAdminUser(defined('USER_GROUP') ? USER_GROUP : null);
-if (!$canViewAllFollowUpRecords) {
-    $assignedUserFilters = defined('USER_ID') && (int) USER_ID > 0 ? array((int) USER_ID) : array();
-}
+// Follow-up records are shared work: everybody who can open this page sees every case,
+// including the history other people left, instead of only their own assignments.
+$canViewAllFollowUpRecords = true;
 $followUpIdFilter = (int) input('follow_up_id');
 $roundIdFilter = (int) input('round_id');
 $missedOnlyFilter = trim((string) input('missed_only')) === '1';
@@ -840,9 +841,6 @@ $userResult = getData('id,name,username', '', '', USR_USER, $connect);
 if ($userResult) {
     while ($userRow = $userResult->fetch_assoc()) {
         $userId = isset($userRow['id']) ? (int) $userRow['id'] : 0;
-        if (!$canViewAllFollowUpRecords && defined('USER_ID') && $userId !== (int) USER_ID) {
-            continue;
-        }
         $userLabel = trim((string) (isset($userRow['name']) && $userRow['name'] !== '' ? $userRow['name'] : $userRow['username']));
         if ($userId <= 0 || $userLabel === '') {
             continue;

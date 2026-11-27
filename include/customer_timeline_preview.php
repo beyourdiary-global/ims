@@ -172,6 +172,53 @@ if (!function_exists('customerTimelinePreviewRenderLightboxMarkup')) {
     }
 }
 
+if (!function_exists('customerTimelinePreviewRenderReviewScript')) {
+    /**
+     * Approve/Reject posts in place and swaps in the rebuilt queue and timeline, so a reviewer
+     * keeps their scroll position and does not lose the page they were working in.
+     */
+    function customerTimelinePreviewRenderReviewScript()
+    {
+        return '<script>(function(){'
+            . 'if(window.__customerTimelineReviewBound){return;}window.__customerTimelineReviewBound=true;'
+            . 'function slots(){return{workflow:document.querySelector("[data-customer-timeline-workflow]"),timeline:document.querySelector("[data-customer-timeline-events]")};}'
+            . 'function showInlineError(form,message){var card=form.closest(".fu-review-card");var box=card?card.querySelector("[data-ct-review-feedback]"):null;if(!box){return;}box.className="fu-review-feedback danger";box.textContent=message;box.hidden=false;}'
+            . 'function showFlash(type,message){var live=document.querySelector("[data-ct-flash-live]");if(!live){return;}'
+            // Drop any server-rendered banner before showing the live one, so the reviewer
+            // never reads the same outcome twice.
+            . 'var stale=document.querySelectorAll("[data-ct-flash]:not([data-ct-flash-live])");for(var s=0;s<stale.length;s++){stale[s].parentNode&&stale[s].parentNode.removeChild(stale[s]);}'
+            . 'live.className="fu-flash"+(type==="danger"?" danger":"");live.textContent=message;live.hidden=false;}'
+            . 'document.addEventListener("submit",function(event){'
+            . 'var form=event.target;if(!form||!form.matches||!form.matches("form[data-ct-review-form]")){return;}'
+            . 'event.preventDefault();'
+            . 'var action=form.getAttribute("data-ct-review-action")||"";'
+            . 'var reason=form.querySelector("[name=reject_reason]");'
+            . 'if(action==="reject"&&reason&&reason.value.trim()===""){showInlineError(form,"Please enter a rejection reason.");reason.focus();return;}'
+            . 'var buttons=form.querySelectorAll("button[type=submit]");'
+            . 'for(var i=0;i<buttons.length;i++){buttons[i].disabled=true;}'
+            . 'form.setAttribute("aria-busy","true");'
+            . 'var data=new FormData(form);data.set("customer_timeline_ajax","1");'
+            . 'var anchor=document.querySelector("[data-customer-timeline-workflow]");'
+            . 'var anchorTop=anchor?anchor.getBoundingClientRect().top:0;'
+            . 'fetch(window.location.href,{method:"POST",body:data,headers:{"X-Requested-With":"XMLHttpRequest","Accept":"application/json"},credentials:"same-origin"})'
+            . '.then(function(response){return response.text().then(function(text){var payload={};if(text){try{payload=JSON.parse(text);}catch(error){throw new Error("Unexpected response from the server.");}}if(!response.ok&&!payload.message){throw new Error("Unable to complete this action right now.");}return payload;});})'
+            . '.then(function(payload){'
+            . 'var target=slots();'
+            . 'if(payload.workflow_html&&target.workflow){target.workflow.innerHTML=payload.workflow_html;}'
+            . 'if(payload.timeline_html&&target.timeline){target.timeline.innerHTML=payload.timeline_html;}'
+            // Approving removes a card, so the page gets shorter; keep the reviewer looking at
+            // the same place instead of yanking them to the top. This runs a frame later on
+            // purpose: the browser applies its own scroll anchoring during layout, and
+            // correcting in the same frame would be overwritten by it.
+            . 'if(anchor){requestAnimationFrame(function(){var shift=anchor.getBoundingClientRect().top-anchorTop;if(Math.abs(shift)>1){window.scrollBy(0,shift);}});}'
+            . 'showFlash(payload.type||(payload.success?"success":"danger"),payload.message||"Action completed.");'
+            . '})'
+            . '.catch(function(error){for(var i=0;i<buttons.length;i++){buttons[i].disabled=false;}form.removeAttribute("aria-busy");showInlineError(form,error&&error.message?error.message:"Unable to complete this action right now.");});'
+            . '});'
+            . '})();</script>';
+    }
+}
+
 if (!function_exists('customerTimelinePreviewRenderMessageSnapshot')) {
     function customerTimelinePreviewRenderMessageSnapshot($payload, $heading = 'Message sent to customer')
     {
@@ -222,6 +269,24 @@ if (!function_exists('customerTimelinePreviewGetReviewPermissions')) {
     }
 }
 
+if (!function_exists('customerTimelinePreviewIsAjaxRequest')) {
+    function customerTimelinePreviewIsAjaxRequest()
+    {
+        if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
+            return false;
+        }
+        if (isset($_POST['customer_timeline_ajax']) && (string) $_POST['customer_timeline_ajax'] === '1') {
+            return true;
+        }
+        $requestedWith = isset($_SERVER['HTTP_X_REQUESTED_WITH']) ? strtolower(trim((string) $_SERVER['HTTP_X_REQUESTED_WITH'])) : '';
+        if ($requestedWith === 'xmlhttprequest') {
+            return true;
+        }
+        $accept = isset($_SERVER['HTTP_ACCEPT']) ? strtolower((string) $_SERVER['HTTP_ACCEPT']) : '';
+        return strpos($accept, 'application/json') !== false;
+    }
+}
+
 if (!function_exists('customerTimelineHandleFollowUpReviewPost')) {
     function customerTimelineHandleFollowUpReviewPost($connect, $platform, $customerId, $returnUrl)
     {
@@ -229,9 +294,11 @@ if (!function_exists('customerTimelineHandleFollowUpReviewPost')) {
             return false;
         }
 
+        $isAjax = customerTimelinePreviewIsAjaxRequest();
         $action = trim((string) $_POST['customer_timeline_action']);
         $followUpId = isset($_POST['follow_up_id']) ? (int) $_POST['follow_up_id'] : 0;
         $csrf = isset($_POST['customer_follow_up_csrf']) ? (string) $_POST['customer_follow_up_csrf'] : '';
+        $success = false;
         if (empty($_SESSION['customer_follow_up_csrf']) || !hash_equals((string) $_SESSION['customer_follow_up_csrf'], $csrf)) {
             $_SESSION['customer_timeline_flash'] = array('type' => 'danger', 'message' => 'Your session expired. Refresh the page and try again.');
         } elseif (!in_array($action, array('approve_follow_up', 'reject_follow_up'), true)) {
@@ -259,8 +326,9 @@ if (!function_exists('customerTimelineHandleFollowUpReviewPost')) {
                         defined('USER_GROUP') ? USER_GROUP : 0,
                         isset($GLOBALS['finance_connect']) ? $GLOBALS['finance_connect'] : null
                     );
+                    $success = !empty($result['success']);
                     $_SESSION['customer_timeline_flash'] = array(
-                        'type' => !empty($result['success']) ? 'success' : 'danger',
+                        'type' => $success ? 'success' : 'danger',
                         'message' => isset($result['message']) ? (string) $result['message'] : 'Unable to approve this Follow-Up.',
                     );
                 } else {
@@ -271,12 +339,37 @@ if (!function_exists('customerTimelineHandleFollowUpReviewPost')) {
                         defined('USER_ID') ? USER_ID : 0,
                         defined('USER_GROUP') ? USER_GROUP : 0
                     );
+                    $success = !empty($result['success']);
                     $_SESSION['customer_timeline_flash'] = array(
-                        'type' => !empty($result['success']) ? 'success' : 'danger',
+                        'type' => $success ? 'success' : 'danger',
                         'message' => isset($result['message']) ? (string) $result['message'] : 'Unable to reject this Follow-Up.',
                     );
                 }
             }
+        }
+
+        $flash = isset($_SESSION['customer_timeline_flash']) && is_array($_SESSION['customer_timeline_flash'])
+            ? $_SESSION['customer_timeline_flash']
+            : array('type' => 'danger', 'message' => 'Unable to complete this Follow-Up action.');
+
+        if ($isAjax) {
+            // Rebuild both fragments from the database so the reviewer sees the new round
+            // status, the new queue and the appended history without reloading the page.
+            // Consume the flash first: the response carries it once, and the rebuilt markup
+            // must not print the same message a second time.
+            unset($_SESSION['customer_timeline_flash']);
+            $fragments = customerTimelinePreviewBuildPageHtml($connect, $platform, $customerId);
+            if (!headers_sent()) {
+                header('Content-Type: application/json; charset=UTF-8');
+            }
+            echo json_encode(array(
+                'success' => !empty($success) || $flash['type'] === 'success',
+                'type' => isset($flash['type']) ? (string) $flash['type'] : 'danger',
+                'message' => isset($flash['message']) ? (string) $flash['message'] : '',
+                'workflow_html' => isset($fragments['workflow']) ? (string) $fragments['workflow'] : '',
+                'timeline_html' => isset($fragments['timeline']) ? (string) $fragments['timeline'] : '',
+            ), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            exit;
         }
 
         $redirectUrl = $returnUrl . '#customer-follow-up-workflow';
@@ -781,6 +874,11 @@ if (!function_exists('customerTimelinePreviewRenderFollowUpWorkflow')) {
                 .customer-follow-up-workflow .ct-lightbox-panel img { display:block; max-width:92vw; max-height:86vh; object-fit:contain; background:#fff; }
                 .customer-follow-up-workflow .ct-lightbox-caption { margin-top:.5rem; color:#fff; font-size:.9rem; text-align:center; overflow-wrap:anywhere; }
                 .customer-follow-up-workflow .ct-lightbox-close { position:absolute; top:-.7rem; right:-.7rem; width:2.25rem; height:2.25rem; border:0; border-radius:50%; background:#fff; color:#173b50; font-size:1.35rem; font-weight:700; cursor:pointer; }
+                .customer-follow-up-workflow .fu-review-feedback { margin-top:.6rem; padding:.5rem .7rem; border-radius:.3rem; font-size:.86rem; background:#eaf5ed; border:1px solid #b8d8bf; color:#2e693b; }
+                .customer-follow-up-workflow .fu-review-feedback.danger { background:#fff1ef; border-color:#e8c0b9; color:#a03f35; }
+                .customer-follow-up-workflow .fu-review-form[aria-busy="true"] { opacity:.6; }
+                .customer-follow-up-workflow .fu-review-form[aria-busy="true"] button[type="submit"] { cursor:progress; }
+                .customer-follow-up-workflow .fu-flash[hidden] { display:none; }
                 @media (max-width:575px) { .customer-follow-up-workflow .fu-body { padding:.65rem; } .customer-follow-up-workflow .fu-review-card,.customer-follow-up-workflow .fu-case-card { padding:.7rem; } }
             </style>
             <div class="fu-hero">
@@ -788,7 +886,8 @@ if (!function_exists('customerTimelinePreviewRenderFollowUpWorkflow')) {
                 <div class="fu-counts"><span class="fu-count"><?php echo count($caseDetails); ?> Follow-Up cases</span><span class="fu-count"><?php echo $pendingCount; ?> pending approval</span></div>
             </div>
             <div class="fu-body">
-                <?php if (!empty($flash)) { ?><div class="fu-flash <?php echo customerTimelinePreviewEscape(isset($flash['type']) ? $flash['type'] : ''); ?>" role="status"><?php echo customerTimelinePreviewEscape(isset($flash['message']) ? $flash['message'] : ''); ?></div><?php } ?>
+                <?php if (!empty($flash)) { ?><div class="fu-flash <?php echo customerTimelinePreviewEscape(isset($flash['type']) ? $flash['type'] : ''); ?>" role="status" data-ct-flash><?php echo customerTimelinePreviewEscape(isset($flash['message']) ? $flash['message'] : ''); ?></div><?php } ?>
+                <div class="fu-flash" role="status" aria-live="polite" data-ct-flash data-ct-flash-live hidden></div>
                 <section class="fu-queue" aria-labelledby="customer-follow-up-queue-title">
                     <h5 class="fu-section-title" id="customer-follow-up-queue-title">Pending Approval Queue <span class="fu-status pending"><?php echo $pendingCount; ?> waiting</span></h5>
                     <?php if ($pendingCount === 0) { ?><div class="fu-queue-empty">No active Follow-Up round is waiting for approval for this customer.</div><?php } ?>
@@ -811,8 +910,9 @@ if (!function_exists('customerTimelinePreviewRenderFollowUpWorkflow')) {
                             <?php echo customerTimelinePreviewRenderFollowUpAttachment($attachmentPath); ?>
                             <?php if ($canApprove || $canReject) { ?>
                                 <div class="fu-actions"><span class="fu-muted">Review controls</span></div>
-                                <?php if ($canApprove) { ?><form method="post" action="" class="fu-review-form"><input type="hidden" name="customer_timeline_action" value="approve_follow_up"><input type="hidden" name="id" value="<?php echo (int) $customerId; ?>"><input type="hidden" name="follow_up_id" value="<?php echo $followUpId; ?>"><input type="hidden" name="customer_follow_up_csrf" value="<?php echo $csrf; ?>"><label for="ct-approval-comment-<?php echo $followUpId; ?>">Approval note (optional)</label><textarea class="form-control" id="ct-approval-comment-<?php echo $followUpId; ?>" name="approval_comment" maxlength="4000" placeholder="Add a note for this approval"></textarea><button type="submit" class="btn btn-sm btn-success">Approve this round</button></form><?php } ?>
-                                <?php if ($canReject) { ?><form method="post" action="" class="fu-review-form" onsubmit="return this.querySelector('[name=reject_reason]').value.trim() !== '' || (alert('Please enter a rejection reason.'), false);"><input type="hidden" name="customer_timeline_action" value="reject_follow_up"><input type="hidden" name="id" value="<?php echo (int) $customerId; ?>"><input type="hidden" name="follow_up_id" value="<?php echo $followUpId; ?>"><input type="hidden" name="customer_follow_up_csrf" value="<?php echo $csrf; ?>"><label for="ct-reject-reason-<?php echo $followUpId; ?>">Rejection reason (required)</label><textarea class="form-control" id="ct-reject-reason-<?php echo $followUpId; ?>" name="reject_reason" maxlength="4000" required placeholder="Explain what needs correction"></textarea><button type="submit" class="btn btn-sm btn-outline-danger">Reject and return</button></form><?php } ?>
+                                <?php if ($canApprove) { ?><form method="post" action="" class="fu-review-form" data-ct-review-form data-ct-review-action="approve"><input type="hidden" name="customer_timeline_action" value="approve_follow_up"><input type="hidden" name="id" value="<?php echo (int) $customerId; ?>"><input type="hidden" name="follow_up_id" value="<?php echo $followUpId; ?>"><input type="hidden" name="customer_follow_up_csrf" value="<?php echo $csrf; ?>"><label for="ct-approval-comment-<?php echo $followUpId; ?>">Approval note (optional)</label><textarea class="form-control" id="ct-approval-comment-<?php echo $followUpId; ?>" name="approval_comment" maxlength="4000" placeholder="Add a note for this approval"></textarea><button type="submit" class="btn btn-sm btn-success">Approve this round</button></form><?php } ?>
+                                <?php if ($canReject) { ?><form method="post" action="" class="fu-review-form" data-ct-review-form data-ct-review-action="reject"><input type="hidden" name="customer_timeline_action" value="reject_follow_up"><input type="hidden" name="id" value="<?php echo (int) $customerId; ?>"><input type="hidden" name="follow_up_id" value="<?php echo $followUpId; ?>"><input type="hidden" name="customer_follow_up_csrf" value="<?php echo $csrf; ?>"><label for="ct-reject-reason-<?php echo $followUpId; ?>">Rejection reason (required)</label><textarea class="form-control" id="ct-reject-reason-<?php echo $followUpId; ?>" name="reject_reason" maxlength="4000" required placeholder="Explain what needs correction"></textarea><button type="submit" class="btn btn-sm btn-outline-danger">Reject and return</button></form><?php } ?>
+                                <div class="fu-review-feedback" data-ct-review-feedback role="status" aria-live="polite" hidden></div>
                             <?php } else { ?><div class="fu-muted mt-2">This round is waiting for an authorized reviewer. You can view the submission but cannot approve or reject it with your current permissions.</div><?php } ?>
                         </article>
                     <?php } ?>
@@ -863,13 +963,19 @@ if (!function_exists('customerTimelinePreviewRenderFollowUpWorkflow')) {
                 </section>
             </div>
             <?php echo customerTimelinePreviewRenderLightboxMarkup(); ?>
+            <?php echo customerTimelinePreviewRenderReviewScript(); ?>
         </section>
         <?php
     }
 }
 
-if (!function_exists('customerTimelineRenderCustomerPreview')) {
-    function customerTimelineRenderCustomerPreview($connect, $platform, $customerId)
+if (!function_exists('customerTimelinePreviewBuildPageHtml')) {
+    /**
+     * Builds the two customer-page fragments (Follow-Up workflow and activity timeline) and
+     * returns them instead of printing, so the same code serves the first page load and the
+     * in-place refresh after a review action.
+     */
+    function customerTimelinePreviewBuildPageHtml($connect, $platform, $customerId)
     {
         $platform = strtolower(trim((string) $platform));
         $customerId = (int) $customerId;
@@ -879,7 +985,7 @@ if (!function_exists('customerTimelineRenderCustomerPreview')) {
             || !defined('USER_RECORD_LOG')
             || $customerColumn === ''
         ) {
-            return;
+            return array('workflow' => '', 'timeline' => '');
         }
 
         $noteRows = array();
@@ -889,22 +995,12 @@ if (!function_exists('customerTimelineRenderCustomerPreview')) {
         $caseMap = array();
         $canViewFollowUpModule = customerTimelinePreviewCanViewFollowUp($connect);
         $followUpPermissions = customerTimelinePreviewGetReviewPermissions($connect);
-        // Keep the same visibility rule as the Follow-Up list page: only administrators see
-        // every case, everybody else sees the cases assigned to them.
-        $canViewAllFollowUpRecords = $canViewFollowUpModule && function_exists('customerFollowUpIsAdminUser')
-            && customerFollowUpIsAdminUser(defined('USER_GROUP') ? USER_GROUP : null);
+        // Follow-up work is shared: anybody who may view the module sees every case linked to
+        // this customer, not only the ones assigned to them. Acting on a case is still gated
+        // by its own assignee/approver checks.
+        $canViewAllFollowUpRecords = $canViewFollowUpModule;
         if ($canViewFollowUpModule && function_exists('customerFollowUpFetchActiveCasesByCustomer')) {
             $followUpRows = customerFollowUpFetchActiveCasesByCustomer($connect, $platform, $customerId);
-        }
-        if (!$canViewAllFollowUpRecords) {
-            $currentUserId = defined('USER_ID') ? (int) USER_ID : 0;
-            $visibleFollowUpRows = array();
-            foreach ($followUpRows as $followUpRow) {
-                if ($currentUserId > 0 && (int) (isset($followUpRow['assigned_user_id']) ? $followUpRow['assigned_user_id'] : 0) === $currentUserId) {
-                    $visibleFollowUpRows[] = $followUpRow;
-                }
-            }
-            $followUpRows = $visibleFollowUpRows;
         }
         foreach ($followUpRows as $followUpRow) {
             $followUpId = (int) (isset($followUpRow['id']) ? $followUpRow['id'] : 0);
@@ -1051,7 +1147,9 @@ if (!function_exists('customerTimelineRenderCustomerPreview')) {
         });
         $events = array_slice($events, 0, 100);
         $eventCount = count($events);
+        $workflowHtml = '';
         if ($canViewFollowUpModule) {
+            ob_start();
             customerTimelinePreviewRenderFollowUpWorkflow(
                 $connect,
                 $platform,
@@ -1059,7 +1157,9 @@ if (!function_exists('customerTimelineRenderCustomerPreview')) {
                 $followUpRows,
                 $followUpPermissions
             );
+            $workflowHtml = ob_get_clean();
         }
+        ob_start();
         ?>
         <section class="customer-timeline-preview mt-4" id="customer-activity-timeline" aria-labelledby="customer-timeline-title">
             <style>
@@ -1157,6 +1257,21 @@ if (!function_exists('customerTimelineRenderCustomerPreview')) {
             <?php echo customerTimelinePreviewRenderLightboxMarkup(); ?>
         </section>
         <?php
+        $timelineHtml = ob_get_clean();
+        return array('workflow' => $workflowHtml, 'timeline' => $timelineHtml);
+    }
+}
+
+if (!function_exists('customerTimelineRenderCustomerPreview')) {
+    function customerTimelineRenderCustomerPreview($connect, $platform, $customerId)
+    {
+        $fragments = customerTimelinePreviewBuildPageHtml($connect, $platform, $customerId);
+        if (!empty($fragments['workflow'])) {
+            echo '<div class="customer-timeline-workflow-slot" data-customer-timeline-workflow>' . $fragments['workflow'] . '</div>';
+        }
+        if (!empty($fragments['timeline'])) {
+            echo '<div class="customer-timeline-events-slot" data-customer-timeline-events>' . $fragments['timeline'] . '</div>';
+        }
     }
 }
 
