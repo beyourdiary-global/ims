@@ -72,13 +72,27 @@ if (!function_exists('customerTimelinePreviewActionTitle')) {
             'adjust_follow_up_round' => 'Follow-up round changed',
             'contact_number_edited' => 'Contact number edited',
             'merged_duplicate_case' => 'Duplicate case merged',
+            'assign_tag_follow_up_appeal' => 'Customer tag added',
+            'create_tag_follow_up_appeal' => 'Customer tag created',
+            'request_cancel_follow_up' => 'Cancellation requested',
+            'approve_cancel_follow_up' => 'Cancellation approved',
+            'reject_cancel_follow_up' => 'Cancellation rejected',
+            'submit_missing_next_follow_up_date' => 'Follow-up date added',
+            'reschedule_follow_up_date' => 'Follow-up date rescheduled',
+            'allow_auto_follow_up' => 'Auto follow-up enabled',
+            'mark_missed_follow_up' => 'Round marked missed',
+            'due_follow_up_notice' => 'Follow-up due notice',
         );
         $actionType = trim((string) $actionType);
         if (isset($labels[$actionType])) {
             return $labels[$actionType];
         }
 
-        return $actionType !== '' ? ucwords(str_replace('_', ' ', $actionType)) : 'Follow-up action';
+        // Never show a raw machine key to the reader; an unknown action still needs to look
+        // like a sentence rather than "assign_tag_follow_up_appeal".
+        return $actionType !== ''
+            ? ucfirst(trim(str_replace(array('_', '  '), array(' ', ' '), $actionType)))
+            : 'Follow-up action';
     }
 }
 
@@ -243,6 +257,152 @@ if (!function_exists('customerTimelinePreviewRenderMessageSnapshot')) {
                 . '<div class="ct-message-snapshot-body">' . nl2br(customerTimelinePreviewEscape($shortcutText)) . '</div></details>';
         }
         return $html . '</div>';
+    }
+}
+
+if (!function_exists('customerTimelinePreviewRenderConversationCard')) {
+    /**
+     * One follow-up round as a conversation card: what we sent, what the customer said back,
+     * the proof, and who handled it. The bookkeeping actions that belong to the same round are
+     * folded into a single line at the bottom instead of each taking a row of their own -
+     * otherwise a reader scrolls past eight status changes to find one exchange.
+     */
+    function customerTimelinePreviewRenderConversationCard($connect, $caseRow, $roundRow, $roundNo, $submission, $actions, $roundMap)
+    {
+        $submission = is_array($submission) ? $submission : array();
+        $actions = is_array($actions) ? $actions : array();
+        $payload = isset($submission['new_value_decoded']) && is_array($submission['new_value_decoded'])
+            ? $submission['new_value_decoded']
+            : array();
+
+        $caseName = trim((string) (isset($caseRow['customer_name']) ? $caseRow['customer_name'] : ''));
+        $orderNo = trim((string) (isset($caseRow['order_no']) ? $caseRow['order_no'] : ''));
+        $roundStatus = customerFollowUpNormalizeStatus(isset($roundRow['round_status']) ? $roundRow['round_status'] : '');
+        if ($roundStatus === '') {
+            $roundStatus = customerFollowUpNormalizeStatus(isset($caseRow['current_status']) ? $caseRow['current_status'] : '');
+        }
+        $statusClass = $roundStatus !== '' ? strtolower(str_replace(' ', '-', $roundStatus)) : 'unavailable';
+        $statusLabel = $roundStatus !== '' ? $roundStatus : 'Status unavailable';
+
+        $submittedAt = trim((string) (isset($submission['action_date']) ? $submission['action_date'] : '') . ' ' . (isset($submission['action_time']) ? $submission['action_time'] : ''));
+        $submittedBy = !empty($submission['action_by']) ? customerTimelinePreviewEscape(customerFollowUpGetUserDisplayName($connect, $submission['action_by'])) : '';
+
+        $sentMessageText = trim((string) (isset($payload['sent_message_text']) ? $payload['sent_message_text'] : ''));
+        $sentMessageStatus = strtolower(trim((string) (isset($payload['sent_message_status']) ? $payload['sent_message_status'] : '')));
+        $replyText = trim((string) (isset($payload['customer_reply_text']) ? $payload['customer_reply_text'] : ''));
+        $replyStatus = strtolower(trim((string) (isset($payload['customer_reply_status']) ? $payload['customer_reply_status'] : '')));
+        $attachmentPath = trim((string) (isset($payload['attachment_path']) ? $payload['attachment_path'] : (isset($roundRow['attachment']) ? $roundRow['attachment'] : '')));
+
+        // Facts the person had on hand when this round happened.
+        $contextBits = array();
+        if ($orderNo !== '') {
+            $contextBits[] = 'Order ' . customerTimelinePreviewEscape($orderNo);
+        }
+        $packageName = trim((string) (isset($caseRow['package_name']) ? $caseRow['package_name'] : ''));
+        if ($packageName !== '') {
+            $contextBits[] = customerTimelinePreviewEscape($packageName);
+        }
+        $contactNo = trim((string) (isset($payload['contact_no']) ? $payload['contact_no'] : (isset($caseRow['contact_no']) ? $caseRow['contact_no'] : '')));
+        if ($contactNo !== '') {
+            $contextBits[] = customerTimelinePreviewEscape($contactNo);
+        }
+        $nextDate = trim((string) (isset($payload['next_follow_up_date']) ? $payload['next_follow_up_date'] : (isset($roundRow['next_follow_up_date']) ? $roundRow['next_follow_up_date'] : '')));
+        if ($nextDate !== '') {
+            $contextBits[] = 'Next ' . customerTimelinePreviewEscape($nextDate);
+        }
+
+        // Every action on this round other than the submission itself is bookkeeping.
+        $bookkeeping = array();
+        $approvalNote = '';
+        $rejectReason = '';
+        foreach ($actions as $actionRow) {
+            $actionType = strtolower(trim((string) (isset($actionRow['action_type']) ? $actionRow['action_type'] : '')));
+            if (in_array($actionType, array('submit_follow_up', 'resubmit_rejected_follow_up'), true)) {
+                continue;
+            }
+            $actionAt = trim((string) (isset($actionRow['action_date']) ? $actionRow['action_date'] : '') . ' ' . (isset($actionRow['action_time']) ? $actionRow['action_time'] : ''));
+            $actionBy = isset($actionRow['action_by']) ? customerFollowUpGetUserDisplayName($connect, $actionRow['action_by']) : '';
+            $remark = trim((string) (isset($actionRow['remark']) ? $actionRow['remark'] : ''));
+            $bookkeeping[] = array(
+                'label' => customerTimelinePreviewActionTitle(isset($actionRow['action_type']) ? $actionRow['action_type'] : ''),
+                'at' => $actionAt,
+                'by' => $actionBy,
+                'remark' => $remark,
+            );
+            if ($actionType === 'approve_follow_up' && $remark !== '') {
+                $approvalNote = $remark;
+            }
+            if ($actionType === 'reject_follow_up') {
+                $rejectReason = $remark !== '' ? $remark : trim((string) (isset($roundRow['reject_reason']) ? $roundRow['reject_reason'] : ''));
+            }
+        }
+
+        $html = '<article class="ct-event ct-conversation">';
+        $html .= '<div class="ct-event-marker" aria-hidden="true"></div>';
+        $html .= '<header class="ct-event-header"><div class="ct-event-heading"><span class="ct-kind">Round ' . (int) $roundNo . '</span><h5>'
+            . customerTimelinePreviewEscape($caseName !== '' ? $caseName : 'Follow-up case #' . (int) (isset($caseRow['id']) ? $caseRow['id'] : 0))
+            . '</h5><span class="ct-review-state ct-review-state-' . customerTimelinePreviewEscape($statusClass) . '">' . customerTimelinePreviewEscape($statusLabel) . '</span></div>'
+            . '<time class="ct-event-time">' . customerTimelinePreviewEscape($submittedAt !== '' ? $submittedAt : 'Time unavailable') . '</time></header>';
+
+        if ($submittedBy !== '') {
+            $html .= '<div class="ct-event-meta">Submitted by ' . $submittedBy . '</div>';
+        }
+        if (!empty($contextBits)) {
+            $html .= '<div class="ct-context-line">' . implode(' · ', $contextBits) . '</div>';
+        }
+
+        // What we sent.
+        $html .= '<div class="ct-bubble ct-bubble-out"><span class="ct-bubble-label">We sent</span>';
+        if ($sentMessageText !== '') {
+            $html .= '<div class="ct-bubble-body">' . nl2br(customerTimelinePreviewEscape($sentMessageText)) . '</div>';
+        } elseif ($sentMessageStatus === 'not_sent') {
+            $html .= '<div class="ct-bubble-body ct-bubble-muted">No written message - handled by call or another channel.</div>';
+        } else {
+            $html .= '<div class="ct-bubble-body ct-bubble-muted">No sent-message snapshot was recorded for this round.</div>';
+        }
+        $html .= '</div>';
+
+        // What the customer said back.
+        $html .= '<div class="ct-bubble ct-bubble-in"><span class="ct-bubble-label">Customer replied</span>';
+        if ($replyText !== '') {
+            $html .= '<div class="ct-bubble-body">' . nl2br(customerTimelinePreviewEscape($replyText)) . '</div>';
+        } elseif ($replyStatus === 'recorded') {
+            $html .= '<div class="ct-bubble-body ct-bubble-muted">Marked as recorded, but the text is empty.</div>';
+        } else {
+            $html .= '<div class="ct-bubble-body ct-bubble-muted">Reply not captured for this round. Check the screenshot if one is attached.</div>';
+        }
+        $html .= '</div>';
+
+        if ($attachmentPath !== '') {
+            $html .= customerTimelinePreviewRenderFollowUpAttachment($attachmentPath);
+        }
+
+        if ($approvalNote !== '') {
+            $html .= '<div class="ct-reviewer-note"><span class="ct-bubble-label">Approval note</span>' . nl2br(customerTimelinePreviewEscape($approvalNote)) . '</div>';
+        }
+        if ($rejectReason !== '') {
+            $html .= '<div class="ct-reviewer-note ct-reviewer-note-reject"><span class="ct-bubble-label">Rejected because</span>' . nl2br(customerTimelinePreviewEscape($rejectReason)) . '</div>';
+        }
+
+        $shortcutText = trim((string) (isset($payload['message_shortcut_text']) ? $payload['message_shortcut_text'] : ''));
+        if ($shortcutText !== '') {
+            $html .= '<details class="ct-next-message"><summary>Next follow-up template</summary>'
+                . '<div class="ct-message-snapshot-body">' . nl2br(customerTimelinePreviewEscape($shortcutText)) . '</div></details>';
+        }
+
+        if (!empty($bookkeeping)) {
+            $html .= '<details class="ct-bookkeeping"><summary>' . count($bookkeeping) . ' system action' . (count($bookkeeping) === 1 ? '' : 's') . ' on this round</summary><ul class="ct-bookkeeping-list">';
+            foreach (array_reverse($bookkeeping) as $entry) {
+                $html .= '<li><strong>' . customerTimelinePreviewEscape($entry['label']) . '</strong>'
+                    . ($entry['at'] !== '' ? ' · ' . customerTimelinePreviewEscape($entry['at']) : '')
+                    . ($entry['by'] !== '' ? ' · ' . customerTimelinePreviewEscape($entry['by']) : '')
+                    . ($entry['remark'] !== '' ? ' · ' . customerTimelinePreviewEscape($entry['remark']) : '')
+                    . '</li>';
+            }
+            $html .= '</ul></details>';
+        }
+
+        return $html . '</article>';
     }
 }
 
@@ -1065,6 +1225,7 @@ if (!function_exists('customerTimelinePreviewBuildPageHtml')) {
         }
 
         $actionRowsByRound = array();
+        $actionsByRoundKey = array();
         if ($canViewFollowUpModule
             && defined('CUSTOMER_FOLLOW_UP_ACTION_LOG')
             && customerTimelinePreviewTableExists($connect, CUSTOMER_FOLLOW_UP_ACTION_LOG)
@@ -1077,18 +1238,65 @@ if (!function_exists('customerTimelinePreviewBuildPageHtml')) {
                 foreach (customerTimelinePreviewActionRows($connect, $followUpId) as $actionRow) {
                     $roundId = (int) (isset($actionRow['round_id']) ? $actionRow['round_id'] : 0);
                     $key = $followUpId . ':' . $roundId;
-                    $roundNo = isset($roundMap[$roundId]['round_no']) ? (int) $roundMap[$roundId]['round_no'] : 0;
-                    $actionAt = trim((string) (isset($actionRow['action_date']) ? $actionRow['action_date'] : '') . ' ' . (isset($actionRow['action_time']) ? $actionRow['action_time'] : ''));
-                    $events[] = array(
-                        'kind' => 'action',
-                        'row' => $actionRow,
-                        'time' => $actionAt,
-                        'round_no' => $roundNo,
-                        'follow_up_id' => $followUpId,
-                        'sort_id' => (int) (isset($actionRow['id']) ? $actionRow['id'] : 0),
-                    );
+                    $actionRow['round_no'] = isset($roundMap[$roundId]['round_no']) ? (int) $roundMap[$roundId]['round_no'] : 0;
+                    $actionsByRoundKey[$key][] = $actionRow;
                     $actionRowsByRound[$key] = true;
                 }
+            }
+        }
+
+        // One exchange per round reads as a conversation; the status changes that belong to
+        // the same round travel with it instead of each taking a separate entry. Rounds with
+        // no submission (a reschedule-only round) keep their actions as plain entries because
+        // there is no exchange to attach them to.
+        foreach ($actionsByRoundKey as $key => $roundActions) {
+            $submissionRow = array();
+            $latestId = 0;
+            foreach ($roundActions as $actionRow) {
+                $actionType = strtolower(trim((string) (isset($actionRow['action_type']) ? $actionRow['action_type'] : '')));
+                $actionId = (int) (isset($actionRow['id']) ? $actionRow['id'] : 0);
+                if ($actionId > $latestId) {
+                    $latestId = $actionId;
+                }
+                if (empty($submissionRow)
+                    && in_array($actionType, array('submit_follow_up', 'resubmit_rejected_follow_up'), true)) {
+                    $submissionRow = $actionRow;
+                }
+            }
+
+            $keyParts = explode(':', (string) $key);
+            $followUpId = (int) $keyParts[0];
+            $roundId = isset($keyParts[1]) ? (int) $keyParts[1] : 0;
+            $roundRow = $roundId > 0 && isset($roundMap[$roundId])
+                ? $roundMap[$roundId]
+                : (isset($caseMap[$followUpId]) ? $caseMap[$followUpId] : array());
+
+            if (!empty($submissionRow)) {
+                $submissionAt = trim((string) (isset($submissionRow['action_date']) ? $submissionRow['action_date'] : '') . ' ' . (isset($submissionRow['action_time']) ? $submissionRow['action_time'] : ''));
+                $submissionRow['new_value_decoded'] = customerFollowUpDecodeActionLogPayload(isset($submissionRow['new_value']) ? $submissionRow['new_value'] : '');
+                $events[] = array(
+                    'kind' => 'conversation',
+                    'case' => isset($caseMap[$followUpId]) ? $caseMap[$followUpId] : array(),
+                    'round' => $roundRow,
+                    'round_no' => (int) (isset($submissionRow['round_no']) ? $submissionRow['round_no'] : 0),
+                    'submission' => $submissionRow,
+                    'actions' => $roundActions,
+                    'time' => $submissionAt,
+                    'sort_id' => $latestId,
+                );
+                continue;
+            }
+
+            foreach ($roundActions as $actionRow) {
+                $actionAt = trim((string) (isset($actionRow['action_date']) ? $actionRow['action_date'] : '') . ' ' . (isset($actionRow['action_time']) ? $actionRow['action_time'] : ''));
+                $events[] = array(
+                    'kind' => 'action',
+                    'row' => $actionRow,
+                    'time' => $actionAt,
+                    'round_no' => (int) (isset($actionRow['round_no']) ? $actionRow['round_no'] : 0),
+                    'follow_up_id' => $followUpId,
+                    'sort_id' => (int) (isset($actionRow['id']) ? $actionRow['id'] : 0),
+                );
             }
         }
 
@@ -1179,9 +1387,12 @@ if (!function_exists('customerTimelinePreviewBuildPageHtml')) {
                 .customer-timeline-preview .ct-kind { color:#42697e; background:#eef5f8; border-radius:.2rem; padding:.12rem .38rem; font-size:.68rem; font-weight:700; text-transform:uppercase; letter-spacing:.04em; }
                 .customer-timeline-preview .ct-kind-action { color:#87521f; background:#fbf2e8; }
                 .customer-timeline-preview .ct-context { color:#697e8a; font-size:.8rem; }
-                .customer-timeline-preview .ct-review-state { display:inline-flex; border-radius:999px; padding:.18rem .55rem; font-size:.75rem; font-weight:750; background:#edf2f4; color:#465e6a; }
+                .customer-timeline-preview .ct-review-state { display:inline-flex; border-radius:999px; padding:.18rem .55rem; font-size:.75rem; font-weight:750; background:#edf2f4; color:#465e6a; white-space:nowrap; }
                 .customer-timeline-preview .ct-review-state-pending { background:#fff0d9; color:#87531d; }
                 .customer-timeline-preview .ct-review-state-approved { background:#e6f3e9; color:#2e693b; }
+                .customer-timeline-preview .ct-review-state-rejected,.customer-timeline-preview .ct-review-state-not-approved { background:#fbe9e7; color:#a03f35; }
+                .customer-timeline-preview .ct-review-state-done,.customer-timeline-preview .ct-review-state-completed { background:#e9eff2; color:#40586a; }
+                .customer-timeline-preview .ct-review-state-cancelled { background:#f2eeee; color:#6d5b5b; }
                 .customer-timeline-preview .ct-review-state-rejected { background:#fbe9e7; color:#a03f35; }
                 .customer-timeline-preview .ct-event-time { color:#536c7b; font-size:.83rem; font-variant-numeric:tabular-nums; white-space:nowrap; }
                 .customer-timeline-preview .ct-event-meta { color:#6a7d89; font-size:.79rem; margin-top:.35rem; }
@@ -1210,6 +1421,30 @@ if (!function_exists('customerTimelinePreviewBuildPageHtml')) {
                 .customer-timeline-preview .ct-lightbox-panel img { display:block; max-width:92vw; max-height:86vh; object-fit:contain; background:#fff; }
                 .customer-timeline-preview .ct-lightbox-caption { margin-top:.5rem; color:#fff; font-size:.9rem; text-align:center; overflow-wrap:anywhere; }
                 .customer-timeline-preview .ct-lightbox-close { position:absolute; top:-.7rem; right:-.7rem; width:2.25rem; height:2.25rem; border:0; border-radius:50%; background:#fff; color:#173b50; font-size:1.35rem; font-weight:700; cursor:pointer; }
+                .customer-timeline-preview .ct-conversation { border-left:3px solid #2f6f8f; }
+                .customer-timeline-preview .ct-context-line { color:#5d7381; font-size:.8rem; margin-top:.3rem; overflow-wrap:anywhere; }
+                .customer-timeline-preview .ct-bubble { margin-top:.7rem; padding:.6rem .75rem; border-radius:.45rem; }
+                .customer-timeline-preview .ct-bubble-label { display:block; font-size:.72rem; font-weight:750; text-transform:uppercase; letter-spacing:.05em; margin-bottom:.28rem; }
+                .customer-timeline-preview .ct-bubble-body { white-space:pre-wrap; overflow-wrap:anywhere; font-size:.93rem; line-height:1.55; }
+                .customer-timeline-preview .ct-bubble-muted { color:#6a7d89; font-style:italic; }
+                .customer-timeline-preview .ct-bubble-out { background:#eef6fb; border:1px solid #c6ddeb; }
+                .customer-timeline-preview .ct-bubble-out .ct-bubble-label { color:#1c5b7d; }
+                .customer-timeline-preview .ct-bubble-in { background:#eef8f1; border:1px solid #c3e0cb; }
+                .customer-timeline-preview .ct-bubble-in .ct-bubble-label { color:#2b6640; }
+                .customer-timeline-preview .ct-reviewer-note { margin-top:.6rem; padding:.55rem .7rem; border-left:3px solid #b8cfd9; background:#f7fafb; font-size:.88rem; overflow-wrap:anywhere; }
+                .customer-timeline-preview .ct-reviewer-note-reject { border-left-color:#dda9a1; background:#fdf4f2; }
+                .customer-timeline-preview .ct-bookkeeping { margin-top:.65rem; font-size:.84rem; }
+                .customer-timeline-preview .ct-bookkeeping summary { cursor:pointer; color:#5b7382; font-weight:700; }
+                .customer-timeline-preview .ct-bookkeeping-list { margin:.4rem 0 0; padding-left:1.2rem; color:#5b7382; }
+                .customer-timeline-preview .ct-bookkeeping-list li { padding:.2rem 0; overflow-wrap:anywhere; }
+                @media (max-width:575px) {
+                    .customer-timeline-preview .ct-bubble { padding:.5rem .6rem; }
+                    .customer-timeline-preview .ct-bubble-body { font-size:.9rem; }
+                    /* The status badge and time must not be squeezed onto the title line. */
+                    .customer-timeline-preview .ct-conversation .ct-event-heading { display:block; }
+                    .customer-timeline-preview .ct-conversation .ct-event-heading h5 { margin:.2rem 0 .3rem; }
+                    .customer-timeline-preview .ct-conversation .ct-review-state { margin-top:.1rem; }
+                }
                 .customer-timeline-preview .ct-revisions { margin-top:.65rem; font-size:.85rem; }
                 .customer-timeline-preview .ct-revision-list { margin:.45rem 0 0; padding-left:1.4rem; }
                 .customer-timeline-preview .ct-revision-list li { padding:.3rem 0 .3rem .1rem; border-top:1px solid #edf1f3; }
@@ -1237,7 +1472,17 @@ if (!function_exists('customerTimelinePreviewBuildPageHtml')) {
             <?php } else { ?>
                 <div class="ct-list">
                     <?php foreach ($events as $event) {
-                        if ($event['kind'] === 'action') {
+                        if ($event['kind'] === 'conversation') {
+                            echo customerTimelinePreviewRenderConversationCard(
+                                $connect,
+                                $event['case'],
+                                $event['round'],
+                                (int) $event['round_no'],
+                                $event['submission'],
+                                $event['actions'],
+                                $roundMap
+                            );
+                        } elseif ($event['kind'] === 'action') {
                             echo customerTimelinePreviewRenderActionEvent($connect, $event['row'], (int) $event['round_no']);
                         } elseif ($event['kind'] === 'history') {
                             echo customerTimelinePreviewRenderHistoryEvent($connect, $event);

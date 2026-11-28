@@ -3337,6 +3337,37 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             $sentMessageText = '';
         }
 
+        // What the customer said back. Optional on purpose: some follow-ups happen over a
+        // phone call with nothing written down, and a required field would only teach people
+        // to type "none". Leaving it blank is recorded as "not captured", never as "no reply".
+        $customerReplyStatus = strtolower(trim((string) (isset($formData['customer_reply_status']) && is_scalar($formData['customer_reply_status']) ? $formData['customer_reply_status'] : 'not_recorded')));
+        if (!in_array($customerReplyStatus, array('recorded', 'not_recorded'), true)) {
+            $customerReplyStatus = 'not_recorded';
+        }
+        $customerReplyText = isset($formData['customer_reply_text']) && is_scalar($formData['customer_reply_text'])
+            ? str_replace(array("\r\n", "\r"), "\n", (string) $formData['customer_reply_text'])
+            : '';
+        $customerReplyLength = function_exists('mb_strlen') ? mb_strlen($customerReplyText, 'UTF-8') : strlen($customerReplyText);
+        if ($customerReplyLength > 12000) {
+            if ($uploadedNewAttachment) {
+                customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
+            }
+            return array('success' => false, 'message' => 'The customer reply is too long. Keep it under 12000 characters.');
+        }
+        if ($customerReplyStatus === 'recorded' && trim($customerReplyText) === '') {
+            if ($uploadedNewAttachment) {
+                customerFollowUpDeleteAttachmentFile($uploadedAttachmentPath);
+            }
+            return array('success' => false, 'message' => 'Write the customer reply, or select that no reply was captured.');
+        }
+        if ($customerReplyStatus !== 'recorded' && trim($customerReplyText) === '') {
+            $customerReplyText = '';
+        } elseif (trim($customerReplyText) !== '') {
+            // Text was typed, so keep it even if the select still says "not recorded" -
+            // silently throwing away what someone pasted is worse than an extra field.
+            $customerReplyStatus = 'recorded';
+        }
+
         // The shortcut names the message for the follow-up being scheduled next, so it may
         // legitimately be left blank when that has not been decided yet.
         $messageShortcutId = (int) (isset($formData['message_shortcut_id']) ? $formData['message_shortcut_id'] : 0);
@@ -3510,6 +3541,8 @@ if (!function_exists('customerFollowUpSubmitRound')) {
             'message_shortcut_text' => isset($messageShortcutRow['shortcuts_message_text']) ? $messageShortcutRow['shortcuts_message_text'] : '',
             'sent_message_status' => $sentMessageStatus,
             'sent_message_text' => $sentMessageText,
+            'customer_reply_status' => $customerReplyStatus,
+            'customer_reply_text' => $customerReplyText,
             'approval_status' => $approvalStatus,
             'round_status' => $roundStatus,
             'reject_reason' => $isAppeal ? trim((string) (isset($oldRoundState['reject_reason']) ? $oldRoundState['reject_reason'] : '')) : '',
